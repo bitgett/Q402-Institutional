@@ -1,0 +1,21 @@
+{
+  "subscriptions": {
+    "0xfc77ff29178b7286a8ba703d7a70895ca74ff466": {
+      "paidAt": "2026-03-10T00:00:00.000Z",
+      "apiKey": "q402_live_test_masterkey",
+      "plan": "growth",
+      "txHash": "0xtest",
+      "amountUSD": 99
+    }
+  },
+  "apiKeys": {
+    "q402_live_test_masterkey": {
+      "address": "0xfc77ff29178b7286a8ba703d7a70895ca74ff466",
+      "createdAt": "2026-03-10T00:00:00.000Z",
+      "active": true,
+      "plan": "growth"
+    }
+  },
+  "gasDeposits": {},
+  "relayedTxs": {}
+}
