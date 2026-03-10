@@ -3,9 +3,16 @@
     "0xfc77ff29178b7286a8ba703d7a70895ca74ff466": {
       "paidAt": "2026-03-10T00:00:00.000Z",
       "apiKey": "q402_live_test_masterkey",
-      "plan": "growth",
+      "plan": "enterprise",
       "txHash": "0xtest",
-      "amountUSD": 99
+      "amountUSD": 449
+    },
+    "0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28": {
+      "paidAt": "2026-03-10T00:00:00.000Z",
+      "apiKey": "q402_live_test_ownerkey",
+      "plan": "enterprise",
+      "txHash": "0xtest",
+      "amountUSD": 449
     }
   },
   "apiKeys": {
@@ -13,7 +20,13 @@
       "address": "0xfc77ff29178b7286a8ba703d7a70895ca74ff466",
       "createdAt": "2026-03-10T00:00:00.000Z",
       "active": true,
-      "plan": "growth"
+      "plan": "enterprise"
+    },
+    "q402_live_test_ownerkey": {
+      "address": "0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28",
+      "createdAt": "2026-03-10T00:00:00.000Z",
+      "active": true,
+      "plan": "enterprise"
     }
   },
   "gasDeposits": {},
