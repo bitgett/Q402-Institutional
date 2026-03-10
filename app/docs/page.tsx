@@ -1,0 +1,632 @@
+"use client";
+
+import { useState } from "react";
+
+const NAV = [
+  { id: "overview",     label: "Overview",        icon: "○" },
+  { id: "how-it-works", label: "How It Works",    icon: "○" },
+  { id: "quickstart",   label: "Quick Start",     icon: "○" },
+  { id: "gaspool",      label: "Gas Pool",         icon: "○" },
+  { id: "auth",         label: "Authentication",   icon: "○" },
+  { id: "api-ref",      label: "API Reference",    icon: "○" },
+  { id: "chains",       label: "Chain Support",    icon: "○" },
+  { id: "eip712",       label: "EIP-712 Signing",  icon: "○" },
+  { id: "errors",       label: "Error Codes",      icon: "○" },
+  { id: "faq",          label: "FAQ",              icon: "○" },
+];
+
+function CodeBlock({ code, lang = "typescript" }: { code: string; lang?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="relative rounded-xl overflow-hidden border border-white/8 mb-5">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
+        <span className="text-xs text-white/30 font-mono">{lang}</span>
+        <button
+          onClick={() => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+          className="text-xs text-white/30 hover:text-white/70 transition-colors"
+        >
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <pre className="p-4 overflow-x-auto bg-[#060C14]">
+        <code className="text-xs font-mono text-white/75 leading-relaxed whitespace-pre">{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className="mb-16 scroll-mt-24">
+      <h2 className="text-2xl font-bold mb-6 pb-3 border-b border-white/8">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Badge({ color, children }: { color: string; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-semibold" style={{ background: `${color}15`, color, border: `1px solid ${color}30` }}>
+      {children}
+    </span>
+  );
+}
+
+function Callout({ type, children }: { type: "info" | "warn" | "tip"; children: React.ReactNode }) {
+  const styles = {
+    info: { border: "rgba(98,126,234,0.25)", bg: "rgba(98,126,234,0.05)", dot: "#627EEA", label: "Note" },
+    warn: { border: "rgba(245,197,24,0.25)", bg: "rgba(245,197,24,0.05)", dot: "#F5C518", label: "Important" },
+    tip:  { border: "rgba(74,222,128,0.25)", bg: "rgba(74,222,128,0.05)", dot: "#4ade80", label: "Tip" },
+  }[type];
+  return (
+    <div className="rounded-xl p-4 mb-5 text-sm leading-relaxed" style={{ border: `1px solid ${styles.border}`, background: styles.bg }}>
+      <span className="font-semibold text-xs uppercase tracking-widest block mb-1" style={{ color: styles.dot }}>{styles.label}</span>
+      <div className="text-white/55">{children}</div>
+    </div>
+  );
+}
+
+export default function DocsPage() {
+  const [activeSection, setActiveSection] = useState("overview");
+
+  return (
+    <div className="min-h-screen text-white" style={{ background: "#080E1C" }}>
+      {/* Top nav */}
+      <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(8,14,28,0.92)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-5">
+            <a href="/" className="flex items-center gap-2">
+              <span className="text-yellow font-bold text-base">Q402</span>
+              <span className="text-white/20 text-xs">/</span>
+              <span className="text-white/50 text-xs font-medium">docs</span>
+            </a>
+            <div className="hidden sm:flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-lg px-3 py-1.5">
+              <span className="text-white/25 text-xs font-mono">v1.0</span>
+              <span className="ml-2 text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded" style={{ background: "rgba(245,197,24,0.15)", color: "#F5C518" }}>Beta</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <a href="/" className="text-xs text-white/35 hover:text-white/70 transition-colors">← Landing</a>
+            <a href="/#pricing" className="text-xs text-white/35 hover:text-white/70 transition-colors">Pricing</a>
+            <a href="/payment" className="bg-yellow text-navy text-xs font-bold px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">
+              Get API Key →
+            </a>
+          </div>
+        </div>
+        {/* yellow accent line */}
+        <div className="h-px w-full" style={{ background: "linear-gradient(90deg, transparent 0%, rgba(245,197,24,0.4) 30%, rgba(245,197,24,0.4) 70%, transparent 100%)" }} />
+      </nav>
+
+      <div className="max-w-7xl mx-auto flex pt-14">
+        {/* Sidebar */}
+        <aside className="hidden lg:flex w-64 flex-shrink-0 flex-col sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-r" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(5,9,18,0.6)" }}>
+          {/* Sidebar header */}
+          <div className="px-5 pt-8 pb-4">
+            <div className="text-[10px] text-white/25 uppercase tracking-[0.2em] font-semibold mb-1">Documentation</div>
+          </div>
+
+          <nav className="flex-1 px-3 space-y-0.5 pb-6">
+            {NAV.map((item) => {
+              const active = activeSection === item.id;
+              return (
+                <a
+                  key={item.id}
+                  href={`#${item.id}`}
+                  onClick={() => setActiveSection(item.id)}
+                  className={`flex items-center gap-3 text-sm py-2 px-3 rounded-lg transition-all ${
+                    active
+                      ? "text-yellow bg-yellow/8 font-medium"
+                      : "text-white/45 hover:text-white/80 hover:bg-white/[0.04]"
+                  }`}
+                  style={active ? { boxShadow: "inset 2px 0 0 #F5C518" } : {}}
+                >
+                  <span className={`text-[11px] w-4 text-center flex-shrink-0 ${active ? "text-yellow" : "text-white/20"}`}>{item.icon}</span>
+                  {item.label}
+                </a>
+              );
+            })}
+          </nav>
+
+          <div className="px-5 py-5 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+            <div className="text-[10px] text-white/20 uppercase tracking-widest mb-3">Support</div>
+            <a href="mailto:hello@quackai.ai" className="flex items-center gap-2 text-xs text-yellow/60 hover:text-yellow transition-colors">
+              <span>✉</span> hello@quackai.ai
+            </a>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 min-w-0 max-w-3xl">
+          {/* Docs hero banner */}
+          <div className="px-8 pt-12 pb-10 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, transparent 100%)" }}>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.0 Beta</span>
+              <span className="text-white/20 text-xs">·</span>
+              <span className="text-white/30 text-xs">EIP-712 + EIP-7702</span>
+            </div>
+            <h1 className="text-3xl font-bold mb-3">Q402 Developer Docs</h1>
+            <p className="text-white/50 text-sm leading-relaxed max-w-xl">
+              Everything you need to add gasless USDC payments to your product. One API. Any EVM chain. Zero gas for your users.
+            </p>
+            <div className="flex items-center gap-6 mt-6">
+              <a href="#quickstart" className="inline-flex items-center gap-2 bg-yellow text-navy text-xs font-bold px-5 py-2.5 rounded-full hover:bg-yellow-hover transition-colors">
+                Quick Start →
+              </a>
+              <a href="#api-ref" className="text-xs text-white/40 hover:text-white transition-colors flex items-center gap-1">
+                <span className="font-mono">{"{ }"}</span> API Reference
+              </a>
+            </div>
+          </div>
+
+          <div className="px-8 py-10">
+
+          {/* ── OVERVIEW ── */}
+          <Section id="overview" title="Overview">
+            <p className="text-white/60 text-base leading-relaxed mb-6">
+              Q402 is a <span className="text-white font-medium">gasless transaction relay</span> for EVM chains. Your users send USDC — without ever needing BNB, ETH, or AVAX for gas. You integrate one API. The rest is invisible.
+            </p>
+
+            {/* What is an API? — plain language */}
+            <div className="bg-white/[0.03] border border-white/8 rounded-xl p-5 mb-6">
+              <p className="text-xs text-white/30 uppercase tracking-widest font-semibold mb-2">What is an API?</p>
+              <p className="text-white/55 text-sm leading-relaxed">
+                An API is just a URL your server calls. Like ordering food at a restaurant — you send a request (&quot;here&apos;s a user&apos;s signed transaction&quot;), Q402&apos;s server handles the work, and sends back a result (&quot;done, txHash: 0xabc...&quot;). No blockchain expertise needed on your end.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-3 gap-4 mb-8">
+              {[
+                { label: "Protocol",         value: "EIP-712 + EIP-7702" },
+                { label: "Settlement token", value: "USDC · USDT" },
+                { label: "Gas source",       value: "Your gas pool" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <div className="text-xs text-white/30 mb-1">{item.label}</div>
+                  <div className="text-sm font-mono text-white/80">{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          {/* ── HOW IT WORKS ── */}
+          <Section id="how-it-works" title="How It Works">
+            <p className="text-white/55 text-sm mb-6">Three actors. One transaction. Zero gas for your users.</p>
+
+            <div className="space-y-3 mb-8">
+              {[
+                {
+                  step: "A", color: "#F5C518",
+                  title: "User signs an authorization (no gas, no blockchain)",
+                  desc: "Using their wallet (e.g. MetaMask), the user signs a typed message saying \"I allow transferring X USDC to address Y\". This is purely a cryptographic signature — no transaction is sent, no gas is needed."
+                },
+                {
+                  step: "B", color: "#627EEA",
+                  title: "Your server calls POST /v1/send",
+                  desc: "You pass the user's signature to Q402's API. That's it — one HTTP call. Q402 verifies the signature, constructs the on-chain transaction, and submits it."
+                },
+                {
+                  step: "C", color: "#4ade80",
+                  title: "Gas is deducted from your gas pool, USDC lands in recipient wallet",
+                  desc: "Q402 uses your pre-funded gas pool to pay the network fee. The USDC moves on-chain, verifiable on BscScan / Snowtrace / Etherscan. User sees zero gas cost."
+                },
+              ].map((item) => (
+                <div key={item.step} className="flex gap-4 p-4 rounded-xl border border-white/8">
+                  <div className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-extrabold font-mono" style={{ background: `${item.color}20`, color: item.color }}>
+                    {item.step}
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold mb-1">{item.title}</div>
+                    <div className="text-xs text-white/45 leading-relaxed">{item.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Architecture diagram (text) */}
+            <div className="bg-[#060C14] border border-white/8 rounded-xl p-5 font-mono text-xs text-white/50 leading-loose">
+              <div><span className="text-white/25">{"// "}</span>Full flow</div>
+              <div className="mt-2">
+                <span className="text-yellow">User wallet</span>
+                <span className="text-white/25">  →  signs EIP-712  →  </span>
+                <span className="text-blue-400">your frontend</span>
+              </div>
+              <div>
+                <span className="text-blue-400">Your backend</span>
+                <span className="text-white/25">  →  POST /v1/send  →  </span>
+                <span className="text-green-400">Q402 API</span>
+              </div>
+              <div>
+                <span className="text-green-400">Q402</span>
+                <span className="text-white/25">       →  uses gas pool  →  </span>
+                <span className="text-white/60">on-chain TX</span>
+              </div>
+              <div>
+                <span className="text-white/60">Chain</span>
+                <span className="text-white/25">       →  confirms TX    →  </span>
+                <span className="text-yellow">recipient gets USDC</span>
+              </div>
+            </div>
+          </Section>
+
+          {/* ── QUICK START ── */}
+          <Section id="quickstart" title="Quick Start">
+            <p className="text-white/55 text-sm mb-6">
+              Get your first gasless transaction running in under 5 minutes.
+            </p>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Install the SDK</h3>
+            <CodeBlock lang="bash" code={`npm install @quackai/q402
+# or
+yarn add @quackai/q402`} />
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · Initialize with your API key</h3>
+            <CodeBlock lang="typescript" code={`import { Q402 } from "@quackai/q402";
+
+const q402 = new Q402({
+  apiKey: process.env.Q402_API_KEY,   // from your dashboard
+  chain:  "bnb",    // "bnb" | "ethereum" | "avalanche" | "xlayer" | "arbitrum" | "scroll"
+});`} />
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · User signs (client-side, zero gas)</h3>
+            <CodeBlock lang="typescript" code={`// In your frontend — wallet popup appears, user signs, no gas
+const { payload, signature } = await q402.createPayload({
+  from:   userWalletAddress,
+  to:     recipientAddress,
+  amount: 50,           // USDC, human-readable
+  nonce:  await q402.getNonce(userWalletAddress),
+  expiry: Math.floor(Date.now() / 1000) + 3600,  // 1 hour window
+});
+
+// Send payload + signature to your backend (e.g. via fetch/axios)
+`} />
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Submit from your backend</h3>
+            <CodeBlock lang="typescript" code={`// In your server — one call, Q402 handles the rest
+const result = await q402.send({ payload, signature });
+
+console.log(result);
+// {
+//   success:     true,
+//   txHash:      "0xabc123...",
+//   chain:       "bnb",
+//   blockNumber: 38482910
+// }`} />
+
+            <Callout type="tip">
+              That&apos;s the full integration. The user never touches BNB, ETH, or AVAX. Gas is deducted from your pre-funded gas pool automatically.
+            </Callout>
+          </Section>
+
+          {/* ── GAS POOL ── */}
+          <Section id="gaspool" title="Gas Pool">
+            <p className="text-white/55 text-sm mb-6">
+              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, AVAX…) into a Q402-managed address for your project. Every time a user transaction is relayed, the gas fee is automatically deducted from this pool.
+            </p>
+
+            <div className="grid sm:grid-cols-2 gap-4 mb-6">
+              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
+                <div className="text-yellow text-xs font-semibold mb-2">Deposit</div>
+                <p className="text-xs text-white/50 leading-relaxed">Send BNB / ETH / AVAX to your project&apos;s gas address from your dashboard. The address is unique to your API key.</p>
+              </div>
+              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
+                <div className="text-blue-400 text-xs font-semibold mb-2">Auto-deduction</div>
+                <p className="text-xs text-white/50 leading-relaxed">Each relayed transaction deducts the exact gas cost in real time. No manual management needed.</p>
+              </div>
+              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
+                <div className="text-green-400 text-xs font-semibold mb-2">Withdraw</div>
+                <p className="text-xs text-white/50 leading-relaxed">Withdraw remaining balance any time from your dashboard. Funds always remain yours.</p>
+              </div>
+              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
+                <div className="text-orange-400 text-xs font-semibold mb-2">Low balance alert</div>
+                <p className="text-xs text-white/50 leading-relaxed">Email alerts when your gas pool drops below a threshold. Set thresholds in dashboard settings.</p>
+              </div>
+            </div>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Check gas pool balance via API</h3>
+            <CodeBlock lang="json" code={`// GET /v1/gaspool
+{
+  "chain":     "bnb",
+  "address":   "0xYourGasPoolAddress...",
+  "balance":   "0.482",        // BNB
+  "balanceUsd": "$285.40",
+  "estimatedTxsRemaining": 482000
+}`} />
+
+            <Callout type="warn">
+              If your gas pool is empty, transactions will fail. Q402 sends email alerts before depletion. Top up via your dashboard or directly to the gas pool address.
+            </Callout>
+          </Section>
+
+          {/* ── AUTHENTICATION ── */}
+          <Section id="auth" title="Authentication">
+            <p className="text-white/55 text-sm mb-5">
+              All API requests require your API key as a bearer token in the Authorization header.
+            </p>
+            <CodeBlock lang="http" code={`POST https://api.q402.quackai.ai/v1/send
+Authorization: Bearer q402_live_YOUR_API_KEY
+Content-Type: application/json`} />
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
+                <div className="text-xs text-yellow font-mono mb-1">q402_live_*</div>
+                <div className="text-xs text-white/50">Production key. Transactions hit mainnet. <strong className="text-white/70">Never expose in client-side code.</strong></div>
+              </div>
+              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
+                <div className="text-xs text-blue-400 font-mono mb-1">q402_test_*</div>
+                <div className="text-xs text-white/50">Testnet key. Free tier. Safe to test without real funds.</div>
+              </div>
+            </div>
+          </Section>
+
+          {/* ── API REFERENCE ── */}
+          <Section id="api-ref" title="API Reference">
+            <p className="text-white/40 text-xs mb-8 font-mono">Base URL: https://api.q402.quackai.ai/v1</p>
+
+            {/* POST /send */}
+            <div className="mb-12">
+              <div className="flex items-center gap-3 mb-2">
+                <Badge color="#4ade80">POST</Badge>
+                <span className="font-mono text-sm text-white/70">/send</span>
+              </div>
+              <p className="text-white/50 text-sm mb-4">Submit a signed EIP-712 payload. Q402 verifies the signature and relays the transaction on-chain using your gas pool.</p>
+              <CodeBlock lang="json" code={`// Request body
+{
+  "chain":     "bnb",
+  "payload": {
+    "from":    "0xUserWallet...",
+    "to":      "0xRecipient...",
+    "amount":  "50000000",       // 6 decimals (50 USDC)
+    "nonce":   14,
+    "expiry":  1751289600
+  },
+  "signature": "0xabc123..."
+}
+
+// Response 200
+{
+  "success":     true,
+  "txHash":      "0xdef456...",
+  "chain":       "bnb",
+  "blockNumber": 38482910
+}`} />
+            </div>
+
+            {/* GET /nonce */}
+            <div className="mb-12">
+              <div className="flex items-center gap-3 mb-2">
+                <Badge color="#627EEA">GET</Badge>
+                <span className="font-mono text-sm text-white/70">/nonce/:address</span>
+              </div>
+              <p className="text-white/50 text-sm mb-4">Returns the current nonce for a wallet address. Must be included in the EIP-712 payload to prevent replay attacks.</p>
+              <CodeBlock lang="json" code={`// GET /nonce/0xUserWallet...
+{ "nonce": 14, "address": "0xUserWallet..." }`} />
+            </div>
+
+            {/* GET /status */}
+            <div className="mb-12">
+              <div className="flex items-center gap-3 mb-2">
+                <Badge color="#627EEA">GET</Badge>
+                <span className="font-mono text-sm text-white/70">/status/:txHash</span>
+              </div>
+              <p className="text-white/50 text-sm mb-4">Check on-chain confirmation status of a submitted transaction.</p>
+              <CodeBlock lang="json" code={`{
+  "txHash":        "0xdef456...",
+  "status":        "confirmed",   // "pending" | "confirmed" | "failed"
+  "blockNumber":   38482910,
+  "confirmations": 12
+}`} />
+            </div>
+
+            {/* GET /quota */}
+            <div className="mb-12">
+              <div className="flex items-center gap-3 mb-2">
+                <Badge color="#627EEA">GET</Badge>
+                <span className="font-mono text-sm text-white/70">/quota</span>
+              </div>
+              <p className="text-white/50 text-sm mb-4">Returns your remaining monthly API call quota and plan details.</p>
+              <CodeBlock lang="json" code={`{
+  "plan":       "Scale",
+  "quota":      50000,
+  "used":       14823,
+  "remaining":  35177,
+  "resetsAt":   "2026-04-01T00:00:00Z"
+}`} />
+            </div>
+
+            {/* GET /gaspool */}
+            <div className="mb-4">
+              <div className="flex items-center gap-3 mb-2">
+                <Badge color="#627EEA">GET</Badge>
+                <span className="font-mono text-sm text-white/70">/gaspool</span>
+              </div>
+              <p className="text-white/50 text-sm mb-4">Returns your gas pool balance and estimated remaining capacity.</p>
+              <CodeBlock lang="json" code={`{
+  "chain":                  "bnb",
+  "address":                "0xYourGasPoolAddress...",
+  "balance":                "0.482",
+  "balanceUsd":             "$285.40",
+  "estimatedTxsRemaining":  482000
+}`} />
+            </div>
+          </Section>
+
+          {/* ── CHAIN SUPPORT ── */}
+          <Section id="chains" title="Chain Support">
+            <p className="text-white/55 text-sm mb-6">
+              Same API, same SDK — regardless of which chain. Switch with one parameter.
+            </p>
+            <div className="overflow-x-auto mb-4">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-white/8">
+                    {["Chain", "chain param", "Chain ID", "Status", "Avg gas/tx"].map(h => (
+                      <th key={h} className="text-left py-3 pr-6 text-white/30 text-xs uppercase tracking-wider font-semibold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { name: "BNB Chain",  color: "#F0B90B", param: "bnb",       id: "56",    status: "live",      gas: "~$0.001" },
+                    { name: "Ethereum",   color: "#627EEA", param: "ethereum",  id: "1",     status: "live",      gas: "~$0.19"  },
+                    { name: "Avalanche",  color: "#E84142", param: "avalanche", id: "43114", status: "live",      gas: "~$0.002" },
+                    { name: "X Layer",    color: "#CCCCCC", param: "xlayer",    id: "196",   status: "live",      gas: "~$0.001" },
+                    { name: "Arbitrum",   color: "#12AAFF", param: "arbitrum",  id: "42161", status: "deploying", gas: "~$0.003" },
+                    { name: "Scroll",     color: "#EEB431", param: "scroll",    id: "534352",status: "deploying", gas: "~$0.003" },
+                  ].map((chain) => (
+                    <tr key={chain.param} className="border-b border-white/5 hover:bg-white/2 transition-colors">
+                      <td className="py-3 pr-6">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: chain.color }} />
+                          <span className="font-medium text-sm">{chain.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-6 font-mono text-white/50 text-xs">{chain.param}</td>
+                      <td className="py-3 pr-6 font-mono text-white/30 text-xs">{chain.id}</td>
+                      <td className="py-3 pr-6">
+                        {chain.status === "live" ? (
+                          <span className="text-green-400 text-xs font-semibold bg-green-400/10 px-2 py-0.5 rounded-full">Mainnet Live</span>
+                        ) : (
+                          <span className="text-white/30 text-xs font-semibold bg-white/5 px-2 py-0.5 rounded-full">Deploying</span>
+                        )}
+                      </td>
+                      <td className="py-3 font-mono text-yellow text-xs">{chain.gas}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Callout type="info">
+              Gas costs are deducted from <strong className="text-white/80">your gas pool</strong> — not from Q402&apos;s pocket, not from your users. Ethereum gas is significantly higher; consider funding a larger pool for ETH.
+            </Callout>
+          </Section>
+
+          {/* ── EIP-712 SIGNING ── */}
+          <Section id="eip712" title="EIP-712 Signing">
+            <p className="text-white/55 text-sm mb-5">
+              Q402 uses <span className="text-white font-medium">EIP-712 typed structured data signing</span> — the same standard used by Uniswap, Compound, and major DeFi protocols. The user signs a human-readable message. No gas. No blockchain interaction.
+            </p>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Domain Separator</h3>
+            <CodeBlock lang="typescript" code={`// Contract addresses per chain
+const CONTRACTS = {
+  avax:   "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699", // Q402 Avalanche (chainId: 43114)
+  bnb:    "0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6", // Q402 BNB Chain (chainId: 56)
+  eth:    "0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9", // Q402 Ethereum  (chainId: 1)
+  xlayer: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 X Layer   (chainId: 196)
+};
+
+// Each chain uses its own EIP-712 domain name
+const domain = {
+  name:              "Q402 BNB Chain", // "Q402 Avalanche" | "Q402 BNB Chain" | "Q402 Ethereum" | "Q402 X Layer"
+  version:           "1",
+  chainId:           56,               // 1=ETH, 56=BNB, 43114=AVAX, 196=XLayer
+  verifyingContract: CONTRACTS.bnb,    // use the matching CONTRACTS[chain] address
+};`} />
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Type Definition</h3>
+            <CodeBlock lang="typescript" code={`const types = {
+  Transfer: [
+    { name: "from",   type: "address" },
+    { name: "to",     type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "nonce",  type: "uint256" },
+    { name: "expiry", type: "uint256" },
+  ],
+};`} />
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Signing with ethers.js</h3>
+            <CodeBlock lang="typescript" code={`const signature = await signer.signTypedData(domain, types, {
+  from:   userAddress,
+  to:     recipientAddress,
+  amount: ethers.parseUnits("50", 6),  // 50 USDC (6 decimals)
+  nonce:  currentNonce,
+  expiry: Math.floor(Date.now() / 1000) + 3600,
+});`} />
+            <Callout type="info">
+              <strong className="text-white/80">EIP-7702 note:</strong> On chains supporting EIP-7702, Q402 uses a single-transaction flow. On others (current BNB mainnet), the fallback is Permit2 — two sequential on-chain operations, both handled server-side by Q402. Your API call is identical either way.
+            </Callout>
+          </Section>
+
+          {/* ── ERRORS ── */}
+          <Section id="errors" title="Error Codes">
+            <p className="text-white/55 text-sm mb-5">All errors return a JSON body with <span className="font-mono text-white/70">code</span> and <span className="font-mono text-white/70">message</span> fields.</p>
+            <div className="space-y-2">
+              {[
+                { code: "INVALID_SIGNATURE",   http: "400", desc: "EIP-712 signature is malformed or doesn't match the payload." },
+                { code: "EXPIRED_PAYLOAD",      http: "400", desc: "The expiry timestamp has passed. Generate a new payload." },
+                { code: "NONCE_MISMATCH",       http: "400", desc: "Nonce is wrong. Fetch the current nonce with GET /nonce/:address." },
+                { code: "INSUFFICIENT_BALANCE", http: "400", desc: "Sender wallet has insufficient USDC for the requested amount." },
+                { code: "GAS_POOL_EMPTY",       http: "402", desc: "Your gas pool is empty. Top up via dashboard to resume transactions." },
+                { code: "QUOTA_EXCEEDED",       http: "429", desc: "Monthly API quota exhausted. Upgrade plan or wait for reset." },
+                { code: "CHAIN_NOT_SUPPORTED",  http: "400", desc: "Chain is not currently supported or still deploying." },
+                { code: "UNAUTHORIZED",         http: "401", desc: "Missing or invalid API key." },
+                { code: "INTERNAL_ERROR",       http: "500", desc: "Q402 server error. Retry with exponential backoff." },
+              ].map((err) => (
+                <div key={err.code} className="flex gap-4 p-4 rounded-xl border border-white/8">
+                  <div className="flex-shrink-0 pt-0.5">
+                    <span className="font-mono text-xs bg-red-400/10 px-2 py-0.5 rounded" style={{ color: err.http === "402" ? "#F5C518" : "#f87171" }}>{err.http}</span>
+                  </div>
+                  <div>
+                    <div className="font-mono text-xs text-white/80 mb-0.5">{err.code}</div>
+                    <div className="text-xs text-white/40 leading-relaxed">{err.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          {/* ── FAQ ── */}
+          <Section id="faq" title="FAQ">
+            {[
+              {
+                q: "Do users need BNB, ETH, or AVAX to use Q402?",
+                a: "No. Users only need USDC (or USDT) in their wallet. All gas is paid from your gas pool. The user signs a message — that's it."
+              },
+              {
+                q: "Who pays the gas fees?",
+                a: "You do — from your gas pool. You deposit native tokens (BNB on BNB Chain, ETH on Ethereum, etc.) to your project's gas pool address. Q402 auto-deducts the exact gas cost per transaction. You can deposit and withdraw anytime from the dashboard."
+              },
+              {
+                q: "Is Q402 non-custodial?",
+                a: "Yes. Q402 never holds user funds. The EIP-712 signature authorizes exactly one transfer from A to C. Q402 only pays gas and relays — it cannot redirect or intercept USDC."
+              },
+              {
+                q: "What if a transaction fails?",
+                a: "Q402 retries up to 3 times with adjusted gas. If all retries fail, the payload is discarded — no user funds are moved, and the failed attempt does not count against your quota."
+              },
+              {
+                q: "Can I use Q402 with tokens other than USDC?",
+                a: "Currently USDC and USDT are supported on all live chains. Additional ERC-20 token support is on the roadmap for Q3 2026."
+              },
+              {
+                q: "How do I test before going live?",
+                a: "Your Free plan includes 100 test transactions on EVM testnets (BNB Testnet, Fuji, Goerli). Use a q402_test_* API key — free, no real funds required."
+              },
+              {
+                q: "What's the difference between the monthly fee and the gas pool?",
+                a: "The monthly subscription fee (shown on the pricing page) is for API access — your quota of relay transactions per month. The gas pool is separate: you deposit native tokens there to cover actual on-chain gas costs. Think of the subscription as your 'slots' and the gas pool as the 'fuel'."
+              },
+            ].map((item, i) => (
+              <div key={i} className="mb-4 p-5 rounded-xl border border-white/8">
+                <div className="font-semibold text-sm mb-2">{item.q}</div>
+                <div className="text-white/50 text-sm leading-relaxed">{item.a}</div>
+              </div>
+            ))}
+          </Section>
+
+          {/* Bottom CTA */}
+          <div className="border border-yellow/15 rounded-2xl p-8 text-center" style={{ background: "rgba(245,197,24,0.04)" }}>
+            <h3 className="text-xl font-bold mb-2">Ready to go gasless?</h3>
+            <p className="text-white/40 text-sm mb-6">Start with the Free tier — 100 test transactions, no credit card needed.</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <a href="/payment" className="bg-yellow text-navy font-bold px-8 py-3 rounded-full hover:bg-yellow-hover transition-colors text-sm">
+                Get API Key →
+              </a>
+              <a href="mailto:hello@quackai.ai" className="border border-white/20 text-white/70 font-semibold px-8 py-3 rounded-full hover:bg-white/5 transition-colors text-sm">
+                Talk to us
+              </a>
+            </div>
+          </div>
+
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}

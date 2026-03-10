@@ -1,0 +1,662 @@
+"use client";
+
+import { useWallet } from "../context/WalletContext";
+import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { motion } from "framer-motion";
+import WalletButton from "../components/WalletButton";
+
+function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
+function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
+
+const RELAYER_ADDRESS = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
+
+const PLAN_QUOTA: Record<string, number> = {
+  starter:     1_000,
+  growth:     10_000,
+  enterprise: 100_000,
+};
+
+const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string }> = {
+  bnb:    { name: "BNB Chain",  token: "BNB",  color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
+  eth:    { name: "Ethereum",   token: "ETH",  color: "#627EEA", img: "/eth.png",    rounded: "rounded-lg"   },
+  xlayer: { name: "X Layer",    token: "ETH",  color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-sm"   },
+  avax:   { name: "Avalanche",  token: "AVAX", color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
+};
+
+const STEPS = [
+  { n: "01", title: "Load the SDK (browser)", code: `<script src="https://q402.io/q402-sdk.js"></script>\n<!-- or: import { Q402Client } from "q402-sdk" -->` },
+  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer\n});` },
+  { n: "03", title: "One-line gasless payment", code: `const result = await q402.pay({\n  to:     "0xRecipient...",\n  amount: "5.00",\n  token:  "USDC",\n});\nconsole.log(result.txHash);` },
+  { n: "04", title: "Settlement confirmed", code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: 5, token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0` },
+];
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; }
+interface RelayedTx {
+  apiKey: string; address: string; chain: string;
+  fromUser: string; toUser: string; tokenAmount: number; tokenSymbol: string;
+  gasCostNative: number; relayTxHash: string; relayedAt: string;
+}
+interface GasDeposit { chain: string; token: string; amount: number; txHash: string; depositedAt: string; }
+
+// ── Deposit / Withdraw Modal ───────────────────────────────────────────────────
+function DepositModal({ chain, token, onClose, address, onDepositVerified, onWithdraw }: {
+  chain: string; token: string; onClose: () => void; address: string;
+  onDepositVerified?: (balances: Record<string, number>) => void;
+  onWithdraw?: () => void;
+}) {
+  const chainKey = Object.entries(CHAIN_META).find(([, v]) => v.name === chain)?.[0] ?? chain.toLowerCase();
+  const [phase, setPhase] = useState<"loading"|"main"|"checking"|"deposit_verified"|"withdrawing"|"withdraw_done"|"not_found">("loading");
+  const [copied, setCopied] = useState(false);
+  const [verifiedBalances, setVerifiedBalances] = useState<Record<string, number>>({});
+  const [withdrawTx, setWithdrawTx] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+
+  useEffect(() => { const t = setTimeout(() => setPhase("main"), 1000); return () => clearTimeout(t); }, []);
+
+  function copyAddr() { navigator.clipboard.writeText(RELAYER_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+
+  async function verifyDeposit() {
+    setPhase("checking");
+    try {
+      const res = await fetch("/api/gas-tank/verify-deposit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
+      const data = await res.json();
+      if (res.ok && data.newDeposits > 0) { setVerifiedBalances(data.balances); setPhase("deposit_verified"); onDepositVerified?.(data.balances); }
+      else setPhase("not_found");
+    } catch { setPhase("not_found"); }
+  }
+
+  async function doWithdraw() {
+    setPhase("withdrawing");
+    try {
+      const res = await fetch("/api/gas-tank/withdraw", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, chain: chainKey }) });
+      const data = await res.json();
+      if (res.ok && data.success) { setWithdrawTx(data.txHash); setWithdrawAmount(data.amount); setPhase("withdraw_done"); onWithdraw?.(); }
+      else { alert(data.error ?? "Withdraw failed"); setPhase("main"); }
+    } catch { setPhase("main"); }
+  }
+
+  const Spinner = ({ color = "text-yellow" }: { color?: string }) => (
+    <svg className={`animate-spin w-10 h-10 ${color}`} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+    </svg>
+  );
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(10px)" }} onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border p-6 shadow-2xl shadow-black" style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="font-bold text-base">{token} — {chain}</h3>
+          <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        {(phase === "loading") && <div className="flex justify-center py-8"><Spinner /></div>}
+
+        {phase === "main" && (
+          <div className="space-y-4">
+            <p className="text-white/40 text-sm">Send <span className="text-yellow font-semibold">{token}</span> to Q402 to top up your gas tank.</p>
+            <div>
+              <p className="text-xs text-white/30 mb-2 uppercase tracking-widest">Q402 Relayer Address</p>
+              <div className="flex items-center gap-2 bg-white/4 border border-white/10 rounded-xl px-3 py-3">
+                <span className="font-mono text-xs text-white/70 break-all flex-1">{RELAYER_ADDRESS}</span>
+                <button onClick={copyAddr} className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${copied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>{copied ? "Copied!" : "Copy"}</button>
+              </div>
+            </div>
+            <div className="flex items-start gap-2.5 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3 text-xs text-yellow/80">
+              <span className="mt-0.5 flex-shrink-0">⚡</span>
+              <span>Only send <strong>{token}</strong> on the <strong>{chain}</strong> network.</span>
+            </div>
+            <button onClick={verifyDeposit} className="w-full py-3 rounded-xl font-bold text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all">
+              I&apos;ve deposited — Verify
+            </button>
+            <div className="border-t border-white/8 pt-4">
+              <p className="text-xs text-white/30 mb-2">Withdraw remaining balance back to your wallet</p>
+              <button onClick={doWithdraw} className="w-full py-2.5 rounded-xl text-sm border border-red-400/20 text-red-400/70 hover:text-red-400 hover:border-red-400/40 transition-all">
+                Withdraw {token}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {phase === "checking" && <div className="flex flex-col items-center gap-4 py-8"><Spinner /><p className="text-white/40 text-sm">Scanning on-chain…</p></div>}
+        {phase === "withdrawing" && <div className="flex flex-col items-center gap-4 py-8"><Spinner color="text-red-400" /><p className="text-white/40 text-sm">Sending withdrawal…</p></div>}
+
+        {phase === "deposit_verified" && (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3 bg-green-400/8 border border-green-400/20 rounded-xl px-4 py-3">
+              <span className="text-green-400 text-xl">✓</span>
+              <div><p className="text-green-400 font-bold text-sm">Deposit Confirmed!</p><p className="text-white/40 text-xs">Gas tank credited.</p></div>
+            </div>
+            <div className="space-y-1.5 text-xs font-mono">
+              {Object.entries(verifiedBalances).filter(([, v]) => v > 0).map(([c, amt]) => (
+                <div key={c} className="flex justify-between text-white/50 bg-white/4 rounded-lg px-3 py-2">
+                  <span className="uppercase text-white/30">{c}</span>
+                  <span className="text-white/70">{amt.toFixed(4)} {CHAIN_META[c]?.token ?? c.toUpperCase()}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={onClose} className="w-full py-3 rounded-xl font-bold text-sm bg-yellow text-navy hover:bg-yellow-hover transition-all">Back to Dashboard</button>
+          </div>
+        )}
+
+        {phase === "withdraw_done" && (
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3 bg-green-400/8 border border-green-400/20 rounded-xl px-4 py-3">
+              <span className="text-green-400 text-xl">✓</span>
+              <div><p className="text-green-400 font-bold text-sm">Withdrawal Sent!</p><p className="text-white/40 text-xs">{withdrawAmount} {token} → your wallet</p></div>
+            </div>
+            <div><p className="text-xs text-white/30 mb-1.5">TX Hash</p><div className="font-mono text-xs text-white/50 bg-white/4 border border-white/10 rounded-xl px-3 py-3 break-all">{withdrawTx}</div></div>
+            <button onClick={onClose} className="w-full py-3 rounded-xl font-bold text-sm bg-yellow text-navy hover:bg-yellow-hover transition-all">Done</button>
+          </div>
+        )}
+
+        {phase === "not_found" && (
+          <div className="space-y-4 py-2">
+            <div className="bg-red-400/8 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">No deposit found yet. Transactions may take 1–2 minutes.</div>
+            <div className="flex gap-3">
+              <button onClick={() => setPhase("main")} className="flex-1 py-2.5 rounded-xl text-sm border border-white/10 text-white/50 hover:text-white transition-all">← Back</button>
+              <button onClick={verifyDeposit} className="flex-1 py-2.5 rounded-xl text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all font-semibold">Try Again</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ── Bar Chart ─────────────────────────────────────────────────────────────────
+function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
+  const max = Math.max(...data) || 1;
+  return (
+    <div className="flex items-end gap-1.5 h-28">
+      {data.map((v, i) => (
+        <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+          <div className="relative w-full" style={{ height: `${Math.max((v / max) * 100, v > 0 ? 4 : 0)}%` }}>
+            <motion.div initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.5, delay: i * 0.03 }}
+              style={{ transformOrigin: "bottom", background: i === data.length - 1 ? "#F5C518" : "rgba(245,197,24,0.3)" }}
+              className="w-full h-full rounded-sm" />
+            {v > 0 && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity bg-navy px-1 rounded">{v}</div>}
+          </div>
+          {i % 3 === 0 && <span className="text-[9px] text-white/20 font-mono whitespace-nowrap">{labels[i]?.split(" ")[1]}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Playground ────────────────────────────────────────────────────────────────
+function Playground({ apiKey }: { apiKey: string }) {
+  const [chain, setChain] = useState("avax");
+  const [to, setTo] = useState("0xF5Cd...945c");
+  const [amount, setAmount] = useState("5");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<null | { hash: string }>(null);
+
+  async function simulate() {
+    setLoading(true); setResult(null);
+    await new Promise(r => setTimeout(r, 1800));
+    setLoading(false);
+    setResult({ hash: `0x${Math.random().toString(16).slice(2, 10)}…${Math.random().toString(16).slice(2, 6)}` });
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid sm:grid-cols-3 gap-3">
+        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Chain</label>
+          <select value={chain} onChange={e => setChain(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30">
+            <option value="avax">Avalanche ✓</option>
+            <option value="bnb">BNB Chain ✓</option>
+            <option value="eth">Ethereum ✓</option>
+            <option value="xlayer">X Layer ✓</option>
+          </select></div>
+        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Recipient</label>
+          <input value={to} onChange={e => setTo(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-yellow/30" /></div>
+        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount (USDC)</label>
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30" /></div>
+      </div>
+      <div className="bg-[#060C14] border border-white/8 rounded-xl p-4 font-mono text-xs text-white/50 leading-6">
+        <div><span className="text-purple-400">const</span><span className="text-white"> tx </span><span className="text-white/30">= await </span><span className="text-blue-300">q402</span><span className="text-white/30">.pay({"{"}</span></div>
+        <div className="pl-5">
+          <div><span className="text-green-300">to</span><span className="text-white/30">: </span><span className="text-orange-300">&quot;{to}&quot;</span><span className="text-white/30">,</span></div>
+          <div><span className="text-green-300">amount</span><span className="text-white/30">: </span><span className="text-cyan-300">&quot;{amount}&quot;</span><span className="text-white/30">,</span></div>
+          <div><span className="text-green-300">token</span><span className="text-white/30">: </span><span className="text-orange-300">&quot;USDC&quot;</span></div>
+        </div>
+        <div><span className="text-white/30">{"});"}</span></div>
+      </div>
+      <button onClick={simulate} disabled={loading} className="bg-yellow text-navy font-bold text-sm px-6 py-3 rounded-xl hover:bg-yellow-hover transition-all disabled:opacity-60 flex items-center gap-2">
+        {loading ? (<><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>Sending…</>) : "▶ Run Simulation"}
+      </button>
+      {result && (
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-green-400/5 border border-green-400/20 rounded-xl p-4 font-mono text-xs space-y-1">
+          <div className="text-green-400 font-bold mb-2">✓ Simulated</div>
+          <div><span className="text-white/30">hash: </span><span className="text-orange-300">{result.hash}</span></div>
+          <div><span className="text-white/30">gas by user: </span><span className="text-yellow font-bold">$0.000000</span></div>
+          <div><span className="text-white/30">USDC sent: </span><span className="text-green-400">${amount}.00</span></div>
+        </motion.div>
+      )}
+      <div className="pt-4 border-t border-white/6">
+        <p className="text-xs text-white/25 mb-2">Your API Key</p>
+        <div className="font-mono text-xs text-white/50 bg-navy border border-white/8 rounded-lg px-3 py-2 break-all">{apiKey}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+const TABS = ["overview", "gas-tank", "developer", "transactions"] as const;
+type Tab = typeof TABS[number];
+
+export default function DashboardPage() {
+  const { address, isConnected } = useWallet();
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>("overview");
+  const [keyCopied, setKeyCopied] = useState(false);
+  const [depositChain, setDepositChain] = useState<{ chain: string; token: string } | null>(null);
+  const [autoTopup, setAutoTopup] = useState(true);
+
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [expiresAt, setExpiresAt] = useState<Date | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
+  const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
+  const [thisMonthCount, setThisMonthCount] = useState(0);
+  const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
+  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0 });
+  const [relayerTanks, setRelayerTanks] = useState<{ key: string; chain: string; token: string; balance: string; usd: string; price: number }[]>([]);
+  const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [tankLoading, setTankLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    if (!mounted) return;
+    const t = setTimeout(() => { if (!isConnected) router.push("/"); }, 600);
+    return () => clearTimeout(t);
+  }, [mounted, isConnected, router]);
+
+  const refreshUserBalance = useCallback((addr: string) => {
+    fetch(`/api/gas-tank/user-balance?address=${addr}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.balances) setUserGasBalance(data.balances);
+        if (data.deposits) setGasDeposits(data.deposits);
+      }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!address) return;
+    fetch(`/api/payment/check?address=${address}`).then(r => r.json()).then(data => {
+      if (data.subscription) setSubscription(data.subscription);
+      if (data.expiresAt) setExpiresAt(new Date(data.expiresAt));
+      if (data.isExpired !== undefined) setIsExpired(data.isExpired);
+    }).catch(() => {});
+  }, [address]);
+
+  useEffect(() => {
+    if (!address) return;
+    fetch(`/api/transactions?address=${address}`).then(r => r.json()).then(data => {
+      if (data.txs) setRelayedTxs(data.txs);
+      if (data.thisMonthCount !== undefined) setThisMonthCount(data.thisMonthCount);
+    }).catch(() => {});
+  }, [address]);
+
+  useEffect(() => {
+    setTankLoading(true);
+    fetch("/api/gas-tank").then(r => r.json()).then(data => {
+      if (data.tanks) {
+        setRelayerTanks(data.tanks);
+        const prices: Record<string, number> = {};
+        for (const t of data.tanks) prices[t.key] = t.price;
+        setTokenPrices(prices);
+      }
+    }).catch(() => {}).finally(() => setTankLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!address) return;
+    refreshUserBalance(address);
+    fetch(`/api/wallet-balance?address=${address}`).then(r => r.json()).then(data => {
+      if (data.balances) setWalletBalances(data.balances);
+    }).catch(() => {});
+  }, [address, refreshUserBalance]);
+
+  if (!mounted || !isConnected || !address) return null;
+
+  const API_KEY = subscription?.apiKey ?? "—";
+  const plan = subscription?.plan ?? "starter";
+  const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
+  const quota = PLAN_QUOTA[plan.toLowerCase()] ?? 1_000;
+  const pct = Math.round((thisMonthCount / quota) * 100);
+  const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000) : null;
+  const totalUserUSD = Object.entries(userGasBalance).reduce((sum, [c, amt]) => {
+    return sum + amt * (tokenPrices[c === "xlayer" ? "eth" : c] ?? 0);
+  }, 0);
+
+  // Build 14-day chart
+  const today = new Date();
+  const dailyLabels: string[] = [];
+  const dailyData: number[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    dailyLabels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+    dailyData.push(relayedTxs.filter(tx => new Date(tx.relayedAt).toDateString() === d.toDateString()).length);
+  }
+
+  function copyKey() { navigator.clipboard.writeText(API_KEY); setKeyCopied(true); setTimeout(() => setKeyCopied(false), 2000); }
+
+  const tabLabel: Record<Tab, string> = {
+    "overview": "Overview",
+    "gas-tank": "Gas Tank",
+    "developer": "Developer",
+    "transactions": `Transactions${relayedTxs.length > 0 ? ` (${relayedTxs.length})` : ""}`,
+  };
+
+  return (
+    <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
+      {depositChain && (
+        <DepositModal chain={depositChain.chain} token={depositChain.token} onClose={() => setDepositChain(null)} address={address}
+          onDepositVerified={balances => { setUserGasBalance(balances); setDepositChain(null); }}
+          onWithdraw={() => { refreshUserBalance(address); setDepositChain(null); }} />
+      )}
+
+      <header className="border-b px-6 h-16 flex items-center justify-between max-w-7xl mx-auto sticky top-0 z-40 backdrop-blur-md"
+        style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(5,7,10,0.85)" }}>
+        <a href="/" className="flex items-baseline gap-2">
+          <span className="text-yellow font-bold text-base">Q402</span>
+          <span className="text-white/25 text-xs hidden sm:block">Dashboard</span>
+        </a>
+        <div className="flex items-center gap-4">
+          <div className="hidden sm:flex items-center gap-2 bg-white/5 border border-white/8 rounded-full px-3 py-1.5">
+            <span className="text-xs text-white/30 font-mono">{shortAddr(address)}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
+          </div>
+          <WalletButton />
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">My Dashboard</h1>
+            <p className="text-white/35 text-sm mt-0.5">Manage your Q402 plan, gas tank, and API access.</p>
+          </div>
+          <div className="flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-2">
+            <span className="text-yellow font-bold text-sm">{planName} Plan</span>
+            {subscription && <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>}
+          </div>
+        </div>
+
+        {/* Expiry banner */}
+        {expiresAt && (
+          <div className={`mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border ${isExpired ? "bg-red-400/8 border-red-400/20" : daysLeft !== null && daysLeft <= 7 ? "bg-yellow/6 border-yellow/20" : "bg-white/4 border-white/8"}`}>
+            <div className="flex items-center gap-3">
+              <span className={`text-lg ${isExpired ? "text-red-400" : "text-yellow"}`}>{isExpired ? "⚠" : "📅"}</span>
+              <div>
+                <p className={`font-semibold text-sm ${isExpired ? "text-red-400" : "text-white"}`}>
+                  {isExpired ? "Subscription Expired" : daysLeft !== null && daysLeft <= 7 ? `Expiring in ${daysLeft} day${daysLeft === 1 ? "" : "s"}` : "Subscription Active"}
+                </p>
+                <p className="text-white/35 text-xs">
+                  {isExpired ? "Renew to restore relay access" : `Renews ${expiresAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
+                </p>
+              </div>
+            </div>
+            {(isExpired || (daysLeft !== null && daysLeft <= 7)) && (
+              <a href="/payment" className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">Renew →</a>
+            )}
+          </div>
+        )}
+
+        {/* Tabs */}
+        <div className="flex gap-1 bg-white/4 border border-white/7 rounded-2xl p-1 w-fit mb-8 flex-wrap">
+          {TABS.map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${tab === t ? "bg-yellow text-navy shadow-lg shadow-yellow/15" : "text-white/40 hover:text-white"}`}>
+              {tabLabel[t]}
+            </button>
+          ))}
+        </div>
+
+        {/* ── OVERVIEW ── */}
+        {tab === "overview" && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: "Txs This Month", value: thisMonthCount.toLocaleString(), sub: `of ${quota.toLocaleString()} quota` },
+                { label: "Total Relayed",  value: relayedTxs.length.toLocaleString(), sub: "all time" },
+                { label: "My Gas Tank",    value: `$${totalUserUSD.toFixed(2)}`, sub: "deposited balance", accent: true },
+                { label: "Today's Txs",    value: dailyData[13].toLocaleString(), sub: "today", green: true },
+              ].map((s, i) => (
+                <div key={i} className="card-glow rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                  <div className="text-white/35 text-xs mb-2">{s.label}</div>
+                  <div className={`text-2xl font-bold mb-1 ${"accent" in s && s.accent ? "text-yellow" : "green" in s && s.green ? "text-green-400" : "text-white"}`}>{s.value}</div>
+                  <div className="text-white/25 text-xs">{s.sub}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl p-6 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+              <div className="flex items-center justify-between mb-6">
+                <div><div className="font-semibold">Daily Transactions</div><div className="text-white/35 text-xs mt-0.5">Last 14 days</div></div>
+                <div className="flex items-center gap-4 text-xs text-white/30">
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-yellow/30" />Previous</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-yellow" />Today</span>
+                </div>
+              </div>
+              <BarChart data={dailyData} labels={dailyLabels} />
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="rounded-2xl p-6 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="flex justify-between mb-3">
+                  <span className="text-sm font-medium">Monthly Quota</span>
+                  <span className="text-sm text-white/40">{pct}% used</span>
+                </div>
+                <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(pct, 100)}%` }} transition={{ duration: 1, delay: 0.3 }}
+                    className="h-full rounded-full" style={{ background: pct > 80 ? "#E84142" : "#F5C518" }} />
+                </div>
+                <div className="flex justify-between mt-2 text-xs text-white/25">
+                  <span>{thisMonthCount.toLocaleString()} used</span>
+                  <span>{Math.max(quota - thisMonthCount, 0).toLocaleString()} remaining</span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-medium">API Key</span>
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full border ${isExpired ? "text-red-400 bg-red-400/8 border-red-400/20" : "text-green-400 bg-green-400/8 border-green-400/20"}`}>
+                    {isExpired ? "Expired" : "Active"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
+                  <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Not yet activated" : API_KEY}</span>
+                  {API_KEY !== "—" && (
+                    <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
+                      {keyCopied ? "Copied!" : "Copy"}
+                    </button>
+                  )}
+                </div>
+                {subscription?.paidAt && expiresAt && (
+                  <p className="text-white/20 text-xs mt-2">
+                    Paid {new Date(subscription.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    {" · expires "}{expiresAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── GAS TANK ── */}
+        {tab === "gas-tank" && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+            <div className="rounded-2xl p-6 border relative overflow-hidden"
+              style={{ background: "linear-gradient(135deg, #0F1929 0%, #131E30 100%)", borderColor: "rgba(245,197,24,0.15)" }}>
+              <div className="absolute right-6 top-6 w-32 h-32 rounded-full blur-3xl" style={{ background: "rgba(245,197,24,0.06)" }} />
+              <div className="text-white/40 text-sm mb-1">My Gas Tank (USD est.)</div>
+              <div className="text-4xl font-bold text-yellow mb-1">
+                {tankLoading ? <span className="text-2xl text-white/20 animate-pulse">Loading…</span> : `$${totalUserUSD.toFixed(2)}`}
+              </div>
+              <div className="text-white/25 text-xs">Your deposited balance · used for gas sponsorship</div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {Object.entries(CHAIN_META).map(([key, meta]) => {
+                const userAmt = userGasBalance[key] ?? 0;
+                const price = tokenPrices[key === "xlayer" ? "eth" : key] ?? 0;
+                const userUSD = userAmt * price;
+                const relayerTank = relayerTanks.find(t => t.key === key);
+                return (
+                  <div key={key} className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                    <div className="flex items-center gap-2.5 mb-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <div className={`w-7 h-7 ${meta.rounded} overflow-hidden flex-shrink-0`} style={{ background: meta.color }}>
+                        <img src={meta.img} alt={meta.name} className="w-full h-full object-cover" />
+                      </div>
+                      <div><div className="text-xs font-semibold">{meta.name}</div><div className="text-white/30 text-[10px]">{meta.token}</div></div>
+                    </div>
+                    <div className="text-xl font-bold">{userAmt.toFixed(4)} <span className="text-sm font-normal text-white/40">{meta.token}</span></div>
+                    <div className="text-white/30 text-xs mt-0.5">{userUSD >= 0.01 ? `$${userUSD.toFixed(2)}` : "$0.00"} deposited</div>
+                    {(walletBalances[key] ?? 0) > 0 && (
+                      <div className="text-white/25 text-[10px] mt-1.5 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400/60 inline-block" />
+                        Wallet: {(walletBalances[key] ?? 0).toFixed(4)} {meta.token}
+                      </div>
+                    )}
+                    {relayerTank && <div className="text-white/15 text-[10px] mt-0.5">Pool: {relayerTank.balance} {meta.token}</div>}
+                    <button onClick={() => setDepositChain({ chain: meta.name, token: meta.token })}
+                      className="mt-3 w-full text-xs font-semibold border border-yellow/25 text-yellow bg-yellow/5 hover:bg-yellow/10 py-1.5 rounded-lg transition-all">
+                      Manage {meta.token}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-2xl p-6 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+              <div className="flex items-start justify-between gap-4">
+                <div><div className="font-semibold mb-1">Auto Top-up</div>
+                  <p className="text-white/40 text-sm">Automatically refill each chain&apos;s gas tank when balance drops low.</p></div>
+                <button onClick={() => setAutoTopup(v => !v)}
+                  className="flex-shrink-0 w-12 h-6 rounded-full transition-all relative mt-0.5"
+                  style={{ background: autoTopup ? "#F5C518" : "rgba(255,255,255,0.1)" }}>
+                  <span className="absolute top-0.5 transition-all w-5 h-5 rounded-full bg-white shadow" style={{ left: autoTopup ? "26px" : "2px" }} />
+                </button>
+              </div>
+              {autoTopup && <div className="mt-4 flex items-center gap-2 text-xs text-yellow/80 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3">⚡ Auto top-up active</div>}
+            </div>
+
+            {/* Real deposit history */}
+            <div className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+              <div className="px-6 py-4 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                <span className="font-semibold">Tank Activity</span>
+              </div>
+              {gasDeposits.length === 0 ? (
+                <div className="px-6 py-10 text-center text-white/25 text-sm">No activity yet</div>
+              ) : [...gasDeposits].reverse().map((d, i) => {
+                const isWithdrawal = d.amount < 0;
+                return (
+                  <div key={i} className="flex items-center justify-between px-6 py-4 border-b last:border-0 hover:bg-white/2 transition-colors" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                    <div>
+                      <div className="text-sm font-medium">{isWithdrawal ? "Withdrawal" : "Deposit"}</div>
+                      <div className="text-white/30 text-xs mt-0.5">{CHAIN_META[d.chain]?.name ?? d.chain} · {new Date(d.depositedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
+                      <div className="font-mono text-[10px] text-white/20 mt-0.5">{shortHash(d.txHash)}</div>
+                    </div>
+                    <span className={`font-mono text-sm font-semibold ${isWithdrawal ? "text-red-400" : "text-green-400"}`}>
+                      {isWithdrawal ? "-" : "+"}{Math.abs(d.amount).toFixed(4)} {d.token}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── DEVELOPER ── */}
+        {tab === "developer" && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+            <div className="grid lg:grid-cols-2 gap-5">
+              <div className="space-y-4">
+                <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest">Integration Guide</h3>
+                {STEPS.map(s => (
+                  <div key={s.n} className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                    <div className="flex items-center gap-3 px-5 py-4">
+                      <span className="w-7 h-7 rounded-lg bg-yellow/10 border border-yellow/20 text-yellow text-xs font-bold flex items-center justify-center flex-shrink-0">{s.n}</span>
+                      <span className="text-sm font-medium">{s.title}</span>
+                    </div>
+                    <div className="mx-4 mb-4 bg-[#060C14] border border-white/7 rounded-xl p-4">
+                      <pre className="font-mono text-xs text-green-400 leading-5 whitespace-pre-wrap overflow-x-auto">{s.code}</pre>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest mb-4">API Playground</h3>
+                <div className="rounded-2xl border p-6" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                  <p className="text-white/40 text-sm mb-5">Test a simulated transaction using your API key.</p>
+                  <Playground apiKey={API_KEY} />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── TRANSACTIONS ── */}
+        {tab === "transactions" && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+            <div className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+              <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                <span className="font-semibold">Relayed Transaction History</span>
+                <span className="text-white/25 text-xs">{thisMonthCount} this month · {relayedTxs.length} total</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px]">
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                      {["Date", "Chain", "From → To", "Amount", "Tx Hash", "Status"].map(h => (
+                        <th key={h} className="text-left text-xs text-white/25 font-normal px-5 py-3">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {relayedTxs.length === 0 ? (
+                      <tr><td colSpan={6} className="px-6 py-12 text-center text-white/25 text-sm">No transactions yet</td></tr>
+                    ) : [...relayedTxs].reverse().map((tx, i) => {
+                      const meta = CHAIN_META[tx.chain];
+                      return (
+                        <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                          className="border-b last:border-0 hover:bg-white/2 transition-colors" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+                          <td className="px-5 py-4 text-xs text-white/50 whitespace-nowrap">
+                            {new Date(tx.relayedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </td>
+                          <td className="px-5 py-4">
+                            <span className="flex items-center gap-1.5 text-xs text-white/60">
+                              {meta && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: meta.color }} />}
+                              {meta?.name ?? tx.chain}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 font-mono text-xs text-white/35">{shortAddr(tx.fromUser)} → {shortAddr(tx.toUser)}</td>
+                          <td className="px-5 py-4 text-xs font-semibold text-white/70">
+                            {tx.tokenAmount.toFixed(2)} <span className="text-white/30">{tx.tokenSymbol}</span>
+                          </td>
+                          <td className="px-5 py-4 font-mono text-xs text-white/30">{shortHash(tx.relayTxHash)}</td>
+                          <td className="px-5 py-4">
+                            <span className="text-xs text-green-400 bg-green-400/8 border border-green-400/20 px-2.5 py-1 rounded-full">Success</span>
+                          </td>
+                        </motion.tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}
