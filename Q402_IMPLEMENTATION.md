@@ -178,7 +178,10 @@ q402-landing/
 ### 결제 게이팅 (`app/lib/access.ts`)
 
 ```typescript
-const MASTER_ADDRESSES = ["0xfc77ff29178b7286a8ba703d7a70895ca74ff466"];
+const MASTER_ADDRESSES = [
+  "0xfc77ff29178b7286a8ba703d7a70895ca74ff466",
+  "0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28",
+];
 
 isPaid(address)  // MASTER_ADDRESSES 포함 여부 or localStorage 확인
 setPaid(address) // localStorage에 q402_paid_{address} = "true" 저장
@@ -197,8 +200,8 @@ setPaid(address) // localStorage에 q402_paid_{address} = "true" 저장
 | 금액 | 플랜 |
 |------|------|
 | $29+ | Starter |
-| $99+ | Growth |
-| $299+ | Enterprise |
+| $89+ | Growth |
+| $449+ | Enterprise |
 
 ### 결제 확인 API
 
@@ -562,6 +565,7 @@ RELAYER_PRIVATE_KEY=0x...
 IMPLEMENTATION_CONTRACT=0xE5b90D564650bdcE7C2Bb4344F777f6582e05699
 BNB_IMPLEMENTATION_CONTRACT=0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6
 ETH_IMPLEMENTATION_CONTRACT=0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9
+XLAYER_IMPLEMENTATION_CONTRACT=0x2fb2B2D110b6c5664e701666B3741240242bf350
 ```
 
 ---
@@ -627,9 +631,10 @@ function payBatch(
 테스트 및 내부 관리용으로 항상 paid 처리되는 주소:
 
 ```
-0xfc77ff29178b7286a8ba703d7a70895ca74ff466
+0xfc77ff29178b7286a8ba703d7a70895ca74ff466  (릴레이어 지갑)
+0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28  (오너 지갑)
 ```
 
 - `app/lib/access.ts`의 `MASTER_ADDRESSES` 배열에 하드코딩
+- 결제/체인 스캔 없이 즉시 Dashboard 접근 가능
 - `data/db.json`에 `q402_live_test_masterkey`로 수동 삽입됨
-- 이 주소 = 릴레이어 지갑 주소 (동일 주소로 설정됨)
