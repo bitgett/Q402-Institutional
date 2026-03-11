@@ -1,44 +1,29 @@
 const tiers = [
   {
-    name: "Free",
-    price: "$0",
-    period: "/mo",
-    description: "Test the protocol risk-free.",
-    features: [
-      "100 sponsored transactions/mo",
-      "All EVM Testnets supported",
-      "Full API access",
-      "Community support",
-    ],
-    cta: "Get started",
-    href: "#contact",
-    highlight: false,
-  },
-  {
-    name: "Growth",
-    price: "$149",
+    name: "Starter",
+    price: "$29",
     period: "/mo",
     description: "For early-stage apps and MVPs.",
     features: [
-      "10,000 sponsored transactions/mo",
+      "1,000 sponsored transactions/mo",
       "BNB Chain · Avalanche · X Layer",
-      "API access + webhooks",
-      "Email support",
+      "Full API access",
+      "Community support",
     ],
     cta: "Get started",
     href: "/payment",
     highlight: false,
   },
   {
-    name: "Scale",
-    price: "$449",
+    name: "Growth",
+    price: "$89",
     period: "/mo",
-    description: "For growing products at scale.",
+    description: "For growing products with real users.",
     features: [
-      "50,000 sponsored transactions/mo",
+      "10,000 sponsored transactions/mo",
       "All supported EVM chains",
-      "Priority queue + custom policies",
-      "Slack / dedicated support",
+      "API access + webhooks",
+      "Email support",
     ],
     cta: "Get started",
     href: "/payment",
@@ -46,17 +31,17 @@ const tiers = [
   },
   {
     name: "Enterprise",
-    price: "Custom",
-    period: "",
+    price: "$449",
+    period: "/mo",
     description: "For high-volume, mission-critical apps.",
     features: [
       "Unlimited transactions",
-      "SLA guarantee (99.9% uptime)",
-      "Private RPC endpoint",
-      "Dedicated account manager",
+      "All supported EVM chains",
+      "Priority queue + custom policies",
+      "Slack / dedicated support",
     ],
-    cta: "Contact Us",
-    href: "#contact",
+    cta: "Get started",
+    href: "/payment",
     highlight: false,
   },
 ];
@@ -72,7 +57,7 @@ export default function Pricing() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid md:grid-cols-3 gap-5 max-w-4xl mx-auto">
           {tiers.map((tier, i) => (
             <div
               key={i}
