@@ -1,47 +1,62 @@
 const tiers = [
   {
-    name: "Starter",
-    price: "$29",
+    name: "Growth",
+    price: "$670",
     period: "/mo",
-    description: "For early-stage apps and MVPs.",
+    description: "For growing products with real users.",
     features: [
-      "1,000 sponsored transactions/mo",
-      "BNB Chain · Avalanche · X Layer",
+      "50,000 sponsored transactions/mo",
+      "All supported EVM chains",
       "Full API access",
-      "Community support",
+      "Email support",
     ],
     cta: "Get started",
     href: "/payment",
     highlight: false,
   },
   {
-    name: "Growth",
-    price: "$89",
+    name: "Scale",
+    price: "$1,200",
     period: "/mo",
-    description: "For growing products with real users.",
+    description: "For products scaling at volume.",
     features: [
-      "10,000 sponsored transactions/mo",
+      "100,000 sponsored transactions/mo",
       "All supported EVM chains",
       "API access + webhooks",
-      "Email support",
+      "Priority support",
     ],
     cta: "Get started",
     href: "/payment",
     highlight: true,
   },
   {
-    name: "Enterprise",
-    price: "$449",
+    name: "Business",
+    price: "$3,000",
     period: "/mo",
-    description: "For high-volume, mission-critical apps.",
+    description: "For high-throughput DeFi applications.",
     features: [
-      "Unlimited transactions",
+      "100K–500K sponsored transactions/mo",
       "All supported EVM chains",
       "Priority queue + custom policies",
       "Slack / dedicated support",
     ],
     cta: "Get started",
     href: "/payment",
+    highlight: false,
+  },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    period: "",
+    description: "For mission-critical apps at any scale.",
+    features: [
+      "500K+ sponsored transactions/mo",
+      "All supported EVM chains",
+      "SLA guarantee (99.9% uptime)",
+      "Dedicated account manager",
+    ],
+    cta: "Contact Us",
+    href: "#contact",
     highlight: false,
   },
 ];
@@ -57,7 +72,7 @@ export default function Pricing() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-5 max-w-4xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
           {tiers.map((tier, i) => (
             <div
               key={i}
@@ -107,7 +122,7 @@ export default function Pricing() {
         {/* Cost context */}
         <div className="mt-10 text-center">
           <p className="text-white/25 text-sm">
-            Prices shown for BNB Chain (base rate). Other chains may vary. <a href="/payment" className="text-yellow/60 hover:text-yellow underline transition-colors">Build a custom quote →</a>
+            Prices shown for Ethereum mainnet. BNB Chain / Avalanche / X Layer start lower. <a href="/payment" className="text-yellow/60 hover:text-yellow underline transition-colors">Build a custom quote →</a>
           </p>
         </div>
       </div>
