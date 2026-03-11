@@ -148,9 +148,12 @@ console.log(result.txHash);
 
 | Plan | Price | Monthly Relay TX |
 |------|-------|-----------------|
-| Starter | $29 | 1,000 |
-| Growth | $89 | 10,000 |
-| Enterprise | $449 | Unlimited |
+| Growth | $670 | 50,000 |
+| Scale | $1,200 | 100,000 |
+| Business | $3,000 | 100K–500K |
+| Enterprise | Custom | 500K+ |
+
+Prices shown for Ethereum mainnet. BNB Chain / Avalanche / X Layer start lower — use the [Quote Builder](/payment) for exact pricing per chain.
 
 Payment flow: send USDC/USDT to the Q402 relayer address on any supported chain → wait ~3 min → click "Activate" on `/payment` → dashboard access granted + API key issued.
 

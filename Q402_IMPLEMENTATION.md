@@ -197,11 +197,12 @@ setPaid(address) // localStorage에 q402_paid_{address} = "true" 저장
 
 ### 플랜 매핑
 
-| 금액 | 플랜 |
-|------|------|
-| $29+ | Starter |
-| $89+ | Growth |
-| $449+ | Enterprise |
+| 금액 (ETH 기준) | 플랜 | TX/월 |
+|----------------|------|-------|
+| $670+ | Growth | 50,000 |
+| $1,200+ | Scale | 100,000 |
+| $3,000+ | Business | 100K~500K |
+| Custom | Enterprise | 500K+ |
 
 ### 결제 확인 API
 
@@ -499,7 +500,7 @@ q402.pay() 호출
 #### Overview 탭
 - 일별 TX 차트 (bar chart, SVG)
 - API Key 표시 (마스킹 + 복사 버튼)
-- 릴레이 TX 할당량 (0/1,000 — Starter 기준)
+- 릴레이 TX 할당량 (플랜별: Growth 50K / Scale 100K / Business 500K / Enterprise 무제한)
 - 최근 TX 목록
 
 #### Gas Tank 탭
