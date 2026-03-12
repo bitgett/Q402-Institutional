@@ -6,7 +6,7 @@ const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   bnb:    { rpc: "https://bsc-dataseed1.binance.org/",         token: "BNB"  },
   eth:    { rpc: "https://ethereum.publicnode.com",             token: "ETH"  },
   avax:   { rpc: "https://api.avax.network/ext/bc/C/rpc",      token: "AVAX" },
-  xlayer: { rpc: "https://rpc.xlayer.tech",                    token: "ETH"  },
+  xlayer: { rpc: "https://rpc.xlayer.tech",                    token: "OKB"  },
 };
 
 export async function POST(req: NextRequest) {

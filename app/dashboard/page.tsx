@@ -21,7 +21,7 @@ const PLAN_QUOTA: Record<string, number> = {
 const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string }> = {
   bnb:    { name: "BNB Chain",  token: "BNB",  color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
   eth:    { name: "Ethereum",   token: "ETH",  color: "#627EEA", img: "/eth.png",    rounded: "rounded-lg"   },
-  xlayer: { name: "X Layer",    token: "ETH",  color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-sm"   },
+  xlayer: { name: "X Layer",    token: "OKB",  color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-sm"   },
   avax:   { name: "Avalanche",  token: "AVAX", color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
 };
 

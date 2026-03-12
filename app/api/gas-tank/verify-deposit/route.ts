@@ -8,7 +8,7 @@ const CHAINS = [
   { key: "bnb",    name: "BNB Chain", token: "BNB",  rpc: "https://bsc-dataseed1.binance.org/",   blockWindow: 200 },
   { key: "eth",    name: "Ethereum",  token: "ETH",  rpc: "https://ethereum.publicnode.com",       blockWindow: 50  },
   { key: "avax",   name: "Avalanche", token: "AVAX", rpc: "https://api.avax.network/ext/bc/C/rpc", blockWindow: 200 },
-  { key: "xlayer", name: "X Layer",   token: "ETH",  rpc: "https://rpc.xlayer.tech",               blockWindow: 200 },
+  { key: "xlayer", name: "X Layer",   token: "OKB",  rpc: "https://rpc.xlayer.tech",               blockWindow: 200 },
 ];
 
 async function scanNativeDeposits(

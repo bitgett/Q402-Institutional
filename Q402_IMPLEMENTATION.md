@@ -293,7 +293,7 @@ q402_live_{랜덤16자}
     { "key": "bnb",    "chain": "BNB Chain",  "token": "BNB",  "balance": "1.2340", "usd": "$865.31" },
     { "key": "eth",    "chain": "Ethereum",   "token": "ETH",  "balance": "0.1200", "usd": "$456.00" },
     { "key": "avax",  "chain": "Avalanche",  "token": "AVAX", "balance": "25.4000","usd": "$812.80" },
-    { "key": "xlayer","chain": "X Layer",    "token": "ETH",  "balance": "0.0000", "usd": "$0.00"   }
+    { "key": "xlayer","chain": "X Layer",    "token": "OKB",  "balance": "0.0000", "usd": "$0.00"   }
   ]
 }
 ```
