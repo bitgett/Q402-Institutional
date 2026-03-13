@@ -1,3 +1,8 @@
+"use client";
+
+import { useState } from "react";
+import RegisterModal from "./RegisterModal";
+
 const tiers = [
   {
     name: "Growth",
@@ -55,14 +60,17 @@ const tiers = [
       "SLA guarantee (99.9% uptime)",
       "Dedicated account manager",
     ],
-    cta: "Contact Us",
-    href: "#contact",
+    cta: "Contact Sales",
+    href: null,
     highlight: false,
   },
 ];
 
 export default function Pricing() {
+  const [showModal, setShowModal] = useState(false);
+
   return (
+    <>
     <section id="pricing" className="py-24 px-6">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16">
@@ -105,16 +113,25 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              <a
-                href={tier.href}
-                className={`text-center text-sm font-semibold py-3 rounded-full transition-all ${
-                  tier.highlight
-                    ? "bg-yellow text-navy hover:bg-yellow-hover"
-                    : "border border-white/20 text-white hover:bg-white/5"
-                }`}
-              >
-                {tier.cta}
-              </a>
+              {tier.href === null ? (
+                <button
+                  onClick={() => setShowModal(true)}
+                  className={`w-full text-center text-sm font-semibold py-3 rounded-full transition-all border border-white/20 text-white hover:bg-white/5`}
+                >
+                  {tier.cta}
+                </button>
+              ) : (
+                <a
+                  href={tier.href}
+                  className={`text-center text-sm font-semibold py-3 rounded-full transition-all ${
+                    tier.highlight
+                      ? "bg-yellow text-navy hover:bg-yellow-hover"
+                      : "border border-white/20 text-white hover:bg-white/5"
+                  }`}
+                >
+                  {tier.cta}
+                </a>
+              )}
             </div>
           ))}
         </div>
@@ -127,5 +144,7 @@ export default function Pricing() {
         </div>
       </div>
     </section>
+    {showModal && <RegisterModal onClose={() => setShowModal(false)} />}
+    </>
   );
 }
