@@ -5,45 +5,45 @@ import RegisterModal from "./RegisterModal";
 
 const tiers = [
   {
-    name: "Growth",
-    price: "$670",
+    name: "Starter",
+    price: "$30",
     period: "/mo",
-    description: "For growing products with real users.",
+    description: "For indie developers and early-stage projects.",
     features: [
-      "50,000 sponsored transactions/mo",
-      "All supported EVM chains",
+      "500 sponsored transactions/mo",
+      "BNB Chain supported",
       "Full API access",
-      "Email support",
+      "Community support",
     ],
     cta: "Get started",
     href: "/payment",
     highlight: false,
   },
   {
-    name: "Scale",
-    price: "$1,200",
+    name: "Growth",
+    price: "$150",
     period: "/mo",
-    description: "For products scaling at volume.",
+    description: "For growing products with real users.",
     features: [
-      "100,000 sponsored transactions/mo",
+      "10,000 sponsored transactions/mo",
       "All supported EVM chains",
-      "API access + webhooks",
-      "Priority support",
+      "Full API access",
+      "Email support",
     ],
     cta: "Get started",
     href: "/payment",
     highlight: true,
   },
   {
-    name: "Business",
-    price: "$3,000",
+    name: "Scale",
+    price: "$800",
     period: "/mo",
     description: "For high-throughput DeFi applications.",
     features: [
-      "100K–500K sponsored transactions/mo",
+      "100,000 sponsored transactions/mo",
       "All supported EVM chains",
-      "Priority queue + custom policies",
-      "Slack / dedicated support",
+      "API access + webhooks",
+      "Priority support",
     ],
     cta: "Get started",
     href: "/payment",
@@ -140,7 +140,7 @@ export default function Pricing() {
         {/* Cost context */}
         <div className="mt-10 text-center space-y-2">
           <p className="text-white/25 text-sm">
-            Prices shown for Ethereum mainnet. BNB Chain / Avalanche / X Layer start lower. <a href="/payment" className="text-yellow/60 hover:text-yellow underline transition-colors">Build a custom quote →</a>
+            Prices based on BNB Chain. Ethereum / Avalanche / X Layer may vary. <a href="/payment" className="text-yellow/60 hover:text-yellow underline transition-colors">Build a custom quote →</a>
           </p>
           <p className="text-white/20 text-sm">
             Not sure where to start? <a href="/docs" className="text-white/40 hover:text-white underline transition-colors">Read the docs →</a>
