@@ -74,10 +74,6 @@ export default function Pricing() {
     <section id="pricing" className="py-24 px-6">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 bg-yellow/10 border border-yellow/25 rounded-full px-4 py-1.5 mb-4">
-            <span className="text-yellow font-bold text-sm">From $30/mo</span>
-            <span className="text-white/35 text-xs">· 500 transactions included</span>
-          </div>
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Simple, transparent pricing</h2>
           <p className="text-white/50 max-w-xl mx-auto">
             Sponsor gas for your users on any EVM chain. Plans scale with your product — from early MVPs to enterprise.
