@@ -78,6 +78,7 @@ export default function Pricing() {
           <p className="text-white/50 max-w-xl mx-auto">
             Sponsor gas for your users on any EVM chain. Plans scale with your product — from early MVPs to enterprise.
           </p>
+          <p className="text-white/35 text-sm mt-3">Deploy in 5 minutes with our SDK.</p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
