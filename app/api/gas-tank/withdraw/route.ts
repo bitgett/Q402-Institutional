@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Unsupported chain: ${chain}` }, { status: 400 });
   }
 
-  const balance = getGasBalance(address);
+  const balance = await getGasBalance(address);
   const amount = balance[chain] ?? 0;
   if (amount < 0.0005) {
     return NextResponse.json({ error: "Balance too low to withdraw" }, { status: 400 });
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Record as negative deposit to zero out this address's balance
-    addGasDeposit(address, {
+    await addGasDeposit(address, {
       chain,
       token: chainCfg.token,
       amount: -amount,   // negative = withdrawal

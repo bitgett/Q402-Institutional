@@ -8,13 +8,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "address required" }, { status: 400 });
   }
 
-  const sub = getSubscription(address);
+  const sub = await getSubscription(address);
   if (!sub) {
     return NextResponse.json({ error: "No active subscription found" }, { status: 403 });
   }
 
-  const newKey = generateApiKey(address, sub.plan);
-  setSubscription(address, { ...sub, apiKey: newKey });
+  const newKey = await generateApiKey(address, sub.plan);
+  await setSubscription(address, { ...sub, apiKey: newKey });
 
   return NextResponse.json({ apiKey: newKey, plan: sub.plan });
 }

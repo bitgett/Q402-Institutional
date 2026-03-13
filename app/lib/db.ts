@@ -1,7 +1,12 @@
-import fs from "fs";
-import path from "path";
-
-const DB_PATH = path.join(process.cwd(), "data", "db.json");
+/**
+ * db.ts — Vercel KV (Redis) backed data layer
+ * Drop-in replacement for the previous fs/db.json implementation.
+ *
+ * Required env vars (set in Vercel dashboard or .env.local):
+ *   KV_REST_API_URL   — from Vercel KV store
+ *   KV_REST_API_TOKEN — from Vercel KV store
+ */
+import { kv } from "@vercel/kv";
 
 interface Subscription {
   paidAt: string;
@@ -39,108 +44,75 @@ export interface RelayedTx {
   relayedAt: string;
 }
 
-interface DB {
-  subscriptions: Record<string, Subscription>;
-  apiKeys: Record<string, ApiKeyRecord>;
-  // address → list of confirmed gas deposits
-  gasDeposits: Record<string, GasDeposit[]>;
-  // address → list of relayed transactions (for gas consumption tracking)
-  relayedTxs: Record<string, RelayedTx[]>;
+// ── Key helpers ──────────────────────────────────────────────────────────────
+
+const subKey        = (addr: string) => `sub:${addr.toLowerCase()}`;
+const apiKeyRecKey  = (key: string)  => `apikey:${key}`;
+const gasDepKey     = (addr: string) => `gasdep:${addr.toLowerCase()}`;
+const relayTxKey    = (addr: string) => `relaytx:${addr.toLowerCase()}`;
+
+// ── Subscriptions ────────────────────────────────────────────────────────────
+
+export async function getSubscription(address: string): Promise<Subscription | null> {
+  return kv.get<Subscription>(subKey(address));
 }
 
-function readDB(): DB {
-  if (!fs.existsSync(DB_PATH)) {
-    const empty: DB = { subscriptions: {}, apiKeys: {}, gasDeposits: {}, relayedTxs: {} };
-    fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-    fs.writeFileSync(DB_PATH, JSON.stringify(empty, null, 2));
-    return empty;
-  }
-  const db = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
-  if (!db.gasDeposits) db.gasDeposits = {};
-  if (!db.relayedTxs) db.relayedTxs = {};
-  return db;
+export async function setSubscription(address: string, data: Subscription) {
+  await kv.set(subKey(address), data);
 }
 
-function writeDB(db: DB) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+// ── API Keys ─────────────────────────────────────────────────────────────────
+
+export async function getApiKeyRecord(apiKey: string): Promise<ApiKeyRecord | null> {
+  return kv.get<ApiKeyRecord>(apiKeyRecKey(apiKey));
 }
 
-export function getSubscription(address: string): Subscription | null {
-  const db = readDB();
-  return db.subscriptions[address.toLowerCase()] ?? null;
-}
-
-export function setSubscription(address: string, data: Subscription) {
-  const db = readDB();
-  db.subscriptions[address.toLowerCase()] = data;
-  writeDB(db);
-}
-
-export function getApiKeyRecord(apiKey: string): ApiKeyRecord | null {
-  const db = readDB();
-  return db.apiKeys[apiKey] ?? null;
-}
-
-export function generateApiKey(address: string, plan: string): string {
-  const db = readDB();
+export async function generateApiKey(address: string, plan: string): Promise<string> {
   const rand = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   const key = `q402_live_${rand}`;
-  db.apiKeys[key] = {
+  await kv.set(apiKeyRecKey(key), {
     address: address.toLowerCase(),
     createdAt: new Date().toISOString(),
     active: true,
     plan,
-  };
-  writeDB(db);
+  } satisfies ApiKeyRecord);
   return key;
 }
 
-// ── Gas Deposit tracking ──────────────────────────────────────────────────────
+// ── Gas Deposits ─────────────────────────────────────────────────────────────
 
-export function getGasDeposits(address: string): GasDeposit[] {
-  const db = readDB();
-  return db.gasDeposits[address.toLowerCase()] ?? [];
+export async function getGasDeposits(address: string): Promise<GasDeposit[]> {
+  return (await kv.get<GasDeposit[]>(gasDepKey(address))) ?? [];
 }
 
-export function addGasDeposit(address: string, deposit: GasDeposit) {
-  const db = readDB();
-  const key = address.toLowerCase();
-  if (!db.gasDeposits[key]) db.gasDeposits[key] = [];
-  // Avoid duplicate txHash
-  const exists = db.gasDeposits[key].some(d => d.txHash === deposit.txHash);
-  if (!exists) {
-    db.gasDeposits[key].push(deposit);
-    writeDB(db);
-  }
+export async function addGasDeposit(address: string, deposit: GasDeposit) {
+  const existing = await getGasDeposits(address);
+  if (existing.some(d => d.txHash === deposit.txHash)) return; // deduplicate
+  await kv.set(gasDepKey(address), [...existing, deposit]);
 }
 
-// Sum deposited amount per chain for a given address
-export function getGasBalance(address: string): Record<string, number> {
-  const deposits = getGasDeposits(address);
-  const used = getGasUsed(address);
+export async function getGasBalance(address: string): Promise<Record<string, number>> {
+  const deposits = await getGasDeposits(address);
+  const used     = await getGasUsed(address);
   const totals: Record<string, number> = { bnb: 0, eth: 0, avax: 0, xlayer: 0 };
   for (const d of deposits) totals[d.chain] = (totals[d.chain] ?? 0) + d.amount;
-  for (const u of used)    totals[u.chain] = (totals[u.chain] ?? 0) - u.gasCostNative;
+  for (const u of used)     totals[u.chain] = (totals[u.chain] ?? 0) - u.gasCostNative;
   return totals;
 }
 
-// ── Relayed TX tracking ───────────────────────────────────────────────────────
+// ── Relayed TXs ───────────────────────────────────────────────────────────────
 
-export function getRelayedTxs(address: string): RelayedTx[] {
-  const db = readDB();
-  return db.relayedTxs[address.toLowerCase()] ?? [];
+export async function getRelayedTxs(address: string): Promise<RelayedTx[]> {
+  return (await kv.get<RelayedTx[]>(relayTxKey(address))) ?? [];
 }
 
-export function getGasUsed(address: string): RelayedTx[] {
+export async function getGasUsed(address: string): Promise<RelayedTx[]> {
   return getRelayedTxs(address);
 }
 
-export function recordRelayedTx(address: string, tx: RelayedTx) {
-  const db = readDB();
-  const key = address.toLowerCase();
-  if (!db.relayedTxs[key]) db.relayedTxs[key] = [];
-  db.relayedTxs[key].push(tx);
-  writeDB(db);
+export async function recordRelayedTx(address: string, tx: RelayedTx) {
+  const existing = await getRelayedTxs(address);
+  await kv.set(relayTxKey(address), [...existing, tx]);
 }
 
 // ── Plan helpers ──────────────────────────────────────────────────────────────
@@ -155,16 +127,15 @@ export function getPlanQuota(plan: string): number {
   return PLAN_QUOTA[plan?.toLowerCase()] ?? 1_000;
 }
 
-/** Returns true if the subscription is still within its 30-day window */
-export function isSubscriptionActive(address: string): boolean {
-  const sub = getSubscription(address);
+export async function isSubscriptionActive(address: string): Promise<boolean> {
+  const sub = await getSubscription(address);
   if (!sub) return false;
   const expiresAt = new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
   return new Date() < expiresAt;
 }
 
-export function getSubscriptionExpiry(address: string): Date | null {
-  const sub = getSubscription(address);
+export async function getSubscriptionExpiry(address: string): Promise<Date | null> {
+  const sub = await getSubscription(address);
   if (!sub) return null;
   return new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
 }
