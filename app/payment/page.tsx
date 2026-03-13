@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useWallet } from "../context/WalletContext";
 import { setPaid } from "../lib/access";
 import { useRouter } from "next/navigation";
@@ -46,7 +47,8 @@ function calcPrice(chainId: string, volume: number): { price: number; isEnterpri
 }
 
 export default function PaymentPage() {
-  const { address, connect } = useWallet();
+  const { address, connectWith } = useWallet();
+  const [showWalletModal, setShowWalletModal] = useState(false);
   const router = useRouter();
 
   const [selectedChain, setSelectedChain] = useState("bnb");
@@ -289,7 +291,7 @@ export default function PaymentPage() {
                 {/* Wallet not connected */}
                 {!address && (
                   <button
-                    onClick={connect}
+                    onClick={() => setShowWalletModal(true)}
                     className="w-full flex items-center justify-center gap-2 border border-white/15 text-white/60 text-sm font-semibold py-3.5 rounded-xl hover:border-yellow/30 hover:text-white transition-all"
                     style={{ background: "rgba(255,255,255,0.03)" }}
                   >
@@ -462,6 +464,44 @@ export default function PaymentPage() {
           </div>
         </div>
       </main>
+
+      {/* Wallet selection modal */}
+      {showWalletModal && typeof window !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
+          onClick={() => setShowWalletModal(false)}
+        >
+          <div
+            className="w-full max-w-sm mx-4 rounded-2xl border border-white/10 p-6"
+            style={{ background: "#0f1117" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-white font-bold text-lg mb-1">Connect Wallet</h3>
+            <p className="text-white/40 text-sm mb-5">Choose your wallet to continue</p>
+            <div className="space-y-3">
+              {[
+                { type: "metamask" as const, name: "MetaMask", desc: "Browser extension wallet", bg: "#F6851B" },
+                { type: "okx" as const,      name: "OKX Wallet", desc: "Multi-chain Web3 wallet", bg: "#000" },
+              ].map(w => (
+                <button
+                  key={w.type}
+                  onClick={async () => { await connectWith(w.type); setShowWalletModal(false); }}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl border border-white/10 hover:border-yellow/30 transition-all text-left"
+                  style={{ background: "rgba(255,255,255,0.03)" }}
+                >
+                  <div className="w-10 h-10 rounded-xl flex-shrink-0" style={{ background: w.bg }} />
+                  <div>
+                    <p className="text-white font-semibold text-sm">{w.name}</p>
+                    <p className="text-white/40 text-xs">{w.desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
