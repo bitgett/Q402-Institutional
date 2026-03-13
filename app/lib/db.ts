@@ -14,6 +14,7 @@ interface Subscription {
   plan: string;
   txHash: string;
   amountUSD: number;
+  quotaBonus?: number;
 }
 
 interface ApiKeyRecord {
@@ -113,6 +114,15 @@ export async function getGasUsed(address: string): Promise<RelayedTx[]> {
 export async function recordRelayedTx(address: string, tx: RelayedTx) {
   const existing = await getRelayedTxs(address);
   await kv.set(relayTxKey(address), [...existing, tx]);
+}
+
+export async function addQuotaBonus(address: string, additionalTxs: number) {
+  const sub = await getSubscription(address);
+  if (!sub) throw new Error("No subscription found");
+  await setSubscription(address, {
+    ...sub,
+    quotaBonus: (sub.quotaBonus ?? 0) + additionalTxs,
+  });
 }
 
 // ── Plan helpers ──────────────────────────────────────────────────────────────

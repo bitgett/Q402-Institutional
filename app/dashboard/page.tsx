@@ -33,7 +33,7 @@ const STEPS = [
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; }
+interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; }
 interface RelayedTx {
   apiKey: string; address: string; chain: string;
   fromUser: string; toUser: string; tokenAmount: number; tokenSymbol: string;
@@ -338,7 +338,7 @@ export default function DashboardPage() {
   const API_KEY = subscription?.apiKey ?? "—";
   const plan = subscription?.plan ?? "starter";
   const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
-  const quota = PLAN_QUOTA[plan.toLowerCase()] ?? 1_000;
+  const quota = (PLAN_QUOTA[plan.toLowerCase()] ?? 1_000) + (subscription?.quotaBonus ?? 0);
   const pct = Math.round((thisMonthCount / quota) * 100);
   const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000) : null;
   const totalUserUSD = Object.entries(userGasBalance).reduce((sum, [c, amt]) => {
