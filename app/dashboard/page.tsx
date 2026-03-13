@@ -257,6 +257,10 @@ export default function DashboardPage() {
   const [keyCopied, setKeyCopied] = useState(false);
   const [depositChain, setDepositChain] = useState<{ chain: string; token: string } | null>(null);
   const [autoTopup, setAutoTopup] = useState(true);
+  const [alertEmail, setAlertEmail] = useState("");
+  const [alertEmailInput, setAlertEmailInput] = useState("");
+  const [showEmailSetup, setShowEmailSetup] = useState(false);
+  const [emailSaved, setEmailSaved] = useState(false);
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
@@ -271,7 +275,12 @@ export default function DashboardPage() {
   const [tankLoading, setTankLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+    const saved = localStorage.getItem("q402_alert_email");
+    if (saved) { setAlertEmail(saved); }
+    else { setShowEmailSetup(true); }
+  }, []);
   useEffect(() => {
     if (!mounted) return;
     const t = setTimeout(() => { if (!isConnected) router.push("/"); }, 600);
@@ -407,6 +416,62 @@ export default function DashboardPage() {
             {(isExpired || (daysLeft !== null && daysLeft <= 7)) && (
               <a href="/payment" className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">Renew →</a>
             )}
+          </div>
+        )}
+
+        {/* Email alert setup banner */}
+        {showEmailSetup && !alertEmail && (
+          <div className="mb-6 rounded-2xl px-5 py-4 border bg-white/4 border-white/10">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-start gap-3">
+                <span className="text-xl mt-0.5">🔔</span>
+                <div>
+                  <p className="font-semibold text-sm text-white">Would you like to receive usage alerts?</p>
+                  <p className="text-white/35 text-xs mt-0.5">We&apos;ll email you when you&apos;re at 20% and 10% of your monthly quota remaining.</p>
+                </div>
+              </div>
+              <button onClick={() => setShowEmailSetup(false)} className="text-white/25 hover:text-white text-lg leading-none flex-shrink-0">×</button>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <input
+                type="email"
+                placeholder="your@email.com"
+                value={alertEmailInput}
+                onChange={e => setAlertEmailInput(e.target.value)}
+                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-yellow/40 transition-colors"
+              />
+              <button
+                onClick={() => {
+                  if (!alertEmailInput) return;
+                  localStorage.setItem("q402_alert_email", alertEmailInput);
+                  setAlertEmail(alertEmailInput);
+                  setEmailSaved(true);
+                  setTimeout(() => { setShowEmailSetup(false); setEmailSaved(false); }, 1500);
+                }}
+                className="bg-yellow text-navy font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-yellow-hover transition-all"
+              >
+                {emailSaved ? "Saved ✓" : "Save"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Quota usage warning banner */}
+        {subscription && pct >= 80 && (
+          <div className={`mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border ${pct >= 90 ? "bg-red-400/8 border-red-400/25" : "bg-yellow/6 border-yellow/20"}`}>
+            <div className="flex items-center gap-3">
+              <span className={`text-lg ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>⚠</span>
+              <div>
+                <p className={`font-semibold text-sm ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>
+                  {pct >= 90 ? "Only 10% of quota remaining" : "Only 20% of quota remaining"}
+                </p>
+                <p className="text-white/35 text-xs">
+                  {thisMonthCount.toLocaleString()} / {quota.toLocaleString()} transactions used this month
+                  {alertEmail && ` · Alert will be sent to ${alertEmail}`}
+                </p>
+              </div>
+            </div>
+            <a href="/payment" className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">Upgrade →</a>
           </div>
         )}
 
