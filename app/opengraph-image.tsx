@@ -18,7 +18,6 @@ export default function Image() {
           alignItems: "flex-start",
           justifyContent: "center",
           padding: "80px",
-          fontFamily: "sans-serif",
           position: "relative",
         }}
       >
@@ -32,6 +31,7 @@ export default function Image() {
             height: "600px",
             borderRadius: "50%",
             background: "radial-gradient(circle, rgba(255,200,0,0.12) 0%, transparent 70%)",
+            display: "flex",
           }}
         />
 
@@ -52,25 +52,37 @@ export default function Image() {
           </span>
         </div>
 
-        {/* Title */}
+        {/* Title line 1 */}
         <div
           style={{
+            display: "flex",
             fontSize: "72px",
             fontWeight: 800,
             color: "#ffffff",
             lineHeight: 1.1,
-            marginBottom: "24px",
-            maxWidth: "800px",
           }}
         >
-          Gasless Payments
-          <br />
-          <span style={{ color: "#ffc800" }}>on EVM.</span>
+          Gasless Payments on EVM.
+        </div>
+
+        {/* Title line 2 - colored */}
+        <div
+          style={{
+            display: "flex",
+            fontSize: "72px",
+            fontWeight: 800,
+            color: "#ffc800",
+            lineHeight: 1.1,
+            marginBottom: "24px",
+          }}
+        >
+          Powered by Q402.
         </div>
 
         {/* Subtitle */}
         <div
           style={{
+            display: "flex",
             fontSize: "26px",
             color: "rgba(255,255,255,0.5)",
             marginBottom: "56px",
@@ -86,6 +98,7 @@ export default function Image() {
             <div
               key={chain}
               style={{
+                display: "flex",
                 background: "rgba(255,255,255,0.06)",
                 border: "1px solid rgba(255,255,255,0.12)",
                 borderRadius: "999px",
@@ -103,6 +116,7 @@ export default function Image() {
         {/* Bottom URL */}
         <div
           style={{
+            display: "flex",
             position: "absolute",
             bottom: "48px",
             right: "80px",
