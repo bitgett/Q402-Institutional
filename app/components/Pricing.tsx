@@ -137,9 +137,12 @@ export default function Pricing() {
         </div>
 
         {/* Cost context */}
-        <div className="mt-10 text-center">
+        <div className="mt-10 text-center space-y-2">
           <p className="text-white/25 text-sm">
             Prices shown for Ethereum mainnet. BNB Chain / Avalanche / X Layer start lower. <a href="/payment" className="text-yellow/60 hover:text-yellow underline transition-colors">Build a custom quote →</a>
+          </p>
+          <p className="text-white/20 text-sm">
+            Not sure where to start? <a href="/docs" className="text-white/40 hover:text-white underline transition-colors">Read the docs →</a>
           </p>
         </div>
       </div>
