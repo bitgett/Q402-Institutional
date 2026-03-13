@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Already activated?
-  const existing = getSubscription(address);
+  const existing = await getSubscription(address);
   if (existing) {
     const expiresAt = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
     const isExpired = new Date() >= expiresAt;

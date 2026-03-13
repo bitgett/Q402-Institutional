@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Already activated? Skip only if not expired (within 30 days)
-  const existing = getSubscription(address);
+  const existing = await getSubscription(address);
   if (existing) {
     const expiresAt = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
     if (new Date() < expiresAt) {
@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Issue API key and save
-  const apiKey = generateApiKey(address, plan);
-  setSubscription(address, {
+  const apiKey = await generateApiKey(address, plan);
+  await setSubscription(address, {
     paidAt: new Date().toISOString(),
     apiKey,
     plan,

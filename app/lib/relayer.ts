@@ -9,6 +9,15 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
+// ── X Layer 특이사항 ────────────────────────────────────────────────────────────
+// X Layer는 Polygon CDK 기반으로 EIP-7702 Type 4 TX를 지원하지 않는다.
+// 대신 X Layer USDC는 EIP-3009 transferWithAuthorization을 지원하므로,
+// xlayer 체인은 USDC.transferWithAuthorization()을 릴레이어가 직접 호출하는 방식으로 동작한다.
+//
+// 체인별 릴레이 방식:
+//   avax / bnb / eth : EIP-7702 (Type 4 TX, Q402PaymentImplementation.pay())
+//   xlayer           : EIP-3009 (Standard TX, USDC.transferWithAuthorization())
+
 // ── Chain configs ──────────────────────────────────────────────────────────────
 export const CHAIN_CONFIG = {
   avax: {
@@ -100,6 +109,210 @@ export const Q402_IMPL_ABI_HUMAN = [
   "function pay(address owner, address token, uint256 amount, address to, uint256 deadline, bytes32 paymentId, bytes calldata witnessSig) external",
   "function payBatch(address owner, tuple(address token, uint256 amount, address to)[] items, uint256 deadline, bytes32 paymentId, bytes calldata witnessSig) external",
 ];
+
+// ── X Layer USDC EIP-3009 ABI ─────────────────────────────────────────────────
+// X Layer USDC는 v,r,s 분리 방식(9-param)을 사용한다.
+// 확인된 USDC 주소: 0x74b7F16337b8972027F6196A17a631aC6dE26d22 (chainId 196)
+const USDC_EIP3009_ABI = [
+  "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s) external",
+];
+
+export interface EIP3009PayParams {
+  /** 토큰 보유자 (서명자) */
+  from: string;
+  /** 수신자 */
+  to: string;
+  /** atomic 단위 금액 */
+  amount: bigint;
+  /** 유효 시작 (보통 0) */
+  validAfter: bigint;
+  /** 유효 만료 (unix timestamp) */
+  validBefore: bigint;
+  /** EIP-3009 bytes32 nonce (random) */
+  nonce: string;
+  /** EIP-3009 서명 (65-byte packed: r+s+v) */
+  sig: string;
+  /** 체인 키 — 현재 xlayer만 사용 */
+  chainKey: ChainKey;
+  /** 토큰 심볼 */
+  token: "USDC" | "USDT";
+}
+
+/**
+ * X Layer: USDC EIP-3009 transferWithAuthorization 직접 호출
+ *
+ * 유저가 USDC의 TransferWithAuthorization 타입으로 서명 →
+ * 릴레이어가 USDC.transferWithAuthorization()을 호출해서 가스 대납
+ * Q402PaymentImplementation 컨트랙트 불필요
+ */
+export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<SettleResult> {
+  const pkRaw = process.env.RELAYER_PRIVATE_KEY;
+  if (!pkRaw || pkRaw === "your_private_key_here") {
+    return { success: false, error: "RELAYER_PRIVATE_KEY not set" };
+  }
+
+  const chainCfg = CHAIN_CONFIG[params.chainKey];
+  const tokenCfg = getTokenConfig(params.chainKey, params.token);
+
+  try {
+    const pk = pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`;
+    const provider = new ethers.JsonRpcProvider(chainCfg.rpc);
+    const relayer  = new ethers.Wallet(pk, provider);
+
+    const { v, r, s } = ethers.Signature.from(params.sig);
+
+    const usdc = new ethers.Contract(tokenCfg.address, USDC_EIP3009_ABI, relayer);
+
+    const tx = await usdc.transferWithAuthorization(
+      params.from,
+      params.to,
+      params.amount,
+      params.validAfter,
+      params.validBefore,
+      params.nonce,
+      v, r, s,
+      { gasLimit: 200000n }
+    );
+
+    const receipt = await tx.wait();
+
+    return {
+      success: receipt.status === 1,
+      txHash:      tx.hash,
+      blockNumber: BigInt(receipt.blockNumber),
+      error: receipt.status !== 1 ? "Transaction reverted on-chain" : undefined,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  }
+}
+
+// ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
+// Contract: 0x31E9D105df96b5294298cFaffB7f106994CD0d0f (X Layer mainnet)
+// Witness type: TransferAuthorization (different from PaymentWitness on avax/bnb/eth)
+// Key difference: verifyingContract = user's EOA (not impl contract)
+//                 msg.sender must equal facilitator param
+const XLAYER_EIP7702_ABI = [
+  {
+    type: "function",
+    name: "transferWithAuthorization",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "owner",            type: "address" },
+      { name: "facilitator",      type: "address" },
+      { name: "token",            type: "address" },
+      { name: "recipient",        type: "address" },
+      { name: "amount",           type: "uint256" },
+      { name: "nonce",            type: "uint256" },
+      { name: "deadline",         type: "uint256" },
+      { name: "witnessSignature", type: "bytes"   },
+    ],
+    outputs: [],
+  },
+] as const;
+
+export interface XLayerEIP7702PayParams {
+  /** Token owner — the user whose EOA is delegated */
+  owner: Address;
+  /** Relayer wallet address (msg.sender on-chain, must match signed facilitator) */
+  facilitator: Address;
+  /** ERC-20 token address */
+  token: Address;
+  /** Payment recipient */
+  recipient: Address;
+  /** Amount in atomic units */
+  amount: bigint;
+  /** Random uint256 nonce (replay protection — not sequential) */
+  nonce: bigint;
+  /** Unix timestamp deadline */
+  deadline: bigint;
+  /** EIP-712 TransferAuthorization signature */
+  witnessSig: Hex;
+  /** EIP-7702 authorization from the owner's EOA */
+  authorization: {
+    chainId: number;
+    address: Address;
+    nonce: number;
+    yParity: number;
+    r: Hex;
+    s: Hex;
+  };
+}
+
+/**
+ * X Layer: EIP-7702 transferWithAuthorization via Q402PaymentImplementationXLayer
+ *
+ * 유저가 TransferAuthorization 타입으로 서명 + EIP-7702 authorization 서명 →
+ * 릴레이어(facilitator)가 Type 4 TX 제출, 유저 EOA에 impl 코드 위임 실행
+ */
+export async function settlePaymentXLayerEIP7702(params: XLayerEIP7702PayParams): Promise<SettleResult> {
+  const pkRaw = process.env.RELAYER_PRIVATE_KEY;
+  if (!pkRaw || pkRaw === "your_private_key_here") {
+    return { success: false, error: "RELAYER_PRIVATE_KEY not set" };
+  }
+
+  const chainCfg = CHAIN_CONFIG["xlayer"];
+
+  try {
+    const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
+    const account = privateKeyToAccount(pk);
+
+    const walletClient = createWalletClient({
+      account,
+      transport: http(chainCfg.rpc),
+    });
+
+    const publicClient = createPublicClient({
+      transport: http(chainCfg.rpc),
+    });
+
+    const callData = encodeFunctionData({
+      abi: XLAYER_EIP7702_ABI,
+      functionName: "transferWithAuthorization",
+      args: [
+        params.owner,
+        params.facilitator,
+        params.token,
+        params.recipient,
+        params.amount,
+        params.nonce,
+        params.deadline,
+        params.witnessSig,
+      ],
+    });
+
+    // EIP-7702 Type 4 TX: to = owner's EOA, authorizationList delegates impl code
+    const txHash = await walletClient.sendTransaction({
+      chain: null,
+      to: params.owner,
+      data: callData,
+      gas: BigInt(300000),
+      authorizationList: [
+        {
+          chainId: params.authorization.chainId,
+          address: params.authorization.address,
+          nonce: params.authorization.nonce,
+          yParity: params.authorization.yParity,
+          r: params.authorization.r,
+          s: params.authorization.s,
+        },
+      ],
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+    return {
+      success: receipt.status === "success",
+      txHash,
+      blockNumber: receipt.blockNumber,
+      error: receipt.status !== "success" ? "Transaction reverted" : undefined,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  }
+}
 
 // ── ethers.js relayer wallet (kept for gas estimation / non-EIP7702 ops) ──────
 export function getRelayerWallet(chainKey: ChainKey): ethers.Wallet {

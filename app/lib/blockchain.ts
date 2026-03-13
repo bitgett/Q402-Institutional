@@ -111,13 +111,21 @@ async function scanChain(
 }
 
 // Map USD amount to plan
-// Thresholds match payment/page.tsx VOLUMES base prices:
-//   starter  : $29  (500–1K txs)
-//   growth   : $89  (5K–10K txs)
-//   enterprise: $449 (50K+ txs)
+// Thresholds = payment/page.tsx VOLUMES basePrice (BNB 1.0x = cheapest chain)
+//   starter       : $29   (500 txs)
+//   basic         : $49   (1,000 txs)
+//   growth        : $89   (5,000 txs)
+//   pro           : $149  (10,000 txs)
+//   scale         : $449  (50,000 txs)
+//   business      : $799  (100,000 txs)
+//   enterprise_flex: $1,999 (100K–500K txs)
 export function planFromAmount(usd: number): string | null {
-  if (usd >= 449) return "enterprise";
-  if (usd >= 89)  return "growth";
-  if (usd >= 29)  return "starter";
+  if (usd >= 1999) return "enterprise_flex";
+  if (usd >= 799)  return "business";
+  if (usd >= 449)  return "scale";
+  if (usd >= 149)  return "pro";
+  if (usd >= 89)   return "growth";
+  if (usd >= 49)   return "basic";
+  if (usd >= 29)   return "starter";
   return null;
 }

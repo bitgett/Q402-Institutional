@@ -9,27 +9,42 @@
 
 Q402 is a **gasless payment infrastructure** for Web3. External developers integrate the Q402 SDK into their dApp, and Q402's relayer wallet pays all on-chain gas costs so end users never need to hold native tokens.
 
+**avax / bnb / eth — EIP-7702 mode:**
 ```
 User clicks "Pay USDC"
-  → SDK generates EIP-712 signature + EIP-7702 authorization
-    → POST /api/relay
+  → SDK generates EIP-712 witnessSig + EIP-7702 authorization (2 signatures)
+    → POST /api/relay { witnessSig, authorization }
       → Q402 relayer submits Type 4 TX (pays gas)
         → Q402PaymentImplementation.pay() executes
           → USDC moves from user EOA to recipient
 ```
 
+**xlayer — EIP-7702 mode** (confirmed working 2026-03-12):
+```
+User clicks "Pay USDC"
+  → SDK fetches GET /api/relay/info (facilitator address)
+    → SDK generates EIP-712 TransferAuthorization + EIP-7702 authorization (2 signatures)
+      → POST /api/relay { witnessSig, authorization, xlayerNonce }
+        → Q402 relayer submits Type 4 TX (pays OKB gas)
+          → Q402PaymentImplementationXLayer.transferWithAuthorization() executes
+            → USDC moves from user EOA to recipient
+```
+> EIP-3009 fallback still available — send `eip3009Nonce` instead of `authorization` to use it.
+
 ---
 
 ## Supported Chains
 
-| Chain | ChainID | Contract |
-|-------|---------|----------|
-| Avalanche C-Chain | 43114 | `0xE5b90D564650bdcE7C2Bb4344F777f6582e05699` |
-| BNB Chain | 56 | `0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6` |
-| Ethereum | 1 | `0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9` |
-| X Layer | 196 | `0x2fb2B2D110b6c5664e701666B3741240242bf350` |
+| Chain | ChainID | Relay Method | Contract / Notes |
+|-------|---------|-------------|------------------|
+| Avalanche C-Chain | 43114 | EIP-7702 | `0xE5b90D564650bdcE7C2Bb4344F777f6582e05699` |
+| BNB Chain | 56 | EIP-7702 | `0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6` |
+| Ethereum | 1 | EIP-7702 | `0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9` |
+| X Layer | 196 | EIP-7702 | `0x31E9D105df96b5294298cFaffB7f106994CD0d0f` |
 
-All RPCs are **public endpoints** — no API keys required for blockchain scanning.
+> X Layer EIP-7702 confirmed working (2026-03-12). Uses `Q402PaymentImplementationXLayer` with `TransferAuthorization` witness type (verifyingContract = user EOA).
+> EIP-3009 fallback also supported.
+> All RPCs are **public endpoints** — no API keys required.
 
 ---
 
@@ -37,7 +52,7 @@ All RPCs are **public endpoints** — no API keys required for blockchain scanni
 
 - **Framework**: Next.js 14 App Router (TypeScript)
 - **Styling**: Tailwind CSS + framer-motion
-- **Blockchain**: ethers.js v6 + viem (EIP-7702)
+- **Blockchain**: ethers.js v6 + viem (EIP-7702 for all chains, EIP-3009 fallback for xlayer)
 - **Wallet**: Custom WalletContext (MetaMask + OKX Wallet)
 - **DB**: JSON file (`data/db.json`) — replace with PostgreSQL for production
 
@@ -77,7 +92,7 @@ RELAYER_PRIVATE_KEY=0x_your_private_key_here
 IMPLEMENTATION_CONTRACT=0xE5b90D564650bdcE7C2Bb4344F777f6582e05699
 BNB_IMPLEMENTATION_CONTRACT=0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6
 ETH_IMPLEMENTATION_CONTRACT=0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9
-XLAYER_IMPLEMENTATION_CONTRACT=0x2fb2B2D110b6c5664e701666B3741240242bf350
+XLAYER_IMPLEMENTATION_CONTRACT=0x31E9D105df96b5294298cFaffB7f106994CD0d0f
 ```
 
 > **Without `.env.local`:** The frontend (landing, dashboard UI, payment page) runs fine.
@@ -131,15 +146,15 @@ The file is read/written at runtime via `app/lib/db.ts`.
 ```
 
 ```javascript
+// Avalanche / BNB / Ethereum — EIP-7702
 const q402 = new Q402Client({ apiKey: "q402_live_xxx", chain: "avax" });
+const result = await q402.pay({ to: "0xRecipient", amount: "5.00", token: "USDC" });
+console.log(result.txHash); // method: "eip7702"
 
-const result = await q402.pay({
-  to: "0xRecipient",
-  amount: "5.00",
-  token: "USDC",
-});
-
-console.log(result.txHash);
+// X Layer — EIP-7702 (auto-detected, same API)
+const q402xl = new Q402Client({ apiKey: "q402_live_xxx", chain: "xlayer" });
+const result2 = await q402xl.pay({ to: "0xRecipient", amount: "1.00", token: "USDC" });
+console.log(result2.txHash); // method: "eip7702_xlayer"
 ```
 
 ---
@@ -200,4 +215,4 @@ Q402-Institutional/
 
 ## Full Technical Docs
 
-See [Q402_IMPLEMENTATION.md](./Q402_IMPLEMENTATION.md) for complete implementation details, API specs, contract ABIs, and EIP-7702 relay internals.
+See [Q402_IMPLEMENTATION.md](./Q402_IMPLEMENTATION.md) for complete implementation details, API specs, contract ABIs, and EIP-7702 relay internals (including X Layer `TransferAuthorization` witness type).

@@ -9,11 +9,11 @@ export async function GET(req: NextRequest) {
   const apiKey = req.nextUrl.searchParams.get("apiKey");
   let lookupAddress = address;
   if (apiKey) {
-    const record = getApiKeyRecord(apiKey);
+    const record = await getApiKeyRecord(apiKey);
     if (record) lookupAddress = record.address;
   }
 
-  const txs = getRelayedTxs(lookupAddress);
+  const txs = await getRelayedTxs(lookupAddress);
 
   // Count this month's usage
   const now = new Date();

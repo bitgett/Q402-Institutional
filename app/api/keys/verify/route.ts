@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ valid: false, error: "apiKey required" }, { status: 400 });
   }
 
-  const record = getApiKeyRecord(apiKey);
+  const record = await getApiKeyRecord(apiKey);
   if (!record || !record.active) {
     return NextResponse.json({ valid: false });
   }

@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     if (r.status !== "fulfilled") continue;
     const { chain, txs } = r.value;
     for (const tx of txs) {
-      addGasDeposit(address, {
+      await addGasDeposit(address, {
         chain: chain.key,
         token: chain.token,
         amount: tx.amount,
@@ -95,6 +95,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const balances = getGasBalance(address);
+  const balances = await getGasBalance(address);
   return NextResponse.json({ newDeposits, balances });
 }
