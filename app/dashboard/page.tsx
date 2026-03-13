@@ -419,6 +419,22 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Email alert — saved state (always visible, editable) */}
+        {alertEmail && !showEmailSetup && (
+          <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-3 border bg-white/4 border-white/10">
+            <div className="flex items-center gap-2 text-sm text-white/40">
+              <span>🔔</span>
+              <span>Usage alerts → <span className="text-white/70">{alertEmail}</span></span>
+            </div>
+            <button
+              onClick={() => { setAlertEmailInput(alertEmail); setShowEmailSetup(true); setAlertEmail(""); }}
+              className="text-xs text-white/30 hover:text-white transition-colors"
+            >
+              Edit
+            </button>
+          </div>
+        )}
+
         {/* Email alert setup banner */}
         {showEmailSetup && !alertEmail && (
           <div className="mb-6 rounded-2xl px-5 py-4 border bg-white/4 border-white/10">
