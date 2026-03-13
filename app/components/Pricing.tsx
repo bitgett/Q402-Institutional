@@ -74,11 +74,8 @@ export default function Pricing() {
     <section id="pricing" className="py-24 px-6">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Simple, transparent pricing</h2>
-          <p className="text-white/50 max-w-xl mx-auto">
-            Sponsor gas for your users on any EVM chain. Plans scale with your product — from early MVPs to enterprise.
-          </p>
-          <p className="text-white/35 text-sm mt-3">Deploy in 5 minutes with our SDK.</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-3">Pick a plan. Ship today.</h2>
+          <p className="text-white/40 text-sm">No gas. No friction. Plug in the SDK and you&apos;re live.</p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -138,12 +135,12 @@ export default function Pricing() {
         </div>
 
         {/* Cost context */}
-        <div className="mt-10 text-center space-y-2">
+        <div className="mt-10 text-center">
           <p className="text-white/25 text-sm">
-            Prices based on BNB Chain. Ethereum / Avalanche / X Layer may vary. <a href="/payment" className="text-yellow/60 hover:text-yellow underline transition-colors">Build a custom quote →</a>
-          </p>
-          <p className="text-white/20 text-sm">
-            Not sure where to start? <a href="/docs" className="text-white/40 hover:text-white underline transition-colors">Read the docs →</a>
+            BNB Chain pricing. Other chains may vary. &nbsp;·&nbsp;
+            <a href="/payment" className="text-white/40 hover:text-white transition-colors">Custom quote →</a>
+            &nbsp;·&nbsp;
+            <a href="/docs" className="text-white/40 hover:text-white transition-colors">Docs →</a>
           </p>
         </div>
       </div>
