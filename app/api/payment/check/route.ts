@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     const expiresAt = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
     const isExpired = new Date() >= expiresAt;
     // Return subscription info WITHOUT apiKey
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { apiKey: _omit, ...safeSubscription } = existing;
     return NextResponse.json({
       status: isExpired ? "expired" : "already_paid",
