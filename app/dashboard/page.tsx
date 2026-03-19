@@ -207,12 +207,15 @@ function Playground({ apiKey }: { apiKey: string }) {
     <div className="space-y-5">
       <div className="grid sm:grid-cols-3 gap-3">
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Chain</label>
-          <select value={chain} onChange={e => setChain(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30">
-            <option value="avax">Avalanche ✓</option>
-            <option value="bnb">BNB Chain ✓</option>
-            <option value="eth">Ethereum ✓</option>
-            <option value="xlayer">X Layer ✓</option>
-          </select></div>
+          <div className="relative">
+            <select value={chain} onChange={e => setChain(e.target.value)} className="w-full appearance-none border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30 cursor-pointer" style={{ background: "#0d1422" }}>
+              <option value="avax" style={{ background: "#0d1422" }}>Avalanche ✓</option>
+              <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓</option>
+              <option value="eth" style={{ background: "#0d1422" }}>Ethereum ✓</option>
+              <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
+          </div></div>
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Recipient</label>
           <input value={to} onChange={e => setTo(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-yellow/30" /></div>
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount (USDC)</label>
@@ -240,7 +243,13 @@ function Playground({ apiKey }: { apiKey: string }) {
       )}
       <div className="pt-4 border-t border-white/6">
         <p className="text-xs text-white/25 mb-2">Your API Key</p>
-        <div className="font-mono text-xs text-white/50 bg-navy border border-white/8 rounded-lg px-3 py-2 break-all">{apiKey}</div>
+        <div className="flex items-center gap-2 font-mono text-xs text-white/50 bg-navy border border-white/8 rounded-lg px-3 py-2">
+          <span className="flex-1 break-all">{apiKey ? `${apiKey.slice(0, 12)}${"•".repeat(16)}${apiKey.slice(-4)}` : "—"}</span>
+          <button
+            onClick={() => { navigator.clipboard.writeText(apiKey); }}
+            className="text-white/25 hover:text-yellow transition-colors flex-shrink-0 text-[10px] uppercase tracking-widest"
+          >Copy</button>
+        </div>
       </div>
     </div>
   );
