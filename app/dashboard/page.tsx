@@ -263,8 +263,8 @@ export default function DashboardPage() {
   const [emailSaved, setEmailSaved] = useState(false);
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [expiresAt, setExpiresAt] = useState<Date | null>(null);
-  const [isExpired, setIsExpired] = useState(false);
+  const [expiresAt] = useState<Date | null>(null);
+  const [isExpired] = useState(false);
   const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
   const [thisMonthCount, setThisMonthCount] = useState(0);
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
