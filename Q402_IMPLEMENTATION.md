@@ -1,6 +1,6 @@
 # Q402 — 전체 구현 문서
 
-> 작성일: 2026-03-10 / 최종 업데이트: 2026-03-12
+> 작성일: 2026-03-10 / **최종 업데이트: 2026-03-19 (v1.1)**
 > 프로젝트 경로: `C:/Users/user/q402-landing/`
 > 기술 스택: Next.js 14 App Router · TypeScript · ethers.js v6 · viem · Tailwind CSS · framer-motion
 
@@ -10,10 +10,10 @@
 
 1. [프로젝트 개요](#1-프로젝트-개요)
 2. [디렉터리 구조](#2-디렉터리-구조)
-3. [데이터베이스 구조 (db.json)](#3-데이터베이스-구조)
+3. [데이터베이스 구조 (Vercel KV)](#3-데이터베이스-구조)
 4. [프론트엔드 — 지갑 연결](#4-프론트엔드--지갑-연결)
-5. [결제 감지 & 구독 활성화 플로우](#5-결제-감지--구독-활성화-플로우)
-6. [API Key 발급 & 검증](#6-api-key-발급--검증)
+5. [구독 & API Key 관리](#5-구독--api-key-관리)
+6. [Direct Inquiry 시스템](#6-direct-inquiry-시스템)
 7. [Gas Tank — 릴레이어 잔고](#7-gas-tank--릴레이어-잔고)
 8. [Gas Tank — 유저 입금 잔고](#8-gas-tank--유저-입금-잔고)
 9. [EIP-7702 릴레이 트랜잭션](#9-eip-7702-릴레이-트랜잭션)
@@ -67,29 +67,34 @@ q402-landing/
 ├── app/
 │   ├── api/
 │   │   ├── payment/
-│   │   │   ├── check/route.ts          # GET  — 결제 여부 확인
-│   │   │   └── activate/route.ts       # POST — 구독 활성화 + API Key 발급
+│   │   │   ├── check/route.ts          # GET  — 결제 여부 확인 (레거시, v1.1 미사용)
+│   │   │   └── activate/route.ts       # POST — 구독 활성화 + API Key 발급 (레거시, v1.1 미사용)
 │   │   ├── keys/
-│   │   │   ├── generate/route.ts       # POST — API Key 재발급
-│   │   │   └── verify/route.ts         # POST — API Key 유효성 검증
+│   │   │   ├── generate/route.ts       # POST — API Key 재발급 (Admin 전용)
+│   │   │   ├── verify/route.ts         # POST — API Key 유효성 검증
+│   │   │   ├── topup/route.ts          # POST — 할당량 보너스 추가 (Admin 전용)
+│   │   │   └── provision/route.ts      # POST — 구독 수동 생성 (Admin 전용)
 │   │   ├── gas-tank/
 │   │   │   ├── route.ts                # GET  — 릴레이어 온체인 잔고 (전체)
 │   │   │   ├── verify-deposit/route.ts # POST — 유저 입금 스캔 후 DB 기록
-│   │   │   └── user-balance/route.ts   # GET  — 유저 입금 잔고 조회
+│   │   │   ├── user-balance/route.ts   # GET  — 유저 입금 잔고 조회 (apiKey 필요)
+│   │   │   └── withdraw/route.ts       # POST — 가스 잔고 출금 (Admin 전용)
 │   │   ├── wallet-balance/route.ts     # GET  — 유저 지갑 잔고 (4체인)
+│   │   ├── inquiry/route.ts            # POST — 프로젝트 문의 저장 / GET — 문의 목록 (Admin)
+│   │   ├── transactions/route.ts       # GET  — 릴레이 TX 이력 (apiKey 필요)
 │   │   └── relay/
 │   │       ├── route.ts                # POST — EIP-7702 / EIP-3009 릴레이 TX 제출
 │   │       └── info/route.ts           # GET  — facilitator 주소 반환 (SDK용)
 │   ├── lib/
-│   │   ├── db.ts                       # JSON DB CRUD 헬퍼
+│   │   ├── db.ts                       # Vercel KV CRUD 헬퍼
 │   │   ├── blockchain.ts               # ERC-20 Transfer 이벤트 스캔
 │   │   ├── relayer.ts                  # viem EIP-7702 settlePayment() / settlePaymentXLayerEIP7702() / settlePaymentEIP3009()
-│   │   ├── access.ts                   # isPaid / setPaid / MASTER_ADDRESSES
+│   │   ├── access.ts                   # isPaid (v1.1: 항상 true) / MASTER_ADDRESSES
 │   │   └── wallet.ts                   # connectWallet / getConnectedAccount
 │   ├── context/
 │   │   └── WalletContext.tsx           # 전역 지갑 상태 (localStorage 즉시 복원)
 │   ├── components/
-│   │   ├── WalletButton.tsx            # 지갑 연결 모달 + PaymentRequiredPopup
+│   │   ├── WalletButton.tsx            # 지갑 연결 모달
 │   │   ├── Navbar.tsx
 │   │   ├── Hero.tsx
 │   │   ├── HowItWorks.tsx
@@ -97,71 +102,69 @@ q402-landing/
 │   │   ├── Contact.tsx
 │   │   └── Footer.tsx
 │   ├── dashboard/page.tsx              # 대시보드 (4개 탭)
-│   ├── payment/page.tsx                # Quote Builder
+│   ├── payment/page.tsx                # Quote Builder + Direct Inquiry 팝업
 │   ├── docs/page.tsx                   # 개발자 문서
 │   └── page.tsx                        # 랜딩 메인
-├── data/
-│   └── db.json                         # 런타임 DB (JSON 파일)
 ├── public/
-│   ├── q402-sdk.js                     # 클라이언트 SDK (배포용)
+│   ├── q402-sdk.js                     # 클라이언트 SDK v1.2.0 (배포용)
 │   ├── bnb.png / eth.png / avax.png / xlayer.png
 │   └── arbitrum.png / scroll.png
-└── .env.local                          # RELAYER_PRIVATE_KEY
+└── .env.local                          # RELAYER_PRIVATE_KEY, KV_REST_API_*, ADMIN_SECRET
 ```
+
+> ⚠️ v1.0의 `data/db.json` (JSON 파일 DB)는 v1.1에서 **Vercel KV (Redis)** 로 마이그레이션됨.
 
 ---
 
 ## 3. 데이터베이스 구조
 
-파일: `data/db.json`
-서버 사이드에서 fs.readFileSync/writeFileSync로 읽고 씀. (프로덕션에서는 PostgreSQL/Redis로 교체 필요)
+**v1.1부터 Vercel KV (Redis)를 사용한다.** (`app/lib/db.ts`)
 
+```
+kv.get("subscriptions:{address}")  → SubscriptionRecord
+kv.get("apikeys:{apiKey}")         → ApiKeyRecord
+kv.get("gasdeposits:{address}")    → GasDeposit[]
+kv.get("relayedtxs:{address}")     → RelayedTx[]
+kv.get("inquiries")                → Inquiry[]
+```
+
+### 데이터 구조 예시
+
+**SubscriptionRecord**
 ```json
 {
-  "subscriptions": {
-    "0xOwnerAddress": {
-      "paidAt": "2026-03-10T00:00:00.000Z",
-      "apiKey": "q402_live_xxx",
-      "plan": "growth",
-      "txHash": "0xOnChainPaymentTxHash",
-      "amountUSD": 99
-    }
-  },
-  "apiKeys": {
-    "q402_live_xxx": {
-      "address": "0xOwnerAddress",
-      "createdAt": "2026-03-10T00:00:00.000Z",
-      "active": true,
-      "plan": "growth"
-    }
-  },
-  "gasDeposits": {
-    "0xOwnerAddress": [
-      {
-        "chain": "avax",
-        "token": "AVAX",
-        "amount": 1.5,
-        "txHash": "0xDepositTxHash",
-        "depositedAt": "2026-03-10T00:00:00.000Z"
-      }
-    ]
-  },
-  "relayedTxs": {
-    "0xOwnerAddress": [
-      {
-        "apiKey": "q402_live_xxx",
-        "address": "0xOwnerAddress",
-        "chain": "avax",
-        "fromUser": "0xPayer",
-        "toUser": "0xRecipient",
-        "tokenAmount": 5.0,
-        "tokenSymbol": "USDC",
-        "gasCostNative": 0,
-        "relayTxHash": "0xRelayTxHash",
-        "relayedAt": "2026-03-10T00:00:00.000Z"
-      }
-    ]
-  }
+  "address": "0xOwnerAddress",
+  "paidAt":  "2026-03-19T00:00:00.000Z",
+  "apiKey":  "q402_live_xxx",
+  "plan":    "growth",
+  "txHash":  "0xOnChainPaymentTxHash",
+  "amountUSD": 150
+}
+```
+
+**ApiKeyRecord**
+```json
+{
+  "address":   "0xOwnerAddress",
+  "createdAt": "2026-03-19T00:00:00.000Z",
+  "active":    true,
+  "plan":      "growth"
+}
+```
+
+**Inquiry**
+```json
+{
+  "id":             "inq_1710834000000_abc12",
+  "appName":        "MyDApp",
+  "website":        "https://mydapp.io",
+  "email":          "dev@mydapp.io",
+  "telegram":       "@myhandle",
+  "category":       "DeFi",
+  "targetChain":    "avax",
+  "expectedVolume": "1000-5000",
+  "description":    "We need gasless USDC transfers for...",
+  "submittedAt":    "2026-03-19T10:00:00.000Z"
 }
 ```
 
@@ -173,6 +176,7 @@ q402-landing/
 | `setSubscription(address, data)` | 구독 저장/갱신 |
 | `getApiKeyRecord(apiKey)` | API Key → 레코드 조회 |
 | `generateApiKey(address, plan)` | 새 API Key 생성 후 저장 |
+| `deactivateApiKey(apiKey)` | API Key 비활성화 (키 교체 시 구 키 무효화) |
 | `getGasDeposits(address)` | 유저의 입금 내역 목록 |
 | `addGasDeposit(address, deposit)` | 입금 추가 (txHash 중복 방지) |
 | `getGasBalance(address)` | 입금합계 - 소비합계 = 현재 잔고 |
@@ -191,10 +195,11 @@ q402-landing/
 ### WalletButton (`app/components/WalletButton.tsx`)
 
 - 미연결: "Connect Wallet" 버튼
-- 연결됨 + 미결제: PaymentRequiredPopup 팝업 (createPortal로 중앙 렌더링)
-- 연결됨 + 결제완료: `MY PAGE` 버튼 (sparkle 반짝 애니메이션)
+- 연결됨: `MY PAGE` 버튼 (sparkle 반짝 애니메이션) → `/dashboard`로 이동
 
 ### 결제 게이팅 (`app/lib/access.ts`)
+
+**v1.1: 결제 게이팅 임시 제거. `isPaid()` 항상 `true` 반환.**
 
 ```typescript
 const MASTER_ADDRESSES = [
@@ -202,80 +207,46 @@ const MASTER_ADDRESSES = [
   "0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28",
 ];
 
-isPaid(address)  // MASTER_ADDRESSES 포함 여부 or localStorage 확인
-setPaid(address) // localStorage에 q402_paid_{address} = "true" 저장
+// v1.1: 항상 true 반환 (페이월 임시 제거)
+isPaid(address)  // always true
+setPaid(address) // no-op (localStorage 저장 유지)
 ```
+
+> 결제 플로우 복원 시 이 함수들만 원래 로직으로 되돌리면 됨.
 
 ---
 
-## 5. 결제 감지 & 구독 활성화 플로우
+## 5. 구독 & API Key 관리
 
-### 개요
+### 구독 수동 생성 (Admin)
 
-유저가 릴레이어 주소(`0xfc77...`)로 USDC/USDT를 직접 전송 → API가 온체인에서 Transfer 이벤트 스캔 → 구독 활성화 + API Key 발급
+**`POST /api/keys/provision`** — header: `x-admin-secret`
 
-### 플랜 매핑
+Inquiry 검토 후 관리자가 수동으로 구독을 생성하고 API Key를 발급한다.
 
-| 금액 (ETH 기준) | 플랜 | TX/월 |
-|----------------|------|-------|
-| $670+ | Growth | 50,000 |
-| $1,200+ | Scale | 100,000 |
-| $3,000+ | Business | 100K~500K |
-| Custom | Enterprise | 500K+ |
+```json
+// 요청
+{ "address": "0xClientAddress", "plan": "growth" }
 
-### 결제 확인 API
-
-**`GET /api/payment/check?address=0x...`**
-
-1. DB에 이미 구독 있으면 `{ status: "already_paid" }` 즉시 반환
-2. `checkPaymentOnChain(address)` 호출 — 3개 체인 병렬 스캔
-3. 결과 반환: `payment_found` / `not_found` / `amount_too_low`
-
-### 구독 활성화 API
-
-**`POST /api/payment/activate`** — body: `{ address }`
-
-1. 이미 구독 있으면 `{ status: "already_active", apiKey }` 반환
-2. `checkPaymentOnChain(address)` 재확인
-3. `generateApiKey(address, plan)` — API Key 생성
-4. `setSubscription(address, {...})` — DB 저장
-5. 반환: `{ status: "activated", apiKey, plan }`
-
-### 블록체인 스캔 (`app/lib/blockchain.ts`)
-
-```
-BNB Chain   : 최근 2000 블록 (약 1.7시간, 블록타임 3초)
-Ethereum    : 최근 500 블록  (약 1.7시간, 블록타임 12초)
-Avalanche   : 최근 2000 블록 (약 1.1시간, 블록타임 2초)
-X Layer     : 최근 3000 블록 (약 1.7시간, 블록타임 2초)
+// 응답
+{ "success": true, "apiKey": "q402_live_xxx", "plan": "growth" }
 ```
 
-- `Promise.allSettled`로 4개 체인 병렬 조회
-- ERC-20 Transfer 이벤트 필터: `from=유저주소, to=릴레이어주소`
-- 여러 건 있으면 금액 가장 큰 것 선택
+### API Key 재발급 (Admin)
 
----
+**`POST /api/keys/generate`** — header: `x-admin-secret`
 
-## 6. API Key 발급 & 검증
+기존 키를 `deactivateApiKey()`로 비활성화하고 새 키 발급.
 
-### API Key 형식
-
+```json
+{ "address": "0xClientAddress" }
 ```
-q402_live_{랜덤16자}
-예: q402_live_k3m9xp2jf8ab1z7q
-```
-
-### API Key 재발급
-
-**`POST /api/keys/generate`** — body: `{ address }`
-
-- 이미 결제된 주소에 한해서만 새 키 발급
-- 기존 구독의 플랜은 그대로 유지
-- 새 키가 db.apiKeys에 추가됨
 
 ### API Key 검증
 
 **`POST /api/keys/verify`** — body: `{ apiKey }`
+
+구독 만료 여부와 현재 키 일치 여부도 함께 확인한다.
 
 ```json
 // 응답 (유효)
@@ -283,11 +254,84 @@ q402_live_{랜덤16자}
   "valid": true,
   "address": "0xOwnerAddress",
   "plan": "growth",
-  "createdAt": "2026-03-10T00:00:00.000Z"
+  "createdAt": "2026-03-19T00:00:00.000Z",
+  "expired": false,
+  "expiresAt": "2026-04-19T00:00:00.000Z"
 }
 
-// 응답 (무효)
-{ "valid": false }
+// 응답 (만료)
+{ "valid": false, "reason": "expired" }
+
+// 응답 (키 교체됨)
+{ "valid": false, "reason": "rotated" }
+```
+
+### 할당량 보너스 추가 (Admin)
+
+**`POST /api/keys/topup`** — header: `x-admin-secret`
+
+```json
+{ "address": "0xClientAddress", "bonus": 5000 }
+```
+
+### PLAN_QUOTA 매핑
+
+| 플랜 | TX/월 |
+|------|-------|
+| Starter | 500 |
+| Basic | 1,000 |
+| Growth | 10,000 |
+| Pro | 10,000 |
+| Scale | 100,000 |
+| Business | 100,000 |
+| Enterprise / Enterprise Flex | 500,000 |
+
+---
+
+## 6. Direct Inquiry 시스템
+
+v1.1에서 온체인 결제 플로우를 대체하는 문의 시스템.
+
+### 플로우
+
+```
+유저가 /payment 방문
+  └─ Quote Builder에서 체인 + 예상 볼륨 + 토큰 선택
+      └─ "Get a Quote" 클릭 → InquiryModal 팝업
+          └─ 프로젝트 세부사항 입력 (appName, email, chain, volume 등)
+              └─ POST /api/inquiry → Vercel KV 저장
+                  └─ 팀이 검토 후 수동으로 API Key 발급
+```
+
+### Inquiry 제출 API
+
+**`POST /api/inquiry`**
+
+```json
+// 요청 (필수: appName, email, category, targetChain, expectedVolume)
+{
+  "appName":        "MyDApp",
+  "website":        "https://mydapp.io",
+  "email":          "dev@mydapp.io",
+  "telegram":       "@myhandle",
+  "category":       "DeFi",
+  "targetChain":    "avax",
+  "expectedVolume": "1000-5000",
+  "description":    "We need gasless USDC transfers..."
+}
+
+// 응답
+{ "success": true, "id": "inq_1710834000000_abc12" }
+```
+
+### Inquiry 목록 조회 (Admin)
+
+**`GET /api/inquiry`** — header: `x-admin-secret`
+
+```json
+{
+  "inquiries": [ /* Inquiry[] */ ]
+}
 ```
 
 ---
@@ -319,6 +363,14 @@ q402_live_{랜덤16자}
 
 > 이 잔고는 **Q402 플랫폼 전체** 릴레이어 잔고이며, 개별 클라이언트의 입금 잔고와 다르다.
 
+### Gas 출금 (Admin)
+
+**`POST /api/gas-tank/withdraw`** — header: `x-admin-secret`
+
+```json
+{ "chain": "avax", "to": "0xAddress", "amount": "1.5" }
+```
+
 ---
 
 ## 8. Gas Tank — 유저 입금 잔고
@@ -343,7 +395,9 @@ Ethereum        : 최근 50 블록 스캔
 
 ### 유저 잔고 조회 API
 
-**`GET /api/gas-tank/user-balance?address=0x...`**
+**`GET /api/gas-tank/user-balance`** — query: `?apiKey=q402_live_xxx`
+
+> ⚠️ v1.1: `address` 파라미터 → `apiKey` 파라미터로 변경 (주소 열람 방지 보안 강화)
 
 ```json
 {
@@ -358,11 +412,11 @@ Ethereum        : 최근 50 블록 스캔
 
 ```
 getGasBalance(address) =
-  sum(gasDeposits[address].amount)     // 누적 입금
+  sum(gasDeposits[address].amount)      // 누적 입금
 - sum(relayedTxs[address].gasCostNative) // 누적 소비
 ```
 
-> 현재 gasCostNative는 0으로 기록 (정확한 gas 계산은 미구현 — 다음 단계)
+> gasCostNative는 v1.1부터 실제 TX receipt에서 계산됨 (v1.0에서는 항상 0이었음).
 
 ---
 
@@ -502,24 +556,6 @@ const types = {
 }
 ```
 
-#### settlePaymentXLayerEIP7702 내부 (`app/lib/relayer.ts`)
-
-```typescript
-// viem으로 Type 4 TX 전송
-const callData = encodeFunctionData({
-  abi: XLAYER_EIP7702_ABI,
-  functionName: "transferWithAuthorization",
-  args: [owner, facilitator, token, recipient, amount, nonce, deadline, witnessSig],
-});
-const txHash = await walletClient.sendTransaction({
-  chain: null,
-  to: params.owner,   // 유저 EOA
-  data: callData,
-  gas: BigInt(300000),
-  authorizationList: [{ ...params.authorization }],
-});
-```
-
 #### 검증된 X Layer EIP-7702 테스트 결과 (2026-03-12)
 
 | 항목 | 값 |
@@ -565,16 +601,17 @@ SDK v1.1.x 이하 하위 호환 유지용.
 
 ---
 
-### 9-D. 처리 단계 (공통)
+### 9-D. 처리 단계 (공통, v1.1)
 
-1. **API Key 검증** — `getApiKeyRecord(apiKey)`, active 확인
-2. **체인별 추가 필드 검증**
+1. **API Key 검증** — `getApiKeyRecord(apiKey)`, `active` 확인
+2. **구독 만료 + 키 교체 확인** — `subscription.apiKey !== apiKey` → 401 / 30일 만료 → 403
+3. **체인별 추가 필드 검증**
    - xlayer: `authorization + xlayerNonce` → EIP-7702 / `eip3009Nonce` → EIP-3009 fallback
    - avax/bnb/eth: `authorization` 필수
-3. **Gas Tank 잔고 확인** — `getGasBalance(keyRecord.address)[chain] > 0.0001`
-4. **paymentId 처리** — bytes32 hex면 그대로, 문자열이면 keccak256, 없으면 랜덤 생성
-5. **체인 분기** — xlayer EIP-7702 → `settlePaymentXLayerEIP7702()` / xlayer EIP-3009 → `settlePaymentEIP3009()` / 기타 → `settlePayment()`
-6. **TX 기록** — `recordRelayedTx()` 호출
+4. **Gas Tank 잔고 확인** — `getGasBalance(keyRecord.address)[chain] > 0.0001`
+5. **paymentId 처리** — bytes32 hex면 그대로, 문자열이면 keccak256, 없으면 랜덤 생성
+6. **체인 분기** — xlayer EIP-7702 → `settlePaymentXLayerEIP7702()` / xlayer EIP-3009 → `settlePaymentEIP3009()` / 기타 → `settlePayment()`
+7. **TX 기록** — `recordRelayedTx()` 호출 (gasCostNative = receipt에서 실제 계산)
 
 ### 9-E. 응답
 
@@ -595,7 +632,7 @@ SDK v1.1.x 이하 하위 호환 유지용.
 
 ## 10. 클라이언트 SDK
 
-파일: `public/q402-sdk.js`
+파일: `public/q402-sdk.js` (v1.2.0)
 
 개발자가 EIP-712 서명 / EIP-7702 authorization 생성 방법을 몰라도 단 3줄로 결제를 구현할 수 있다.
 
@@ -617,7 +654,7 @@ const q402 = new Q402Client({
 // X Layer (EIP-7702 방식 — 자동 감지, 추가 설정 불필요)
 const q402xl = new Q402Client({ apiKey: "q402_live_xxxxx", chain: "xlayer" });
 
-// 2. 결제
+// 결제
 const result = await q402.pay({
   to:     "0xRecipient...",
   amount: "5.00",    // 사람이 읽을 수 있는 형태 (USDC 5달러)
@@ -673,8 +710,9 @@ q402xl.pay() 호출
 #### Overview 탭
 - 일별 TX 차트 (bar chart, SVG)
 - API Key 표시 (마스킹 + 복사 버튼)
-- 릴레이 TX 할당량 (플랜별: Growth 50K / Scale 100K / Business 500K / Enterprise 무제한)
+- 릴레이 TX 할당량 (플랜별)
 - 최근 TX 목록
+- 이메일 알림 설정 (UI 존재; 발송 기능은 추후 구현 예정)
 
 #### Gas Tank 탭
 두 개 구역으로 분리:
@@ -684,7 +722,7 @@ q402xl.pay() 호출
 - 4개 체인 온체인 잔고 실시간 표시
 
 **내 입금 잔고** (클라이언트별)
-- `GET /api/gas-tank/user-balance?address=0x...`
+- `GET /api/gas-tank/user-balance?apiKey=q402_live_xxx`
 - Deposit 버튼 → DepositModal
 
 **DepositModal 플로우**
@@ -705,7 +743,7 @@ loading(1.5초) → address(릴레이어 주소 표시 + 복사)
 4. 응답 구조 설명
 
 #### Transactions 탭
-- 릴레이 TX 이력 목록 (현재 구현 중)
+- 릴레이 TX 이력 목록 (`GET /api/transactions?apiKey=q402_live_xxx`)
 
 ---
 
@@ -713,15 +751,13 @@ loading(1.5초) → address(릴레이어 주소 표시 + 복사)
 
 | 항목 | 현황 | 우선순위 |
 |------|------|---------|
-| Gas 소비량 정확 계산 | gasCostNative 항상 0 | 높음 |
-| BNB/ETH 체인 컨트랙트 배포 | 미배포 | 높음 |
-| 구독 만료/갱신 로직 | 미구현 | 중간 |
-| Webhook / TX 이벤트 알림 | 미구현 | 중간 |
-| DB를 PostgreSQL로 교체 | JSON 파일로 임시 운영 | 높음 (프로덕션) |
-| Vercel 배포 | 미배포 | 높음 |
-| EIP-7702 authorization 서명 표준화 | 현재 custom typed data 방식 | 중간 |
-| SDK npm 패키지 배포 | 현재 CDN 파일만 | 낮음 |
-| TX 이력 대시보드 | 탭 UI만 있음 | 낮음 |
+| 구독 결제 플로우 복원 | v1.1에서 임시 제거 (Direct Inquiry 시스템으로 대체) | 중간 |
+| Webhook / TX 이벤트 알림 발송 | UI 존재 (email input); 백엔드 발송 미구현 | 중간 |
+| 프로젝트별 별도 릴레이어 주소 | 현재 단일 글로벌 릴레이어 지갑 사용 | 높음 (P1) |
+| 블록 스캔 윈도우 최적화 | 현재 고정값 (2000/500/3000 블록) | 낮음 (결제 복원 시) |
+| SDK npm 패키지 배포 | 현재 CDN 파일만 (`/q402-sdk.js`) | 낮음 |
+| 자동화 테스트 | 미구현 | 중간 |
+| PostgreSQL 마이그레이션 | 현재 Vercel KV | 낮음 (KV로 충분) |
 
 ---
 
@@ -731,7 +767,6 @@ loading(1.5초) → address(릴레이어 주소 표시 + 복사)
 
 ```env
 # 릴레이어 지갑 Private Key (가스 대납 지갑)
-# 이 지갑이 각 체인에서 gas를 지불함
 # 절대 외부에 노출 금지!
 RELAYER_PRIVATE_KEY=0x...
 
@@ -740,6 +775,13 @@ IMPLEMENTATION_CONTRACT=0xE5b90D564650bdcE7C2Bb4344F777f6582e05699
 BNB_IMPLEMENTATION_CONTRACT=0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6
 ETH_IMPLEMENTATION_CONTRACT=0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9
 XLAYER_IMPLEMENTATION_CONTRACT=0x31E9D105df96b5294298cFaffB7f106994CD0d0f
+
+# Vercel KV (Redis) — 모든 데이터 영속성
+KV_REST_API_URL=https://...
+KV_REST_API_TOKEN=...
+
+# Admin 전용 엔드포인트 보호 (x-admin-secret 헤더)
+ADMIN_SECRET=your_admin_secret_here
 ```
 
 ---
@@ -750,7 +792,7 @@ XLAYER_IMPLEMENTATION_CONTRACT=0x31E9D105df96b5294298cFaffB7f106994CD0d0f
 
 | 체인 | ChainID | 릴레이 컨트랙트 | EIP-712 NAME | 상태 |
 |------|---------|----------------|-------------|------|
-| Avalanche C-Chain | 43114 | `0xE5b90D564650bdcE7C2Bb4344F777f6582e05699` | Q402 Avalanche | 배포완료 |
+| Avalanche C-Chain | 43114 | `0xE5b90D564650bdcE7C2Bb4344F777f6582e05699` | Q402 Avalanche | ✅ 배포완료 + 테스트 성공 |
 | BNB Chain | 56 | `0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6` | Q402 BNB Chain | 배포완료 |
 | Ethereum | 1 | `0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9` | Q402 Ethereum | 배포완료 |
 | X Layer | 196 | `0x31E9D105df96b5294298cFaffB7f106994CD0d0f` | Q402 X Layer | ✅ EIP-7702 테스트 성공 (2026-03-12) |
@@ -816,5 +858,4 @@ function payBatch(
 ```
 
 - `app/lib/access.ts`의 `MASTER_ADDRESSES` 배열에 하드코딩
-- 결제/체인 스캔 없이 즉시 Dashboard 접근 가능
-- `data/db.json`에 `q402_live_test_masterkey`로 수동 삽입됨
+- v1.1에서는 isPaid가 항상 true이므로 실질적인 게이팅 효과 없음 (결제 복원 시 재활성화)
