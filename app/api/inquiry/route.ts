@@ -39,6 +39,30 @@ export async function POST(req: NextRequest) {
   const existing = (await kv.get<Inquiry[]>("inquiries")) ?? [];
   await kv.set("inquiries", [...existing, inquiry]);
 
+  // Telegram alert
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (botToken && chatId) {
+    const lines = [
+      `📩 *New Q402 Inquiry*`,
+      ``,
+      `*App:* ${inquiry.appName}`,
+      `*Email:* ${inquiry.email}`,
+      inquiry.telegram ? `*Telegram:* ${inquiry.telegram}` : null,
+      inquiry.website ? `*URL:* ${inquiry.website}` : null,
+      `*Category:* ${inquiry.category}`,
+      `*Chain:* ${inquiry.targetChain}`,
+      `*Volume:* ${inquiry.expectedVolume}`,
+      inquiry.description ? `*Notes:* ${inquiry.description}` : null,
+    ].filter(Boolean).join("\n");
+
+    fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text: lines, parse_mode: "Markdown" }),
+    }).catch(() => {}); // fire-and-forget, don't block response
+  }
+
   return NextResponse.json({ success: true, id });
 }
 
