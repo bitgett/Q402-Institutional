@@ -201,7 +201,7 @@ export default function DocsPage() {
                 },
                 {
                   step: "B", color: "#627EEA",
-                  title: "Your server calls POST /v1/send",
+                  title: "Your server calls POST /api/relay",
                   desc: "You pass the user's signature to Q402's API. That's it — one HTTP call. Q402 verifies the signature, constructs the on-chain transaction, and submits it."
                 },
                 {
@@ -232,7 +232,7 @@ export default function DocsPage() {
               </div>
               <div>
                 <span className="text-blue-400">Your backend</span>
-                <span className="text-white/25">  →  POST /v1/send  →  </span>
+                <span className="text-white/25">  →  POST /api/relay  →  </span>
                 <span className="text-green-400">Q402 API</span>
               </div>
               <div>
@@ -254,43 +254,42 @@ export default function DocsPage() {
               Get your first gasless transaction running in under 5 minutes.
             </p>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Install the SDK</h3>
-            <CodeBlock lang="bash" code={`npm install @quackai/q402
-# or
-yarn add @quackai/q402`} />
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Load the SDK</h3>
+            <CodeBlock lang="html" code={`<script src="https://q402.io/q402-sdk.js"></script>`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · Initialize with your API key</h3>
-            <CodeBlock lang="typescript" code={`import { Q402 } from "@quackai/q402";
-
-const q402 = new Q402({
-  apiKey: process.env.Q402_API_KEY,   // from your dashboard
-  chain:  "bnb",    // "bnb" | "ethereum" | "avalanche" | "xlayer" | "arbitrum" | "scroll"
-});`} />
-
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · User signs (client-side, zero gas)</h3>
-            <CodeBlock lang="typescript" code={`// In your frontend — wallet popup appears, user signs, no gas
-const { payload, signature } = await q402.createPayload({
-  from:   userWalletAddress,
-  to:     recipientAddress,
-  amount: 50,           // USDC, human-readable
-  nonce:  await q402.getNonce(userWalletAddress),
-  expiry: Math.floor(Date.now() / 1000) + 3600,  // 1 hour window
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · User signs (client-side, zero gas)</h3>
+            <CodeBlock lang="javascript" code={`// Wallet popup appears — user signs, no gas required
+const result = await Q402.sign({
+  chain:    "bnb",         // "bnb" | "avax" | "eth" | "xlayer"
+  token:    "USDC",
+  from:     userWalletAddress,
+  to:       recipientAddress,
+  amount:   "50000000",   // atomic units (6 decimals = 50 USDC)
+  deadline: Math.floor(Date.now() / 1000) + 3600,
+  apiKey:   "q402_live_YOUR_KEY",
 });
-
-// Send payload + signature to your backend (e.g. via fetch/axios)
+// result → { witnessSig, authorization, ... }
 `} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Submit from your backend</h3>
-            <CodeBlock lang="typescript" code={`// In your server — one call, Q402 handles the rest
-const result = await q402.send({ payload, signature });
-
-console.log(result);
-// {
-//   success:     true,
-//   txHash:      "0xabc123...",
-//   chain:       "bnb",
-//   blockNumber: 38482910
-// }`} />
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · Submit from your backend</h3>
+            <CodeBlock lang="typescript" code={`// POST to Q402 relay — Q402 handles the rest
+const res = await fetch("https://q402.io/api/relay", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    apiKey:        "q402_live_YOUR_KEY",
+    chain:         "bnb",
+    token:         "USDC",
+    from:          userWalletAddress,
+    to:            recipientAddress,
+    amount:        "50000000",
+    deadline:      deadline,
+    witnessSig:    result.witnessSig,
+    authorization: result.authorization,
+  }),
+});
+const data = await res.json();
+// { success: true, txHash: "0xabc123...", chain: "bnb", blockNumber: "38482910" }`} />
 
             <Callout type="tip">
               That&apos;s the full integration. The user never touches BNB, ETH, or AVAX. Gas is deducted from your pre-funded gas pool automatically.
@@ -306,31 +305,17 @@ console.log(result);
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-yellow text-xs font-semibold mb-2">Deposit</div>
-                <p className="text-xs text-white/50 leading-relaxed">Send BNB / ETH / AVAX to your project&apos;s gas address from your dashboard. The address is unique to your API key.</p>
+                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / AVAX / OKB) to the Q402 relayer address shown in your dashboard. Your balance is tracked per wallet address.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-blue-400 text-xs font-semibold mb-2">Auto-deduction</div>
-                <p className="text-xs text-white/50 leading-relaxed">Each relayed transaction deducts the exact gas cost in real time. No manual management needed.</p>
+                <p className="text-xs text-white/50 leading-relaxed">Each relayed transaction deducts the actual gas cost in native tokens. Balances update in real time.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-green-400 text-xs font-semibold mb-2">Withdraw</div>
                 <p className="text-xs text-white/50 leading-relaxed">Withdraw remaining balance any time from your dashboard. Funds always remain yours.</p>
               </div>
-              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
-                <div className="text-orange-400 text-xs font-semibold mb-2">Low balance alert</div>
-                <p className="text-xs text-white/50 leading-relaxed">Email alerts when your gas pool drops below a threshold. Set thresholds in dashboard settings.</p>
-              </div>
             </div>
-
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Check gas pool balance via API</h3>
-            <CodeBlock lang="json" code={`// GET /v1/gaspool
-{
-  "chain":     "bnb",
-  "address":   "0xYourGasPoolAddress...",
-  "balance":   "0.482",        // BNB
-  "balanceUsd": "$285.40",
-  "estimatedTxsRemaining": 482000
-}`} />
 
             <Callout type="warn">
               If your gas pool is empty, transactions will fail. Q402 sends email alerts before depletion. Top up via your dashboard or directly to the gas pool address.
@@ -340,112 +325,66 @@ console.log(result);
           {/* ── AUTHENTICATION ── */}
           <Section id="auth" title="Authentication">
             <p className="text-white/55 text-sm mb-5">
-              All API requests require your API key as a bearer token in the Authorization header.
+              All relay requests require your API key in the <span className="font-mono text-white/70">apiKey</span> field of the request body. Your API key is available in your dashboard after connecting your wallet.
             </p>
-            <CodeBlock lang="http" code={`POST https://api.q402.quackai.ai/v1/send
-Authorization: Bearer q402_live_YOUR_API_KEY
-Content-Type: application/json`} />
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
-                <div className="text-xs text-yellow font-mono mb-1">q402_live_*</div>
-                <div className="text-xs text-white/50">Production key. Transactions hit mainnet. <strong className="text-white/70">Never expose in client-side code.</strong></div>
-              </div>
-              <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
-                <div className="text-xs text-blue-400 font-mono mb-1">q402_test_*</div>
-                <div className="text-xs text-white/50">Testnet key. Free tier. Safe to test without real funds.</div>
-              </div>
+            <CodeBlock lang="json" code={`// POST /api/relay
+{
+  "apiKey": "q402_live_YOUR_API_KEY",
+  "chain":  "avax",
+  "token":  "USDC",
+  ...
+}`} />
+            <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
+              <div className="text-xs text-yellow font-mono mb-1">q402_live_*</div>
+              <div className="text-xs text-white/50">Production key. Transactions hit mainnet. <strong className="text-white/70">Keep this key private — it is tied to your gas tank.</strong></div>
             </div>
           </Section>
 
           {/* ── API REFERENCE ── */}
           <Section id="api-ref" title="API Reference">
-            <p className="text-white/40 text-xs mb-8 font-mono">Base URL: https://api.q402.quackai.ai/v1</p>
+            <p className="text-white/40 text-xs mb-8 font-mono">Base URL: https://q402.io/api</p>
 
-            {/* POST /send */}
+            {/* POST /relay */}
             <div className="mb-12">
               <div className="flex items-center gap-3 mb-2">
                 <Badge color="#4ade80">POST</Badge>
-                <span className="font-mono text-sm text-white/70">/send</span>
+                <span className="font-mono text-sm text-white/70">/relay</span>
               </div>
-              <p className="text-white/50 text-sm mb-4">Submit a signed EIP-712 payload. Q402 verifies the signature and relays the transaction on-chain using your gas pool.</p>
+              <p className="text-white/50 text-sm mb-4">Submit a signed EIP-712 + EIP-7702 payload. Q402 verifies the signature and relays the transaction on-chain using your gas pool.</p>
               <CodeBlock lang="json" code={`// Request body
 {
-  "chain":     "bnb",
-  "payload": {
-    "from":    "0xUserWallet...",
-    "to":      "0xRecipient...",
-    "amount":  "50000000",       // 6 decimals (50 USDC)
-    "nonce":   14,
-    "expiry":  1751289600
-  },
-  "signature": "0xabc123..."
+  "apiKey":      "q402_live_YOUR_API_KEY",
+  "chain":       "avax",           // avax | bnb | eth | xlayer
+  "token":       "USDC",           // USDC | USDT
+  "from":        "0xUserWallet...",
+  "to":          "0xRecipient...",
+  "amount":      "50000000",       // atomic units (6 decimals = 50 USDC)
+  "deadline":    1751289600,
+  "witnessSig":  "0xabc123...",
+  "authorization": { ... }         // EIP-7702 authorization object
 }
 
 // Response 200
 {
-  "success":     true,
-  "txHash":      "0xdef456...",
-  "chain":       "bnb",
-  "blockNumber": 38482910
+  "success":        true,
+  "txHash":         "0xdef456...",
+  "chain":          "avax",
+  "blockNumber":    "54540550",
+  "tokenAmount":    50,
+  "gasCostNative":  0.000021,
+  "method":         "eip7702"
 }`} />
             </div>
 
-            {/* GET /nonce */}
-            <div className="mb-12">
-              <div className="flex items-center gap-3 mb-2">
-                <Badge color="#627EEA">GET</Badge>
-                <span className="font-mono text-sm text-white/70">/nonce/:address</span>
-              </div>
-              <p className="text-white/50 text-sm mb-4">Returns the current nonce for a wallet address. Must be included in the EIP-712 payload to prevent replay attacks.</p>
-              <CodeBlock lang="json" code={`// GET /nonce/0xUserWallet...
-{ "nonce": 14, "address": "0xUserWallet..." }`} />
-            </div>
-
-            {/* GET /status */}
-            <div className="mb-12">
-              <div className="flex items-center gap-3 mb-2">
-                <Badge color="#627EEA">GET</Badge>
-                <span className="font-mono text-sm text-white/70">/status/:txHash</span>
-              </div>
-              <p className="text-white/50 text-sm mb-4">Check on-chain confirmation status of a submitted transaction.</p>
-              <CodeBlock lang="json" code={`{
-  "txHash":        "0xdef456...",
-  "status":        "confirmed",   // "pending" | "confirmed" | "failed"
-  "blockNumber":   38482910,
-  "confirmations": 12
-}`} />
-            </div>
-
-            {/* GET /quota */}
-            <div className="mb-12">
-              <div className="flex items-center gap-3 mb-2">
-                <Badge color="#627EEA">GET</Badge>
-                <span className="font-mono text-sm text-white/70">/quota</span>
-              </div>
-              <p className="text-white/50 text-sm mb-4">Returns your remaining monthly API call quota and plan details.</p>
-              <CodeBlock lang="json" code={`{
-  "plan":       "Scale",
-  "quota":      50000,
-  "used":       14823,
-  "remaining":  35177,
-  "resetsAt":   "2026-04-01T00:00:00Z"
-}`} />
-            </div>
-
-            {/* GET /gaspool */}
+            {/* GET /relay/info */}
             <div className="mb-4">
               <div className="flex items-center gap-3 mb-2">
                 <Badge color="#627EEA">GET</Badge>
-                <span className="font-mono text-sm text-white/70">/gaspool</span>
+                <span className="font-mono text-sm text-white/70">/relay/info</span>
               </div>
-              <p className="text-white/50 text-sm mb-4">Returns your gas pool balance and estimated remaining capacity.</p>
-              <CodeBlock lang="json" code={`{
-  "chain":                  "bnb",
-  "address":                "0xYourGasPoolAddress...",
-  "balance":                "0.482",
-  "balanceUsd":             "$285.40",
-  "estimatedTxsRemaining":  482000
-}`} />
+              <p className="text-white/50 text-sm mb-4">Returns the relayer (facilitator) wallet address. Required for X Layer EIP-7702 signing — include this address in your EIP-712 payload before submitting.</p>
+              <CodeBlock lang="json" code={`// GET /api/relay/info
+{ "facilitator": "0xRelayerAddress..." }`} />
             </div>
           </Section>
 
@@ -465,12 +404,10 @@ Content-Type: application/json`} />
                 </thead>
                 <tbody>
                   {[
-                    { name: "BNB Chain",  color: "#F0B90B", param: "bnb",       id: "56",    status: "live",      gas: "~$0.001" },
-                    { name: "Ethereum",   color: "#627EEA", param: "ethereum",  id: "1",     status: "live",      gas: "~$0.19"  },
-                    { name: "Avalanche",  color: "#E84142", param: "avalanche", id: "43114", status: "live",      gas: "~$0.002" },
-                    { name: "X Layer",    color: "#CCCCCC", param: "xlayer",    id: "196",   status: "live",      gas: "~$0.001" },
-                    { name: "Arbitrum",   color: "#12AAFF", param: "arbitrum",  id: "42161", status: "deploying", gas: "~$0.003" },
-                    { name: "Scroll",     color: "#EEB431", param: "scroll",    id: "534352",status: "deploying", gas: "~$0.003" },
+                    { name: "BNB Chain",  color: "#F0B90B", param: "bnb",       id: "56",    gas: "~$0.001" },
+                    { name: "Ethereum",   color: "#627EEA", param: "eth",       id: "1",     gas: "~$0.19"  },
+                    { name: "Avalanche",  color: "#E84142", param: "avax",      id: "43114", gas: "~$0.002" },
+                    { name: "X Layer",    color: "#CCCCCC", param: "xlayer",    id: "196",   gas: "~$0.001" },
                   ].map((chain) => (
                     <tr key={chain.param} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="py-3 pr-6">
@@ -482,11 +419,7 @@ Content-Type: application/json`} />
                       <td className="py-3 pr-6 font-mono text-white/50 text-xs">{chain.param}</td>
                       <td className="py-3 pr-6 font-mono text-white/30 text-xs">{chain.id}</td>
                       <td className="py-3 pr-6">
-                        {chain.status === "live" ? (
-                          <span className="text-green-400 text-xs font-semibold bg-green-400/10 px-2 py-0.5 rounded-full">Mainnet Live</span>
-                        ) : (
-                          <span className="text-white/30 text-xs font-semibold bg-white/5 px-2 py-0.5 rounded-full">Deploying</span>
-                        )}
+                        <span className="text-green-400 text-xs font-semibold bg-green-400/10 px-2 py-0.5 rounded-full">Mainnet Live</span>
                       </td>
                       <td className="py-3 font-mono text-yellow text-xs">{chain.gas}</td>
                     </tr>
@@ -539,7 +472,7 @@ const domain = {
   expiry: Math.floor(Date.now() / 1000) + 3600,
 });`} />
             <Callout type="info">
-              <strong className="text-white/80">EIP-7702 note:</strong> On chains supporting EIP-7702, Q402 uses a single-transaction flow. On others (current BNB mainnet), the fallback is Permit2 — two sequential on-chain operations, both handled server-side by Q402. Your API call is identical either way.
+              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer) use EIP-7702 for single-transaction gasless relay. X Layer additionally supports EIP-3009 as a fallback.
             </Callout>
           </Section>
 
@@ -550,7 +483,7 @@ const domain = {
               {[
                 { code: "INVALID_SIGNATURE",   http: "400", desc: "EIP-712 signature is malformed or doesn't match the payload." },
                 { code: "EXPIRED_PAYLOAD",      http: "400", desc: "The expiry timestamp has passed. Generate a new payload." },
-                { code: "NONCE_MISMATCH",       http: "400", desc: "Nonce is wrong. Fetch the current nonce with GET /nonce/:address." },
+                { code: "DEADLINE_EXPIRED",      http: "400", desc: "The deadline timestamp has passed. Generate a new payload with a future deadline." },
                 { code: "INSUFFICIENT_BALANCE", http: "400", desc: "Sender wallet has insufficient USDC for the requested amount." },
                 { code: "GAS_POOL_EMPTY",       http: "402", desc: "Your gas pool is empty. Top up via dashboard to resume transactions." },
                 { code: "QUOTA_EXCEEDED",       http: "429", desc: "Monthly API quota exhausted. Upgrade plan or wait for reset." },
@@ -588,19 +521,15 @@ const domain = {
               },
               {
                 q: "What if a transaction fails?",
-                a: "Q402 retries up to 3 times with adjusted gas. If all retries fail, the payload is discarded — no user funds are moved, and the failed attempt does not count against your quota."
+                a: "If relay fails, the payload is discarded and no user funds are moved. Check the error code in the API response — common causes are insufficient gas tank balance or an expired deadline."
               },
               {
                 q: "Can I use Q402 with tokens other than USDC?",
-                a: "Currently USDC and USDT are supported on all live chains. Additional ERC-20 token support is on the roadmap for Q3 2026."
+                a: "Currently USDC and USDT are supported on all live chains. Additional ERC-20 token support is on the roadmap."
               },
               {
-                q: "How do I test before going live?",
-                a: "Your Free plan includes 100 test transactions on EVM testnets (BNB Testnet, Fuji, Goerli). Use a q402_test_* API key — free, no real funds required."
-              },
-              {
-                q: "What's the difference between the monthly fee and the gas pool?",
-                a: "The monthly subscription fee (shown on the pricing page) is for API access — your quota of relay transactions per month. The gas pool is separate: you deposit native tokens there to cover actual on-chain gas costs. Think of the subscription as your 'slots' and the gas pool as the 'fuel'."
+                q: "How do I get an API key?",
+                a: "Connect your wallet on the dashboard — an API key is automatically provisioned for your address. Deposit native tokens into the Gas Tank to start relaying."
               },
             ].map((item, i) => (
               <div key={i} className="mb-4 p-5 rounded-xl border border-white/8">
@@ -613,9 +542,9 @@ const domain = {
           {/* Bottom CTA */}
           <div className="border border-yellow/15 rounded-2xl p-8 text-center" style={{ background: "rgba(245,197,24,0.04)" }}>
             <h3 className="text-xl font-bold mb-2">Ready to go gasless?</h3>
-            <p className="text-white/40 text-sm mb-6">Start with the Free tier — 100 test transactions, no credit card needed.</p>
+            <p className="text-white/40 text-sm mb-6">Connect your wallet and get your API key instantly — no payment required.</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <a href="/payment" className="bg-yellow text-navy font-bold px-8 py-3 rounded-full hover:bg-yellow-hover transition-colors text-sm">
+              <a href="/dashboard" className="bg-yellow text-navy font-bold px-8 py-3 rounded-full hover:bg-yellow-hover transition-colors text-sm">
                 Get API Key →
               </a>
               <a href="mailto:hello@quackai.ai" className="border border-white/20 text-white/70 font-semibold px-8 py-3 rounded-full hover:bg-white/5 transition-colors text-sm">

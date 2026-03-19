@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSubscription, addQuotaBonus, getPlanQuota } from "@/app/lib/db";
 
+function checkAdminSecret(req: NextRequest): boolean {
+  const secret = req.headers.get("x-admin-secret");
+  const expected = process.env.ADMIN_SECRET;
+  return !!expected && secret === expected;
+}
+
+// Admin-only: Add quota bonus to a subscription.
+// Requires x-admin-secret header.
 export async function POST(req: NextRequest) {
+  if (!checkAdminSecret(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { address, additionalTxs } = await req.json();
   if (!address || !additionalTxs || typeof additionalTxs !== "number" || additionalTxs <= 0) {
     return NextResponse.json({ error: "address and additionalTxs (positive number) required" }, { status: 400 });
@@ -9,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const sub = await getSubscription(address);
   if (!sub) {
-    return NextResponse.json({ error: "No active subscription found" }, { status: 404 });
+    return NextResponse.json({ error: "No subscription found" }, { status: 404 });
   }
 
   await addQuotaBonus(address, additionalTxs);

@@ -298,10 +298,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
-    fetch(`/api/payment/check?address=${address}`).then(r => r.json()).then(data => {
-      if (data.subscription) setSubscription(data.subscription);
-      if (data.expiresAt) setExpiresAt(new Date(data.expiresAt));
-      if (data.isExpired !== undefined) setIsExpired(data.isExpired);
+    // Provision API key (auto-creates if not exists, returns existing otherwise)
+    fetch("/api/keys/provision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address }),
+    }).then(r => r.json()).then(data => {
+      if (data.apiKey) {
+        setSubscription(prev => ({ ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }), apiKey: data.apiKey, plan: data.plan ?? "starter" }));
+      }
     }).catch(() => {});
   }, [address]);
 
@@ -395,7 +400,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-2">
             <span className="text-yellow font-bold text-sm">{planName} Plan</span>
-            {subscription && <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>}
+            {subscription && subscription.amountUSD > 0 && <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>}
           </div>
         </div>
 

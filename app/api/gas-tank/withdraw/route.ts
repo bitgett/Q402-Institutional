@@ -9,7 +9,19 @@ const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   xlayer: { rpc: "https://rpc.xlayer.tech",                    token: "OKB"  },
 };
 
+function checkAdminSecret(req: NextRequest): boolean {
+  const secret = req.headers.get("x-admin-secret");
+  const expected = process.env.ADMIN_SECRET;
+  return !!expected && secret === expected;
+}
+
+// Admin-only: Withdraw gas balance for an address.
+// Requires x-admin-secret header.
 export async function POST(req: NextRequest) {
+  if (!checkAdminSecret(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { address, chain } = await req.json();
   if (!address || !chain) {
     return NextResponse.json({ error: "address and chain required" }, { status: 400 });
@@ -36,7 +48,6 @@ export async function POST(req: NextRequest) {
     const provider = new ethers.JsonRpcProvider(chainCfg.rpc);
     const wallet = new ethers.Wallet(pk, provider);
 
-    // Estimate gas cost for a simple ETH transfer
     const feeData = await provider.getFeeData();
     const gasPrice = feeData.gasPrice ?? BigInt(1_000_000_000);
     const gasLimit = BigInt(21_000);
@@ -55,11 +66,10 @@ export async function POST(req: NextRequest) {
       gasLimit,
     });
 
-    // Record as negative deposit to zero out this address's balance
     await addGasDeposit(address, {
       chain,
       token: chainCfg.token,
-      amount: -amount,   // negative = withdrawal
+      amount: -amount,
       txHash: tx.hash,
       depositedAt: new Date().toISOString(),
     });

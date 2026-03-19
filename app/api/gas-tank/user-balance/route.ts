@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGasBalance, getGasDeposits } from "@/app/lib/db";
+import { getGasBalance, getGasDeposits, getApiKeyRecord } from "@/app/lib/db";
 
 export async function GET(req: NextRequest) {
-  const address = req.nextUrl.searchParams.get("address");
-  if (!address) return NextResponse.json({ error: "address required" }, { status: 400 });
+  const apiKey = req.nextUrl.searchParams.get("apiKey");
+  if (!apiKey) return NextResponse.json({ error: "apiKey required" }, { status: 401 });
 
+  const record = await getApiKeyRecord(apiKey);
+  if (!record || !record.active) {
+    return NextResponse.json({ error: "Invalid or inactive API key" }, { status: 401 });
+  }
+
+  const address = record.address;
   const balances = await getGasBalance(address);
   const deposits = await getGasDeposits(address);
 

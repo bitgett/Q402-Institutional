@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
-import { getApiKeyRecord, getGasBalance, recordRelayedTx } from "@/app/lib/db";
+import { getApiKeyRecord, getGasBalance, recordRelayedTx, getSubscription } from "@/app/lib/db";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   CHAIN_CONFIG,
@@ -15,47 +15,13 @@ import {
 } from "@/app/lib/relayer";
 import type { Hex, Address } from "viem";
 
-/**
- * POST /api/relay
- *
- * 체인별 가스리스 USDC/USDT 릴레이 엔드포인트.
- *
- * ─────────────────────────────────────────────────────────────
- * 체인별 동작 방식:
- *   avax / bnb / eth  → EIP-7702 (Type 4 TX)
- *     클라이언트가 EIP-712 witnessSig + EIP-7702 authorization을 전달
- *     릴레이어가 Q402PaymentImplementation.pay() 호출
- *
- *   xlayer            → EIP-3009 (Standard TX)
- *     클라이언트가 USDC TransferWithAuthorization 서명 전달
- *     (witnessSig = EIP-3009 65-byte sig, eip3009Nonce = bytes32 nonce)
- *     릴레이어가 USDC.transferWithAuthorization() 직접 호출
- *     authorization 필드 불필요
- * ─────────────────────────────────────────────────────────────
- *
- * 공통 필드:
- * {
- *   apiKey:       "q402_live_xxx",
- *   chain:        "avax" | "bnb" | "eth" | "xlayer",
- *   token:        "USDC" | "USDT",
- *   from:         "0xPayer",
- *   to:           "0xRecipient",
- *   amount:       "50000",           // atomic units (string)
- *   deadline:     1234567890,        // unix timestamp (= validBefore for xlayer)
- *   paymentId:    "0x...",           // bytes32, optional (auto-generated if omitted)
- *   witnessSig:   "0x...",           // EIP-712 sig (non-xlayer) OR EIP-3009 sig (xlayer)
- * }
- *
- * EIP-7702 추가 필드 (avax/bnb/eth):
- * {
- *   authorization: { chainId, address, nonce, yParity, r, s }
- * }
- *
- * EIP-3009 추가 필드 (xlayer):
- * {
- *   eip3009Nonce: "0x...(bytes32)"
- * }
- */
+const CHAIN_RPC: Record<string, string> = {
+  bnb:    "https://bsc-dataseed1.binance.org/",
+  eth:    "https://ethereum.publicnode.com",
+  avax:   "https://api.avax.network/ext/bc/C/rpc",
+  xlayer: "https://rpc.xlayer.tech",
+};
+
 export async function POST(req: NextRequest) {
   let body: {
     apiKey:       string;
@@ -67,7 +33,6 @@ export async function POST(req: NextRequest) {
     deadline:     number;
     paymentId?:   string;
     witnessSig:   string;
-    // EIP-7702 (avax/bnb/eth)
     authorization?: {
       chainId:  number;
       address:  string;
@@ -76,11 +41,9 @@ export async function POST(req: NextRequest) {
       r: string;
       s: string;
     };
-    // EIP-3009 (xlayer fallback)
     eip3009Nonce?: string;
-    // EIP-7702 XLayer (xlayer native, Q402PaymentImplementationXLayer)
-    xlayerNonce?: string;   // random uint256 for TransferAuthorization replay protection
-    facilitator?: string;   // relayer wallet address (must match msg.sender)
+    xlayerNonce?: string;
+    facilitator?: string;
   };
 
   try {
@@ -94,14 +57,13 @@ export async function POST(req: NextRequest) {
     paymentId, witnessSig, authorization, eip3009Nonce, xlayerNonce,
   } = body;
 
-  // ── 1. 공통 필수 필드 검증 ──────────────────────────────────────────────────
+  // ── 1. 공통 필수 필드 검증 ────────────────────────────────────────────────
   if (!apiKey || !chain || !token || !from || !to || !amount || !deadline || !witnessSig) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // ── 2. 체인별 추가 필드 검증 ────────────────────────────────────────────────
+  // ── 2. 체인별 추가 필드 검증 ──────────────────────────────────────────────
   const isXLayer = chain === "xlayer";
-  // xlayer: EIP-7702 mode (preferred) or EIP-3009 fallback
   const isXLayerEIP7702 = isXLayer && !!authorization && !!xlayerNonce;
   const isXLayerEIP3009 = isXLayer && !!eip3009Nonce && !authorization;
 
@@ -118,13 +80,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 3. API Key 검증 ─────────────────────────────────────────────────────────
+  // ── 3. API Key 검증 ───────────────────────────────────────────────────────
   const keyRecord = await getApiKeyRecord(apiKey);
   if (!keyRecord || !keyRecord.active) {
     return NextResponse.json({ error: "Invalid or inactive API key" }, { status: 401 });
   }
 
-  // ── 4. 체인 지원 확인 ───────────────────────────────────────────────────────
+  // ── 4. 현재 구독의 키와 일치하는지 + 만료 여부 확인 ────────────────────
+  const subscription = await getSubscription(keyRecord.address);
+  if (subscription) {
+    if (subscription.apiKey !== apiKey) {
+      return NextResponse.json({ error: "API key has been rotated. Please use your current key." }, { status: 401 });
+    }
+    const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+    if (new Date() >= expiresAt) {
+      return NextResponse.json({ error: "Subscription expired. Please renew to continue." }, { status: 403 });
+    }
+  }
+
+  // ── 5. 체인 지원 확인 ──────────────────────────────────────────────────────
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
@@ -132,16 +106,16 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  // ── 5. Gas Tank 잔고 확인 ──────────────────────────────────────────────────
+  // ── 6. Gas Tank 잔고 확인 ─────────────────────────────────────────────────
   const gasBalance   = await getGasBalance(keyRecord.address);
   const chainBalance = gasBalance[chain] ?? 0;
   if (chainBalance <= 0.0001) {
     return NextResponse.json({
-      error: `Insufficient gas tank on ${chain}. Deposit ${chainCfg.token} to your gas tank.`,
+      error: `Insufficient gas tank on ${chain}. Deposit native tokens to your gas tank.`,
     }, { status: 402 });
   }
 
-  // ── 6. paymentId → bytes32 ─────────────────────────────────────────────────
+  // ── 7. paymentId → bytes32 ────────────────────────────────────────────────
   let paymentIdBytes32: Hex;
   if (paymentId && paymentId.startsWith("0x") && paymentId.length === 66) {
     paymentIdBytes32 = paymentId as Hex;
@@ -156,9 +130,8 @@ export async function POST(req: NextRequest) {
   const tokenCfg = getTokenConfig(chain, token);
   let result;
 
-  // ── 7a-1. X Layer EIP-7702 (Q402PaymentImplementationXLayer) ────────────────
+  // ── 8. 릴레이 실행 ────────────────────────────────────────────────────────
   if (isXLayerEIP7702) {
-    // Derive facilitator address from RELAYER_PRIVATE_KEY to enforce match
     const pkRaw = process.env.RELAYER_PRIVATE_KEY!;
     const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
     const relayerAddress = privateKeyToAccount(pk).address as Address;
@@ -183,7 +156,6 @@ export async function POST(req: NextRequest) {
     };
     result = await settlePaymentXLayerEIP7702(xlayerParams);
 
-  // ── 7a-2. X Layer EIP-3009 fallback (USDC.transferWithAuthorization) ────────
   } else if (isXLayerEIP3009) {
     const eip3009Params: EIP3009PayParams = {
       from,
@@ -198,7 +170,6 @@ export async function POST(req: NextRequest) {
     };
     result = await settlePaymentEIP3009(eip3009Params);
 
-  // ── 7b. EIP-7702 릴레이 (avax / bnb / eth) ────────────────────────────────
   } else {
     const payParams: PayParams = {
       owner:      from as Address,
@@ -225,7 +196,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Relay failed: ${result.error}` }, { status: 400 });
   }
 
-  // ── 8. TX 기록 ─────────────────────────────────────────────────────────────
+  // ── 9. 실제 가스비 계산 (TX 영수증에서 추출) ──────────────────────────────
+  let gasCostNative = 0;
+  if (result.txHash) {
+    try {
+      const provider = new ethers.JsonRpcProvider(CHAIN_RPC[chain]);
+      const receipt = await provider.getTransactionReceipt(result.txHash);
+      if (receipt) {
+        const gasUsed = receipt.gasUsed;
+        const gasPrice = receipt.gasPrice ?? 0n;
+        gasCostNative = parseFloat(ethers.formatEther(gasUsed * gasPrice));
+      }
+    } catch {
+      // RPC 오류 시 0으로 유지
+    }
+  }
+
+  // ── 10. TX 기록 (실제 가스비 포함) ───────────────────────────────────────
   const tokenAmount = parseFloat(ethers.formatUnits(amount, tokenCfg.decimals));
 
   await recordRelayedTx(keyRecord.address, {
@@ -236,7 +223,7 @@ export async function POST(req: NextRequest) {
     toUser:       to,
     tokenAmount,
     tokenSymbol:  token,
-    gasCostNative: 0,
+    gasCostNative,
     relayTxHash:  result.txHash ?? "",
     relayedAt:    new Date().toISOString(),
   });
@@ -248,6 +235,7 @@ export async function POST(req: NextRequest) {
     tokenAmount,
     token,
     chain,
+    gasCostNative,
     method:      isXLayerEIP7702 ? "eip7702_xlayer" : isXLayerEIP3009 ? "eip3009" : "eip7702",
   });
 }
