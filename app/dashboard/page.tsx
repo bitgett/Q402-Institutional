@@ -277,10 +277,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setMounted(true);
-    const saved = localStorage.getItem("q402_alert_email");
-    if (saved) { setAlertEmail(saved); }
-    else { setShowEmailSetup(true); }
   }, []);
+
+  useEffect(() => {
+    if (!address) return;
+    const saved = localStorage.getItem(`q402_alert_email_${address.toLowerCase()}`);
+    if (saved) { setAlertEmail(saved); setShowEmailSetup(false); }
+    else { setAlertEmail(""); setShowEmailSetup(true); }
+  }, [address]);
   useEffect(() => {
     if (!mounted) return;
     const t = setTimeout(() => { if (!isConnected) router.push("/"); }, 600);
@@ -464,7 +468,7 @@ export default function DashboardPage() {
               <button
                 onClick={() => {
                   if (!alertEmailInput) return;
-                  localStorage.setItem("q402_alert_email", alertEmailInput);
+                  localStorage.setItem(`q402_alert_email_${address.toLowerCase()}`, alertEmailInput);
                   setAlertEmail(alertEmailInput);
                   setEmailSaved(true);
                   setTimeout(() => { setShowEmailSetup(false); setEmailSaved(false); }, 1500);
