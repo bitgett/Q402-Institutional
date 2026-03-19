@@ -68,6 +68,13 @@ export async function getApiKeyRecord(apiKey: string): Promise<ApiKeyRecord | nu
   return kv.get<ApiKeyRecord>(apiKeyRecKey(apiKey));
 }
 
+export async function deactivateApiKey(apiKey: string) {
+  const record = await getApiKeyRecord(apiKey);
+  if (record) {
+    await kv.set(apiKeyRecKey(apiKey), { ...record, active: false });
+  }
+}
+
 export async function generateApiKey(address: string, plan: string): Promise<string> {
   const rand = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
   const key = `q402_live_${rand}`;
@@ -128,9 +135,14 @@ export async function addQuotaBonus(address: string, additionalTxs: number) {
 // ── Plan helpers ──────────────────────────────────────────────────────────────
 
 const PLAN_QUOTA: Record<string, number> = {
-  starter:     1_000,
-  growth:     10_000,
-  enterprise: 100_000,
+  starter:          500,
+  basic:          1_000,
+  growth:        10_000,
+  pro:           10_000,
+  scale:        100_000,
+  business:     100_000,
+  enterprise:   100_000,
+  enterprise_flex: 500_000,
 };
 
 export function getPlanQuota(plan: string): number {
