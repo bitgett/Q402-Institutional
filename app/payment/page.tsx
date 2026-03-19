@@ -4,10 +4,12 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 
 const CHAINS = [
-  { id: "bnb",    name: "BNB Chain", shortName: "BNB",  color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full", multiplier: 1.0 },
-  { id: "avax",   name: "Avalanche", shortName: "AVAX", color: "#E84142", img: "/avax.png",   rounded: "rounded-full", multiplier: 1.1 },
-  { id: "xlayer", name: "X Layer",   shortName: "X",    color: "#CCCCCC", img: "/xlayer.png", rounded: "rounded-sm",   multiplier: 1.0 },
-  { id: "eth",    name: "Ethereum",  shortName: "ETH",  color: "#627EEA", img: "/eth.png",    rounded: "rounded-full", multiplier: 1.5 },
+  { id: "bnb",       name: "BNB Chain",  shortName: "BNB",  color: "#F0B90B", img: "/bnb.png",       rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "avax",      name: "Avalanche",  shortName: "AVAX", color: "#E84142", img: "/avax.png",      rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
+  { id: "xlayer",    name: "X Layer",    shortName: "X",    color: "#CCCCCC", img: "/xlayer.png",    rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
+  { id: "eth",       name: "Ethereum",   shortName: "ETH",  color: "#627EEA", img: "/eth.png",       rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
+  { id: "arbitrum",  name: "Arbitrum",   shortName: "ARB",  color: "#28A0F0", img: "/arbitrum.png",  rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
+  { id: "scroll",    name: "Scroll",     shortName: "SCR",  color: "#FFDBB0", img: "/scroll.png",    rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
 ];
 
 const VOLUMES = [
@@ -81,7 +83,7 @@ function InquiryModal({
   }
 
   const inputCls = "w-full bg-white/[0.04] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 focus:outline-none focus:border-yellow/40 transition-colors";
-  const selectCls = `${inputCls} appearance-none`;
+  const selectCls = `${inputCls} appearance-none cursor-pointer`;
 
   return createPortal(
     <div
@@ -161,56 +163,70 @@ function InquiryModal({
 
             <div>
               <label className="block text-xs text-white/40 mb-1.5">Category <span className="text-yellow">*</span></label>
-              <select
-                className={selectCls}
-                value={form.category}
-                onChange={e => set("category", e.target.value)}
-                required
-              >
-                <option value="" disabled>Select…</option>
-                <option value="DeFi">DeFi</option>
-                <option value="NFT / Gaming">NFT / Gaming</option>
-                <option value="Payment">Payment</option>
-                <option value="Social">Social</option>
-                <option value="Other">Other</option>
-              </select>
+              <div className="relative">
+                <select
+                  className={selectCls}
+                  style={{ background: "#0d1422", color: form.category ? "#fff" : "rgba(255,255,255,0.25)" }}
+                  value={form.category}
+                  onChange={e => set("category", e.target.value)}
+                  required
+                >
+                  <option value="" disabled style={{ background: "#0d1422", color: "rgba(255,255,255,0.4)" }}>Select…</option>
+                  <option value="DeFi" style={{ background: "#0d1422", color: "#fff" }}>DeFi</option>
+                  <option value="NFT / Gaming" style={{ background: "#0d1422", color: "#fff" }}>NFT / Gaming</option>
+                  <option value="Payment" style={{ background: "#0d1422", color: "#fff" }}>Payment</option>
+                  <option value="Social" style={{ background: "#0d1422", color: "#fff" }}>Social</option>
+                  <option value="Other" style={{ background: "#0d1422", color: "#fff" }}>Other</option>
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
+              </div>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-white/40 mb-1.5">Target Chain <span className="text-yellow">*</span></label>
-                <select
-                  className={selectCls}
-                  value={form.targetChain}
-                  onChange={e => set("targetChain", e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Select…</option>
-                  <option value="BNB Chain">BNB Chain</option>
-                  <option value="Avalanche">Avalanche</option>
-                  <option value="X Layer">X Layer</option>
-                  <option value="Ethereum">Ethereum</option>
-                  <option value="Multiple">Multiple chains</option>
-                </select>
+                <div className="relative">
+                  <select
+                    className={selectCls}
+                    style={{ background: "#0d1422", color: "#fff" }}
+                    value={form.targetChain}
+                    onChange={e => set("targetChain", e.target.value)}
+                    required
+                  >
+                    <option value="" disabled style={{ background: "#0d1422", color: "rgba(255,255,255,0.4)" }}>Select…</option>
+                    <option value="BNB Chain" style={{ background: "#0d1422", color: "#fff" }}>BNB Chain</option>
+                    <option value="Avalanche" style={{ background: "#0d1422", color: "#fff" }}>Avalanche</option>
+                    <option value="X Layer" style={{ background: "#0d1422", color: "#fff" }}>X Layer</option>
+                    <option value="Ethereum" style={{ background: "#0d1422", color: "#fff" }}>Ethereum</option>
+                    <option value="Arbitrum" style={{ background: "#0d1422", color: "#fff" }}>Arbitrum</option>
+                    <option value="Scroll" style={{ background: "#0d1422", color: "#fff" }}>Scroll</option>
+                    <option value="Multiple" style={{ background: "#0d1422", color: "#fff" }}>Multiple chains</option>
+                  </select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
+                </div>
               </div>
               <div>
                 <label className="block text-xs text-white/40 mb-1.5">Expected Volume <span className="text-yellow">*</span></label>
-                <select
-                  className={selectCls}
-                  value={form.expectedVolume}
-                  onChange={e => set("expectedVolume", e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Select…</option>
-                  <option value="500 txs/mo">500 txs/mo</option>
-                  <option value="1,000 txs/mo">1,000 txs/mo</option>
-                  <option value="5,000 txs/mo">5,000 txs/mo</option>
-                  <option value="10,000 txs/mo">10,000 txs/mo</option>
-                  <option value="50,000 txs/mo">50,000 txs/mo</option>
-                  <option value="100,000 txs/mo">100,000 txs/mo</option>
-                  <option value="100K–500K txs/mo">100K–500K txs/mo</option>
-                  <option value="500K+ txs/mo">500K+ txs/mo</option>
-                </select>
+                <div className="relative">
+                  <select
+                    className={selectCls}
+                    style={{ background: "#0d1422", color: "#fff" }}
+                    value={form.expectedVolume}
+                    onChange={e => set("expectedVolume", e.target.value)}
+                    required
+                  >
+                    <option value="" disabled style={{ background: "#0d1422", color: "rgba(255,255,255,0.4)" }}>Select…</option>
+                    <option value="500 txs/mo" style={{ background: "#0d1422", color: "#fff" }}>500 txs/mo</option>
+                    <option value="1,000 txs/mo" style={{ background: "#0d1422", color: "#fff" }}>1,000 txs/mo</option>
+                    <option value="5,000 txs/mo" style={{ background: "#0d1422", color: "#fff" }}>5,000 txs/mo</option>
+                    <option value="10,000 txs/mo" style={{ background: "#0d1422", color: "#fff" }}>10,000 txs/mo</option>
+                    <option value="50,000 txs/mo" style={{ background: "#0d1422", color: "#fff" }}>50,000 txs/mo</option>
+                    <option value="100,000 txs/mo" style={{ background: "#0d1422", color: "#fff" }}>100,000 txs/mo</option>
+                    <option value="100K–500K txs/mo" style={{ background: "#0d1422", color: "#fff" }}>100K–500K txs/mo</option>
+                    <option value="500K+ txs/mo" style={{ background: "#0d1422", color: "#fff" }}>500K+ txs/mo</option>
+                  </select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
+                </div>
               </div>
             </div>
 
@@ -301,9 +317,12 @@ export default function PaymentPage() {
                   return (
                     <button
                       key={c.id}
-                      onClick={() => setSelectedChain(c.id)}
+                      onClick={() => !c.comingSoon && setSelectedChain(c.id)}
+                      disabled={c.comingSoon}
                       className={`relative flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                        active
+                        c.comingSoon
+                          ? "border-white/5 bg-white/[0.01] opacity-50 cursor-not-allowed"
+                          : active
                           ? "border-yellow/50 bg-yellow/6"
                           : "border-white/8 bg-white/[0.02] hover:border-white/20"
                       }`}
@@ -312,13 +331,15 @@ export default function PaymentPage() {
                       <img src={c.img} alt={c.name} className={`w-7 h-7 flex-shrink-0 ${c.rounded}`} />
                       <div className="min-w-0">
                         <p className="text-xs font-semibold truncate">{c.name}</p>
-                        {c.multiplier > 1.0 ? (
+                        {c.comingSoon ? (
+                          <p className="text-[10px] text-white/30">Integrating…</p>
+                        ) : c.multiplier > 1.0 ? (
                           <p className="text-[10px] text-white/25">+{Math.round((c.multiplier - 1) * 100)}%</p>
                         ) : (
                           <p className="text-[10px] text-white/25">Base rate</p>
                         )}
                       </div>
-                      {active && (
+                      {active && !c.comingSoon && (
                         <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-yellow" style={{ boxShadow: "0 0 5px #F5C518" }} />
                       )}
                     </button>
