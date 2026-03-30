@@ -19,15 +19,16 @@ const PLAN_QUOTA: Record<string, number> = {
 };
 
 const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string }> = {
-  bnb:    { name: "BNB Chain",  token: "BNB",  color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
-  eth:    { name: "Ethereum",   token: "ETH",  color: "#627EEA", img: "/eth.png",    rounded: "rounded-lg"   },
-  xlayer: { name: "X Layer",    token: "OKB",  color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-sm"   },
-  avax:   { name: "Avalanche",  token: "AVAX", color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
+  bnb:    { name: "BNB Chain",  token: "BNB",   color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
+  eth:    { name: "Ethereum",   token: "ETH",   color: "#627EEA", img: "/eth.png",    rounded: "rounded-lg"   },
+  xlayer: { name: "X Layer",    token: "OKB",   color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-sm"   },
+  avax:   { name: "Avalanche",  token: "AVAX",  color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
+  stable: { name: "Stable",     token: "USDT0", color: "#4AE54A", img: "/stable.jpg", rounded: "rounded-full" },
 };
 
 const STEPS = [
   { n: "01", title: "Load the SDK (browser)", code: `<script src="https://q402.io/q402-sdk.js"></script>\n<!-- or: import { Q402Client } from "q402-sdk" -->` },
-  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer\n});` },
+  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable\n});` },
   { n: "03", title: "One-line gasless payment", code: `const result = await q402.pay({\n  to:     "0xRecipient...",\n  amount: "5.00",\n  token:  "USDC",\n});\nconsole.log(result.txHash);` },
   { n: "04", title: "Settlement confirmed", code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: 5, token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0` },
 ];

@@ -53,6 +53,14 @@ const CHAINS = [
       { symbol: "USDT", address: "0x1E4a5963aBFD975d8c9021ce480b42188849D41D", decimals: 6 },
     ],
   },
+  {
+    name: "Stable",
+    rpc: "https://rpc.stable.xyz",
+    blockWindow: 5000,   // ~1 hour (0.7s block)
+    tokens: [
+      { symbol: "USDT0", address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
+    ],
+  },
 ];
 
 /**

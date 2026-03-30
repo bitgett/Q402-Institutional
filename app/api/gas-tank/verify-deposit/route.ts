@@ -5,10 +5,11 @@ import { addGasDeposit, getGasBalance } from "@/app/lib/db";
 const RELAYER = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
 
 const CHAINS = [
-  { key: "bnb",    name: "BNB Chain", token: "BNB",  rpc: "https://bsc-dataseed1.binance.org/",   blockWindow: 200 },
-  { key: "eth",    name: "Ethereum",  token: "ETH",  rpc: "https://ethereum.publicnode.com",       blockWindow: 50  },
-  { key: "avax",   name: "Avalanche", token: "AVAX", rpc: "https://api.avax.network/ext/bc/C/rpc", blockWindow: 200 },
-  { key: "xlayer", name: "X Layer",   token: "OKB",  rpc: "https://rpc.xlayer.tech",               blockWindow: 200 },
+  { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",   blockWindow: 200 },
+  { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",       blockWindow: 50  },
+  { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc", blockWindow: 200 },
+  { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",               blockWindow: 200 },
+  { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                blockWindow: 500 },
 ];
 
 async function scanNativeDeposits(

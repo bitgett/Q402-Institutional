@@ -9,6 +9,7 @@ const CHAINS = [
   { name: "Ethereum",  color: "#627EEA", live: true },
   { name: "Avalanche", color: "#E84142", live: true },
   { name: "X Layer",   color: "#CCCCCC", live: true },
+  { name: "Stable",    color: "#4AE54A", live: true },
 ];
 
 function useCountUp(target: number, duration = 2200) {
@@ -158,7 +159,7 @@ export default function Hero() {
                 </div>
                 <div className="w-px h-10 bg-white/8" />
                 <div>
-                  <div className="text-2xl font-bold">4 chains</div>
+                  <div className="text-2xl font-bold">5 chains</div>
                   <div className="text-xs text-white/30 mt-0.5">mainnet live</div>
                 </div>
               </motion.div>
@@ -207,7 +208,7 @@ export default function Hero() {
                     </div>
                     <div className="pl-5">
                       <div><span className="text-green-300">apiKey</span><span className="text-white/40">: </span><span className="text-orange-300">process.env.Q402_KEY</span><span className="text-white/40">,</span></div>
-                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avalanche | eth | xlayer"}</span></div>
+                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avalanche | eth | xlayer | stable"}</span></div>
                     </div>
                     <div className="text-white/40 mb-4">{"});"}</div>
 
