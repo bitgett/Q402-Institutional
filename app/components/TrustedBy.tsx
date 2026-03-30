@@ -1,4 +1,4 @@
-// Chain order: BNB → Ethereum → Avalanche → X Layer → USDC → USDT → Arbitrum → Scroll
+// Chain order: BNB → Ethereum → Avalanche → X Layer → Stable → USDC → USDT → Arbitrum → Scroll
 const chains = [
   {
     name: "BNB Chain",
@@ -41,6 +41,15 @@ const chains = [
     icon: (
       // eslint-disable-next-line @next/next/no-img-element
       <img src="/xlayer.png" alt="X Layer" className="w-6 h-6 rounded-md" />
+    ),
+  },
+  {
+    name: "Stable",
+    color: "#4AE54A",
+    status: "live",
+    icon: (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/stable.jpg" alt="Stable" className="w-6 h-6 rounded-full" />
     ),
   },
   {
