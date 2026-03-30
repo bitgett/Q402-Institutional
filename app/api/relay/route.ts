@@ -20,7 +20,7 @@ const CHAIN_RPC: Record<string, string> = {
   eth:    "https://ethereum.publicnode.com",
   avax:   "https://api.avax.network/ext/bc/C/rpc",
   xlayer: "https://rpc.xlayer.tech",
-  stable: "https://rpc.testnet.stable.xyz",
+  stable: "https://rpc.stable.xyz",
 };
 
 export async function POST(req: NextRequest) {

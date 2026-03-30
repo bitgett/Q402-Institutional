@@ -88,7 +88,7 @@ Because gas is denominated in USDT0 (USD-pegged), relayer operating costs are pr
 | Network | Address |
 |---------|---------|
 | Stable Testnet (Chain ID: 2201) | `0x2fb2B2D110b6c5664e701666B3741240242bf350` |
-| Stable Mainnet (Chain ID: 988) | *Pending mainnet launch* |
+| Stable Mainnet (Chain ID: 988) | `0x2fb2B2D110b6c5664e701666B3741240242bf350` |
 
 **Explorer:** [View on Stablescan Testnet](https://testnet.stablescan.xyz/address/0x2fb2B2D110b6c5664e701666B3741240242bf350)
 
@@ -335,7 +335,7 @@ The `Q402PaymentImplementationStable` contract enforces:
 | Testnet deployment | ✅ 2026-03-30 |
 | SDK v1.3.0 with stable chain | ✅ 2026-03-30 |
 | End-to-end testnet verification | In progress |
-| Stable mainnet deployment | Pending Stable mainnet launch |
+| Stable mainnet deployment | ✅ 2026-03-30 |
 | Gas Waiver API integration | Evaluating (Stable partner program) |
 
 ---

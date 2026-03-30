@@ -63,14 +63,14 @@ export const CHAIN_CONFIG = {
   },
   stable: {
     name: "Stable",
-    rpc: "https://rpc.testnet.stable.xyz",
-    chainId: 2201,
+    rpc: "https://rpc.stable.xyz",
+    chainId: 988,
     token: "USDT0",
-    // Q402PaymentImplementationStable deployed on Stable Testnet (Chain ID: 2201)
+    // Q402PaymentImplementationStable deployed on Stable Mainnet (Chain ID: 988)
     implContract: process.env.STABLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     // USDT0 is the native gas token and primary transfer token on Stable
-    usdc: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18, symbol: "USDT0" },
-    usdt: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18, symbol: "USDT0" },
+    usdc: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0" },
+    usdt: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0" },
   },
 } as const;
 
