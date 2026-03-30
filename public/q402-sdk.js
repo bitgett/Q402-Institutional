@@ -54,13 +54,13 @@ const Q402_CHAIN_CONFIG = {
   },
   stable: {
     name:         "Stable",
-    chainId:      2201,  // testnet; mainnet = 988
+    chainId:      988,
     mode:         "eip7702_stable",
     domainName:   "Q402 Stable",
     implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     // USDT0 is the only token on Stable (gas token + transfer token)
-    usdc: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18 },
-    usdt: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18 },
+    usdc: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
+    usdt: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
   },
 };
 
