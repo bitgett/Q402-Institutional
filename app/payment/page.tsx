@@ -4,12 +4,13 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 
 const CHAINS = [
-  { id: "bnb",       name: "BNB Chain",  shortName: "BNB",  color: "#F0B90B", img: "/bnb.png",       rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "avax",      name: "Avalanche",  shortName: "AVAX", color: "#E84142", img: "/avax.png",      rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
-  { id: "xlayer",    name: "X Layer",    shortName: "X",    color: "#CCCCCC", img: "/xlayer.png",    rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
-  { id: "eth",       name: "Ethereum",   shortName: "ETH",  color: "#627EEA", img: "/eth.png",       rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
-  { id: "arbitrum",  name: "Arbitrum",   shortName: "ARB",  color: "#28A0F0", img: "/arbitrum.png",  rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
-  { id: "scroll",    name: "Scroll",     shortName: "SCR",  color: "#FFDBB0", img: "/scroll.png",    rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
+  { id: "bnb",       name: "BNB Chain",  shortName: "BNB",   color: "#F0B90B", img: "/bnb.png",       rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "avax",      name: "Avalanche",  shortName: "AVAX",  color: "#E84142", img: "/avax.png",      rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
+  { id: "xlayer",    name: "X Layer",    shortName: "X",     color: "#CCCCCC", img: "/xlayer.png",    rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
+  { id: "eth",       name: "Ethereum",   shortName: "ETH",   color: "#627EEA", img: "/eth.png",       rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
+  { id: "stable",    name: "Stable",     shortName: "STABLE",color: "#4AE54A", img: "/stable.jpg",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "arbitrum",  name: "Arbitrum",   shortName: "ARB",   color: "#28A0F0", img: "/arbitrum.png",  rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
+  { id: "scroll",    name: "Scroll",     shortName: "SCR",   color: "#FFDBB0", img: "/scroll.png",    rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
 ];
 
 const VOLUMES = [
@@ -198,6 +199,7 @@ function InquiryModal({
                     <option value="Avalanche" style={{ background: "#0d1422", color: "#fff" }}>Avalanche</option>
                     <option value="X Layer" style={{ background: "#0d1422", color: "#fff" }}>X Layer</option>
                     <option value="Ethereum" style={{ background: "#0d1422", color: "#fff" }}>Ethereum</option>
+                    <option value="Stable" style={{ background: "#0d1422", color: "#fff" }}>Stable</option>
                     <option value="Arbitrum" style={{ background: "#0d1422", color: "#fff" }}>Arbitrum</option>
                     <option value="Scroll" style={{ background: "#0d1422", color: "#fff" }}>Scroll</option>
                     <option value="Multiple" style={{ background: "#0d1422", color: "#fff" }}>Multiple chains</option>
