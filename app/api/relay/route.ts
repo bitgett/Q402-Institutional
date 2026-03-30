@@ -20,6 +20,7 @@ const CHAIN_RPC: Record<string, string> = {
   eth:    "https://ethereum.publicnode.com",
   avax:   "https://api.avax.network/ext/bc/C/rpc",
   xlayer: "https://rpc.xlayer.tech",
+  stable: "https://rpc.testnet.stable.xyz",
 };
 
 export async function POST(req: NextRequest) {
@@ -31,7 +32,8 @@ export async function POST(req: NextRequest) {
     to:           string;
     amount:       string;
     deadline:     number;
-    paymentId?:   string;
+    nonce?:       string;  // uint256 nonce for avax/bnb/eth (v1.2 contract)
+    paymentId?:   string;  // legacy bytes32 (fallback if nonce absent)
     witnessSig:   string;
     authorization?: {
       chainId:  number;
@@ -42,8 +44,9 @@ export async function POST(req: NextRequest) {
       s: string;
     };
     eip3009Nonce?: string;
-    xlayerNonce?: string;
-    facilitator?: string;
+    xlayerNonce?:  string;
+    stableNonce?:  string;
+    facilitator?:  string;
   };
 
   try {
@@ -54,7 +57,7 @@ export async function POST(req: NextRequest) {
 
   const {
     apiKey, chain, token, from, to, amount, deadline,
-    paymentId, witnessSig, authorization, eip3009Nonce, xlayerNonce,
+    nonce, paymentId, witnessSig, authorization, eip3009Nonce, xlayerNonce, stableNonce,
   } = body;
 
   // ── 1. 공통 필수 필드 검증 ────────────────────────────────────────────────
@@ -63,9 +66,11 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 2. 체인별 추가 필드 검증 ──────────────────────────────────────────────
-  const isXLayer = chain === "xlayer";
+  const isXLayer      = chain === "xlayer";
+  const isStable      = chain === "stable";
   const isXLayerEIP7702 = isXLayer && !!authorization && !!xlayerNonce;
   const isXLayerEIP3009 = isXLayer && !!eip3009Nonce && !authorization;
+  const isStableEIP7702 = isStable && !!authorization && !!stableNonce;
 
   if (isXLayer && !isXLayerEIP7702 && !isXLayerEIP3009) {
     return NextResponse.json(
@@ -73,7 +78,13 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (!isXLayer && !authorization) {
+  if (isStable && !isStableEIP7702) {
+    return NextResponse.json(
+      { error: "stable requires authorization + stableNonce for EIP-7702 mode" },
+      { status: 400 }
+    );
+  }
+  if (!isXLayer && !isStable && !authorization) {
     return NextResponse.json(
       { error: "EIP-7702 chains (avax/bnb/eth) require authorization object" },
       { status: 400 }
@@ -115,23 +126,55 @@ export async function POST(req: NextRequest) {
     }, { status: 402 });
   }
 
-  // ── 7. paymentId → bytes32 ────────────────────────────────────────────────
-  let paymentIdBytes32: Hex;
-  if (paymentId && paymentId.startsWith("0x") && paymentId.length === 66) {
-    paymentIdBytes32 = paymentId as Hex;
+  // ── 7. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
+  // SDK sends `nonce` as a uint256 string. Legacy `paymentId` as fallback.
+  let paymentNonce: bigint;
+  if (nonce) {
+    paymentNonce = BigInt(nonce);
   } else if (paymentId) {
-    paymentIdBytes32 = ethers.keccak256(ethers.toUtf8Bytes(paymentId)) as Hex;
+    // Derive uint256 nonce from paymentId hash (truncate bytes32 to uint256)
+    const hash = paymentId.startsWith("0x") && paymentId.length === 66
+      ? paymentId
+      : ethers.keccak256(ethers.toUtf8Bytes(paymentId));
+    paymentNonce = BigInt(hash);
   } else {
-    paymentIdBytes32 = ethers.keccak256(
+    // Auto-generate from tx context
+    paymentNonce = BigInt(ethers.keccak256(
       ethers.toUtf8Bytes(`${from}-${to}-${amount}-${deadline}-${Date.now()}`)
-    ) as Hex;
+    ));
   }
 
   const tokenCfg = getTokenConfig(chain, token);
   let result;
 
   // ── 8. 릴레이 실행 ────────────────────────────────────────────────────────
-  if (isXLayerEIP7702) {
+  if (isStableEIP7702) {
+    const pkRaw = process.env.RELAYER_PRIVATE_KEY!;
+    const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
+    const relayerAddress = privateKeyToAccount(pk).address as Address;
+
+    const stableParams: PayParams = {
+      owner:       from as Address,
+      facilitator: relayerAddress,
+      token:       tokenCfg.address as Address,
+      amount:      BigInt(amount),
+      to:          to as Address,
+      nonce:       BigInt(stableNonce!),
+      deadline:    BigInt(deadline),
+      witnessSig:  witnessSig as Hex,
+      authorization: {
+        chainId:  Number(authorization!.chainId),
+        address:  authorization!.address as Address,
+        nonce:    Number(authorization!.nonce),
+        yParity: authorization!.yParity,
+        r:        authorization!.r as Hex,
+        s:        authorization!.s as Hex,
+      },
+      chainKey: chain,
+    };
+    result = await settlePayment(stableParams);
+
+  } else if (isXLayerEIP7702) {
     const pkRaw = process.env.RELAYER_PRIVATE_KEY!;
     const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
     const relayerAddress = privateKeyToAccount(pk).address as Address;
@@ -171,14 +214,20 @@ export async function POST(req: NextRequest) {
     result = await settlePaymentEIP3009(eip3009Params);
 
   } else {
+    // avax / bnb / eth — EIP-7702 via Q402PaymentImplementation.transferWithAuthorization()
+    const pkRaw2 = process.env.RELAYER_PRIVATE_KEY!;
+    const pk2 = (pkRaw2.startsWith("0x") ? pkRaw2 : `0x${pkRaw2}`) as Hex;
+    const relayerAddress2 = privateKeyToAccount(pk2).address as Address;
+
     const payParams: PayParams = {
-      owner:      from as Address,
-      token:      tokenCfg.address as Address,
-      amount:     BigInt(amount),
-      to:         to as Address,
-      deadline:   BigInt(deadline),
-      paymentId:  paymentIdBytes32,
-      witnessSig: witnessSig as Hex,
+      owner:       from as Address,
+      facilitator: relayerAddress2,
+      token:       tokenCfg.address as Address,
+      amount:      BigInt(amount),
+      to:          to as Address,
+      nonce:       paymentNonce,
+      deadline:    BigInt(deadline),
+      witnessSig:  witnessSig as Hex,
       authorization: {
         chainId:  Number(authorization!.chainId),
         address:  authorization!.address as Address,
@@ -236,6 +285,6 @@ export async function POST(req: NextRequest) {
     token,
     chain,
     gasCostNative,
-    method:      isXLayerEIP7702 ? "eip7702_xlayer" : isXLayerEIP3009 ? "eip3009" : "eip7702",
+    method:      isStableEIP7702 ? "eip7702_stable" : isXLayerEIP7702 ? "eip7702_xlayer" : isXLayerEIP3009 ? "eip3009" : "eip7702",
   });
 }
