@@ -9,14 +9,18 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-// ── X Layer 특이사항 ────────────────────────────────────────────────────────────
-// X Layer는 Polygon CDK 기반으로 EIP-7702 Type 4 TX를 지원하지 않는다.
-// 대신 X Layer USDC는 EIP-3009 transferWithAuthorization을 지원하므로,
-// xlayer 체인은 USDC.transferWithAuthorization()을 릴레이어가 직접 호출하는 방식으로 동작한다.
+// ── 체인별 릴레이 방식 (v1.2) ───────────────────────────────────────────────────
+// 모든 체인이 EIP-7702 Type 4 TX를 지원한다.
+// X Layer는 EIP-7702 (primary) + EIP-3009 (fallback) 두 방식을 모두 지원한다.
 //
 // 체인별 릴레이 방식:
-//   avax / bnb / eth : EIP-7702 (Type 4 TX, Q402PaymentImplementation.pay())
-//   xlayer           : EIP-3009 (Standard TX, USDC.transferWithAuthorization())
+//   avax / bnb / eth : EIP-7702 (Type 4 TX, Q402PaymentImplementation.transferWithAuthorization())
+//   xlayer (primary) : EIP-7702 (Type 4 TX, Q402PaymentImplementationXLayer.transferWithAuthorization())
+//   xlayer (fallback): EIP-3009 (Standard TX, USDC.transferWithAuthorization())
+//
+// 보안 (v1.2): facilitator 주소를 모든 체인에서 명시적으로 전달한다.
+//   - avax/bnb/eth: settlePayment()에서 relayer address를 facilitator로 전달
+//   - xlayer EIP-7702: settlePaymentXLayerEIP7702()에서 relayer address를 facilitator로 전달
 
 // ── Chain configs ──────────────────────────────────────────────────────────────
 export const CHAIN_CONFIG = {
@@ -26,7 +30,7 @@ export const CHAIN_CONFIG = {
     chainId: 43114,
     token: "AVAX",
     // Q402PaymentImplementation deployed on Avalanche mainnet
-    implContract: process.env.IMPLEMENTATION_CONTRACT ?? "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
+    implContract: process.env.IMPLEMENTATION_CONTRACT ?? "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
     usdc: { address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6, symbol: "USDC" },
     usdt: { address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", decimals: 6, symbol: "USDT" },
   },
@@ -35,7 +39,7 @@ export const CHAIN_CONFIG = {
     rpc: "https://bsc-dataseed1.binance.org/",
     chainId: 56,
     token: "BNB",
-    implContract: process.env.BNB_IMPLEMENTATION_CONTRACT ?? "0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6",
+    implContract: process.env.BNB_IMPLEMENTATION_CONTRACT ?? "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
     usdc: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18, symbol: "USDC" },
     usdt: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18, symbol: "USDT" },
   },
@@ -44,7 +48,7 @@ export const CHAIN_CONFIG = {
     rpc: "https://ethereum.publicnode.com",
     chainId: 1,
     token: "ETH",
-    implContract: process.env.ETH_IMPLEMENTATION_CONTRACT ?? "0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9",
+    implContract: process.env.ETH_IMPLEMENTATION_CONTRACT ?? "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
     usdc: { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, symbol: "USDC" },
     usdt: { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, symbol: "USDT" },
   },
@@ -53,62 +57,48 @@ export const CHAIN_CONFIG = {
     rpc: "https://rpc.xlayer.tech",
     chainId: 196,
     token: "OKB",
-    implContract: process.env.XLAYER_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    implContract: process.env.XLAYER_IMPLEMENTATION_CONTRACT ?? "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     usdc: { address: "0x74b7F16337b8972027F6196A17a631aC6dE26d22", decimals: 6, symbol: "USDC" },
     usdt: { address: "0x1E4a5963aBFD975d8c9021ce480b42188849D41D", decimals: 6, symbol: "USDT" },
+  },
+  stable: {
+    name: "Stable",
+    rpc: "https://rpc.testnet.stable.xyz",
+    chainId: 2201,
+    token: "USDT0",
+    // Q402PaymentImplementationStable deployed on Stable Testnet (Chain ID: 2201)
+    implContract: process.env.STABLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // USDT0 is the native gas token and primary transfer token on Stable
+    usdc: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18, symbol: "USDT0" },
+    usdt: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18, symbol: "USDT0" },
   },
 } as const;
 
 export type ChainKey = keyof typeof CHAIN_CONFIG;
 
 // ── Q402PaymentImplementation ABI ─────────────────────────────────────────────
-// pay() is the EIP-7702 delegated execution entry point.
-// The contract is deployed as the implementation; the owner's EOA delegates to it
-// via an EIP-7702 authorization, and then pay() is called on the owner's EOA.
+// transferWithAuthorization() is the EIP-7702 delegated execution entry point (v1.2+).
+// The owner's EOA delegates to the implementation via EIP-7702 authorization,
+// then transferWithAuthorization() is called on the owner's EOA address.
+// msg.sender (facilitator) must match the signed facilitator param.
 export const Q402_IMPL_ABI = [
   {
     type: "function",
-    name: "pay",
+    name: "transferWithAuthorization",
     stateMutability: "nonpayable",
     inputs: [
-      { name: "owner",     type: "address" },
-      { name: "token",     type: "address" },
-      { name: "amount",    type: "uint256" },
-      { name: "to",        type: "address" },
-      { name: "deadline",  type: "uint256" },
-      { name: "paymentId", type: "bytes32" },
-      { name: "witnessSig",type: "bytes"   },
-    ],
-    outputs: [],
-  },
-  {
-    type: "function",
-    name: "payBatch",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "owner", type: "address" },
-      {
-        name: "items",
-        type: "tuple[]",
-        components: [
-          { name: "token",  type: "address" },
-          { name: "amount", type: "uint256" },
-          { name: "to",     type: "address" },
-        ],
-      },
-      { name: "deadline",  type: "uint256" },
-      { name: "paymentId", type: "bytes32" },
-      { name: "witnessSig",type: "bytes"   },
+      { name: "owner",            type: "address" },
+      { name: "facilitator",      type: "address" },
+      { name: "token",            type: "address" },
+      { name: "recipient",        type: "address" },
+      { name: "amount",           type: "uint256" },
+      { name: "nonce",            type: "uint256" },
+      { name: "deadline",         type: "uint256" },
+      { name: "witnessSignature", type: "bytes"   },
     ],
     outputs: [],
   },
 ] as const;
-
-// Legacy human-readable ABI kept for ethers.js usage if needed elsewhere
-export const Q402_IMPL_ABI_HUMAN = [
-  "function pay(address owner, address token, uint256 amount, address to, uint256 deadline, bytes32 paymentId, bytes calldata witnessSig) external",
-  "function payBatch(address owner, tuple(address token, uint256 amount, address to)[] items, uint256 deadline, bytes32 paymentId, bytes calldata witnessSig) external",
-];
 
 // ── X Layer USDC EIP-3009 ABI ─────────────────────────────────────────────────
 // X Layer USDC는 v,r,s 분리 방식(9-param)을 사용한다.
@@ -337,16 +327,18 @@ export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT")
 export interface PayParams {
   /** Owner / payer EOA address */
   owner: Address;
+  /** Gas sponsor address — must match the facilitator param the user signed */
+  facilitator: Address;
   /** Token contract (e.g. USDC) */
   token: Address;
   /** Amount in token atomic units */
   amount: bigint;
   /** Recipient */
   to: Address;
+  /** uint256 nonce for replay protection */
+  nonce: bigint;
   /** Unix timestamp deadline */
   deadline: bigint;
-  /** Unique payment ID (bytes32) */
-  paymentId: Hex;
   /** EIP-712 witness signature */
   witnessSig: Hex;
   /** EIP-7702 signed authorization from the owner's EOA */
@@ -405,17 +397,18 @@ export async function settlePayment(params: PayParams): Promise<SettleResult> {
       transport: http(chainCfg.rpc),
     });
 
-    // Encode pay() calldata
+    // Encode transferWithAuthorization() calldata (v1.2 contract interface)
     const callData = encodeFunctionData({
       abi: Q402_IMPL_ABI,
-      functionName: "pay",
+      functionName: "transferWithAuthorization",
       args: [
         params.owner,
+        params.facilitator,
         params.token,
-        params.amount,
         params.to,
+        params.amount,
+        params.nonce,
         params.deadline,
-        params.paymentId,
         params.witnessSig,
       ],
     });

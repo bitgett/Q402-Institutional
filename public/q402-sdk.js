@@ -1,19 +1,22 @@
 /**
  * Q402 Client SDK (browser-compatible)
- * v1.2.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer) + EIP-3009 (xlayer fallback)
+ * v1.3.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable) + EIP-3009 (xlayer fallback)
  *
  * 체인별 서명 방식:
  *   avax / bnb / eth  → EIP-712 PaymentWitness + EIP-7702 authorization (2 sigs)
  *   xlayer            → EIP-712 TransferAuthorization + EIP-7702 authorization (2 sigs)
  *                       domain verifyingContract = user's EOA (not impl contract)
  *                       impl: 0x31E9D105df96b5294298cFaffB7f106994CD0d0f
+ *   stable (testnet)  → EIP-712 TransferAuthorization + EIP-7702 authorization (2 sigs)
+ *                       domain name = "Q402 Stable", verifyingContract = impl contract
+ *                       gas token = USDT0 (18 decimals), Chain ID: 2201
  *
  * Usage:
  *   const q402 = new Q402Client({ apiKey: "q402_live_xxx", chain: "avax" });
  *   const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
  *
- *   const q402xl = new Q402Client({ apiKey: "q402_live_xxx", chain: "xlayer" });
- *   const result = await q402xl.pay({ to: "0x...", amount: "1.00", token: "USDC" });
+ *   const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
+ *   const result = await q402s.pay({ to: "0x...", amount: "1.00", token: "USDT" });
  */
 
 const Q402_CHAIN_CONFIG = {
@@ -49,6 +52,16 @@ const Q402_CHAIN_CONFIG = {
     usdc: { address: "0x74b7F16337b8972027F6196A17a631aC6dE26d22", decimals: 6 },
     usdt: { address: "0x1E4a5963aBFD975d8c9021ce480b42188849D41D", decimals: 6 },
   },
+  stable: {
+    name:         "Stable",
+    chainId:      2201,  // testnet; mainnet = 988
+    mode:         "eip7702_stable",
+    domainName:   "Q402 Stable",
+    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // USDT0 is the only token on Stable (gas token + transfer token)
+    usdc: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18 },
+    usdt: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18 },
+  },
 };
 
 // EIP-7702 모드 EIP-712 타입
@@ -72,6 +85,21 @@ const Q402_EIP3009_TYPES = {
     { name: "validAfter",  type: "uint256" },
     { name: "validBefore", type: "uint256" },
     { name: "nonce",       type: "bytes32" },
+  ],
+};
+
+// EIP-7702 Stable 모드 — Q402PaymentImplementationStable witness 타입
+// verifyingContract = impl contract (avax/bnb/eth와 동일, xlayer와 다름)
+// gas token = USDT0 (18 decimals)
+const Q402_STABLE_TRANSFER_TYPES = {
+  TransferAuthorization: [
+    { name: "owner",       type: "address" },
+    { name: "facilitator", type: "address" },
+    { name: "token",       type: "address" },
+    { name: "recipient",   type: "address" },
+    { name: "amount",      type: "uint256" },
+    { name: "nonce",       type: "uint256" },
+    { name: "deadline",    type: "uint256" },
   ],
 };
 
@@ -102,7 +130,7 @@ class Q402Client {
     this.chain    = chain;
     this.relayUrl = relayUrl;
     this.chainCfg = Q402_CHAIN_CONFIG[chain];
-    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer`);
+    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable`);
   }
 
   /**
@@ -133,6 +161,8 @@ class Q402Client {
 
     if (this.chainCfg.mode === "eip7702_xlayer") {
       return this._payXLayerEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg);
+    } else if (this.chainCfg.mode === "eip7702_stable") {
+      return this._payStableEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg);
     } else if (this.chainCfg.mode === "eip3009") {
       return this._payEIP3009(signer, owner, to, amountRaw, deadline, token, tokenCfg);
     } else {
@@ -247,6 +277,73 @@ class Q402Client {
         witnessSig,
         authorization,
         xlayerNonce:  xlayerNonce.toString(),
+        facilitator,
+      }),
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error ?? "Relay failed");
+    return data;
+  }
+
+  // ── EIP-7702 Stable 결제 ──────────────────────────────────────────────────────
+  // Q402PaymentImplementationStable.transferWithAuthorization() 사용
+  // witness type: TransferAuthorization
+  // domain name: "Q402 Stable" (contract NAME 일치)
+  // verifyingContract: impl contract (avax/bnb/eth 방식, xlayer와 다름)
+  // gas token: USDT0 (18 decimals)
+  async _payStableEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg) {
+    // 1. Relay 서버에서 facilitator 주소 조회
+    const infoUrl = this.relayUrl.replace(/\/relay$/, "/relay/info");
+    const infoResp = await fetch(infoUrl);
+    if (!infoResp.ok) throw new Error("Failed to fetch relay facilitator info");
+    const { facilitator } = await infoResp.json();
+
+    // 2. EIP-712 TransferAuthorization 서명
+    //    verifyingContract = impl contract (NOT user's EOA — Stable differs from X Layer)
+    const domain = {
+      name:              this.chainCfg.domainName,  // "Q402 Stable"
+      version:           "1",
+      chainId:           this.chainCfg.chainId,
+      verifyingContract: this.chainCfg.implContract,
+    };
+
+    const nonceBuf    = ethers.randomBytes(32);
+    const stableNonce = ethers.toBigInt(nonceBuf);
+
+    const witnessSig = await signer.signTypedData(domain, Q402_STABLE_TRANSFER_TYPES, {
+      owner,
+      facilitator,
+      token:     tokenCfg.address,
+      recipient: to,
+      amount:    BigInt(amountRaw),
+      nonce:     stableNonce,
+      deadline:  BigInt(deadline),
+    });
+
+    // 3. EIP-7702 authorization 서명
+    const authNonce    = await provider.getTransactionCount(owner);
+    const authorization = await this._signAuthorization(signer, {
+      chainId: this.chainCfg.chainId,
+      address: this.chainCfg.implContract,
+      nonce:   authNonce,
+    });
+
+    // 4. Relay API 호출
+    const resp = await fetch(this.relayUrl, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        apiKey:        this.apiKey,
+        chain:         this.chain,
+        token,
+        from:          owner,
+        to,
+        amount:        amountRaw,
+        deadline,
+        witnessSig,
+        authorization,
+        stableNonce:   stableNonce.toString(),
         facilitator,
       }),
     });
