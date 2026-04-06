@@ -1,6 +1,6 @@
 # Q402 — 전체 구현 문서
 
-> 작성일: 2026-03-10 / **최종 업데이트: 2026-03-19 (v1.1)**
+> 작성일: 2026-03-10 / **최종 업데이트: 2026-03-23 (v1.2)**
 > 프로젝트 경로: `C:/Users/user/q402-landing/`
 > 기술 스택: Next.js 14 App Router · TypeScript · ethers.js v6 · viem · Tailwind CSS · framer-motion
 
@@ -22,6 +22,7 @@
 12. [미완성 / 다음 단계](#12-미완성--다음-단계)
 13. [환경 변수](#13-환경-변수)
 14. [체인별 컨트랙트 현황](#14-체인별-컨트랙트-현황)
+15. [보안 패치 이력 (v1.2)](#15-보안-패치-이력-v12)
 
 ---
 
@@ -859,3 +860,169 @@ function payBatch(
 
 - `app/lib/access.ts`의 `MASTER_ADDRESSES` 배열에 하드코딩
 - v1.1에서는 isPaid가 항상 true이므로 실질적인 게이팅 효과 없음 (결제 복원 시 재활성화)
+
+---
+
+## 15. 보안 패치 이력 (v1.2)
+
+**감사일**: 2026-03-23
+**감사자**: Marin
+**대상 컨트랙트**: 4개 체인 (ETH / BNB / Avalanche / XLayer)
+
+---
+
+### [P0] Owner Binding 누락 — 치명
+
+**문제**
+`transferWithAuthorization`에서 `owner != address(this)` 검증이 없었음.
+EIP-7702 위임 실행 컨텍스트에서 서명한 `owner`와 실제 토큰이 출금되는 EOA가 달라질 수 있어, 타 주소의 자산을 무단 이전하는 벡터가 존재했음.
+
+**수정**
+```solidity
+// transferWithAuthorization 상단에 추가
+if (owner == address(0)) revert InvalidOwner();
+if (owner != address(this)) revert OwnerMismatch();
+```
+
+**신규 에러**: `error OwnerMismatch()`, `error InvalidOwner()`
+
+---
+
+### [P1] Facilitator 미검증 — 높음
+
+**문제**
+`msg.sender == facilitator` 체크가 없어서 제3자가 인터셉트된 페이로드를 직접 실행할 수 있었음. `transferWithAuthorization`과 `transferFromWithAuthorization` 두 함수 모두 영향.
+
+**수정**
+```solidity
+// 두 transfer 함수 상단에 추가
+if (msg.sender != facilitator) revert UnauthorizedFacilitator();
+```
+
+**신규 에러**: `error UnauthorizedFacilitator()`
+
+**백엔드 연동**: `relayer.ts`에서 모든 체인에 대해 facilitator 주소를 명시적으로 전달하도록 업데이트.
+
+---
+
+### [P2-A] Signature Recovery 강화 — 중간
+
+**문제**
+`ecrecover` 결과에 대한 zero-address 검증 없음. ECDSA 서명 가변성(malleability) 방어를 위한 low-s 강제도 없었음.
+
+**수정**
+```solidity
+function _recoverSigner(...) internal pure returns (address) {
+    address signer = ecrecover(digest, v, r, s);
+    if (signer == address(0)) revert InvalidSignature();
+    if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0)
+        revert InvalidSignature();
+    return signer;
+}
+```
+
+---
+
+### [P2-B] Digest 헬퍼 함수 WARNING 주석 추가 — 중간
+
+**문제**
+`domainSeparator()`와 `hashTransferAuthorization()`이 EIP-7702 위임 실행 컨텍스트에서는 일반 호출과 다른 값을 반환함 (`address(this)`가 달라짐). 이 사실이 문서화되지 않아 외부 통합 시 오용 가능성 존재.
+
+**수정**
+두 헬퍼 함수에 `@dev WARNING` 주석 추가 — EIP-7702 위임 실행 시 `address(this)` 동작 차이 경고.
+
+---
+
+### [P3] 체인별 주석 불일치 수정 — 낮음
+
+**문제**
+ETH / BNB / XLayer 컨트랙트 헤더에 Avalanche/Fuji 관련 stale 주석이 잔존.
+
+**수정**
+각 컨트랙트 헤더를 해당 체인에 맞게 수정:
+- ETH: Chain ID 1, ETH gas, USDC on Ethereum
+- BNB: Chain ID 56, BNB gas, USDC on BNB Chain
+- Avalanche: Chain ID 43114, AVAX gas
+- XLayer: Chain ID 196, OKB gas
+
+---
+
+### 재배포 정보
+
+v1.2 패치 적용 후 4개 체인 전체 재배포. 새 컨트랙트 주소:
+
+| Chain | ChainID | New Address |
+|-------|---------|-------------|
+| Avalanche | 43114 | `0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c` |
+| BNB Chain | 56 | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` |
+| Ethereum | 1 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` |
+| X Layer | 196 | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` |
+
+검증 완료: ETH/BNB → Sourcify perfect match, Avalanche → Routescan, X Layer → OKLink 수동 검증.
+
+---
+
+## 16. Stable 체인 통합 (v1.3) — 2026-03-30
+
+### 개요
+
+Stable (stable.xyz) — Layer 1 블록체인. USDT0가 네이티브 가스 토큰.
+Q402 on Stable의 핵심 가치: 단일 Gas Tank로 수백 개의 AI 에이전트 가스 통합 관리.
+
+### 네트워크 정보
+
+| 항목 | Mainnet | Testnet |
+|------|---------|---------|
+| Chain ID | `988` | `2201` |
+| RPC | `https://rpc.stable.xyz` | `https://rpc.testnet.stable.xyz` |
+| Explorer | `https://stablescan.xyz` | `https://testnet.stablescan.xyz` |
+| 가스 토큰 | USDT0 (18 decimals) | USDT0 |
+| USDT0 주소 | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | `0x78Cf24370174180738C5B8E352B6D14c83a6c9A9` |
+
+### 배포된 컨트랙트
+
+| Chain | Address |
+|-------|---------|
+| Stable Testnet (2201) | `0x2fb2B2D110b6c5664e701666B3741240242bf350` |
+| Stable Mainnet (988) | `0x2fb2B2D110b6c5664e701666B3741240242bf350` |
+
+같은 주소 — deployer 주소/nonce 동일해서 deterministic 배포됨.
+
+### EIP-712 도메인 (Stable)
+
+```javascript
+{
+  name:              "Q402 Stable",
+  version:           "1",
+  chainId:           988,
+  verifyingContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350"  // impl contract
+}
+```
+
+> X Layer와 달리 verifyingContract = impl contract (유저 EOA 아님)
+
+### 릴레이 방식
+
+avax/bnb/eth와 동일한 `settlePayment()` 사용. `stableNonce` 파라미터 추가.
+
+### SDK v1.3.0 변경사항
+
+```javascript
+// 새로 추가된 체인
+stable: {
+  chainId: 988,
+  mode: "eip7702_stable",
+  domainName: "Q402 Stable",
+  implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+  usdt: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
+}
+```
+
+### Partnership 현황
+
+- Stable 팀 (Eunice)과 Partnership Announcement 협의 중
+- Twitter 공동 발표: Quack AI 포스팅 → Stable RT/QT
+- 예정일: 2026-04-04 (금) 19:00 HKT
+- 상세 스펙: `Q402_STABLE_INTEGRATION.md` 참조
+
+검증 상태: ETH ✅ Sourcify Perfect Match · BNB ✅ Sourcify Perfect Match · Avalanche ✅ Snowtrace · XLayer ✅ OKLink
