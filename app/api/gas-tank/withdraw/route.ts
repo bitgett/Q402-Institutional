@@ -7,6 +7,7 @@ const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   eth:    { rpc: "https://ethereum.publicnode.com",             token: "ETH"  },
   avax:   { rpc: "https://api.avax.network/ext/bc/C/rpc",      token: "AVAX" },
   xlayer: { rpc: "https://rpc.xlayer.tech",                    token: "OKB"  },
+  stable: { rpc: "https://rpc.stable.xyz",                     token: "USDT0"},
 };
 
 function checkAdminSecret(req: NextRequest): boolean {

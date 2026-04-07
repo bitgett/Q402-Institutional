@@ -102,7 +102,7 @@ export async function addGasDeposit(address: string, deposit: GasDeposit) {
 export async function getGasBalance(address: string): Promise<Record<string, number>> {
   const deposits = await getGasDeposits(address);
   const used     = await getGasUsed(address);
-  const totals: Record<string, number> = { bnb: 0, eth: 0, avax: 0, xlayer: 0 };
+  const totals: Record<string, number> = { bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0 };
   for (const d of deposits) totals[d.chain] = (totals[d.chain] ?? 0) + d.amount;
   for (const u of used)     totals[u.chain] = (totals[u.chain] ?? 0) - u.gasCostNative;
   return totals;

@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer.`,
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable.`,
     }, { status: 400 });
   }
 
