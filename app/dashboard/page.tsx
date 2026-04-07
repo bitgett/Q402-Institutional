@@ -192,7 +192,7 @@ function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
 // ── Playground ────────────────────────────────────────────────────────────────
 function Playground({ apiKey }: { apiKey: string }) {
   const [chain, setChain] = useState("avax");
-  const [to, setTo] = useState("0xF5Cd...945c");
+  const [to, setTo] = useState("");
   const [amount, setAmount] = useState("5");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<null | { hash: string }>(null);
@@ -214,11 +214,12 @@ function Playground({ apiKey }: { apiKey: string }) {
               <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓</option>
               <option value="eth" style={{ background: "#0d1422" }}>Ethereum ✓</option>
               <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
+              <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
           </div></div>
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Recipient</label>
-          <input value={to} onChange={e => setTo(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-yellow/30" /></div>
+          <input value={to} onChange={e => setTo(e.target.value)} placeholder="0x..." className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-yellow/30 placeholder-white/20" /></div>
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount (USDC)</label>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30" /></div>
       </div>
