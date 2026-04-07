@@ -181,7 +181,7 @@ type Step = "quote" | "pay" | "verifying" | "success" | "error";
 
 export default function PaymentPage() {
   const router = useRouter();
-  const { address, isConnected, connectWith } = useWallet();
+  const { address, isConnected } = useWallet();
 
   // ── Quote state ───────────────────────────────────────────────────────────
   const [selectedChain,  setSelectedChain]  = useState("bnb");
@@ -190,7 +190,6 @@ export default function PaymentPage() {
   // ── UI state ──────────────────────────────────────────────────────────────
   const [step,           setStep]           = useState<Step>("quote");
   const [showWalletModal, setShowWalletModal] = useState(false);
-  const [addrCopied,     setAddrCopied]     = useState(false);
 
   // ── Verification state ────────────────────────────────────────────────────
   const [pendingPayment,  setPendingPayment]  = useState(false); // true while awaiting wallet connect
@@ -225,13 +224,6 @@ export default function PaymentPage() {
       })
       .catch(() => {});
   }, [address, step, router]);
-
-  // ── Copy address helper ───────────────────────────────────────────────────
-  function copyAddress() {
-    navigator.clipboard.writeText(PAYMENT_ADDRESS);
-    setAddrCopied(true);
-    setTimeout(() => setAddrCopied(false), 2500);
-  }
 
   // ── Verify payment on-chain ───────────────────────────────────────────────
   async function verifyPayment() {
