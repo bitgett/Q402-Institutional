@@ -16,7 +16,7 @@ const CODE_LINES = [
   { tokens: [{ t: "});", c: "text-white/40" }] },
   { tokens: [] },
   { tokens: [{ t: "// ✓ ", c: "text-white/25" }, { t: "result.success", c: "text-green-400" }, { t: "  true", c: "text-white/40" }] },
-  { tokens: [{ t: "// ✓ ", c: "text-white/25" }, { t: "result.txHash", c: "text-green-400" }, { t: "   0xf5cd...c466", c: "text-white/40" }] },
+  { tokens: [{ t: "// ✓ ", c: "text-white/25" }, { t: "result.txHash", c: "text-green-400" }, { t: "   0xd4e8...a3f1", c: "text-white/40" }] },
   { tokens: [{ t: "// ✓ ", c: "text-white/25" }, { t: "result.gasUsed", c: "text-yellow" }, { t: "  $0.000000", c: "text-yellow font-bold" }] },
 ];
 
@@ -36,7 +36,7 @@ const TERMINAL_LINES = [
   { text: "✓ Submitted",                         color: "text-green-400", delay: 4300 },
   { text: "✓ Confirmed  block #38,482,910",      color: "text-green-400", delay: 4900 },
   { text: "",                                     color: "",               delay: 5200 },
-  { text: "  txHash    0xf5cd...c466",           color: "text-white/25",  delay: 5400 },
+  { text: "  txHash    0xd4e8...a3f1",           color: "text-white/25",  delay: 5400 },
   { text: "  gasUsed   $0.000000  ← user paid",  color: "text-yellow",    delay: 5600 },
   { text: "  USDC      50.00 transferred ✓",     color: "text-white/55",  delay: 5800 },
 ];

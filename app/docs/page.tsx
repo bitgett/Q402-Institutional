@@ -81,8 +81,7 @@ export default function DocsPage() {
               <span className="text-white/50 text-xs font-medium">docs</span>
             </a>
             <div className="hidden sm:flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-lg px-3 py-1.5">
-              <span className="text-white/25 text-xs font-mono">v1.0</span>
-              <span className="ml-2 text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded" style={{ background: "rgba(245,197,24,0.15)", color: "#F5C518" }}>Beta</span>
+              <span className="text-white/25 text-xs font-mono">v1.3.0</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -140,7 +139,7 @@ export default function DocsPage() {
           {/* Docs hero banner */}
           <div className="px-8 pt-12 pb-10 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, transparent 100%)" }}>
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.0 Beta</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.3.0</span>
               <span className="text-white/20 text-xs">·</span>
               <span className="text-white/30 text-xs">EIP-712 + EIP-7702</span>
             </div>
@@ -260,7 +259,7 @@ export default function DocsPage() {
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · User signs (client-side, zero gas)</h3>
             <CodeBlock lang="javascript" code={`// Wallet popup appears — user signs, no gas required
 const result = await Q402.sign({
-  chain:    "bnb",         // "bnb" | "avax" | "eth" | "xlayer"
+  chain:    "bnb",         // "bnb" | "avax" | "eth" | "xlayer" | "stable"
   token:    "USDC",
   from:     userWalletAddress,
   to:       recipientAddress,
@@ -408,6 +407,7 @@ const data = await res.json();
                     { name: "Ethereum",   color: "#627EEA", param: "eth",       id: "1",     gas: "~$0.19"  },
                     { name: "Avalanche",  color: "#E84142", param: "avax",      id: "43114", gas: "~$0.002" },
                     { name: "X Layer",    color: "#CCCCCC", param: "xlayer",    id: "196",   gas: "~$0.001" },
+                    { name: "Stable",     color: "#4AE54A", param: "stable",    id: "988",   gas: "~$0.001" },
                   ].map((chain) => (
                     <tr key={chain.param} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="py-3 pr-6">
@@ -440,10 +440,11 @@ const data = await res.json();
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Domain Separator</h3>
             <CodeBlock lang="typescript" code={`// Contract addresses per chain
 const CONTRACTS = {
-  avax:   "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699", // Q402 Avalanche (chainId: 43114)
-  bnb:    "0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6", // Q402 BNB Chain (chainId: 56)
-  eth:    "0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9", // Q402 Ethereum  (chainId: 1)
-  xlayer: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 X Layer   (chainId: 196)
+  avax:   "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c", // Q402 Avalanche (chainId: 43114)
+  bnb:    "0x6cF4aD62C208b6494a55a1494D497713ba013dFa", // Q402 BNB Chain (chainId: 56)
+  eth:    "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD", // Q402 Ethereum  (chainId: 1)
+  xlayer: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 X Layer   (chainId: 196)
+  stable: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Stable    (chainId: 988)
 };
 
 // Each chain uses its own EIP-712 domain name
