@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import { isWalletInstalled } from "../lib/wallet";
-import { isPaid } from "../lib/access";
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -124,81 +123,38 @@ function WalletModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function PaymentRequiredPopup({ onClose, address }: { onClose: () => void; address: string }) {
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(10px)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-2xl border p-6 shadow-2xl shadow-black"
-        style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="text-center mb-5">
-          <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-yellow/10 border border-yellow/20 flex items-center justify-center text-xl">⚡</div>
-          <h3 className="font-bold text-base mb-1">Subscription Required</h3>
-          <p className="text-white/40 text-sm">Dashboard &amp; MY Page require an active Q402 subscription.</p>
-          <p className="text-white/20 text-[11px] mt-2 font-mono break-all">{address.toLowerCase()}</p>
-        </div>
-        <a
-          href="/payment"
-          className="block w-full bg-yellow text-navy font-bold text-sm text-center py-3 rounded-xl hover:bg-yellow-hover transition-colors"
-        >
-          Go to Payment →
-        </a>
-        <button onClick={onClose} className="block w-full mt-2 text-white/30 hover:text-white text-sm py-2 transition-colors">
-          Cancel
-        </button>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 export default function WalletButton() {
-  const { address, isConnected, isPaidUser, disconnect } = useWallet();
+  const { address, isConnected, disconnect } = useWallet();
   const [showModal, setShowModal] = useState(false);
-  const [showPaywall, setShowPaywall] = useState(false);
-
-  function handleMyPage(e: React.MouseEvent) {
-    if (!isPaidUser && !(address && isPaid(address))) {
-      e.preventDefault();
-      setShowPaywall(true);
-    }
-  }
 
   if (isConnected && address) {
     return (
       <>
-      {showPaywall && <PaymentRequiredPopup onClose={() => setShowPaywall(false)} address={address} />}
-      <div className="flex items-center gap-2">
-        {/* MY Page — sparkle animation */}
-        <Link
-          href="/dashboard"
-          onClick={handleMyPage}
-          className="animate-mypage flex items-center gap-1.5 border text-yellow text-xs font-bold px-3.5 py-2 rounded-full"
-          style={{ borderColor: "rgba(245,197,24,0.6)", background: "rgba(245,197,24,0.08)" }}
-        >
-          <span>✦</span>
-          MY Page
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* MY Page */}
+          <Link
+            href="/dashboard"
+            className="animate-mypage flex items-center gap-1.5 border text-yellow text-xs font-bold px-3.5 py-2 rounded-full"
+            style={{ borderColor: "rgba(245,197,24,0.6)", background: "rgba(245,197,24,0.08)" }}
+          >
+            <span>✦</span>
+            MY Page
+          </Link>
 
-        {/* Wallet address */}
-        <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/12 text-white text-xs font-mono px-3.5 py-2 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" style={{ boxShadow: "0 0 5px #4ade80" }} />
-          {shortAddr(address)}
+          {/* Wallet address */}
+          <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/12 text-white text-xs font-mono px-3.5 py-2 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" style={{ boxShadow: "0 0 5px #4ade80" }} />
+            {shortAddr(address)}
+          </div>
+
+          <button
+            onClick={disconnect}
+            className="text-white/25 text-sm hover:text-white/60 transition-colors px-1 py-2"
+            title="Disconnect"
+          >
+            ×
+          </button>
         </div>
-
-        <button
-          onClick={disconnect}
-          className="text-white/25 text-sm hover:text-white/60 transition-colors px-1 py-2"
-          title="Disconnect"
-        >
-          ×
-        </button>
-      </div>
       </>
     );
   }

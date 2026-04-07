@@ -1,6 +1,6 @@
 # Q402 — 전체 구현 문서
 
-> 작성일: 2026-03-10 / **최종 업데이트: 2026-03-23 (v1.2)**
+> 작성일: 2026-03-10 / **최종 업데이트: 2026-04-08 (v1.3)**
 > 프로젝트 경로: `C:/Users/user/q402-landing/`
 > 기술 스택: Next.js 14 App Router · TypeScript · ethers.js v6 · viem · Tailwind CSS · framer-motion
 
@@ -68,8 +68,8 @@ q402-landing/
 ├── app/
 │   ├── api/
 │   │   ├── payment/
-│   │   │   ├── check/route.ts          # GET  — 결제 여부 확인 (레거시, v1.1 미사용)
-│   │   │   └── activate/route.ts       # POST — 구독 활성화 + API Key 발급 (레거시, v1.1 미사용)
+│   │   │   ├── check/route.ts          # GET  — 구독 상태 확인
+│   │   │   └── activate/route.ts       # POST — 온체인 결제 스캔 + API Key 자동 발급 (v1.3 복원)
 │   │   ├── keys/
 │   │   │   ├── generate/route.ts       # POST — API Key 재발급 (Admin 전용)
 │   │   │   ├── verify/route.ts         # POST — API Key 유효성 검증
@@ -103,7 +103,7 @@ q402-landing/
 │   │   ├── Contact.tsx
 │   │   └── Footer.tsx
 │   ├── dashboard/page.tsx              # 대시보드 (4개 탭)
-│   ├── payment/page.tsx                # Quote Builder + Direct Inquiry 팝업
+│   ├── payment/page.tsx                # 4단계 온체인 결제 (체인→볼륨→지갑→송금+검증)
 │   ├── docs/page.tsx                   # 개발자 문서
 │   └── page.tsx                        # 랜딩 메인
 ├── public/
@@ -436,9 +436,11 @@ EIP-7702는 EOA(일반 지갑)가 특정 컨트랙트 코드를 "위임(delegate
 
 | 체인 | 주소 | 상태 |
 |------|------|------|
-| Avalanche | `0xE5b90D564650bdcE7C2Bb4344F777f6582e05699` | ✅ 배포완료 + 테스트 성공 |
-| BNB Chain | `0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6` | 배포완료 |
-| Ethereum  | `0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9` | 배포완료 |
+| Avalanche | `0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c` | ✅ 배포완료 + 테스트 성공 |
+| BNB Chain | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` | ✅ 배포완료 |
+| Ethereum  | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | ✅ 배포완료 |
+| X Layer   | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | ✅ EIP-7702 테스트 성공 |
+| **Stable** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | ✅ 배포완료 (v1.2) |
 
 #### 릴레이 API 요청 (EIP-7702)
 
@@ -771,11 +773,12 @@ loading(1.5초) → address(릴레이어 주소 표시 + 복사)
 # 절대 외부에 노출 금지!
 RELAYER_PRIVATE_KEY=0x...
 
-# Q402PaymentImplementation 컨트랙트 주소
-IMPLEMENTATION_CONTRACT=0xE5b90D564650bdcE7C2Bb4344F777f6582e05699
-BNB_IMPLEMENTATION_CONTRACT=0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6
-ETH_IMPLEMENTATION_CONTRACT=0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9
-XLAYER_IMPLEMENTATION_CONTRACT=0x31E9D105df96b5294298cFaffB7f106994CD0d0f
+# Q402PaymentImplementation 컨트랙트 주소 (v1.3)
+IMPLEMENTATION_CONTRACT=0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c
+BNB_IMPLEMENTATION_CONTRACT=0x6cF4aD62C208b6494a55a1494D497713ba013dFa
+ETH_IMPLEMENTATION_CONTRACT=0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD
+XLAYER_IMPLEMENTATION_CONTRACT=0x8D854436ab0426F5BC6Cc70865C90576AD523E73
+STABLE_IMPLEMENTATION_CONTRACT=0x2fb2B2D110b6c5664e701666B3741240242bf350
 
 # Vercel KV (Redis) — 모든 데이터 영속성
 KV_REST_API_URL=https://...
@@ -793,10 +796,11 @@ ADMIN_SECRET=your_admin_secret_here
 
 | 체인 | ChainID | 릴레이 컨트랙트 | EIP-712 NAME | 상태 |
 |------|---------|----------------|-------------|------|
-| Avalanche C-Chain | 43114 | `0xE5b90D564650bdcE7C2Bb4344F777f6582e05699` | Q402 Avalanche | ✅ 배포완료 + 테스트 성공 |
-| BNB Chain | 56 | `0x8c21b15a90E6E0C0E9807B4024119Faca35C31A6` | Q402 BNB Chain | 배포완료 |
-| Ethereum | 1 | `0x1dd4c1E1D07a3C1aEe6e770106e181a498F4D9c9` | Q402 Ethereum | 배포완료 |
-| X Layer | 196 | `0x31E9D105df96b5294298cFaffB7f106994CD0d0f` | Q402 X Layer | ✅ EIP-7702 테스트 성공 (2026-03-12) |
+| Avalanche C-Chain | 43114 | `0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c` | Q402 Avalanche | ✅ 배포완료 + 테스트 성공 |
+| BNB Chain | 56 | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` | Q402 BNB Chain | ✅ 배포완료 |
+| Ethereum | 1 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | Q402 Ethereum | ✅ 배포완료 |
+| X Layer | 196 | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | Q402 X Layer | ✅ EIP-7702 테스트 성공 (2026-03-12) |
+| **Stable** | **988** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Q402 Stable | ✅ 배포완료 (v1.2, 2026-04-07) |
 
 ### 토큰 주소
 
