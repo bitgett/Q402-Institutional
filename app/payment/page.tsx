@@ -220,7 +220,11 @@ export default function PaymentPage() {
   const [selectedChain,    setSelectedChain]    = useState("bnb");
   const [selectedVolume,   setSelectedVolume]   = useState(10_000);
   const [selectedPayToken, setSelectedPayToken] = useState("bnb-usdc");
-  const [payStep,          setPayStep]          = useState<PayStep>("idle");
+  // Read localStorage synchronously so Step 3 shows "connected" immediately
+  // if the user already connected on the landing page — no flash.
+  const [payStep, setPayStep] = useState<PayStep>(() => {
+    try { return localStorage.getItem("q402_wallet") ? "ready" : "idle"; } catch { return "idle"; }
+  });
   const [showWalletModal,  setShowWalletModal]  = useState(false);
   const [verifyAttempts,   setVerifyAttempts]   = useState(0);
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
