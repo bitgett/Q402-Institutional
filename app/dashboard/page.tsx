@@ -279,7 +279,7 @@ export default function DashboardPage() {
   const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
   const [thisMonthCount, setThisMonthCount] = useState(0);
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
-  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0 });
+  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0 });
   const [relayerTanks, setRelayerTanks] = useState<{ key: string; chain: string; token: string; balance: string; usd: string; price: number }[]>([]);
   const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
@@ -574,7 +574,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
-                  <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Not yet activated" : API_KEY}</span>
+                  <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
                   {API_KEY !== "—" && (
                     <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
                       {keyCopied ? "Copied!" : "Copy"}
