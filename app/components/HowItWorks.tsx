@@ -100,7 +100,7 @@ export default function HowItWorks() {
         >
           <h2 className="text-3xl md:text-4xl font-bold mb-4">How Q402 works</h2>
           <p className="text-white/40 max-w-lg mx-auto text-sm leading-relaxed">
-            Three addresses. One transaction. Works on any EVM chain — BNB, Ethereum, Avalanche, X Layer.
+            Three addresses. One transaction. Works on any EVM chain — BNB, Ethereum, Avalanche, X Layer, Stable.
           </p>
         </motion.div>
 
@@ -147,10 +147,11 @@ export default function HowItWorks() {
             >
               <div className="flex gap-2">
                 {[
-                  { label: "BNB",  img: "/bnb.png",     bg: "#F0B90B" },
-                  { label: "ETH",  img: "/eth.png",     bg: "#1A1F36" },
-                  { label: "AVAX", img: "/avax.png",    bg: "#E84142" },
-                  { label: "X",    img: "/xlayer.png",  bg: "#1A1A1A" },
+                  { label: "BNB",    img: "/bnb.png",    bg: "#F0B90B" },
+                  { label: "ETH",    img: "/eth.png",    bg: "#1A1F36" },
+                  { label: "AVAX",   img: "/avax.png",   bg: "#E84142" },
+                  { label: "X",      img: "/xlayer.png", bg: "#1A1A1A" },
+                  { label: "STABLE", img: "/stable.jpg", bg: "#0F2010" },
                 ].map((c) => (
                   <div key={c.label} className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.bg }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -13,20 +13,20 @@ import { isWalletInstalled } from "@/app/lib/wallet";
 const PAYMENT_ADDRESS = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
 
 const PAY_TOKENS = [
-  { id: "bnb-usdc",  label: "BNB USDC",  chain: "BNB Chain", token: "USDC", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "bnb-usdt",  label: "BNB USDT",  chain: "BNB Chain", token: "USDT", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "eth-usdc",  label: "ETH USDC",  chain: "Ethereum",  token: "USDC", color: "#627EEA", img: "/eth.png"  },
-  { id: "eth-usdt",  label: "ETH USDT",  chain: "Ethereum",  token: "USDT", color: "#627EEA", img: "/eth.png"  },
+  { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", token: "USDC", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "bnb-usdt", label: "BNB USDT", chain: "BNB Chain", token: "USDT", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "eth-usdc", label: "ETH USDC", chain: "Ethereum",  token: "USDC", color: "#627EEA", img: "/eth.png"  },
+  { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  token: "USDT", color: "#627EEA", img: "/eth.png"  },
 ];
 
 const CHAINS = [
-  { id: "bnb",     name: "BNB Chain", color: "#F0B90B", img: "/bnb.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "avax",    name: "Avalanche", color: "#E84142", img: "/avax.png",     rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
-  { id: "xlayer",  name: "X Layer",   color: "#CCCCCC", img: "/xlayer.png",   rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
-  { id: "eth",     name: "Ethereum",  color: "#627EEA", img: "/eth.png",      rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
-  { id: "stable",  name: "Stable",    color: "#4AE54A", img: "/stable.jpg",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "arbitrum",name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png", rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
-  { id: "scroll",  name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
+  { id: "bnb",      name: "BNB Chain", color: "#F0B90B", img: "/bnb.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "avax",     name: "Avalanche", color: "#E84142", img: "/avax.png",     rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
+  { id: "xlayer",   name: "X Layer",   color: "#CCCCCC", img: "/xlayer.png",   rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
+  { id: "eth",      name: "Ethereum",  color: "#627EEA", img: "/eth.png",      rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
+  { id: "stable",   name: "Stable",    color: "#4AE54A", img: "/stable.jpg",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "arbitrum", name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png", rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
+  { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
 ];
 
 const VOLUMES = [
@@ -52,12 +52,10 @@ function calcPrice(chainId: string, volume: number) {
   return { price, isEnterprise: false, perTx: price / vol.value };
 }
 
-function shortAddr(addr: string) {
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
-}
+function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Wallet Connect Modal  (matches landing page exactly)
+// Wallet Connect Modal  (identical to landing page WalletButton modal)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WalletModal({ onClose }: { onClose: () => void }) {
@@ -131,7 +129,6 @@ function WalletModal({ onClose }: { onClose: () => void }) {
           </div>
           <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
         </div>
-
         <div className="space-y-3">
           {wallets.map(wallet => {
             const installed = isWalletInstalled(wallet.id);
@@ -163,7 +160,6 @@ function WalletModal({ onClose }: { onClose: () => void }) {
             );
           })}
         </div>
-
         <p className="text-white/20 text-xs text-center mt-5">
           By connecting, you agree to Q402&apos;s terms of service.
         </p>
@@ -179,20 +175,35 @@ function WalletModal({ onClose }: { onClose: () => void }) {
 
 function CopyButton({ value, label }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
-  function copy() {
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
   return (
     <button
-      onClick={copy}
+      onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
       className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
         copied ? "bg-green-400/15 text-green-400" : "bg-white/6 text-white/50 hover:bg-yellow/10 hover:text-yellow"
       }`}
     >
       {copied ? "✓ Copied" : (label ?? "Copy")}
     </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step header (numbered)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StepHeader({ n, title, sub, done }: { n: string; title: string; sub: string; done?: boolean }) {
+  return (
+    <div className="flex items-center gap-3 mb-5">
+      <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-all ${
+        done ? "bg-green-400 text-navy" : "bg-yellow text-navy"
+      }`}>
+        {done ? "✓" : n}
+      </span>
+      <div>
+        <p className="font-semibold text-sm">{title}</p>
+        <p className="text-white/30 text-xs mt-0.5">{sub}</p>
+      </div>
+    </div>
   );
 }
 
@@ -206,24 +217,25 @@ export default function PaymentPage() {
   const router = useRouter();
   const { address, isConnected } = useWallet();
 
-  const [selectedChain,   setSelectedChain]   = useState("bnb");
-  const [selectedVolume,  setSelectedVolume]  = useState(10_000);
+  const [selectedChain,    setSelectedChain]    = useState("bnb");
+  const [selectedVolume,   setSelectedVolume]   = useState(10_000);
   const [selectedPayToken, setSelectedPayToken] = useState("bnb-usdc");
-  const [payStep,         setPayStep]         = useState<PayStep>("idle");
-  const [showWalletModal, setShowWalletModal] = useState(false);
-  const [verifyAttempts,  setVerifyAttempts]  = useState(0);
-  const [verifyError,     setVerifyError]     = useState<string | null>(null);
-  const [activatedPlan,   setActivatedPlan]   = useState<string | null>(null);
+  const [payStep,          setPayStep]          = useState<PayStep>("idle");
+  const [showWalletModal,  setShowWalletModal]  = useState(false);
+  const [verifyAttempts,   setVerifyAttempts]   = useState(0);
+  const [verifyError,      setVerifyError]      = useState<string | null>(null);
+  const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, isEnterprise, perTx } = calcPrice(selectedChain, selectedVolume);
+  const payToken = PAY_TOKENS.find(t => t.id === selectedPayToken)!;
 
-  // When wallet connects, advance to ready
+  // Wallet connects → advance to ready
   useEffect(() => {
     if (isConnected && payStep === "idle") setPayStep("ready");
   }, [isConnected, payStep]);
 
-  // Already subscribed? go straight to dashboard
+  // Already subscribed → go to dashboard
   useEffect(() => {
     if (!address) return;
     fetch(`/api/payment/check?address=${address}`)
@@ -238,9 +250,9 @@ export default function PaymentPage() {
     setVerifyError(null);
     try {
       const res  = await fetch("/api/payment/activate", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address }),
+        body:    JSON.stringify({ address }),
       });
       const data = await res.json();
       if (res.ok && (data.status === "activated" || data.status === "already_active")) {
@@ -258,214 +270,10 @@ export default function PaymentPage() {
     }
   }
 
-  // ── Right panel content based on payStep ───────────────────────────────────
-  function RightPanel() {
-    // ── Enterprise ────────────────────────────────────────────────────────────
-    if (isEnterprise) {
-      return (
-        <div className="text-center py-4">
-          <p className="text-white/40 text-sm mb-2">This volume requires</p>
-          <p className="text-4xl font-extrabold text-yellow mb-2">Enterprise</p>
-          <p className="text-white/25 text-xs mb-6">Custom SLA · Private RPC · Dedicated support</p>
-          <a
-            href="mailto:hello@quackai.ai?subject=Q402 Enterprise Inquiry"
-            className="block w-full text-center bg-yellow text-navy font-bold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all"
-          >
-            Contact Sales →
-          </a>
-        </div>
-      );
-    }
-
-    // ── Price summary (always shown) ──────────────────────────────────────────
-    const PriceSummary = () => (
-      <>
-        <div className="flex items-center gap-3 mb-4 p-3 rounded-xl border border-white/6" style={{ background: "rgba(255,255,255,0.02)" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={chain.img} alt={chain.name} className={`w-8 h-8 flex-shrink-0 ${chain.rounded}`} />
-          <div className="flex-1">
-            <p className="text-sm font-semibold">{chain.name}</p>
-            <p className="text-white/35 text-xs">{selectedVolume >= 500_000 ? "500,000+" : selectedVolume.toLocaleString()} txs/mo</p>
-          </div>
-        </div>
-        <div className="flex items-baseline justify-between mb-1">
-          <span className="text-white/40 text-sm">Monthly</span>
-          <div className="text-right">
-            <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
-            <span className="text-white/30 text-sm">/mo</span>
-          </div>
-        </div>
-        <p className="text-white/25 text-xs text-right mb-4">
-          ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
-          {chain.multiplier > 1.0 && ` · +${Math.round((chain.multiplier - 1) * 100)}% ${chain.name} rate`}
-        </p>
-      </>
-    );
-
-    // ── Not connected ─────────────────────────────────────────────────────────
-    if (payStep === "idle") {
-      return (
-        <>
-          <PriceSummary />
-          <div className="border-t border-white/8 pt-4">
-            <button
-              onClick={() => setShowWalletModal(true)}
-              className="w-full bg-yellow text-navy font-bold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.02]"
-            >
-              Connect Wallet & Pay →
-            </button>
-            <p className="text-white/15 text-[10px] text-center mt-3">
-              API key is issued to your connected wallet
-            </p>
-          </div>
-        </>
-      );
-    }
-
-    // ── Connected & ready to pay ──────────────────────────────────────────────
-    if (payStep === "ready") {
-      const payToken = PAY_TOKENS.find(t => t.id === selectedPayToken)!;
-      return (
-        <>
-          <PriceSummary />
-          <div className="border-t border-white/8 pt-4 space-y-4">
-
-            {/* Wallet connected badge */}
-            <div className="flex items-center gap-2 bg-green-400/5 border border-green-400/15 rounded-xl px-4 py-2.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" style={{ boxShadow: "0 0 5px #4ade80" }} />
-              <span className="text-xs text-green-400 font-mono flex-1 truncate">{address}</span>
-            </div>
-
-            {/* Token selector */}
-            <div>
-              <p className="text-xs text-white/30 uppercase tracking-widest mb-2 font-semibold">Pay with</p>
-              <div className="grid grid-cols-2 gap-2">
-                {PAY_TOKENS.map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setSelectedPayToken(t.id)}
-                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all ${
-                      selectedPayToken === t.id
-                        ? "border-yellow/50 bg-yellow/8 text-yellow"
-                        : "border-white/8 text-white/50 hover:border-white/20"
-                    }`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={t.img} alt={t.chain} className="w-4 h-4 rounded-full flex-shrink-0" />
-                    {t.label}
-                    {selectedPayToken === t.id && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow flex-shrink-0" style={{ boxShadow: "0 0 4px #F5C518" }} />}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Payment address */}
-            <div>
-              <p className="text-xs text-white/30 uppercase tracking-widest mb-2 font-semibold">
-                Send ${price.toLocaleString()} {payToken.token} on {payToken.chain} to
-              </p>
-              <div className="flex items-center gap-2 bg-[#060C14] border border-white/10 rounded-xl px-3 py-3">
-                <span className="font-mono text-xs text-white/70 flex-1 break-all">{PAYMENT_ADDRESS}</span>
-                <CopyButton value={PAYMENT_ADDRESS} />
-              </div>
-              <p className="text-white/20 text-[10px] mt-2 leading-relaxed">
-                ⚠ Send from <span className="font-mono text-white/35">{shortAddr(address!)}</span> only.
-                Payments from other wallets will not activate your account.
-              </p>
-            </div>
-
-            {/* Confirm button */}
-            <button
-              onClick={verifyPayment}
-              className="w-full bg-yellow text-navy font-bold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01] mt-2"
-            >
-              I&apos;ve Sent — Verify Now →
-            </button>
-          </div>
-        </>
-      );
-    }
-
-    // ── Verifying ─────────────────────────────────────────────────────────────
-    if (payStep === "verifying") {
-      return (
-        <div className="text-center py-8">
-          <svg className="animate-spin w-12 h-12 text-yellow mx-auto mb-4" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
-            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-          </svg>
-          <p className="font-semibold mb-1">Scanning blockchain…</p>
-          <p className="text-white/35 text-xs">Usually completes in 10–30 seconds.</p>
-        </div>
-      );
-    }
-
-    // ── Success ───────────────────────────────────────────────────────────────
-    if (payStep === "success") {
-      return (
-        <div className="text-center py-6">
-          <div className="w-16 h-16 rounded-full bg-green-400/10 border border-green-400/20 flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-          </div>
-          <h3 className="text-lg font-bold mb-1">Payment Confirmed!</h3>
-          <p className="text-white/40 text-sm mb-1">
-            <span className="text-yellow font-semibold capitalize">{activatedPlan}</span> plan is now active.
-          </p>
-          <p className="text-white/20 text-xs mb-6">API key is ready in your dashboard.</p>
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="w-full bg-yellow text-navy font-extrabold py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.02]"
-          >
-            Open My Page →
-          </button>
-        </div>
-      );
-    }
-
-    // ── Error / retry ─────────────────────────────────────────────────────────
-    if (payStep === "error") {
-      return (
-        <>
-          <PriceSummary />
-          <div className="border-t border-white/8 pt-4 space-y-3">
-            <div className="bg-red-400/5 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">
-              {verifyError}
-              {verifyAttempts > 2 && (
-                <p className="text-xs text-red-400/70 mt-1">
-                  Still not found? Contact <a href="mailto:hello@quackai.ai" className="underline">hello@quackai.ai</a>
-                </p>
-              )}
-            </div>
-            <button
-              onClick={verifyPayment}
-              className="w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-xl hover:bg-yellow-hover transition-all"
-            >
-              Try Again →
-            </button>
-            <button
-              onClick={() => setPayStep("ready")}
-              className="w-full text-white/30 text-sm py-2 hover:text-white/60 transition-colors"
-            >
-              ← Back to payment details
-            </button>
-          </div>
-        </>
-      );
-    }
-
-    return null;
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Render
-  // ─────────────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen text-white" style={{ background: "#080E1C" }}>
 
-      {/* Nav */}
+      {/* ── Nav ────────────────────────────────────────────────────────────── */}
       <nav className="border-b border-white/8 px-6 h-16 flex items-center justify-between max-w-6xl mx-auto">
         <a href="/" className="flex items-center gap-2">
           <span className="text-yellow font-bold text-lg">Q402</span>
@@ -499,24 +307,18 @@ export default function PaymentPage() {
           </div>
           <h1 className="text-3xl md:text-4xl font-bold mb-2">Build your plan</h1>
           <p className="text-white/35 text-sm max-w-md mx-auto">
-            Select chain and volume, connect your wallet, and pay directly on-chain.
+            4 steps · connect wallet · pay on-chain · API key issued instantly
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-[1fr_360px] gap-8 items-start">
+        <div className="grid lg:grid-cols-[1fr_320px] gap-8 items-start">
 
-          {/* LEFT: selectors */}
-          <div className="space-y-6">
+          {/* ── LEFT: all 4 steps ──────────────────────────────────────────── */}
+          <div className="space-y-4">
 
-            {/* Chain selector */}
+            {/* ── STEP 1: Chain ──────────────────────────────────────────── */}
             <div className="rounded-2xl p-6 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <div className="flex items-center gap-3 mb-5">
-                <span className="w-6 h-6 rounded-full bg-yellow text-navy text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
-                <div>
-                  <p className="font-semibold text-sm">Which chain do you need?</p>
-                  <p className="text-white/30 text-xs mt-0.5">Select the chain your product runs on</p>
-                </div>
-              </div>
+              <StepHeader n="1" title="Which chain do you need?" sub="Select the chain your product runs on" done={false} />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {CHAINS.map(c => {
                   const active = selectedChain === c.id;
@@ -526,24 +328,18 @@ export default function PaymentPage() {
                       onClick={() => !c.comingSoon && setSelectedChain(c.id)}
                       disabled={c.comingSoon}
                       className={`relative flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                        c.comingSoon
-                          ? "border-white/5 opacity-40 cursor-not-allowed"
-                          : active
-                          ? "border-yellow/50 bg-yellow/6"
-                          : "border-white/8 hover:border-white/20"
+                        c.comingSoon ? "border-white/5 opacity-40 cursor-not-allowed"
+                        : active     ? "border-yellow/50 bg-yellow/6"
+                        :              "border-white/8 hover:border-white/20"
                       }`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={c.img} alt={c.name} className={`w-7 h-7 flex-shrink-0 ${c.rounded}`} />
                       <div className="min-w-0">
                         <p className="text-xs font-semibold truncate">{c.name}</p>
-                        {c.comingSoon ? (
-                          <p className="text-[10px] text-white/25">Integrating…</p>
-                        ) : c.multiplier > 1.0 ? (
-                          <p className="text-[10px] text-white/25">+{Math.round((c.multiplier - 1) * 100)}%</p>
-                        ) : (
-                          <p className="text-[10px] text-white/25">Base rate</p>
-                        )}
+                        {c.comingSoon ? <p className="text-[10px] text-white/25">Integrating…</p>
+                        : c.multiplier > 1.0 ? <p className="text-[10px] text-white/25">+{Math.round((c.multiplier - 1) * 100)}%</p>
+                        : <p className="text-[10px] text-white/25">Base rate</p>}
                       </div>
                       {active && !c.comingSoon && (
                         <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-yellow" style={{ boxShadow: "0 0 5px #F5C518" }} />
@@ -554,15 +350,9 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* Volume selector */}
+            {/* ── STEP 2: Volume ─────────────────────────────────────────── */}
             <div className="rounded-2xl p-6 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <div className="flex items-center gap-3 mb-5">
-                <span className="w-6 h-6 rounded-full bg-yellow text-navy text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
-                <div>
-                  <p className="font-semibold text-sm">Monthly sponsored transactions</p>
-                  <p className="text-white/30 text-xs mt-0.5">How many gasless txs per month?</p>
-                </div>
-              </div>
+              <StepHeader n="2" title="Monthly sponsored transactions" sub="How many gasless txs per month?" done={false} />
               <div className="grid grid-cols-4 gap-2">
                 {VOLUMES.map(v => (
                   <button
@@ -580,26 +370,231 @@ export default function PaymentPage() {
               </div>
             </div>
 
-            {/* Security note */}
-            <div className="p-4 rounded-xl border border-white/6 flex gap-3" style={{ background: "rgba(255,255,255,0.01)" }}>
-              <span className="text-yellow/50 text-base flex-shrink-0">🔒</span>
-              <p className="text-white/25 text-xs leading-relaxed">
-                Your API key is tied to your connected wallet. Only you can access it. Payment is accepted in USDC or USDT on BNB Chain or Ethereum.
-              </p>
+            {/* ── STEP 3: Connect Wallet ─────────────────────────────────── */}
+            <div className={`rounded-2xl p-6 border transition-all ${
+              payStep !== "idle"
+                ? "border-green-400/20"
+                : "border-white/8"
+            }`} style={{ background: "rgba(255,255,255,0.02)" }}>
+              <StepHeader
+                n="3"
+                title="Connect your wallet"
+                sub="Your API key will be tied to this address"
+                done={payStep !== "idle"}
+              />
+
+              {payStep === "idle" ? (
+                <button
+                  onClick={() => setShowWalletModal(true)}
+                  className="w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
+                >
+                  Connect Wallet →
+                </button>
+              ) : (
+                <div className="flex items-center gap-3 bg-green-400/5 border border-green-400/15 rounded-xl px-4 py-3">
+                  <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" style={{ boxShadow: "0 0 6px #4ade80" }} />
+                  <span className="font-mono text-sm text-white/70 flex-1 truncate">{address}</span>
+                  <span className="text-xs text-green-400 font-semibold flex-shrink-0">Connected</span>
+                </div>
+              )}
             </div>
+
+            {/* ── STEP 4: Send Payment ───────────────────────────────────── */}
+            <div className={`rounded-2xl p-6 border transition-all ${
+              payStep === "idle" ? "border-white/5 opacity-50 pointer-events-none"
+              : payStep === "success" ? "border-green-400/20"
+              : "border-white/8"
+            }`} style={{ background: "rgba(255,255,255,0.02)" }}>
+              <StepHeader
+                n="4"
+                title="Send payment & verify"
+                sub="Pay on-chain — API key issued automatically"
+                done={payStep === "success"}
+              />
+
+              {/* Verifying */}
+              {payStep === "verifying" && (
+                <div className="flex items-center gap-4 py-4">
+                  <svg className="animate-spin w-8 h-8 text-yellow flex-shrink-0" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+                  </svg>
+                  <div>
+                    <p className="font-semibold text-sm">Scanning blockchain…</p>
+                    <p className="text-white/35 text-xs mt-0.5">Usually 10–30 seconds</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Success */}
+              {payStep === "success" && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 bg-green-400/5 border border-green-400/15 rounded-xl px-4 py-3">
+                    <svg className="w-5 h-5 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <div>
+                      <p className="text-green-400 font-bold text-sm">Payment Confirmed!</p>
+                      <p className="text-white/40 text-xs capitalize">{activatedPlan} plan is now active</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => router.push("/dashboard")}
+                    className="w-full bg-yellow text-navy font-extrabold py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.02]"
+                  >
+                    Open My Page →
+                  </button>
+                </div>
+              )}
+
+              {/* Error */}
+              {payStep === "error" && (
+                <div className="space-y-3 mb-4">
+                  <div className="bg-red-400/5 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">
+                    {verifyError}
+                    {verifyAttempts > 2 && (
+                      <p className="text-xs text-red-400/60 mt-1">
+                        Still not found? Contact <a href="mailto:hello@quackai.ai" className="underline">hello@quackai.ai</a>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Ready or Error → show payment form */}
+              {(payStep === "ready" || payStep === "error") && (
+                <div className="space-y-4">
+
+                  {/* Token selector */}
+                  <div>
+                    <p className="text-xs text-white/30 uppercase tracking-widest mb-2 font-semibold">Pay with</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PAY_TOKENS.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => setSelectedPayToken(t.id)}
+                          className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all ${
+                            selectedPayToken === t.id
+                              ? "border-yellow/50 bg-yellow/8 text-yellow"
+                              : "border-white/8 text-white/50 hover:border-white/20"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={t.img} alt={t.chain} className="w-4 h-4 rounded-full flex-shrink-0" />
+                          {t.label}
+                          {selectedPayToken === t.id && (
+                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow flex-shrink-0" style={{ boxShadow: "0 0 4px #F5C518" }} />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Address */}
+                  <div>
+                    <p className="text-xs text-white/30 uppercase tracking-widest mb-2 font-semibold">
+                      Send ${price.toLocaleString()} {payToken.token} on {payToken.chain} to
+                    </p>
+                    <div className="flex items-center gap-2 bg-[#060C14] border border-white/10 rounded-xl px-3 py-3">
+                      <span className="font-mono text-xs text-white/70 flex-1 break-all">{PAYMENT_ADDRESS}</span>
+                      <CopyButton value={PAYMENT_ADDRESS} />
+                    </div>
+                    <p className="text-white/20 text-[10px] mt-2">
+                      ⚠ Send from <span className="font-mono text-white/35">{address ? shortAddr(address) : "—"}</span> only. Payments from other wallets will not activate your account.
+                    </p>
+                  </div>
+
+                  {/* Verify */}
+                  <button
+                    onClick={verifyPayment}
+                    className="w-full bg-yellow text-navy font-bold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
+                  >
+                    {payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
+                  </button>
+                </div>
+              )}
+
+              {/* Locked placeholder */}
+              {payStep === "idle" && (
+                <div className="text-white/20 text-sm text-center py-3">
+                  Connect wallet first to unlock this step
+                </div>
+              )}
+            </div>
+
           </div>
 
-          {/* RIGHT: price + payment */}
+          {/* ── RIGHT: Quote summary (sticky) ──────────────────────────── */}
           <div className="lg:sticky lg:top-8">
             <div className="rounded-2xl border border-white/10 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <div className="px-6 py-4 border-b border-white/8" style={{ background: "rgba(245,197,24,0.04)" }}>
                 <p className="text-yellow font-bold text-sm uppercase tracking-widest">Your Quote</p>
               </div>
               <div className="p-6">
-                <RightPanel />
+                {/* Chain + volume */}
+                <div className="flex items-center gap-3 mb-5 p-3 rounded-xl border border-white/6" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={chain.img} alt={chain.name} className={`w-8 h-8 flex-shrink-0 ${chain.rounded}`} />
+                  <div>
+                    <p className="text-sm font-semibold">{chain.name}</p>
+                    <p className="text-white/35 text-xs">{selectedVolume >= 500_000 ? "500,000+" : selectedVolume.toLocaleString()} txs/mo</p>
+                  </div>
+                </div>
+
+                {/* Price */}
+                {isEnterprise ? (
+                  <div className="text-center py-4">
+                    <p className="text-white/40 text-sm mb-1">This volume requires</p>
+                    <p className="text-4xl font-extrabold text-yellow">Enterprise</p>
+                    <p className="text-white/25 text-xs mt-2">Contact us for custom pricing</p>
+                    <a href="mailto:hello@quackai.ai?subject=Q402 Enterprise Inquiry"
+                      className="block mt-5 w-full text-center bg-yellow text-navy font-bold text-sm py-3.5 rounded-xl hover:bg-yellow-hover transition-all">
+                      Contact Sales →
+                    </a>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-baseline justify-between mb-1">
+                      <span className="text-white/40 text-sm">Monthly</span>
+                      <div>
+                        <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
+                        <span className="text-white/30 text-sm">/mo</span>
+                      </div>
+                    </div>
+                    <p className="text-white/25 text-xs text-right mb-1">
+                      ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
+                    </p>
+                    {chain.multiplier > 1.0 && (
+                      <p className="text-white/20 text-xs text-right">
+                        Includes {chain.name} +{Math.round((chain.multiplier - 1) * 100)}% rate
+                      </p>
+                    )}
+
+                    {/* Pay token summary */}
+                    {payStep !== "idle" && (
+                      <div className="mt-4 pt-4 border-t border-white/8">
+                        <p className="text-xs text-white/25 mb-2">Paying with</p>
+                        <div className="flex items-center gap-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={payToken.img} alt={payToken.chain} className="w-4 h-4 rounded-full" />
+                          <span className="text-sm font-semibold text-white/70">{payToken.label}</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Security note */}
+                <div className="mt-5 pt-4 border-t border-white/6 flex gap-2">
+                  <span className="text-yellow/40 text-xs flex-shrink-0">🔒</span>
+                  <p className="text-white/20 text-[10px] leading-relaxed">
+                    API key tied to your wallet. Payment accepted in USDC or USDT on BNB Chain or Ethereum.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
+
         </div>
       </main>
 

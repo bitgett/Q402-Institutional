@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import RegisterModal from "./RegisterModal";
 
 const CODE_LINES = [
   { tokens: [{ t: "import", c: "text-purple-400" }, { t: " { Q402 } ", c: "text-white/80" }, { t: "from", c: "text-purple-400" }, { t: ' "@quackai/q402"', c: "text-orange-300" }, { t: ";", c: "text-white/30" }] },
@@ -148,6 +149,8 @@ function BigTerminal() {
 }
 
 export default function Contact() {
+  const [showModal, setShowModal] = useState(false);
+
   return (
     <section id="contact" className="py-24 px-6 overflow-hidden" style={{ background: "linear-gradient(180deg, transparent 0%, rgba(245,197,24,0.025) 50%, transparent 100%)" }}>
       <div className="max-w-6xl mx-auto">
@@ -184,12 +187,12 @@ export default function Contact() {
 
           {/* CTAs */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a
-              href="mailto:hello@quackai.ai?subject=Q402 Early Access&body=Hi, I'm interested in integrating Q402 gasless payments. Here's our use case:"
+            <button
+              onClick={() => setShowModal(true)}
               className="inline-flex items-center gap-3 bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/20"
             >
               Talk to Us →
-            </a>
+            </button>
             <a href="/docs" className="inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors">
               <span className="w-8 h-8 rounded-full border border-white/12 flex items-center justify-center text-xs">↗</span>
               Read the docs
@@ -201,6 +204,8 @@ export default function Contact() {
         {/* Full-width terminal */}
         <BigTerminal />
       </div>
+
+      {showModal && <RegisterModal onClose={() => setShowModal(false)} />}
     </section>
   );
 }
