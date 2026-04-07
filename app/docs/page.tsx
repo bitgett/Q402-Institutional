@@ -353,7 +353,7 @@ const data = await res.json();
               <CodeBlock lang="json" code={`// Request body
 {
   "apiKey":      "q402_live_YOUR_API_KEY",
-  "chain":       "avax",           // avax | bnb | eth | xlayer
+  "chain":       "avax",           // avax | bnb | eth | xlayer | stable
   "token":       "USDC",           // USDC | USDT
   "from":        "0xUserWallet...",
   "to":          "0xRecipient...",
@@ -473,7 +473,7 @@ const domain = {
   expiry: Math.floor(Date.now() / 1000) + 3600,
 });`} />
             <Callout type="info">
-              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer) use EIP-7702 for single-transaction gasless relay. X Layer additionally supports EIP-3009 as a fallback.
+              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable) use EIP-7702 for single-transaction gasless relay. X Layer additionally supports EIP-3009 as a fallback.
             </Callout>
           </Section>
 
@@ -543,9 +543,9 @@ const domain = {
           {/* Bottom CTA */}
           <div className="border border-yellow/15 rounded-2xl p-8 text-center" style={{ background: "rgba(245,197,24,0.04)" }}>
             <h3 className="text-xl font-bold mb-2">Ready to go gasless?</h3>
-            <p className="text-white/40 text-sm mb-6">Connect your wallet and get your API key instantly — no payment required.</p>
+            <p className="text-white/40 text-sm mb-6">Pick a plan, connect your wallet, and get your API key. Live in minutes.</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <a href="/dashboard" className="bg-yellow text-navy font-bold px-8 py-3 rounded-full hover:bg-yellow-hover transition-colors text-sm">
+              <a href="/payment" className="bg-yellow text-navy font-bold px-8 py-3 rounded-full hover:bg-yellow-hover transition-colors text-sm">
                 Get API Key →
               </a>
               <a href="mailto:hello@quackai.ai" className="border border-white/20 text-white/70 font-semibold px-8 py-3 rounded-full hover:bg-white/5 transition-colors text-sm">
