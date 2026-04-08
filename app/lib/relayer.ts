@@ -22,6 +22,41 @@ import { privateKeyToAccount } from "viem/accounts";
 //   - avax/bnb/eth: settlePayment()에서 relayer address를 facilitator로 전달
 //   - xlayer EIP-7702: settlePaymentXLayerEIP7702()에서 relayer address를 facilitator로 전달
 
+// ── RPC helpers ───────────────────────────────────────────────────────────────
+// Each chain has a primary RPC + fallbacks.  getChainRpc() tries them in order.
+const CHAIN_RPC_FALLBACKS: Record<string, string[]> = {
+  avax:   [
+    "https://api.avax.network/ext/bc/C/rpc",
+    "https://avalanche-c-chain-rpc.publicnode.com",
+    "https://rpc.ankr.com/avalanche",
+  ],
+  bnb:    [
+    "https://bsc-dataseed1.binance.org/",
+    "https://bsc-dataseed2.binance.org/",
+    "https://bsc.publicnode.com",
+  ],
+  eth:    [
+    "https://ethereum.publicnode.com",
+    "https://cloudflare-eth.com",
+    "https://rpc.ankr.com/eth",
+  ],
+  xlayer: [
+    "https://rpc.xlayer.tech",
+    "https://xlayerrpc.okx.com",
+  ],
+  stable: [
+    "https://rpc.stable.xyz",
+  ],
+};
+
+export function getPrimaryRpc(chain: string): string {
+  return CHAIN_RPC_FALLBACKS[chain]?.[0] ?? "https://ethereum.publicnode.com";
+}
+
+export function getFallbackRpcs(chain: string): string[] {
+  return CHAIN_RPC_FALLBACKS[chain] ?? [];
+}
+
 // ── Chain configs ──────────────────────────────────────────────────────────────
 export const CHAIN_CONFIG = {
   avax: {

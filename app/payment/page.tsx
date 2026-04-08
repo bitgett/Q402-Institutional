@@ -215,7 +215,7 @@ type PayStep = "idle" | "ready" | "verifying" | "success" | "error";
 
 export default function PaymentPage() {
   const router = useRouter();
-  const { address, isConnected } = useWallet();
+  const { address, isConnected, signMessage } = useWallet();
 
   const [selectedChain,    setSelectedChain]    = useState("bnb");
   const [selectedVolume,   setSelectedVolume]   = useState(10_000);
@@ -253,10 +253,24 @@ export default function PaymentPage() {
     setPayStep("verifying");
     setVerifyError(null);
     try {
+      // Prove address ownership before activating — same message as provision
+      const PROVISION_MSG = `Q402 API Key Request\nAddress: ${address.toLowerCase()}`;
+      const cacheKey      = `q402_sig_${address.toLowerCase()}`;
+      let signature = sessionStorage.getItem(cacheKey);
+      if (!signature) {
+        signature = await signMessage(PROVISION_MSG);
+        if (!signature) {
+          setVerifyError("Wallet signature required to verify payment.");
+          setPayStep("error");
+          return;
+        }
+        sessionStorage.setItem(cacheKey, signature);
+      }
+
       const res  = await fetch("/api/payment/activate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ address }),
+        body:    JSON.stringify({ address, signature }),
       });
       const data = await res.json();
       if (res.ok && (data.status === "activated" || data.status === "already_active")) {

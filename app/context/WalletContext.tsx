@@ -10,6 +10,8 @@ interface WalletCtx {
   connect: () => Promise<void>;
   connectWith: (type: "metamask" | "okx") => Promise<void>;
   disconnect: () => void;
+  /** Sign an arbitrary message with the connected wallet (personal_sign). */
+  signMessage: (message: string) => Promise<string | null>;
 }
 
 const WalletContext = createContext<WalletCtx>({
@@ -19,6 +21,7 @@ const WalletContext = createContext<WalletCtx>({
   connect: async () => {},
   connectWith: async () => {},
   disconnect: () => {},
+  signMessage: async () => null,
 });
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
@@ -45,6 +48,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("q402_wallet", addr);
     }
   }, []);
+
+  /**
+   * Sign a message with the connected wallet using personal_sign.
+   * Returns the hex signature, or null if the user rejects or no wallet present.
+   * Tries MetaMask first, falls back to OKX.
+   */
+  const signMessage = useCallback(async (message: string): Promise<string | null> => {
+    type EthProvider = { request: (args: { method: string; params: unknown[] }) => Promise<string> };
+    const eth = (window as unknown as { ethereum?: EthProvider }).ethereum;
+    const okx = (window as unknown as { okxwallet?: EthProvider }).okxwallet;
+    const provider = eth ?? okx;
+    if (!provider || !address) return null;
+    try {
+      return await provider.request({
+        method: "personal_sign",
+        params: [message, address],
+      });
+    } catch {
+      return null;
+    }
+  }, [address]);
 
   // Restore on mount
   useEffect(() => {
@@ -88,6 +112,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       connect,
       connectWith,
       disconnect,
+      signMessage,
     }}>
       {children}
     </WalletContext.Provider>

@@ -37,3 +37,6 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Runtime data — contains live API keys and subscription records; never commit
+data/

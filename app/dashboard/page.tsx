@@ -262,7 +262,7 @@ const TABS = ["overview", "gas-tank", "developer", "transactions"] as const;
 type Tab = typeof TABS[number];
 
 export default function DashboardPage() {
-  const { address, isConnected } = useWallet();
+  const { address, isConnected, signMessage } = useWallet();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [keyCopied, setKeyCopied] = useState(false);
@@ -313,16 +313,38 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
-    // Provision API key (auto-creates if not exists, returns existing otherwise)
-    fetch("/api/keys/provision", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address }),
-    }).then(r => r.json()).then(data => {
-      if (data.apiKey) {
-        setSubscription(prev => ({ ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }), apiKey: data.apiKey, plan: data.plan ?? "starter" }));
+
+    // Provision requires a personal_sign proof-of-ownership signature.
+    // Cache it in sessionStorage so the user is only prompted once per session.
+    const PROVISION_MSG = `Q402 API Key Request\nAddress: ${address.toLowerCase()}`;
+    const cacheKey      = `q402_sig_${address.toLowerCase()}`;
+
+    async function provision() {
+      let sig = sessionStorage.getItem(cacheKey);
+      if (!sig) {
+        sig = await signMessage(PROVISION_MSG);
+        if (!sig) return; // user rejected
+        sessionStorage.setItem(cacheKey, sig);
       }
-    }).catch(() => {});
+      fetch("/api/keys/provision", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ address, signature: sig }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.apiKey) {
+            setSubscription(prev => ({ ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }), apiKey: data.apiKey, plan: data.plan ?? "starter" }));
+          } else if (data.error === "Signature does not match address") {
+            // Cached sig is stale (address changed) — clear and retry next render
+            sessionStorage.removeItem(cacheKey);
+          }
+        })
+        .catch(() => {});
+    }
+
+    provision();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]);
 
   useEffect(() => {
