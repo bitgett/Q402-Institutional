@@ -18,12 +18,13 @@ const PLAN_QUOTA: Record<string, number> = {
   enterprise: 100_000,
 };
 
-const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string }> = {
+const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string; gasNote?: string }> = {
   bnb:    { name: "BNB Chain",  token: "BNB",   color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
   eth:    { name: "Ethereum",   token: "ETH",   color: "#627EEA", img: "/eth.png",    rounded: "rounded-lg"   },
   xlayer: { name: "X Layer",    token: "OKB",   color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-sm"   },
   avax:   { name: "Avalanche",  token: "AVAX",  color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
-  stable: { name: "Stable",     token: "USDT0", color: "#4AE54A", img: "/stable.jpg", rounded: "rounded-full" },
+  // Stable: USDT0 is both the gas token and the payment token — no separate native coin
+  stable: { name: "Stable",     token: "USDT0", color: "#4AE54A", img: "/stable.jpg", rounded: "rounded-full", gasNote: "Gas + payment token" },
 };
 
 const STEPS = [
@@ -640,7 +641,16 @@ export default function DashboardPage() {
                       <div className={`w-7 h-7 ${meta.rounded} overflow-hidden flex-shrink-0`} style={{ background: meta.color }}>
                         <img src={meta.img} alt={meta.name} className="w-full h-full object-cover" />
                       </div>
-                      <div><div className="text-xs font-semibold">{meta.name}</div><div className="text-white/30 text-[10px]">{meta.token}</div></div>
+                      <div>
+                        <div className="text-xs font-semibold">{meta.name}</div>
+                        <div className="text-white/30 text-[10px]">{meta.token}</div>
+                        {meta.gasNote && (
+                          <div className="text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full inline-block"
+                            style={{ background: "rgba(74,229,74,0.1)", color: "#4AE54A" }}>
+                            {meta.gasNote}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="text-xl font-bold">{userAmt.toFixed(4)} <span className="text-sm font-normal text-white/40">{meta.token}</span></div>
                     <div className="text-white/30 text-xs mt-0.5">{userUSD >= 0.01 ? `$${userUSD.toFixed(2)}` : "$0.00"} deposited</div>

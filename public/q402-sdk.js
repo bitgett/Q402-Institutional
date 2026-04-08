@@ -2,19 +2,30 @@
  * Q402 Client SDK (browser-compatible)
  * v1.3.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable) + EIP-3009 (xlayer fallback)
  *
- * 체인별 서명 방식:
- *   avax / bnb / eth  → EIP-712 PaymentWitness + EIP-7702 authorization (2 sigs)
- *   xlayer            → EIP-712 TransferAuthorization + EIP-7702 authorization (2 sigs)
- *                       domain verifyingContract = user's EOA (not impl contract)
- *                       impl: 0x31E9D105df96b5294298cFaffB7f106994CD0d0f
- *   stable (testnet)  → EIP-712 TransferAuthorization + EIP-7702 authorization (2 sigs)
- *                       domain name = "Q402 Stable", verifyingContract = impl contract
- *                       gas token = USDT0 (18 decimals), Chain ID: 2201
+ * ── Chain signing matrix ────────────────────────────────────────────────────────
  *
- * Usage:
+ *  Chain      Witness type            Domain name         verifyingContract     Decimals
+ *  ─────────  ──────────────────────  ──────────────────  ──────────────────    ────────
+ *  avax       TransferAuthorization   "Q402 Avalanche"    impl contract         6
+ *  bnb        TransferAuthorization   "Q402 BNB Chain"    impl contract         18  ← BSC USDC/USDT are 18 dec
+ *  eth        TransferAuthorization   "Q402 Ethereum"     impl contract         6
+ *  xlayer     TransferAuthorization   "Q402 X Layer"      user's EOA ★          6
+ *  stable     TransferAuthorization   "Q402 Stable"       impl contract         18  ← USDT0 only, 18 dec
+ *
+ *  ★ X Layer: verifyingContract = address(this) under EIP-7702 = user's own EOA
+ *
+ * ── Stable chain specifics ──────────────────────────────────────────────────────
+ *  - Token:      USDT0 only (0x779ded0c9e1022225f8e0630b35a9b54be713736, mainnet)
+ *  - Decimals:   18 (not 6 — parse with ethers.parseUnits(amount, 18))
+ *  - Gas token:  USDT0 — the GasTank must be funded with USDT0, not a native coin
+ *  - Chain ID:   988 (mainnet), 2201 (testnet)
+ *  - The "USDC" and "USDT" token keys both resolve to the USDT0 address on this chain.
+ *
+ * ── Usage ───────────────────────────────────────────────────────────────────────
  *   const q402 = new Q402Client({ apiKey: "q402_live_xxx", chain: "avax" });
  *   const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
  *
+ *   // Stable — pass token: "USDT" (resolves to USDT0), amount in human-readable form
  *   const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
  *   const result = await q402s.pay({ to: "0x...", amount: "1.00", token: "USDT" });
  */
