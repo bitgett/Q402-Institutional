@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { addGasDeposit, getGasBalance } from "@/app/lib/db";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 const RELAYER = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
 
@@ -73,6 +74,13 @@ async function scanNativeDeposits(
 }
 
 export async function POST(req: NextRequest) {
+  // ── Rate limit: 5 scans / 60 s per IP ────────────────────────────────────
+  // Each scan triggers up to 250 RPC calls across 5 chains — must be restricted.
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "verify-deposit", 5, 60))) {
+    return NextResponse.json({ error: "Too many requests. Please wait before scanning again." }, { status: 429 });
+  }
+
   const { address } = await req.json();
   if (!address) return NextResponse.json({ error: "address required" }, { status: 400 });
 

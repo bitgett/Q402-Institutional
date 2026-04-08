@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
-import { getApiKeyRecord, getGasBalance, recordRelayedTx, getSubscription } from "@/app/lib/db";
+import {
+  getApiKeyRecord,
+  getGasBalance,
+  recordRelayedTx,
+  getSubscription,
+  getRelayedTxs,
+  getPlanQuota,
+} from "@/app/lib/db";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   CHAIN_CONFIG,
@@ -14,6 +22,9 @@ import {
   type XLayerEIP7702PayParams,
 } from "@/app/lib/relayer";
 import type { Hex, Address } from "viem";
+
+// Valid Ethereum address pattern
+const ETH_ADDR = /^0x[0-9a-fA-F]{40}$/;
 
 const CHAIN_RPC: Record<string, string> = {
   bnb:    "https://bsc-dataseed1.binance.org/",
@@ -49,6 +60,12 @@ export async function POST(req: NextRequest) {
     facilitator?:  string;
   };
 
+  // ── 0. Rate limit: 60 relay calls / 60 s per IP ──────────────────────────
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "relay", 60, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   try {
     body = await req.json();
   } catch {
@@ -63,6 +80,26 @@ export async function POST(req: NextRequest) {
   // ── 1. 공통 필수 필드 검증 ────────────────────────────────────────────────
   if (!apiKey || !chain || !token || !from || !to || !amount || !deadline || !witnessSig) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // ── 1a. 주소 형식 검증 ────────────────────────────────────────────────────
+  if (!ETH_ADDR.test(from) || !ETH_ADDR.test(to)) {
+    return NextResponse.json({ error: "Invalid address format" }, { status: 400 });
+  }
+
+  // ── 1b. amount 검증 (양의 정수 bigint) ────────────────────────────────────
+  let amountBigInt: bigint;
+  try {
+    amountBigInt = BigInt(amount);
+    if (amountBigInt <= 0n) throw new Error("zero");
+  } catch {
+    return NextResponse.json({ error: "amount must be a positive integer string" }, { status: 400 });
+  }
+
+  // ── 1c. deadline 검증 (미래 타임스탬프) ──────────────────────────────────
+  const deadlineSec = Number(deadline);
+  if (!Number.isFinite(deadlineSec) || deadlineSec * 1000 <= Date.now()) {
+    return NextResponse.json({ error: "deadline has passed or is invalid" }, { status: 400 });
   }
 
   // ── 2. 체인별 추가 필드 검증 ──────────────────────────────────────────────
@@ -107,6 +144,20 @@ export async function POST(req: NextRequest) {
     if (new Date() >= expiresAt) {
       return NextResponse.json({ error: "Subscription expired. Please renew to continue." }, { status: 403 });
     }
+  }
+
+  // ── 4a. 월간 quota 초과 여부 확인 ────────────────────────────────────────
+  const monthStart    = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const allTxs        = await getRelayedTxs(keyRecord.address);
+  const thisMonthUsed = allTxs.filter(tx => new Date(tx.relayedAt) >= monthStart).length;
+  const baseQuota     = getPlanQuota(keyRecord.plan);
+  const bonusQuota    = subscription?.quotaBonus ?? 0;
+  const totalQuota    = baseQuota + bonusQuota;
+
+  if (thisMonthUsed >= totalQuota) {
+    return NextResponse.json({
+      error: `Monthly quota exceeded (${thisMonthUsed}/${totalQuota}). Upgrade your plan or request a quota top-up.`,
+    }, { status: 429 });
   }
 
   // ── 5. 체인 지원 확인 ──────────────────────────────────────────────────────
@@ -242,7 +293,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (!result.success) {
-    return NextResponse.json({ error: `Relay failed: ${result.error}` }, { status: 400 });
+    // Don't leak internal RPC errors or contract revert reasons to callers
+    console.error(`[relay] failed chain=${chain} from=${from}: ${result.error}`);
+    return NextResponse.json({ error: "Relay failed. Check your signature and parameters." }, { status: 400 });
   }
 
   // ── 9. 실제 가스비 계산 (TX 영수증에서 추출) ──────────────────────────────

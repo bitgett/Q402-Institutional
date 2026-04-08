@@ -76,7 +76,9 @@ export async function deactivateApiKey(apiKey: string) {
 }
 
 export async function generateApiKey(address: string, plan: string): Promise<string> {
-  const rand = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  // Use cryptographically secure random bytes — Math.random() is predictable
+  const { randomBytes } = await import("crypto");
+  const rand = randomBytes(24).toString("hex");
   const key = `q402_live_${rand}`;
   await kv.set(apiKeyRecKey(key), {
     address: address.toLowerCase(),
