@@ -136,8 +136,14 @@ The `/payment` page now uses a full **self-serve on-chain payment flow**:
 3. **Connect wallet** — MetaMask or OKX Wallet
 4. **Send & verify** — send USDC/USDT to the Q402 address, click "Verify", API key issues automatically
 
-Accepted payment tokens: BNB USDC, BNB USDT, ETH USDC, ETH USDT  
+Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT**  
 Payment address: `0xfc77ff29178b7286a8ba703d7a70895ca74ff466`
+
+> **Note — payment tokens are intentionally BNB/ETH only and will not change.**  
+> The `/payment` page is the Q402 subscription billing page, not a relay demo.  
+> It accepts only BNB Chain and Ethereum stablecoins for operational simplicity and reliability.  
+> Stable (USDT0) is available as a *relay target chain* for developer integrations,  
+> but is not used as a payment token for Q402 subscriptions.
 
 ---
 

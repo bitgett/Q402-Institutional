@@ -396,18 +396,18 @@ const data = await res.json();
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-white/8">
-                    {["Chain", "chain param", "Chain ID", "Status", "Avg gas/tx"].map(h => (
+                    {["Chain", "chain param", "Chain ID", "Gas token", "Status", "Avg gas/tx"].map(h => (
                       <th key={h} className="text-left py-3 pr-6 text-white/30 text-xs uppercase tracking-wider font-semibold">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    { name: "BNB Chain",  color: "#F0B90B", param: "bnb",       id: "56",    gas: "~$0.001" },
-                    { name: "Ethereum",   color: "#627EEA", param: "eth",       id: "1",     gas: "~$0.19"  },
-                    { name: "Avalanche",  color: "#E84142", param: "avax",      id: "43114", gas: "~$0.002" },
-                    { name: "X Layer",    color: "#CCCCCC", param: "xlayer",    id: "196",   gas: "~$0.001" },
-                    { name: "Stable",     color: "#4AE54A", param: "stable",    id: "988",   gas: "~$0.001" },
+                    { name: "BNB Chain",  color: "#F0B90B", param: "bnb",    id: "56",    gasToken: "BNB",              gas: "~$0.001", stableNote: false },
+                    { name: "Ethereum",   color: "#627EEA", param: "eth",    id: "1",     gasToken: "ETH",              gas: "~$0.19",  stableNote: false },
+                    { name: "Avalanche",  color: "#E84142", param: "avax",   id: "43114", gasToken: "AVAX",             gas: "~$0.002", stableNote: false },
+                    { name: "X Layer",    color: "#CCCCCC", param: "xlayer", id: "196",   gasToken: "OKB",              gas: "~$0.001", stableNote: false },
+                    { name: "Stable",     color: "#4AE54A", param: "stable", id: "988",   gasToken: "USDT0 ★",          gas: "~$0.001", stableNote: true  },
                   ].map((chain) => (
                     <tr key={chain.param} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="py-3 pr-6">
@@ -418,6 +418,11 @@ const data = await res.json();
                       </td>
                       <td className="py-3 pr-6 font-mono text-white/50 text-xs">{chain.param}</td>
                       <td className="py-3 pr-6 font-mono text-white/30 text-xs">{chain.id}</td>
+                      <td className="py-3 pr-6">
+                        <span className={`font-mono text-xs ${chain.stableNote ? "text-green-400 font-bold" : "text-white/40"}`}>
+                          {chain.gasToken}
+                        </span>
+                      </td>
                       <td className="py-3 pr-6">
                         <span className="text-green-400 text-xs font-semibold bg-green-400/10 px-2 py-0.5 rounded-full">Mainnet Live</span>
                       </td>
@@ -430,6 +435,9 @@ const data = await res.json();
             <Callout type="info">
               Gas costs are deducted from <strong className="text-white/80">your gas pool</strong> — not from Q402&apos;s pocket, not from your users. Ethereum gas is significantly higher; consider funding a larger pool for ETH.
             </Callout>
+            <Callout type="warn">
+              <strong className="text-white/80">★ Stable chain:</strong> USDT0 is both the gas token <em>and</em> the payment token on Stable (Chain ID 988). Your Gas Tank must be funded with USDT0 — not a native coin. Users also send USDT0 when making payments on this chain.
+            </Callout>
           </Section>
 
           {/* ── EIP-712 SIGNING ── */}
@@ -437,8 +445,8 @@ const data = await res.json();
             <p className="text-white/55 text-sm mb-5">
               Q402 uses <span className="text-white font-medium">EIP-712 typed structured data signing</span> — the same standard used by Uniswap, Compound, and major DeFi protocols. The user signs a human-readable message. No gas. No blockchain interaction.
             </p>
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Domain Separator</h3>
-            <CodeBlock lang="typescript" code={`// Contract addresses per chain
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Contract Addresses &amp; Domain Names</h3>
+            <CodeBlock lang="typescript" code={`// Implementation contract per chain
 const CONTRACTS = {
   avax:   "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c", // Q402 Avalanche (chainId: 43114)
   bnb:    "0x6cF4aD62C208b6494a55a1494D497713ba013dFa", // Q402 BNB Chain (chainId: 56)
@@ -447,33 +455,60 @@ const CONTRACTS = {
   stable: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Stable    (chainId: 988)
 };
 
-// Each chain uses its own EIP-712 domain name
-const domain = {
-  name:              "Q402 BNB Chain", // "Q402 Avalanche" | "Q402 BNB Chain" | "Q402 Ethereum" | "Q402 X Layer"
-  version:           "1",
-  chainId:           56,               // 1=ETH, 56=BNB, 43114=AVAX, 196=XLayer
-  verifyingContract: CONTRACTS.bnb,    // use the matching CONTRACTS[chain] address
-};`} />
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Type Definition</h3>
-            <CodeBlock lang="typescript" code={`const types = {
-  Transfer: [
-    { name: "from",   type: "address" },
-    { name: "to",     type: "address" },
-    { name: "amount", type: "uint256" },
-    { name: "nonce",  type: "uint256" },
-    { name: "expiry", type: "uint256" },
+// EIP-712 domain name — must match contract NAME constant exactly
+const DOMAIN_NAMES = {
+  avax:   "Q402 Avalanche",
+  bnb:    "Q402 BNB Chain",
+  eth:    "Q402 Ethereum",
+  xlayer: "Q402 X Layer",
+  stable: "Q402 Stable",
+};
+
+// verifyingContract:
+//   avax / bnb / eth / stable → CONTRACTS[chain]  (impl contract address)
+//   xlayer                    → user's own EOA     (address(this) under EIP-7702)`} />
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Witness Type: TransferAuthorization</h3>
+            <CodeBlock lang="typescript" code={`// All chains use TransferAuthorization (7 fields, same structure)
+const types = {
+  TransferAuthorization: [
+    { name: "owner",       type: "address" }, // token sender (user's EOA)
+    { name: "facilitator", type: "address" }, // gas sponsor (Q402 relayer)
+    { name: "token",       type: "address" }, // ERC-20 contract (USDC / USDT / USDT0)
+    { name: "recipient",   type: "address" }, // payment destination
+    { name: "amount",      type: "uint256" }, // atomic units
+    { name: "nonce",       type: "uint256" }, // random uint256, replay protection
+    { name: "deadline",    type: "uint256" }, // unix timestamp
   ],
 };`} />
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Signing with ethers.js</h3>
-            <CodeBlock lang="typescript" code={`const signature = await signer.signTypedData(domain, types, {
-  from:   userAddress,
-  to:     recipientAddress,
-  amount: ethers.parseUnits("50", 6),  // 50 USDC (6 decimals)
-  nonce:  currentNonce,
-  expiry: Math.floor(Date.now() / 1000) + 3600,
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Signing with ethers.js</h3>
+            <CodeBlock lang="typescript" code={`// Fetch facilitator address first (required for all chains)
+const { facilitator } = await fetch("https://q402.io/api/relay/info").then(r => r.json());
+
+const domain = {
+  name:              DOMAIN_NAMES[chain],
+  version:           "1",
+  chainId:           chainId,
+  verifyingContract: chain === "xlayer" ? userAddress : CONTRACTS[chain],
+};
+
+const nonce = ethers.toBigInt(ethers.randomBytes(32)); // random uint256
+
+const signature = await signer.signTypedData(domain, types, {
+  owner:       userAddress,
+  facilitator,
+  token:       tokenAddress,
+  recipient:   recipientAddress,
+  amount:      ethers.parseUnits("50", decimals), // 6 decimals for USDC/USDT, 18 for USDT0
+  nonce,
+  deadline:    BigInt(Math.floor(Date.now() / 1000) + 600),
 });`} />
             <Callout type="info">
-              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable) use EIP-7702 for single-transaction gasless relay. X Layer additionally supports EIP-3009 as a fallback.
+              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
+            </Callout>
+            <Callout type="warn">
+              <strong className="text-white/80">Stable chain:</strong> USDT0 has 18 decimals (not 6). Use <code>ethers.parseUnits(amount, 18)</code>. The gas pool must also be funded in USDT0 — there is no separate native gas coin.
             </Callout>
           </Section>
 
