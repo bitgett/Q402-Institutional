@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { checkPaymentOnChain, planFromAmount } from "@/app/lib/blockchain";
-import { getSubscription, setSubscription, generateApiKey, deactivateApiKey } from "@/app/lib/db";
+import { getSubscription, setSubscription, generateApiKey } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 /**
@@ -52,8 +52,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  // ── Already activated and not expired? ───────────────────────────────────
   const existing = await getSubscription(addr);
+
+  // ── Already activated and not expired? ───────────────────────────────────
   if (existing) {
     const expiresAt = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
     if (new Date() < expiresAt) {
@@ -72,17 +73,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Payment amount too low" }, { status: 402 });
   }
 
-  // ── Revoke old key, issue new one ─────────────────────────────────────────
-  if (existing?.apiKey) await deactivateApiKey(existing.apiKey);
-  const apiKey = await generateApiKey(addr, plan);
+  // ── Renew: keep existing API key to avoid breaking integrations ───────────
+  // Only generate a new key if the account has no key at all.
+  let apiKey = existing?.apiKey ?? null;
+  if (apiKey) {
+    // Re-activate the existing key in case it was deactivated
+    const { getApiKeyRecord } = await import("@/app/lib/db");
+    const rec = await getApiKeyRecord(apiKey);
+    if (!rec || !rec.active) {
+      // Key was deactivated (e.g. manually rotated) — issue fresh one
+      apiKey = await generateApiKey(addr, plan);
+    }
+  } else {
+    apiKey = await generateApiKey(addr, plan);
+  }
+
+  // Extend from current expiry if renewing early, otherwise from now
+  let newPaidAt: string;
+  if (existing) {
+    const currentExpiry = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+    const base = currentExpiry > new Date() ? currentExpiry : new Date();
+    newPaidAt = base.toISOString();
+  } else {
+    newPaidAt = new Date().toISOString();
+  }
+
   await setSubscription(addr, {
-    paidAt:    new Date().toISOString(),
+    ...(existing ?? {}),
+    paidAt:    newPaidAt,
     apiKey,
     plan,
     txHash:    result.txHash!,
     amountUSD: result.amountUSD!,
   });
 
-  // Return status only — key is retrieved via /api/keys/provision
   return NextResponse.json({ status: "activated", plan });
 }

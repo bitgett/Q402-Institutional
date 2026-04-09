@@ -5,7 +5,7 @@ import {
   getGasBalance,
   recordRelayedTx,
   getSubscription,
-  getRelayedTxs,
+  getThisMonthTxCount,
   getPlanQuota,
   getWebhookConfig,
 } from "@/app/lib/db";
@@ -144,10 +144,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 4a. 월간 quota 초과 여부 확인 ────────────────────────────────────────
-  const monthStart    = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const allTxs        = await getRelayedTxs(keyRecord.address);
-  const thisMonthUsed = allTxs.filter(tx => new Date(tx.relayedAt) >= monthStart).length;
+  // ── 4a. 월간 quota 초과 여부 확인 (단일 KV 읽기) ────────────────────────
+  const thisMonthUsed = await getThisMonthTxCount(keyRecord.address);
   const baseQuota     = getPlanQuota(keyRecord.plan);
   const bonusQuota    = subscription?.quotaBonus ?? 0;
   const totalQuota    = baseQuota + bonusQuota;
@@ -156,6 +154,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       error: `Monthly quota exceeded (${thisMonthUsed}/${totalQuota}). Upgrade your plan or request a quota top-up.`,
     }, { status: 429 });
+  }
+
+  // ── 4b. 일일 burst 상한 (단일 고객이 Gas Tank 독점 소진 방지) ──────────────
+  // 플랜별 일일 최대: starter=50, growth=1000, scale=10000, others=무제한
+  const DAILY_CAP: Record<string, number> = {
+    starter: 50, basic: 100, growth: 1_000, pro: 1_000,
+    scale: 10_000, business: 10_000,
+  };
+  const dailyCap = DAILY_CAP[keyRecord.plan?.toLowerCase()];
+  if (dailyCap !== undefined && !isSandbox) {
+    const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+    const { rateLimit: rl } = await import("@/app/lib/ratelimit");
+    const withinDailyCap = await rl(`relay:daily:${keyRecord.address}`, "daily", dailyCap, 86400);
+    if (!withinDailyCap) {
+      return NextResponse.json({
+        error: `Daily relay cap reached (${dailyCap}/day for ${keyRecord.plan} plan). Resets at midnight UTC.`,
+      }, { status: 429 });
+    }
   }
 
   // ── 5. 체인 지원 확인 ──────────────────────────────────────────────────────
