@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
-import { getSubscription, setSubscription, generateApiKey } from "@/app/lib/db";
+import { getSubscription, setSubscription, generateApiKey, generateSandboxKey } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 /**
@@ -52,21 +52,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  // ── Return existing key if present ───────────────────────────────────────
+  // ── Return existing keys if present ──────────────────────────────────────
   const existing = await getSubscription(addr);
   if (existing?.apiKey) {
-    return NextResponse.json({ apiKey: existing.apiKey, plan: existing.plan, isNew: false });
+    // Ensure sandbox key exists (may be missing for older accounts)
+    if (!existing.sandboxApiKey) {
+      const sandboxApiKey = await generateSandboxKey(addr, existing.plan);
+      await setSubscription(addr, { ...existing, sandboxApiKey });
+      return NextResponse.json({
+        apiKey: existing.apiKey,
+        sandboxApiKey,
+        plan: existing.plan,
+        isNew: false,
+      });
+    }
+    return NextResponse.json({
+      apiKey: existing.apiKey,
+      sandboxApiKey: existing.sandboxApiKey,
+      plan: existing.plan,
+      isNew: false,
+    });
   }
 
-  // ── Auto-provision free starter key ──────────────────────────────────────
-  const apiKey = await generateApiKey(addr, "starter");
+  // ── Auto-provision free starter key + sandbox key ─────────────────────────
+  const apiKey       = await generateApiKey(addr, "starter");
+  const sandboxApiKey = await generateSandboxKey(addr, "starter");
   await setSubscription(addr, {
-    paidAt:    new Date().toISOString(),
+    paidAt:     new Date().toISOString(),
     apiKey,
-    plan:      "starter",
-    txHash:    "provisioned",
-    amountUSD: 0,
+    sandboxApiKey,
+    plan:       "starter",
+    txHash:     "provisioned",
+    amountUSD:  0,
   });
 
-  return NextResponse.json({ apiKey, plan: "starter", isNew: true });
+  return NextResponse.json({ apiKey, sandboxApiKey, plan: "starter", isNew: true });
 }

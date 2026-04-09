@@ -7,7 +7,9 @@ import {
   getSubscription,
   getRelayedTxs,
   getPlanQuota,
+  getWebhookConfig,
 } from "@/app/lib/db";
+import { createHmac, randomBytes } from "crypto";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { privateKeyToAccount } from "viem/accounts";
 import {
@@ -26,13 +28,6 @@ import type { Hex, Address } from "viem";
 // Valid Ethereum address pattern
 const ETH_ADDR = /^0x[0-9a-fA-F]{40}$/;
 
-const CHAIN_RPC: Record<string, string> = {
-  bnb:    "https://bsc-dataseed1.binance.org/",
-  eth:    "https://ethereum.publicnode.com",
-  avax:   "https://api.avax.network/ext/bc/C/rpc",
-  xlayer: "https://rpc.xlayer.tech",
-  stable: "https://rpc.stable.xyz",
-};
 
 export async function POST(req: NextRequest) {
   let body: {
@@ -134,6 +129,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid or inactive API key" }, { status: 401 });
   }
 
+  // ── 3a. Sandbox key detection ────────────────────────────────────────────
+  const isSandbox = keyRecord.isSandbox === true || apiKey.startsWith("q402_test_");
+
   // ── 4. 현재 구독의 키와 일치하는지 + 만료 여부 확인 ────────────────────
   const subscription = await getSubscription(keyRecord.address);
   if (subscription) {
@@ -168,13 +166,15 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  // ── 6. Gas Tank 잔고 확인 ─────────────────────────────────────────────────
-  const gasBalance   = await getGasBalance(keyRecord.address);
-  const chainBalance = gasBalance[chain] ?? 0;
-  if (chainBalance <= 0.0001) {
-    return NextResponse.json({
-      error: `Insufficient gas tank on ${chain}. Deposit native tokens to your gas tank.`,
-    }, { status: 402 });
+  // ── 6. Gas Tank 잔고 확인 (sandbox는 스킵) ───────────────────────────────
+  if (!isSandbox) {
+    const gasBalance   = await getGasBalance(keyRecord.address);
+    const chainBalance = gasBalance[chain] ?? 0;
+    if (chainBalance <= 0.0001) {
+      return NextResponse.json({
+        error: `Insufficient gas tank on ${chain}. Deposit native tokens to your gas tank.`,
+      }, { status: 402 });
+    }
   }
 
   // ── 7. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
@@ -196,10 +196,19 @@ export async function POST(req: NextRequest) {
   }
 
   const tokenCfg = getTokenConfig(chain, token);
-  let result;
+  let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };
 
-  // ── 8. 릴레이 실행 ────────────────────────────────────────────────────────
-  if (isStableEIP7702) {
+  // ── 8. 릴레이 실행 (sandbox → mock, live → on-chain) ─────────────────────
+  if (isSandbox) {
+    // Sandbox: return a mock result without hitting the chain
+    await new Promise(r => setTimeout(r, 400)); // simulate latency
+    result = {
+      success: true,
+      txHash:         `0x${randomBytes(32).toString("hex")}`,
+      blockNumber:    BigInt(Math.floor(Math.random() * 50_000_000) + 1_000_000),
+      gasCostNative:  0.00042,
+    };
+  } else if (isStableEIP7702) {
     const pkRaw = process.env.RELAYER_PRIVATE_KEY!;
     const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
     const relayerAddress = privateKeyToAccount(pk).address as Address;
@@ -264,7 +273,7 @@ export async function POST(req: NextRequest) {
     };
     result = await settlePaymentEIP3009(eip3009Params);
 
-  } else {
+  } else if (!isSandbox) {
     // avax / bnb / eth — EIP-7702 via Q402PaymentImplementation.transferWithAuthorization()
     const pkRaw2 = process.env.RELAYER_PRIVATE_KEY!;
     const pk2 = (pkRaw2.startsWith("0x") ? pkRaw2 : `0x${pkRaw2}`) as Hex;
@@ -298,25 +307,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Relay failed. Check your signature and parameters." }, { status: 400 });
   }
 
-  // ── 9. 실제 가스비 계산 (TX 영수증에서 추출) ──────────────────────────────
-  let gasCostNative = 0;
-  if (result.txHash) {
-    try {
-      const provider = new ethers.JsonRpcProvider(CHAIN_RPC[chain]);
-      const receipt = await provider.getTransactionReceipt(result.txHash);
-      if (receipt) {
-        const gasUsed = receipt.gasUsed;
-        const gasPrice = receipt.gasPrice ?? 0n;
-        gasCostNative = parseFloat(ethers.formatEther(gasUsed * gasPrice));
-      }
-    } catch {
-      // RPC 오류 시 0으로 유지
-    }
-  }
+  // ── 9. 가스비 — relayer.ts가 receipt에서 직접 계산해서 반환 ───────────────
+  const gasCostNative = result.gasCostNative ?? 0;
 
   // ── 10. TX 기록 (실제 가스비 포함) ───────────────────────────────────────
   const tokenAmount = parseFloat(ethers.formatUnits(amount, tokenCfg.decimals));
 
+  const relayedAt = new Date().toISOString();
   await recordRelayedTx(keyRecord.address, {
     apiKey,
     address:      keyRecord.address,
@@ -327,8 +324,46 @@ export async function POST(req: NextRequest) {
     tokenSymbol:  token,
     gasCostNative,
     relayTxHash:  result.txHash ?? "",
-    relayedAt:    new Date().toISOString(),
+    relayedAt,
   });
+
+  // ── 11. Webhook 발동 (non-blocking, sandbox 포함) ─────────────────────────
+  const webhookCfg = await getWebhookConfig(keyRecord.address);
+  if (webhookCfg?.active && webhookCfg.url) {
+    // SSRF guard
+    let webhookSafe = false;
+    try {
+      const wh = new URL(webhookCfg.url);
+      const h = wh.hostname.toLowerCase();
+      webhookSafe = !(/^(localhost|127\.|0\.0\.0\.0|::1$|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(h));
+    } catch { /* invalid URL — skip */ }
+
+    if (webhookSafe) {
+    const payload = JSON.stringify({
+      event:       "relay.success",
+      sandbox:     isSandbox,
+      txHash:      result.txHash,
+      chain,
+      from,
+      to,
+      amount:      tokenAmount,
+      token,
+      gasCostNative,
+      timestamp:   relayedAt,
+    });
+    const hmac = createHmac("sha256", webhookCfg.secret).update(payload).digest("hex");
+    fetch(webhookCfg.url, {
+      method:  "POST",
+      headers: {
+        "Content-Type":      "application/json",
+        "X-Q402-Signature":  `sha256=${hmac}`,
+        "X-Q402-Event":      "relay.success",
+      },
+      body:   payload,
+      signal: AbortSignal.timeout(8_000),
+    }).catch(() => {}); // fire-and-forget
+    } // end webhookSafe
+  }
 
   return NextResponse.json({
     success:     true,

@@ -35,7 +35,7 @@ const STEPS = [
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; }
+interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; sandboxApiKey?: string; }
 interface RelayedTx {
   apiKey: string; address: string; chain: string;
   fromUser: string; toUser: string; tokenAmount: number; tokenSymbol: string;
@@ -275,8 +275,10 @@ export default function DashboardPage() {
   const [emailSaved, setEmailSaved] = useState(false);
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
-  const [expiresAt] = useState<Date | null>(null);
-  const [isExpired] = useState(false);
+  const [expiresAt, setExpiresAt] = useState<Date | null>(null);
+  const [isExpired, setIsExpired] = useState(false);
+  const [sandboxApiKey, setSandboxApiKey] = useState<string>("");
+  const [sandboxKeyCopied, setSandboxKeyCopied] = useState(false);
   const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
   const [thisMonthCount, setThisMonthCount] = useState(0);
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
@@ -286,6 +288,14 @@ export default function DashboardPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [webhookUrlInput, setWebhookUrlInput] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [webhookSaving, setWebhookSaving] = useState(false);
+  const [webhookTesting, setWebhookTesting] = useState(false);
+  const [webhookTestResult, setWebhookTestResult] = useState<null | { ok: boolean; msg: string }>(null);
+  const [rotatingKey, setRotatingKey] = useState(false);
+  const [rotateConfirm, setRotateConfirm] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -336,12 +346,29 @@ export default function DashboardPage() {
         .then(data => {
           if (data.apiKey) {
             setSubscription(prev => ({ ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }), apiKey: data.apiKey, plan: data.plan ?? "starter" }));
+            if (data.sandboxApiKey) setSandboxApiKey(data.sandboxApiKey);
           } else if (data.error === "Signature does not match address") {
-            // Cached sig is stale (address changed) — clear and retry next render
             sessionStorage.removeItem(cacheKey);
           }
         })
         .catch(() => {});
+
+      // Fetch subscription expiry & status
+      fetch(`/api/payment/check?address=${address}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.expiresAt) { setExpiresAt(new Date(data.expiresAt)); setIsExpired(data.isExpired ?? false); }
+        })
+        .catch(() => {});
+
+      // Fetch webhook config
+      const sig2 = sessionStorage.getItem(cacheKey) ?? sig;
+      if (sig2) {
+        fetch(`/api/webhook?address=${address}&sig=${encodeURIComponent(sig2)}`)
+          .then(r => r.json())
+          .then(data => { if (data.configured && data.url) setWebhookUrl(data.url); })
+          .catch(() => {});
+      }
     }
 
     provision();
@@ -350,11 +377,16 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
-    fetch(`/api/transactions?address=${address}`).then(r => r.json()).then(data => {
-      if (data.txs) setRelayedTxs(data.txs);
-      if (data.thisMonthCount !== undefined) setThisMonthCount(data.thisMonthCount);
-    }).catch(() => {});
-  }, [address]);
+    const cacheKey = `q402_sig_${address.toLowerCase()}`;
+    const sig = sessionStorage.getItem(cacheKey);
+    if (!sig) return; // wait until provision completes and caches sig
+    fetch(`/api/transactions?address=${address}&sig=${encodeURIComponent(sig)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.txs) setRelayedTxs(data.txs);
+        if (data.thisMonthCount !== undefined) setThisMonthCount(data.thisMonthCount);
+      }).catch(() => {});
+  }, [address, subscription]); // re-run after provision sets subscription (sig now cached)
 
   useEffect(() => {
     setTankLoading(true);
@@ -399,6 +431,58 @@ export default function DashboardPage() {
   }
 
   function copyKey() { navigator.clipboard.writeText(API_KEY); setKeyCopied(true); setTimeout(() => setKeyCopied(false), 2000); }
+
+  function copySandboxKey() {
+    navigator.clipboard.writeText(sandboxApiKey);
+    setSandboxKeyCopied(true);
+    setTimeout(() => setSandboxKeyCopied(false), 2000);
+  }
+
+  async function rotateKey() {
+    if (!address) return;
+    const cacheKey = `q402_sig_${address.toLowerCase()}`;
+    let sig = sessionStorage.getItem(cacheKey);
+    if (!sig) { sig = await signMessage(`Q402 API Key Request\nAddress: ${address.toLowerCase()}`); if (!sig) return; sessionStorage.setItem(cacheKey, sig); }
+    setRotatingKey(true);
+    try {
+      const res = await fetch("/api/keys/rotate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, signature: sig }) });
+      const data = await res.json();
+      if (data.apiKey) {
+        setSubscription(prev => prev ? { ...prev, apiKey: data.apiKey } : null);
+        setRotateConfirm(false);
+      }
+    } catch { /* ignore */ } finally { setRotatingKey(false); }
+  }
+
+  async function saveWebhook() {
+    if (!address) return;
+    const cacheKey = `q402_sig_${address.toLowerCase()}`;
+    let sig = sessionStorage.getItem(cacheKey);
+    if (!sig) { sig = await signMessage(`Q402 API Key Request\nAddress: ${address.toLowerCase()}`); if (!sig) return; sessionStorage.setItem(cacheKey, sig); }
+    if (!webhookUrlInput) return;
+    setWebhookSaving(true);
+    try {
+      const res = await fetch("/api/webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, signature: sig, url: webhookUrlInput }) });
+      const data = await res.json();
+      if (data.success) {
+        setWebhookUrl(webhookUrlInput);
+        if (data.secret) setWebhookSecret(data.secret);
+      }
+    } catch { /* ignore */ } finally { setWebhookSaving(false); }
+  }
+
+  async function testWebhook() {
+    if (!address) return;
+    const cacheKey = `q402_sig_${address.toLowerCase()}`;
+    let sig = sessionStorage.getItem(cacheKey);
+    if (!sig) { sig = await signMessage(`Q402 API Key Request\nAddress: ${address.toLowerCase()}`); if (!sig) return; sessionStorage.setItem(cacheKey, sig); }
+    setWebhookTesting(true); setWebhookTestResult(null);
+    try {
+      const res = await fetch("/api/webhook/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, signature: sig }) });
+      const data = await res.json();
+      setWebhookTestResult({ ok: data.success, msg: data.success ? `Delivered (HTTP ${data.statusCode})` : (data.error ?? "Failed") });
+    } catch { setWebhookTestResult({ ok: false, msg: "Network error" }); } finally { setWebhookTesting(false); }
+  }
 
   const tabLabel: Record<Tab, string> = {
     "overview": "Overview",
@@ -610,6 +694,19 @@ export default function DashboardPage() {
                     {" · expires "}{expiresAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                   </p>
                 )}
+                {!rotateConfirm ? (
+                  <button onClick={() => setRotateConfirm(true)} className="mt-3 text-xs text-white/25 hover:text-red-400 transition-colors">
+                    Rotate Key…
+                  </button>
+                ) : (
+                  <div className="mt-3 flex items-center gap-2 bg-red-400/8 border border-red-400/20 rounded-xl px-3 py-2.5">
+                    <span className="text-xs text-red-400 flex-1">Current key will stop working immediately.</span>
+                    <button onClick={() => setRotateConfirm(false)} className="text-xs text-white/30 hover:text-white px-2">Cancel</button>
+                    <button onClick={rotateKey} disabled={rotatingKey} className="text-xs font-bold text-red-400 hover:text-red-300 px-2 disabled:opacity-50">
+                      {rotatingKey ? "Rotating…" : "Confirm"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -712,6 +809,67 @@ export default function DashboardPage() {
         {/* ── DEVELOPER ── */}
         {tab === "developer" && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+
+            {/* Sandbox Key + Webhook row */}
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Sandbox Key */}
+              <div className="rounded-2xl border p-5 space-y-3" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-semibold">Sandbox Key</span>
+                    <span className="ml-2 text-[10px] bg-yellow/10 text-yellow border border-yellow/20 px-2 py-0.5 rounded-full font-semibold">TEST</span>
+                  </div>
+                </div>
+                <p className="text-white/35 text-xs">Prefix <span className="font-mono text-yellow/70">q402_test_</span> — no real transactions. Safe for local dev &amp; CI.</p>
+                {sandboxApiKey ? (
+                  <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
+                    <span className="font-mono text-xs text-white/40 truncate flex-1">{sandboxApiKey.slice(0,14)}{"•".repeat(14)}{sandboxApiKey.slice(-4)}</span>
+                    <button onClick={copySandboxKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${sandboxKeyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
+                      {sandboxKeyCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                ) : <div className="font-mono text-xs text-white/20 animate-pulse">Loading…</div>}
+              </div>
+
+              {/* Webhook */}
+              <div className="rounded-2xl border p-5 space-y-3" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">Webhook</span>
+                  {webhookUrl && <span className="text-[10px] bg-green-400/10 text-green-400 border border-green-400/20 px-2 py-0.5 rounded-full">Active</span>}
+                </div>
+                <p className="text-white/35 text-xs">Receive a signed POST after every relay. Header: <span className="font-mono text-white/50">X-Q402-Signature</span></p>
+                <div className="flex gap-2">
+                  <input value={webhookUrlInput || webhookUrl} onChange={e => setWebhookUrlInput(e.target.value)}
+                    placeholder="https://your-server.com/webhook"
+                    className="flex-1 bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-xs text-white placeholder-white/20 outline-none focus:border-yellow/30" />
+                  <button onClick={saveWebhook} disabled={webhookSaving || !webhookUrlInput}
+                    className="text-xs font-bold px-4 py-2 rounded-xl bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all disabled:opacity-40">
+                    {webhookSaving ? "…" : "Save"}
+                  </button>
+                </div>
+                {webhookSecret && (
+                  <div className="bg-yellow/5 border border-yellow/20 rounded-xl px-3 py-2.5 space-y-1">
+                    <p className="text-[10px] text-yellow/70 font-semibold uppercase tracking-widest">Signing Secret — save this now</p>
+                    <div className="font-mono text-xs text-white/60 break-all">{webhookSecret}</div>
+                    <button onClick={() => { navigator.clipboard.writeText(webhookSecret); }} className="text-[10px] text-white/30 hover:text-yellow transition-colors">Copy secret</button>
+                  </div>
+                )}
+                {webhookUrl && (
+                  <div className="flex items-center gap-2">
+                    <button onClick={testWebhook} disabled={webhookTesting}
+                      className="text-xs text-white/40 hover:text-white border border-white/10 hover:border-white/25 px-3 py-1.5 rounded-lg transition-all disabled:opacity-40">
+                      {webhookTesting ? "Sending…" : "▶ Test"}
+                    </button>
+                    {webhookTestResult && (
+                      <span className={`text-xs ${webhookTestResult.ok ? "text-green-400" : "text-red-400"}`}>
+                        {webhookTestResult.ok ? "✓" : "✗"} {webhookTestResult.msg}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="grid lg:grid-cols-2 gap-5">
               <div className="space-y-4">
                 <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest">Integration Guide</h3>
