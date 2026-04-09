@@ -107,10 +107,21 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified, onWit
                 <button onClick={copyAddr} className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${copied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>{copied ? "Copied!" : "Copy"}</button>
               </div>
             </div>
-            <div className="flex items-start gap-2.5 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3 text-xs text-yellow/80">
-              <span className="mt-0.5 flex-shrink-0">⚡</span>
-              <span>Only send <strong>{token}</strong> on the <strong>{chain}</strong> network.</span>
-            </div>
+            {chainKey === "stable" ? (
+              <div className="flex items-start gap-2.5 bg-green-400/5 border border-green-400/20 rounded-xl px-4 py-3 text-xs text-green-400/80">
+                <span className="mt-0.5 flex-shrink-0">ℹ</span>
+                <span>
+                  Stable chain uses <strong>USDT0</strong> as both gas token and payment token.
+                  Send USDT0 on Stable network (Chain ID 988) to this address.
+                  Do <strong>not</strong> send ETH, BNB, or AVAX.
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2.5 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3 text-xs text-yellow/80">
+                <span className="mt-0.5 flex-shrink-0">⚡</span>
+                <span>Only send <strong>{token}</strong> on the <strong>{chain}</strong> network.</span>
+              </div>
+            )}
             <button onClick={verifyDeposit} className="w-full py-3 rounded-xl font-bold text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all">
               I&apos;ve deposited — Verify
             </button>

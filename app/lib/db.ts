@@ -59,8 +59,17 @@ export interface RelayedTx {
 const subKey        = (addr: string) => `sub:${addr.toLowerCase()}`;
 const apiKeyRecKey  = (key: string)  => `apikey:${key}`;
 const gasDepKey     = (addr: string) => `gasdep:${addr.toLowerCase()}`;
-const relayTxKey    = (addr: string) => `relaytx:${addr.toLowerCase()}`;
 const webhookKey    = (addr: string) => `webhook:${addr.toLowerCase()}`;
+
+// ── TX history: monthly keys to avoid 1 MB KV limit ──────────────────────────
+// relaytx:{addr}:{YYYY-MM}  → RelayedTx[]  (one key per calendar month)
+// gasused:{addr}            → Record<chain, number>  (running gas total)
+function ym(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+const relayTxMonthKey = (addr: string, month: string) =>
+  `relaytx:${addr.toLowerCase()}:${month}`;
+const gasUsedKey = (addr: string) => `gasused:${addr.toLowerCase()}`;
 
 // ── Subscriptions ────────────────────────────────────────────────────────────
 
@@ -148,27 +157,70 @@ export async function addGasDeposit(address: string, deposit: GasDeposit) {
 }
 
 export async function getGasBalance(address: string): Promise<Record<string, number>> {
-  const deposits = await getGasDeposits(address);
-  const used     = await getGasUsed(address);
+  const [deposits, usedTotals] = await Promise.all([
+    getGasDeposits(address),
+    getGasUsedTotals(address),
+  ]);
   const totals: Record<string, number> = { bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0 };
   for (const d of deposits) totals[d.chain] = (totals[d.chain] ?? 0) + d.amount;
-  for (const u of used)     totals[u.chain] = (totals[u.chain] ?? 0) - u.gasCostNative;
+  for (const chain of Object.keys(usedTotals)) {
+    totals[chain] = (totals[chain] ?? 0) - usedTotals[chain];
+  }
   return totals;
 }
 
 // ── Relayed TXs ───────────────────────────────────────────────────────────────
 
-export async function getRelayedTxs(address: string): Promise<RelayedTx[]> {
-  return (await kv.get<RelayedTx[]>(relayTxKey(address))) ?? [];
+/**
+ * Returns relayed TXs for the given address across the specified months.
+ * Defaults to current + previous month (covers quota checks and dashboard).
+ */
+export async function getRelayedTxs(
+  address: string,
+  months?: string[],   // e.g. ["2026-04", "2026-03"]
+): Promise<RelayedTx[]> {
+  const targets = months ?? [ym(), ym(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))];
+  const unique = [...new Set(targets)];
+  const results = await Promise.all(
+    unique.map(m => kv.get<RelayedTx[]>(relayTxMonthKey(address, m)).then(v => v ?? []))
+  );
+  return results.flat();
 }
 
-export async function getGasUsed(address: string): Promise<RelayedTx[]> {
-  return getRelayedTxs(address);
+/**
+ * Returns only this month's TX count — cheap single KV read for quota checks.
+ */
+export async function getThisMonthTxCount(address: string): Promise<number> {
+  const txs = await kv.get<RelayedTx[]>(relayTxMonthKey(address, ym()));
+  return txs?.length ?? 0;
+}
+
+/**
+ * Returns per-chain gas used as a running total (separate from TX list).
+ * Much cheaper than summing all TX records.
+ */
+export async function getGasUsedTotals(address: string): Promise<Record<string, number>> {
+  return (await kv.get<Record<string, number>>(gasUsedKey(address))) ?? {};
 }
 
 export async function recordRelayedTx(address: string, tx: RelayedTx) {
-  const existing = await getRelayedTxs(address);
-  await kv.set(relayTxKey(address), [...existing, tx]);
+  const month = ym(new Date(tx.relayedAt));
+  const existing = (await kv.get<RelayedTx[]>(relayTxMonthKey(address, month))) ?? [];
+  // Cap per-month array at 10,000 entries (safety valve)
+  if (existing.length < 10_000) {
+    await kv.set(relayTxMonthKey(address, month), [...existing, tx]);
+  }
+  // Update running gas total
+  if (tx.gasCostNative > 0) {
+    const totals = await getGasUsedTotals(address);
+    totals[tx.chain] = (totals[tx.chain] ?? 0) + tx.gasCostNative;
+    await kv.set(gasUsedKey(address), totals);
+  }
+}
+
+/** @deprecated Use getRelayedTxs with months param */
+export async function getGasUsed(address: string): Promise<RelayedTx[]> {
+  return getRelayedTxs(address);
 }
 
 export async function addQuotaBonus(address: string, additionalTxs: number) {
