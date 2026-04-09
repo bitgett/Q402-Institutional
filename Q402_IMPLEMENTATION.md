@@ -122,13 +122,23 @@ q402-landing/
 
 **v1.1부터 Vercel KV (Redis)를 사용한다.** (`app/lib/db.ts`)
 
+> **v1.6 변경**: TX 기록을 월별 키로 분산 저장 (KV 1MB 제한 대응)
+
 ```
-kv.get("subscriptions:{address}")  → SubscriptionRecord
-kv.get("apikeys:{apiKey}")         → ApiKeyRecord
-kv.get("gasdeposits:{address}")    → GasDeposit[]
-kv.get("relayedtxs:{address}")     → RelayedTx[]
-kv.get("inquiries")                → Inquiry[]
+kv.get("sub:{address}")                  → Subscription
+kv.get("apikey:{apiKey}")                → ApiKeyRecord
+kv.get("gasdep:{address}")               → GasDeposit[]
+kv.get("relaytx:{address}:{YYYY-MM}")    → RelayedTx[]   ← 월별 분산 (v1.6)
+kv.get("gasused:{address}")              → Record<chain, number>  ← 누적 가스 합계 (v1.6)
+kv.get("webhook:{address}")              → WebhookConfig
+kv.get("inquiries")                      → Inquiry[]
 ```
+
+**KV 용량 전략 (v1.6):**
+- TX 이력: `relaytx:{addr}:{YYYY-MM}` — 월 10,000건 상한, 초과 시 기록 중단 (누락 방지)
+- 가스 소비: 별도 누적 키(`gasused:`)로 관리 — TX 배열 전체 스캔 불필요
+- 할당량 체크: `getThisMonthTxCount()` — 현재 월 키 단일 read (O(1))
+- `getGasBalance()` — 입금 배열 + 누적 합계 2개 read만 필요
 
 ### 데이터 구조 예시
 
@@ -182,7 +192,10 @@ kv.get("inquiries")                → Inquiry[]
 | `getGasDeposits(address)` | 유저의 입금 내역 목록 |
 | `addGasDeposit(address, deposit)` | 입금 추가 (txHash 중복 방지) |
 | `getGasBalance(address)` | 입금합계 - 소비합계 = 현재 잔고 |
-| `recordRelayedTx(address, tx)` | 릴레이 TX 기록 (가스 소비 추적) |
+| `getRelayedTxs(address, months?)` | 릴레이 TX 이력 (월 배열, 기본 현재+이전 월) |
+| `getThisMonthTxCount(address)` | 이번 달 TX 수 (할당량 체크용 단일 read) |
+| `getGasUsedTotals(address)` | 체인별 누적 가스 소비 합계 |
+| `recordRelayedTx(address, tx)` | 릴레이 TX 기록 — 월별 배열 + 누적 합계 동시 갱신 |
 
 ---
 
@@ -863,6 +876,82 @@ v1.4: `GET /api/transactions?address=0x...&sig=0x...` (EIP-191 개인 서명 인
 ```typescript
 const recovered = ethers.verifyMessage(PROVISION_MSG(addr), sig);
 if (recovered.toLowerCase() !== addr) → 401
+```
+
+---
+
+## 13. v1.6 신규 기능 (2026-04-09)
+
+### 13-A. KV TX 이력 월별 분산 저장
+
+**문제:** `relayedtxs:{address}` 단일 배열에 TX를 무제한 push → 고트래픽 고객은 수천 건 이후 KV 1MB 제한 초과로 write 실패.
+
+**해결:**
+- 키 패턴: `relaytx:{addr}:{YYYY-MM}` — 월마다 새 키
+- 안전 밸브: 월 10,000건 도달 시 신규 기록 중단 (기존 TX 보존, 릴레이 동작은 계속)
+- 가스 소비: `gasused:{addr}` 별도 누적 키 — 매 TX마다 배열 스캔 없이 O(1) 갱신
+- 할당량 체크: `getThisMonthTxCount()` 단일 KV read — 기존 `getRelayedTxs()`를 통한 배열 length 대비 4× 빠름
+
+### 13-B. 구독 갱신 시 API Key 보존
+
+**문제:** `/api/payment/activate`가 갱신 시 항상 새 API Key를 발급 → 기존 통합이 즉시 깨짐.
+
+**해결:**
+- 갱신 시 기존 키 그대로 유지 (KV `apikey:` 레코드 재사용)
+- 키가 명시적으로 비활성화된 경우(`active: false`)에만 신규 발급
+- 만료일: 현재 만료일 기준으로 +30일 연장 (기간 중 갱신 시 누적)
+  - 만료 전 갱신 → 현재 만료일에서 +30일
+  - 만료 후 갱신 → 현재 시각에서 +30일
+
+```typescript
+// 기존 키 재사용
+let apiKey = existing?.apiKey ?? null;
+if (apiKey) {
+  const rec = await getApiKeyRecord(apiKey);
+  if (!rec || !rec.active) apiKey = await generateApiKey(addr, plan);
+}
+// 만료 기준으로 연장
+const currentExpiry = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+const base = currentExpiry > new Date() ? currentExpiry : new Date();
+newPaidAt = base.toISOString();
+```
+
+### 13-C. 고객별 일일 릴레이 한도 (Daily Burst Cap)
+
+**문제:** 단일 고객이 Starter 키로 하루 수만 건 트랜잭션을 보내 공유 릴레이어를 독점 가능.
+
+**해결:** 플랜별 일일 한도 — KV sliding window (86400s)
+
+| Plan | 일일 한도 |
+|------|----------|
+| starter | 50 TX/day |
+| basic | 100 TX/day |
+| growth / pro | 1,000 TX/day |
+| scale / business | 10,000 TX/day |
+
+- 초과 시 `HTTP 429 Daily relay cap reached for plan {plan}`
+- Sandbox 키는 한도 적용 안 함 (`isSandbox` 체크)
+- Enterprise/Enterprise Flex는 별도 협의 → 한도 없음 (`undefined` = 무제한)
+
+### 13-D. 테스트 스크립트
+
+| 파일 | 내용 |
+|------|------|
+| `scripts/test-bnb-eip7702.mjs` | BNB Chain EIP-7702 Type-4 TX 엔드투엔드 테스트 |
+| `scripts/test-eth-eip7702.mjs` | Ethereum EIP-7702 Type-4 TX + USDC 잔고 체크 |
+| `scripts/agent-example.mjs` | Node.js Agent SDK — 5개 체인 전체 워크플로 예제 |
+
+`agent-example.mjs`는 모듈로도 import 가능:
+```javascript
+import { sendGaslessPayment } from "./scripts/agent-example.mjs";
+
+// 한 줄로 가스리스 결제
+const result = await sendGaslessPayment({
+  chain: "avax",          // "avax" | "bnb" | "eth" | "xlayer" | "stable"
+  recipient: "0x...",
+  amountUSD: 10.0,
+});
+console.log(result.txHash);
 ```
 
 ---
