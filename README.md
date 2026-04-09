@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications.
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Current version: v1.3** · [Changelog](#changelog)
+**Current version: v1.6** · [Changelog](#changelog)
 
 ---
 
@@ -370,7 +370,7 @@ Revokes the current live key and issues a new one. Old key becomes immediately i
 
 ---
 
-## What's Not Yet in v1.4
+## What's Not Yet in v1.6
 
 | Item | Status |
 |------|--------|
@@ -383,6 +383,14 @@ Revokes the current live key and issues a new one. Old key becomes immediately i
 ---
 
 ## Changelog
+
+### v1.6 (2026-04-09)
+- **Fix**: KV TX history monthly key sharding — prevents 1MB explosion at scale; running gas totals in separate key
+- **Fix**: Subscription renewal preserves existing API key (no more broken integrations on renew)
+- **Fix**: Renewal extends from current expiry, not from `now` (early renewal stacks correctly)
+- **Fix**: Per-customer daily relay burst cap (plan-based, 86400s window) — prevents relay monopoly
+- **Fix**: Gas Tank Stable chain shows USDT0-specific deposit instructions
+- **Scripts**: `test-bnb-eip7702.mjs`, `test-eth-eip7702.mjs`, `agent-example.mjs` (full 5-chain agent SDK)
 
 ### v1.5 (2026-04-09)
 - **Page**: `/agents` — AI agent landing with animated SVG network, live relay feed, contact modal

@@ -1,5 +1,5 @@
 # Q402 — 새 컴퓨터 셋업 가이드
-> 최종 업데이트: 2026-04-08
+> 최종 업데이트: 2026-04-09
 
 새 컴퓨터에서 바로 작업 이어가기 위한 전체 가이드.
 
@@ -116,19 +116,31 @@ git push origin main
 
 ---
 
-## 8. 현재 진행 중인 것 (v1.4 기준, 2026-04-08)
+## 8. 현재 진행 중인 것 (v1.6 기준, 2026-04-09)
 
 ### 완료된 것
+
+**v1.6 (2026-04-09)**
+- ✅ KV TX 이력 월별 분산 (`relaytx:{addr}:{YYYY-MM}`) — 1MB 폭발 방지
+- ✅ 누적 가스 합계 별도 키 (`gasused:{addr}`) — O(1) 잔고 계산
+- ✅ 구독 갱신 시 기존 API Key 보존 (통합 깨짐 방지)
+- ✅ 갱신 만료일 누적 연장 (현재 만료일 기준 +30일)
+- ✅ 플랜별 일일 릴레이 한도 (starter 50/basic 100/growth 1000/...)
+- ✅ Gas Tank Stable 체인 USDT0 전용 안내 UI
+- ✅ `scripts/test-bnb-eip7702.mjs`, `test-eth-eip7702.mjs`, `agent-example.mjs`
+
+**v1.5 (2026-04-09)**
+- ✅ `/agents` 페이지 — SVG 에이전트 네트워크 애니메이션, 실시간 TX 피드, Contact Sales 모달
+- ✅ Navbar에 "Agents" 링크 추가 (초록색)
+- ✅ Pricing 섹션 Agent 플랜 분리 (별도 페이지로 이동)
+- ✅ Payment UX 수정 — 서명 거절 시 빨간 에러 → 노란 안내 박스
+
+**v1.4 (2026-04-08)**
 - ✅ Sandbox 모드 (`q402_test_` key prefix, mock relay)
 - ✅ Webhook 시스템 (POST/GET/DELETE /api/webhook, HMAC-SHA256)
 - ✅ API Key 교체 (POST /api/keys/rotate)
 - ✅ 실제 가스 비용 계산 (receipt에서 effectiveGasPrice × gasUsed)
 - ✅ Transactions 인증 방식 변경 (apiKey → EIP-191 sig)
-- ✅ `/agents` 페이지 — SVG 에이전트 네트워크 애니메이션, 실시간 TX 피드, Contact Sales 모달
-- ✅ Navbar에 "Agents" 링크 추가 (초록색)
-- ✅ Pricing 섹션 Agent 플랜 분리 (별도 페이지로 이동)
-- ✅ Payment UX 수정 — 서명 거절 시 빨간 에러 → 노란 안내 박스
-- ✅ README + Q402_IMPLEMENTATION.md + HANDOFF.md 최신화
 
 ### Stable 파트너십 발표
 - **담당자:** Eunice (@eunicecyl) — stable.xyz
