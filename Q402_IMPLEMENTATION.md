@@ -19,8 +19,9 @@
 9. [EIP-7702 릴레이 트랜잭션](#9-eip-7702-릴레이-트랜잭션)
 10. [클라이언트 SDK (q402-sdk.js)](#10-클라이언트-sdk)
 11. [대시보드 페이지](#11-대시보드-페이지)
-12. [미완성 / 다음 단계](#12-미완성--다음-단계)
-13. [환경 변수](#13-환경-변수)
+12. [v1.4 신규 기능 — Sandbox / Webhook / Key Rotation / Gas Fix](#12-v14-신규-기능-2026-04-08)
+13. [미완성 / 다음 단계](#12-미완성--다음-단계)
+14. [환경 변수](#13-환경-변수)
 14. [체인별 컨트랙트 현황](#14-체인별-컨트랙트-현황)
 15. [보안 패치 이력 (v1.2)](#15-보안-패치-이력-v12)
 
@@ -750,17 +751,132 @@ loading(1.5초) → address(릴레이어 주소 표시 + 복사)
 
 ---
 
+## 12. v1.4 신규 기능 (2026-04-08)
+
+### 12-A. Sandbox 모드
+
+`q402_test_` 접두사 API Key는 온체인 트랜잭션 없이 mock 응답을 반환한다.
+
+**동작 방식:**
+- `/api/keys/provision` 호출 시 live key와 함께 sandbox key 자동 발급
+- Relay 요청 수신 시 `isSandbox` 감지:
+  ```typescript
+  const isSandbox = keyRecord.isSandbox === true || apiKey.startsWith("q402_test_");
+  ```
+- sandbox 경로: 400ms 지연 후 mock txHash/blockNumber 반환, 가스 소비 없음
+- 실제 TX 기록(DB)에는 sandbox 플래그 포함되어 저장됨
+
+**KV 데이터:**
+- `sub:{addr}.sandboxApiKey` — sandbox key 저장
+- `apikey:{q402_test_xxx}.isSandbox = true`
+
+---
+
+### 12-B. Webhook 시스템
+
+성공적인 릴레이 TX마다 등록된 엔드포인트로 HMAC-SHA256 서명된 이벤트 전송.
+
+**엔드포인트:**
+- `POST /api/webhook` — URL 등록 (최초 등록 시에만 secret 반환, 재등록 시 기존 secret 유지)
+- `GET /api/webhook?address=0x&sig=0x` — 현재 설정 조회 (secret 미포함)
+- `DELETE /api/webhook` — 설정 삭제
+- `POST /api/webhook/test` — 테스트 이벤트 발송
+
+**페이로드 구조:**
+```json
+{
+  "event": "relay.success",
+  "sandbox": false,
+  "txHash": "0x...",
+  "chain": "avax",
+  "from": "0xUSER",
+  "to": "0xRECIPIENT",
+  "amount": 5.0,
+  "token": "USDC",
+  "gasCostNative": 0.00042,
+  "timestamp": "2026-04-08T12:00:00.000Z"
+}
+```
+
+**헤더:** `X-Q402-Signature: sha256=HMAC_HEX`
+
+**서버 검증 예시 (Node.js):**
+```javascript
+const hmac = crypto.createHmac('sha256', process.env.Q402_WEBHOOK_SECRET);
+hmac.update(rawBody);
+const valid = 'sha256=' + hmac.digest('hex') === req.headers['x-q402-signature'];
+```
+
+**SSRF 방어:** 등록 시 + 테스트 시 + relay fire 시 private IP 범위 차단
+```
+/^(localhost|127\.|0\.0\.0\.0|::1$|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/
+```
+
+**KV:** `webhook:{addr}` → `{ url, secret, active, createdAt }`
+
+---
+
+### 12-C. API Key 교체 (Rotation)
+
+`POST /api/keys/rotate` — EIP-191 서명 인증 필요, rate limit: 5req/60s
+
+```
+기존 key → deactivateApiKey() → 비활성화
+새 key → generateApiKey() → KV 저장
+sub:{addr}.apiKey → 새 key로 업데이트
+```
+
+교체 후 기존 키로 relay 호출 시 → `"API key has been rotated"` 에러 (401)
+
+---
+
+### 12-D. 실제 가스 비용 계산
+
+`app/lib/relayer.ts`의 모든 settle 함수에서 TX receipt으로부터 실제 가스 비용 계산:
+
+```typescript
+// viem (settlePayment, settlePaymentXLayerEIP7702):
+const gasCostNative = parseFloat(formatEther(receipt.gasUsed * receipt.effectiveGasPrice));
+
+// ethers (settlePaymentEIP3009):
+const gasCostNative = parseFloat(ethers.formatEther(gasUsed * gasPrice));
+```
+
+`SettleResult` 인터페이스:
+```typescript
+export interface SettleResult {
+  success: boolean;
+  txHash?: string;
+  blockNumber?: bigint;
+  gasCostNative?: number;   // ← v1.4 추가
+  error?: string;
+}
+```
+
+---
+
+### 12-E. Transactions API 인증 방식 변경
+
+v1.3 이전: `GET /api/transactions?apiKey=q402_live_xxx` (API key 노출 위험)  
+v1.4: `GET /api/transactions?address=0x...&sig=0x...` (EIP-191 개인 서명 인증)
+
+```typescript
+const recovered = ethers.verifyMessage(PROVISION_MSG(addr), sig);
+if (recovered.toLowerCase() !== addr) → 401
+```
+
+---
+
 ## 12. 미완성 / 다음 단계
 
 | 항목 | 현황 | 우선순위 |
 |------|------|---------|
-| 구독 결제 플로우 복원 | v1.1에서 임시 제거 (Direct Inquiry 시스템으로 대체) | 중간 |
-| Webhook / TX 이벤트 알림 발송 | UI 존재 (email input); 백엔드 발송 미구현 | 중간 |
 | 프로젝트별 별도 릴레이어 주소 | 현재 단일 글로벌 릴레이어 지갑 사용 | 높음 (P1) |
-| 블록 스캔 윈도우 최적화 | 현재 고정값 (2000/500/3000 블록) | 낮음 (결제 복원 시) |
+| Webhook retry on failure | 현재 fire-and-forget; 실패 시 재시도 없음 | 중간 |
 | SDK npm 패키지 배포 | 현재 CDN 파일만 (`/q402-sdk.js`) | 낮음 |
 | 자동화 테스트 | 미구현 | 중간 |
 | PostgreSQL 마이그레이션 | 현재 Vercel KV | 낮음 (KV로 충분) |
+| Gas Tank 자동 충전 | UI 토글 존재; 온체인 자동화 로직 미구현 | 중간 |
 
 ---
 

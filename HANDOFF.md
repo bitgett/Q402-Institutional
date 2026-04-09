@@ -1,5 +1,5 @@
 # Q402 — 새 컴퓨터 셋업 가이드
-> 최종 업데이트: 2026-03-30
+> 최종 업데이트: 2026-04-08
 
 새 컴퓨터에서 바로 작업 이어가기 위한 전체 가이드.
 
@@ -116,20 +116,29 @@ git push origin main
 
 ---
 
-## 8. 현재 진행 중인 것
+## 8. 현재 진행 중인 것 (v1.4 기준, 2026-04-08)
+
+### 완료된 것 (이전 세션)
+- ✅ Sandbox 모드 (`q402_test_` key prefix, mock relay)
+- ✅ Webhook 시스템 (POST/GET/DELETE /api/webhook, HMAC-SHA256)
+- ✅ API Key 교체 (POST /api/keys/rotate)
+- ✅ 실제 가스 비용 계산 (receipt에서 effectiveGasPrice × gasUsed)
+- ✅ Transactions 인증 방식 변경 (apiKey → EIP-191 sig)
+- ✅ Dashboard 구독 만료 상태 올바르게 초기화
+- ✅ README + Q402_IMPLEMENTATION.md 최신화
 
 ### Stable 파트너십 발표
 - **담당자:** Eunice (@eunicecyl) — stable.xyz
-- **발표일:** 2026-04-04 (금) 19:00 HKT
+- **발표일:** 2026-04-04 (금) 19:00 HKT (예정)
 - **방식:** Quack AI Twitter 포스팅 → Stable RT/QT
-- **Draft:** https://typefully.com/t/tObboj7
 - **스펙 문서:** `Q402_STABLE_INTEGRATION.md`
 
 ### 남은 작업
+- [ ] Vercel 배포 (git push → 자동 배포)
 - [ ] Stable 컨트랙트 Sourcify/Stablescan 검증
-- [ ] Partnership Announcement 트위터 포스팅 (금요일)
 - [ ] quackai.ai/q402 및 q402.quackai.ai 도메인 연결
 - [ ] Stable 메인넷 Gas Tank 충전 (현재 0.12 USDT0)
+- [ ] Webhook retry 로직 추가 (현재 fire-and-forget)
 
 ---
 
@@ -149,8 +158,7 @@ git push origin main
 
 | 파일 | 내용 |
 |------|------|
-| `Q402_IMPLEMENTATION.md` | 전체 구현 문서 (한국어) |
+| `README.md` | 프로젝트 소개 + Why We Built This + 모든 API/webhook/sandbox 설명 |
+| `Q402_IMPLEMENTATION.md` | 전체 구현 문서 (한국어) — v1.4 신기능 섹션 포함 |
 | `Q402_STABLE_INTEGRATION.md` | Stable 통합 스펙 (영어, 파트너 공유용) |
-| `Q402_AVALANCHE_TECHNICAL_SPEC.md` | Avalanche 기술 스펙 (영어) |
-| `README.md` | 프로젝트 소개 |
-| `HANDOFF.md` | 이 문서 |
+| `HANDOFF.md` | 이 문서 (셋업 가이드 + 현재 진행 상황) |

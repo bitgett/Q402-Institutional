@@ -7,9 +7,28 @@
 
 ---
 
+## Why We Built This
+
+Every EVM blockchain requires users to hold a "native gas token" (BNB, ETH, AVAX, OKB, USDT0) just to move USDC or USDT. This is a massive UX friction point:
+
+> A user with 100 USDC on BNB Chain **cannot send it** unless they also hold BNB for gas.  
+> DeFi onboarding fails at this exact step — millions of users have stablecoins but no gas.
+
+**4 reasons Q402 exists:**
+
+1. **Web3 mass adoption is blocked by gas UX.** Every mainstream fintech app (Stripe, PayPal, Venmo) moves money without the sender worrying about network fees. Web3 must reach this standard.
+
+2. **AI Agents need gasless payment rails.** Running 100+ autonomous agents that each need to hold and manage gas across 5 chains is an operational nightmare. Q402 solves this: fund a shared Gas Tank once, run all agents gaslessly.
+
+3. **EIP-7702 is the right primitive.** Unlike account abstraction (ERC-4337), EIP-7702 works with existing EOAs — no contract wallet migration needed. Any standard wallet (MetaMask, OKX) can participate immediately.
+
+4. **Multi-chain from day one.** Most gasless solutions support one chain. Q402 deployed identical contracts on 5 mainnet chains simultaneously.
+
+---
+
 ## What is Q402?
 
-Q402 is a **gasless payment infrastructure** for Web3. External developers integrate the Q402 SDK into their dApp, and Q402's relayer wallet pays all on-chain gas costs so end users never need to hold native tokens.
+Q402 is a **gasless payment infrastructure** built on EIP-7702 + EIP-712. External developers integrate the Q402 SDK into their dApp, and Q402's relayer wallet pays all on-chain gas costs so end users never need to hold native tokens.
 
 **avax / bnb / eth / stable — EIP-7702 mode:**
 ```
@@ -259,19 +278,119 @@ API key issued automatically after on-chain payment confirmation.
 
 ---
 
-## What's Not Yet in v1.3
+## Authentication Model
+
+All user-facing API routes use **EIP-191 personal_sign** for ownership proof:
+
+```
+Message: "Q402 API Key Request\nAddress: 0xuser_address_lowercase"
+```
+
+1. Client signs once per session → cached in `sessionStorage["q402_sig_0xaddr"]`
+2. Server: `ethers.verifyMessage(msg, sig)` → must match address
+
+---
+
+## Rate Limits
+
+| Endpoint | Limit |
+|----------|-------|
+| /api/relay | 60 req/60s per IP |
+| /api/keys/provision | 10 req/60s per IP |
+| /api/keys/rotate | 5 req/60s per IP |
+| /api/payment/activate | 5 req/60s per IP |
+| /api/payment/check | 30 req/60s per IP |
+| /api/transactions | 30 req/60s per IP |
+| /api/webhook | 10 req/60s per IP |
+| /api/inquiry | 3 req/600s per IP |
+
+---
+
+## Webhook System
+
+Register a webhook URL to receive `relay.success` events after every gasless TX.
+
+```json
+{
+  "event": "relay.success",
+  "sandbox": false,
+  "txHash": "0x...",
+  "chain": "avax",
+  "from": "0xUSER",
+  "to": "0xRECIPIENT",
+  "amount": 5.0,
+  "token": "USDC",
+  "gasCostNative": 0.00042,
+  "timestamp": "2026-04-08T12:00:00.000Z"
+}
+```
+
+All webhook requests include `X-Q402-Signature: sha256=HMAC_HEX`.  
+Verify on your server:
+```javascript
+const hmac = crypto.createHmac('sha256', process.env.Q402_WEBHOOK_SECRET);
+hmac.update(rawBody);
+const valid = 'sha256=' + hmac.digest('hex') === req.headers['x-q402-signature'];
+```
+
+**Endpoints:**
+- `POST /api/webhook` — register URL, receive secret (shown once)
+- `GET /api/webhook?address=0x&sig=0x` — check current config
+- `DELETE /api/webhook` — remove webhook
+- `POST /api/webhook/test` — fire a test event
+
+---
+
+## Sandbox Mode
+
+Use `q402_test_` prefixed API keys to test integration without on-chain transactions:
+
+```javascript
+const q402 = new Q402Client({ apiKey: "q402_test_xxx", chain: "avax" });
+const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
+// result.success = true, result.txHash = random mock hash
+// No gas spent, no on-chain TX
+```
+
+Sandbox keys are co-issued alongside live keys (see `/api/keys/provision`).  
+Sandbox responses appear in the transactions log with `sandbox: true`.
+
+---
+
+## API Key Rotation
+
+```
+POST /api/keys/rotate
+Body: { address, signature }
+```
+
+Revokes the current live key and issues a new one. Old key becomes immediately inactive.
+
+---
+
+## What's Not Yet in v1.4
 
 | Item | Status |
 |------|--------|
-| Webhook / TX event notifications | UI exists; sending not implemented |
 | PostgreSQL migration | Using Vercel KV |
 | Separate gas address per project | Using single global relayer address |
 | Automated tests | Not implemented |
-| Gas cost tracking | gasCostNative always 0 in TX records |
+| Webhook retry on failure | Fire-and-forget; no retry logic |
+| Gas Tank auto-refill | UI toggle exists but no automated on-chain logic |
 
 ---
 
 ## Changelog
+
+### v1.4 (2026-04-08)
+- **Feature**: Sandbox mode — `q402_test_` prefixed API keys bypass on-chain, return mock TX
+- **Feature**: Webhook system — `POST/GET/DELETE /api/webhook` + test endpoint, HMAC-signed payloads
+- **Feature**: API key rotation — `POST /api/keys/rotate` revokes old key, issues new one
+- **Fix**: `gasCostNative` now computed from actual receipt (`effectiveGasPrice * gasUsed`)
+- **Fix**: Transactions tab now uses EIP-191 auth (`address + sig`) instead of bare API key
+- **Fix**: Dashboard subscription expiry state properly initialized from `/api/payment/check`
+- **Security**: SSRF protection on webhook register, test, and relay fire paths
+- **Docs**: AI handoff sections merged into README + Q402_IMPLEMENTATION.md (no CODEX.md)
 
 ### v1.3 (2026-04-08)
 - **Feature**: `/payment` page rebuilt as 4-step on-chain self-serve payment flow
@@ -305,6 +424,21 @@ API key issued automatically after on-chain payment confirmation.
 
 ---
 
+## Security Properties
+
+| Property | Implementation |
+|----------|---------------|
+| API key ownership proof | EIP-191 personal_sign required for provision/rotate/transactions |
+| Replay protection | `usedNonces[owner][nonce]` on-chain |
+| SSRF prevention | Webhook URLs checked against private IP ranges (RFC-1918 + loopback) |
+| Rate limiting | KV sliding-window per IP per endpoint |
+| Error sanitization | Internal errors logged server-side; generic messages to clients |
+| Sandbox isolation | `q402_test_` keys never touch on-chain; `isSandbox` flag in KV |
+| Webhook integrity | HMAC-SHA256 on every outgoing webhook payload |
+
+---
+
 ## Full Technical Docs
 
-See [Q402_IMPLEMENTATION.md](./Q402_IMPLEMENTATION.md) for complete implementation details, API specs, contract ABIs, and EIP-7702 relay internals.
+See [Q402_IMPLEMENTATION.md](./Q402_IMPLEMENTATION.md) for complete implementation details, KV data model, EIP-712 domain matrix, and contract internals.  
+See [HANDOFF.md](./HANDOFF.md) for setup guide (new machine / new dev).
