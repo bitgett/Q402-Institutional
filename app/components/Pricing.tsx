@@ -50,24 +50,6 @@ const tiers = [
     highlight: false,
   },
   {
-    name: "Agent",
-    price: "$500",
-    period: "/mo",
-    description: "Built for AI agents running at scale across any chain.",
-    features: [
-      "Unlimited TX quota",
-      "All 5 EVM chains",
-      "Gas Tank pre-pay model",
-      "Webhooks + sandbox mode",
-      "Priority support",
-    ],
-    badge: "AI / Agents",
-    cta: "Contact Sales",
-    href: "mailto:hello@quackai.ai?subject=Q402 Agent Plan Inquiry",
-    highlight: false,
-    isAgent: true,
-  },
-  {
     name: "Enterprise",
     price: "Custom",
     period: "",
@@ -94,23 +76,18 @@ export default function Pricing() {
           <p className="text-white/40 text-sm">No gas. No friction. Plug in the SDK and you&apos;re live.</p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-5">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
           {tiers.map((tier, i) => (
             <div
               key={i}
               className={`rounded-2xl p-6 flex flex-col border transition-all ${
                 tier.highlight
                   ? "bg-yellow/10 border-yellow/40 shadow-lg shadow-yellow/10"
-                  : (tier as { isAgent?: boolean }).isAgent
-                  ? "border-white/20"
                   : "bg-card border-white/10"
               }`}
-              style={(tier as { isAgent?: boolean }).isAgent ? { background: "linear-gradient(135deg, rgba(74,229,74,0.06) 0%, rgba(255,255,255,0.02) 100%)" } : undefined}
             >
               {tier.badge && (
-                <div className={`text-xs font-bold uppercase tracking-widest mb-3 ${
-                  (tier as { isAgent?: boolean }).isAgent ? "text-green-400" : "text-yellow"
-                }`}>
+                <div className="text-yellow text-xs font-bold uppercase tracking-widest mb-3">
                   {tier.badge}
                 </div>
               )}
@@ -126,7 +103,7 @@ export default function Pricing() {
               <ul className="flex-1 space-y-2 mb-6">
                 {tier.features.map((f, j) => (
                   <li key={j} className="flex items-start gap-2 text-sm text-white/70">
-                    <span className={`mt-0.5 flex-shrink-0 ${(tier as { isAgent?: boolean }).isAgent ? "text-green-400" : "text-yellow"}`}>✓</span>
+                    <span className="text-yellow mt-0.5 flex-shrink-0">✓</span>
                     {f}
                   </li>
                 ))}
@@ -137,8 +114,6 @@ export default function Pricing() {
                 className={`text-center text-sm font-semibold py-3 rounded-full transition-all ${
                   tier.highlight
                     ? "bg-yellow text-navy hover:bg-yellow-hover"
-                    : (tier as { isAgent?: boolean }).isAgent
-                    ? "border border-green-400/40 text-green-400 hover:bg-green-400/10"
                     : "border border-white/20 text-white hover:bg-white/5"
                 }`}
               >
@@ -148,12 +123,15 @@ export default function Pricing() {
           ))}
         </div>
 
-        {/* Agent note */}
-        <div className="mt-6 mx-auto max-w-lg text-center">
-          <p className="text-white/20 text-xs">
-            Agent plan uses a Gas Tank pre-pay model — fund once, relay unlimited TX until gas runs out.
-            Per-TX gas cost billed from your tank in real time.
-          </p>
+        {/* Agent CTA */}
+        <div className="mt-8 rounded-2xl border border-white/8 px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4" style={{ background: "linear-gradient(135deg, rgba(74,229,74,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}>
+          <div>
+            <p className="text-sm font-semibold text-white/80">Running AI agents at scale?</p>
+            <p className="text-xs text-white/35 mt-0.5">Unlimited TX, Gas Tank pre-pay, all 5 chains. Built for autonomous agent pipelines.</p>
+          </div>
+          <a href="/agents" className="flex-shrink-0 border border-green-400/40 text-green-400 hover:bg-green-400/10 text-sm font-semibold px-5 py-2.5 rounded-full transition-all whitespace-nowrap">
+            Agent Plan →
+          </a>
         </div>
 
         {/* Cost context */}

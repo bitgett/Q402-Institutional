@@ -20,6 +20,7 @@ export default function Navbar() {
           <a href="/#how-it-works" className="hover:text-white transition-colors">How it works</a>
           <a href="/#use-cases"    className="hover:text-white transition-colors">Use cases</a>
           <a href="/#pricing"      className="hover:text-white transition-colors">Pricing</a>
+          <a href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</a>
           <a href="/docs"          className="hover:text-white transition-colors">Docs</a>
           {isConnected && (
             <a href="/dashboard" className="text-yellow hover:text-yellow-hover transition-colors font-medium">
