@@ -140,8 +140,9 @@ Open [http://localhost:3000](http://localhost:3000)
 | Route | Description |
 |-------|-------------|
 | `/` | Landing page — Hero, HowItWorks, Pricing, Contact (Talk to Us popup) |
+| `/agents` | AI Agent plan page — animated network demo, live TX feed, contact modal |
 | `/payment` | 4-step on-chain payment: chain/volume → wallet → send → verify → API key |
-| `/dashboard` | Developer dashboard (API key, Gas Tank, TX history) |
+| `/dashboard` | Developer dashboard (API key, Gas Tank, TX history, webhook, sandbox key) |
 | `/docs` | API reference & integration guide |
 
 ---
@@ -271,6 +272,7 @@ Q402-Institutional/
 | Starter | 500 | BNB Chain only |
 | Growth | 10,000 | All 5 chains |
 | Scale | 100,000 | All 5 chains |
+| **Agent** | **Unlimited** | **Gas Tank pre-pay, AI pipelines — see `/agents`** |
 | Enterprise | 500,000+ | Custom SLA |
 
 Payment accepted: USDC or USDT on BNB Chain or Ethereum  
@@ -381,6 +383,11 @@ Revokes the current live key and issues a new one. Old key becomes immediately i
 ---
 
 ## Changelog
+
+### v1.5 (2026-04-09)
+- **Page**: `/agents` — AI agent landing with animated SVG network, live relay feed, contact modal
+- **UX**: Navbar "Agents" link (green, visually distinct)
+- **Pricing**: Agent plan card removed from landing pricing section, replaced with CTA strip linking to `/agents`
 
 ### v1.4 (2026-04-08)
 - **Feature**: Sandbox mode — `q402_test_` prefixed API keys bypass on-chain, return mock TX

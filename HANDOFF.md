@@ -118,14 +118,17 @@ git push origin main
 
 ## 8. 현재 진행 중인 것 (v1.4 기준, 2026-04-08)
 
-### 완료된 것 (이전 세션)
+### 완료된 것
 - ✅ Sandbox 모드 (`q402_test_` key prefix, mock relay)
 - ✅ Webhook 시스템 (POST/GET/DELETE /api/webhook, HMAC-SHA256)
 - ✅ API Key 교체 (POST /api/keys/rotate)
 - ✅ 실제 가스 비용 계산 (receipt에서 effectiveGasPrice × gasUsed)
 - ✅ Transactions 인증 방식 변경 (apiKey → EIP-191 sig)
-- ✅ Dashboard 구독 만료 상태 올바르게 초기화
-- ✅ README + Q402_IMPLEMENTATION.md 최신화
+- ✅ `/agents` 페이지 — SVG 에이전트 네트워크 애니메이션, 실시간 TX 피드, Contact Sales 모달
+- ✅ Navbar에 "Agents" 링크 추가 (초록색)
+- ✅ Pricing 섹션 Agent 플랜 분리 (별도 페이지로 이동)
+- ✅ Payment UX 수정 — 서명 거절 시 빨간 에러 → 노란 안내 박스
+- ✅ README + Q402_IMPLEMENTATION.md + HANDOFF.md 최신화
 
 ### Stable 파트너십 발표
 - **담당자:** Eunice (@eunicecyl) — stable.xyz
