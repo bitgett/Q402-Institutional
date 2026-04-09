@@ -1,8 +1,8 @@
 # Q402 Gasless Payment Protocol — Stable
-## Integration Specification v1.0
+## Integration Specification v1.3
 
-> **Status:** Testnet deployed (Chain ID: 2201) · Mainnet pending
-> **Last updated:** 2026-03-30
+> **Status:** ✅ Mainnet live (Chain ID: 988) · Testnet (Chain ID: 2201) also available
+> **Last updated:** 2026-04-09
 > **Contact:** hello@quackai.ai
 
 ---
@@ -67,7 +67,7 @@ Because gas is denominated in USDT0 (USD-pegged), relayer operating costs are pr
 | Native Gas Token | USDT0 (18 decimals) |
 | USDT0 Contract | `0x78Cf24370174180738C5B8E352B6D14c83a6c9A9` |
 
-### 2.2 Mainnet (Pending)
+### 2.2 Mainnet (Live ✅)
 
 | Parameter | Value |
 |-----------|-------|
@@ -77,7 +77,7 @@ Because gas is denominated in USDT0 (USD-pegged), relayer operating costs are pr
 | WebSocket | `wss://rpc.stable.xyz` |
 | Block Explorer | `https://stablescan.xyz` |
 | Native Gas Token | USDT0 (18 decimals) |
-| USDT0 Contract | `0x779ded0c9e1022225f8e0630b35a9b54be713736` |
+| USDT0 Contract | `0x5FD84259d66Cd46123540766Be93DFE6D43130D7` |
 
 ---
 
@@ -195,7 +195,7 @@ const amount = BigInt(10 * 10**18) // = 10000000000000000000n
 ### 6.1 Installation
 
 ```html
-<script src="https://q402.io/q402-sdk.js"></script>
+<script src="https://q402.xyz/q402-sdk.js"></script>
 ```
 
 Or via npm (for agent environments):
@@ -225,13 +225,14 @@ console.log(result.txHash);
 ### 6.3 Chain Configuration (SDK internals)
 
 ```js
+// Mainnet (Chain ID: 988)
 stable: {
   name:         "Stable",
-  chainId:      2201,
-  mode:         "eip7702_stable",
+  chainId:      988,
+  mode:         "eip7702",
   domainName:   "Q402 Stable",
   implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
-  usdt: { address: "0x78Cf24370174180738C5B8E352B6D14c83a6c9A9", decimals: 18 },
+  usdt: { address: "0x5FD84259d66Cd46123540766Be93DFE6D43130D7", decimals: 18 },
 }
 ```
 
@@ -247,22 +248,21 @@ stable: {
 {
   "apiKey":        "q402_live_xxx",
   "chain":         "stable",
-  "token":         "USDT",
+  "token":         "0x5FD84259d66Cd46123540766Be93DFE6D43130D7",
   "from":          "0xAgentEOA",
   "to":            "0xRecipient",
   "amount":        "5000000000000000000",
   "deadline":      1743600000,
+  "nonce":         "98237498237492834",
   "witnessSig":    "0x...",
   "authorization": {
-    "chainId": 2201,
+    "chainId": 988,
     "address": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     "nonce":   42,
     "yParity": 0,
     "r":       "0x...",
     "s":       "0x..."
-  },
-  "stableNonce":   "98237498237492834",
-  "facilitator":   "0xRelayerWallet"
+  }
 }
 ```
 
@@ -277,7 +277,7 @@ stable: {
   "token":        "USDT",
   "chain":        "stable",
   "gasCostNative": 0.000021,
-  "method":       "eip7702_stable"
+  "method":       "eip7702"
 }
 ```
 
@@ -330,13 +330,16 @@ The `Q402PaymentImplementationStable` contract enforces:
 
 ## 10. Roadmap
 
-| Milestone | Target |
+| Milestone | Status |
 |-----------|--------|
-| Testnet deployment | ✅ 2026-03-30 |
+| Testnet deployment (Chain ID: 2201) | ✅ 2026-03-30 |
 | SDK v1.3.0 with stable chain | ✅ 2026-03-30 |
-| End-to-end testnet verification | In progress |
-| Stable mainnet deployment | ✅ 2026-03-30 |
+| Mainnet deployment (Chain ID: 988) | ✅ 2026-04-04 |
+| Partnership announcement (Stable × Q402) | ✅ 2026-04-04 |
+| Dashboard Gas Tank USDT0 deposit UI | ✅ 2026-04-09 |
+| KV sharding for high-volume customers | ✅ 2026-04-09 |
 | Gas Waiver API integration | Evaluating (Stable partner program) |
+| Sourcify contract verification (Chain ID 988) | Pending |
 
 ---
 
@@ -344,7 +347,7 @@ The `Q402PaymentImplementationStable` contract enforces:
 
 Q402 is a gasless payment protocol built by **Quack AI**. It enables AI agents, dApps, and enterprise systems to execute USDT/USDC transfers via signed authorizations — with no native gas token required on the user's side.
 
-- **Website:** [q402.io](https://q402.io)
+- **Website:** [q402.xyz](https://q402.xyz)
 - **GitHub:** [github.com/bitgett/Q402-Institutional](https://github.com/bitgett/Q402-Institutional)
 - **Contact:** hello@quackai.ai
 - **X:** [@stable](https://x.com/stable) integration · [@quackai](https://x.com/quackai)
