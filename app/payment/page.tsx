@@ -260,7 +260,7 @@ export default function PaymentPage() {
       if (!signature) {
         signature = await signMessage(PROVISION_MSG);
         if (!signature) {
-          setVerifyError("Wallet signature required to verify payment.");
+          setVerifyError("__sig_declined__");
           setPayStep("error");
           return;
         }
@@ -468,14 +468,23 @@ export default function PaymentPage() {
               {/* Error */}
               {payStep === "error" && (
                 <div className="space-y-3 mb-4">
-                  <div className="bg-red-400/5 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">
-                    {verifyError}
-                    {verifyAttempts > 2 && (
-                      <p className="text-xs text-red-400/60 mt-1">
-                        Still not found? Contact <a href="mailto:hello@quackai.ai" className="underline">hello@quackai.ai</a>
+                  {verifyError === "__sig_declined__" ? (
+                    <div className="bg-yellow/5 border border-yellow/20 rounded-xl px-4 py-3 text-sm text-yellow/80">
+                      <p className="font-semibold">One more step — approve the wallet prompt</p>
+                      <p className="text-xs mt-1 text-yellow/50">
+                        We need a quick signature to confirm you own this wallet. It&apos;s free (no gas) and proves your payment came from this address.
                       </p>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="bg-red-400/5 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">
+                      {verifyError}
+                      {verifyAttempts > 2 && (
+                        <p className="text-xs text-red-400/60 mt-1">
+                          Still not found? Contact <a href="mailto:hello@quackai.ai" className="underline">hello@quackai.ai</a>
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -523,11 +532,16 @@ export default function PaymentPage() {
                   </div>
 
                   {/* Verify */}
+                  {payStep === "ready" && (
+                    <p className="text-white/25 text-[11px] text-center">
+                      You&apos;ll approve a free wallet signature to confirm ownership — no gas required.
+                    </p>
+                  )}
                   <button
                     onClick={verifyPayment}
                     className="w-full bg-yellow text-navy font-bold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
                   >
-                    {payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
+                    {verifyError === "__sig_declined__" ? "Approve Signature →" : payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
                   </button>
                 </div>
               )}
