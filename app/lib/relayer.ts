@@ -4,6 +4,7 @@ import {
   createPublicClient,
   http,
   encodeFunctionData,
+  formatEther,
   type Hex,
   type Address,
 } from "viem";
@@ -200,11 +201,15 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
     );
 
     const receipt = await tx.wait();
+    const gasUsed  = receipt.gasUsed  ?? 0n;
+    const gasPrice = receipt.gasPrice ?? 0n;
+    const gasCostNative = parseFloat(ethers.formatEther(gasUsed * gasPrice));
 
     return {
       success: receipt.status === 1,
       txHash:      tx.hash,
       blockNumber: BigInt(receipt.blockNumber),
+      gasCostNative,
       error: receipt.status !== 1 ? "Transaction reverted on-chain" : undefined,
     };
   } catch (e) {
@@ -214,7 +219,7 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
 }
 
 // ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
-// Contract: 0x31E9D105df96b5294298cFaffB7f106994CD0d0f (X Layer mainnet)
+// Contract: 0x8D854436ab0426F5BC6Cc70865C90576AD523E73 (X Layer mainnet)
 // Witness type: TransferAuthorization (different from PaymentWitness on avax/bnb/eth)
 // Key difference: verifyingContract = user's EOA (not impl contract)
 //                 msg.sender must equal facilitator param
@@ -326,11 +331,15 @@ export async function settlePaymentXLayerEIP7702(params: XLayerEIP7702PayParams)
     });
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    const gasUsed  = receipt.gasUsed        ?? 0n;
+    const gasPrice = receipt.effectiveGasPrice ?? 0n;
+    const gasCostNative = parseFloat(formatEther(gasUsed * gasPrice));
 
     return {
       success: receipt.status === "success",
       txHash,
       blockNumber: receipt.blockNumber,
+      gasCostNative,
       error: receipt.status !== "success" ? "Transaction reverted" : undefined,
     };
   } catch (e) {
@@ -395,6 +404,7 @@ export interface SettleResult {
   success: boolean;
   txHash?: string;
   blockNumber?: bigint;
+  gasCostNative?: number;   // gas fee in native token (computed from receipt)
   error?: string;
 }
 
@@ -470,11 +480,15 @@ export async function settlePayment(params: PayParams): Promise<SettleResult> {
 
     // Wait for receipt
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+    const gasUsed  = receipt.gasUsed        ?? 0n;
+    const gasPrice = receipt.effectiveGasPrice ?? 0n;
+    const gasCostNative = parseFloat(formatEther(gasUsed * gasPrice));
 
     return {
       success: receipt.status === "success",
       txHash,
       blockNumber: receipt.blockNumber,
+      gasCostNative,
       error: receipt.status !== "success" ? "Transaction reverted" : undefined,
     };
   } catch (e) {

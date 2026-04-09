@@ -15,6 +15,7 @@ interface Subscription {
   txHash: string;
   amountUSD: number;
   quotaBonus?: number;
+  sandboxApiKey?: string;
 }
 
 interface ApiKeyRecord {
@@ -22,6 +23,14 @@ interface ApiKeyRecord {
   createdAt: string;
   active: boolean;
   plan: string;
+  isSandbox?: boolean;
+}
+
+export interface WebhookConfig {
+  url: string;
+  secret: string;   // HMAC-SHA256 signing secret
+  createdAt: string;
+  active: boolean;
 }
 
 export interface GasDeposit {
@@ -51,6 +60,7 @@ const subKey        = (addr: string) => `sub:${addr.toLowerCase()}`;
 const apiKeyRecKey  = (key: string)  => `apikey:${key}`;
 const gasDepKey     = (addr: string) => `gasdep:${addr.toLowerCase()}`;
 const relayTxKey    = (addr: string) => `relaytx:${addr.toLowerCase()}`;
+const webhookKey    = (addr: string) => `webhook:${addr.toLowerCase()}`;
 
 // ── Subscriptions ────────────────────────────────────────────────────────────
 
@@ -76,7 +86,6 @@ export async function deactivateApiKey(apiKey: string) {
 }
 
 export async function generateApiKey(address: string, plan: string): Promise<string> {
-  // Use cryptographically secure random bytes — Math.random() is predictable
   const { randomBytes } = await import("crypto");
   const rand = randomBytes(24).toString("hex");
   const key = `q402_live_${rand}`;
@@ -87,6 +96,43 @@ export async function generateApiKey(address: string, plan: string): Promise<str
     plan,
   } satisfies ApiKeyRecord);
   return key;
+}
+
+export async function generateSandboxKey(address: string, plan: string): Promise<string> {
+  const { randomBytes } = await import("crypto");
+  const rand = randomBytes(24).toString("hex");
+  const key = `q402_test_${rand}`;
+  await kv.set(apiKeyRecKey(key), {
+    address: address.toLowerCase(),
+    createdAt: new Date().toISOString(),
+    active: true,
+    plan,
+    isSandbox: true,
+  } satisfies ApiKeyRecord);
+  return key;
+}
+
+export async function rotateApiKey(address: string): Promise<string> {
+  const sub = await getSubscription(address);
+  if (!sub) throw new Error("No subscription found");
+  if (sub.apiKey) await deactivateApiKey(sub.apiKey);
+  const newKey = await generateApiKey(address, sub.plan);
+  await setSubscription(address, { ...sub, apiKey: newKey });
+  return newKey;
+}
+
+// ── Webhook Config ────────────────────────────────────────────────────────────
+
+export async function getWebhookConfig(address: string): Promise<WebhookConfig | null> {
+  return kv.get<WebhookConfig>(webhookKey(address));
+}
+
+export async function setWebhookConfig(address: string, config: WebhookConfig) {
+  await kv.set(webhookKey(address), config);
+}
+
+export async function deleteWebhookConfig(address: string) {
+  await kv.del(webhookKey(address));
 }
 
 // ── Gas Deposits ─────────────────────────────────────────────────────────────
