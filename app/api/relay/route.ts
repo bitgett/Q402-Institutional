@@ -135,7 +135,9 @@ export async function POST(req: NextRequest) {
   // ── 4. 현재 구독의 키와 일치하는지 + 만료 여부 확인 ────────────────────
   const subscription = await getSubscription(keyRecord.address);
   if (subscription) {
-    if (subscription.apiKey !== apiKey) {
+    // Allow both the live key and the sandbox key
+    const isCurrentKey = subscription.apiKey === apiKey || subscription.sandboxApiKey === apiKey;
+    if (!isCurrentKey) {
       return NextResponse.json({ error: "API key has been rotated. Please use your current key." }, { status: 401 });
     }
     const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
