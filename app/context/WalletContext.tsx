@@ -24,13 +24,23 @@ const WalletContext = createContext<WalletCtx>({
   signMessage: async () => null,
 });
 
+type EthProvider = { request: (args: { method: string; params: unknown[] }) => Promise<string> };
+
+function getProviders() {
+  const w = window as unknown as { ethereum?: EthProvider; okxwallet?: EthProvider };
+  return { eth: w.ethereum, okx: w.okxwallet };
+}
+
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [walletType, setWalletType] = useState<"metamask" | "okx" | null>(null);
 
   const disconnect = useCallback(() => {
     setAddress(null);
+    setWalletType(null);
     localStorage.removeItem("q402_wallet");
+    localStorage.removeItem("q402_wallet_type");
   }, []);
 
   const connect = useCallback(async () => {
@@ -45,21 +55,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const addr = await connectWallet(type);
     if (addr) {
       setAddress(addr);
+      setWalletType(type);
       localStorage.setItem("q402_wallet", addr);
+      localStorage.setItem("q402_wallet_type", type);
     }
   }, []);
 
   /**
    * Sign a message with the connected wallet using personal_sign.
-   * Returns the hex signature, or null if the user rejects or no wallet present.
-   * Tries MetaMask first, falls back to OKX.
+   * Uses the same wallet type that was used to connect.
    */
   const signMessage = useCallback(async (message: string): Promise<string | null> => {
-    type EthProvider = { request: (args: { method: string; params: unknown[] }) => Promise<string> };
-    const eth = (window as unknown as { ethereum?: EthProvider }).ethereum;
-    const okx = (window as unknown as { okxwallet?: EthProvider }).okxwallet;
-    const provider = eth ?? okx;
-    if (!provider || !address) return null;
+    if (!address) return null;
+    const { eth, okx } = getProviders();
+    // Use whichever wallet the user connected with; fall back to whatever is available
+    const savedType = walletType ?? (localStorage.getItem("q402_wallet_type") as "metamask" | "okx" | null);
+    let provider: EthProvider | undefined;
+    if (savedType === "okx") provider = okx ?? eth;
+    else if (savedType === "metamask") provider = eth ?? okx;
+    else provider = eth ?? okx;
+    if (!provider) return null;
     try {
       return await provider.request({
         method: "personal_sign",
@@ -68,13 +83,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } catch {
       return null;
     }
-  }, [address]);
+  }, [address, walletType]);
 
   // Restore on mount
   useEffect(() => {
     const init = async () => {
       const saved = localStorage.getItem("q402_wallet");
+      const savedType = localStorage.getItem("q402_wallet_type") as "metamask" | "okx" | null;
       if (saved) setAddress(saved);
+      if (savedType) setWalletType(savedType);
       const addr = await getConnectedAccount();
       if (addr) {
         setAddress(addr);
