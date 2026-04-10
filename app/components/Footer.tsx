@@ -57,9 +57,13 @@ export default function Footer() {
           <p className="text-white/20 text-xs">
             © 2026 Quack AI. All rights reserved.
           </p>
-          <a href="mailto:hello@quackai.ai" className="text-white/30 text-xs hover:text-white transition-colors">
-            hello@quackai.ai
-          </a>
+          <div className="flex items-center gap-4">
+            <a href="/terms" className="text-white/25 text-xs hover:text-white/60 transition-colors">Terms</a>
+            <a href="/privacy" className="text-white/25 text-xs hover:text-white/60 transition-colors">Privacy</a>
+            <a href="mailto:hello@quackai.ai" className="text-white/30 text-xs hover:text-white transition-colors">
+              hello@quackai.ai
+            </a>
+          </div>
         </div>
       </div>
     </footer>
