@@ -15,11 +15,18 @@ export interface PaymentResult {
 }
 
 // ── Chain configs ──────────────────────────────────────────────────────────────
-// Each chain: public RPC + USDC + USDT addresses + block scan window
+// Each chain: public RPC(s) + USDC + USDT addresses + block scan window
+// rpcs: tried in order; first success wins
 const CHAINS = [
   {
     name: "BNB Chain",
-    rpc: "https://bsc-dataseed1.binance.org/",
+    rpcs: [
+      "https://bsc.publicnode.com",
+      "https://rpc.ankr.com/bsc",
+      "https://bsc-dataseed2.binance.org/",
+      "https://bsc-dataseed3.binance.org/",
+      "https://bsc-dataseed4.binance.org/",
+    ],
     blockWindow: 2000,   // ~1.7 hours (3s block)
     tokens: [
       { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
@@ -28,7 +35,11 @@ const CHAINS = [
   },
   {
     name: "Ethereum",
-    rpc: "https://ethereum.publicnode.com",
+    rpcs: [
+      "https://ethereum.publicnode.com",
+      "https://rpc.ankr.com/eth",
+      "https://eth.llamarpc.com",
+    ],
     blockWindow: 500,    // ~1.7 hours (12s block)
     tokens: [
       { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
@@ -37,7 +48,11 @@ const CHAINS = [
   },
   {
     name: "Avalanche",
-    rpc: "https://api.avax.network/ext/bc/C/rpc",
+    rpcs: [
+      "https://api.avax.network/ext/bc/C/rpc",
+      "https://rpc.ankr.com/avalanche",
+      "https://avalanche.publicnode.com/ext/bc/C/rpc",
+    ],
     blockWindow: 2000,   // ~1.1 hours (2s block)
     tokens: [
       { symbol: "USDC", address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6 },
@@ -46,7 +61,10 @@ const CHAINS = [
   },
   {
     name: "X Layer",
-    rpc: "https://rpc.xlayer.tech",
+    rpcs: [
+      "https://rpc.xlayer.tech",
+      "https://xlayerrpc.okx.com",
+    ],
     blockWindow: 3000,   // ~1.7 hours (2s block)
     tokens: [
       { symbol: "USDC", address: "0x74b7F16337b8972027F6196A17a631aC6dE26d22", decimals: 6 },
@@ -55,7 +73,9 @@ const CHAINS = [
   },
   {
     name: "Stable",
-    rpc: "https://rpc.stable.xyz",
+    rpcs: [
+      "https://rpc.stable.xyz",
+    ],
     blockWindow: 5000,   // ~1 hour (0.7s block)
     tokens: [
       { symbol: "USDT0", address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
@@ -87,8 +107,29 @@ async function scanChain(
   chain: typeof CHAINS[number],
   fromAddress: string
 ): Promise<PaymentResult> {
-  const provider = new ethers.JsonRpcProvider(chain.rpc);
-  const currentBlock = await provider.getBlockNumber();
+  // Try each RPC in order; first one that succeeds wins
+  for (const rpc of chain.rpcs) {
+    try {
+      const result = await scanChainWithRpc(chain, rpc, fromAddress);
+      return result; // success — return immediately
+    } catch {
+      // This RPC failed (rate limit, timeout, etc.) — try next
+    }
+  }
+  return { found: false };
+}
+
+async function scanChainWithRpc(
+  chain: typeof CHAINS[number],
+  rpc: string,
+  fromAddress: string
+): Promise<PaymentResult> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("RPC timeout")), 8000)
+  );
+
+  const provider = new ethers.JsonRpcProvider(rpc);
+  const currentBlock = await Promise.race([provider.getBlockNumber(), timeout]);
   const fromBlock = currentBlock - chain.blockWindow;
 
   let best: PaymentResult = { found: false };
@@ -97,7 +138,10 @@ async function scanChain(
     const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
     const filter = contract.filters.Transfer(fromAddress, RELAYER);
     try {
-      const events = await contract.queryFilter(filter, fromBlock, currentBlock);
+      const events = await Promise.race([
+        contract.queryFilter(filter, fromBlock, currentBlock),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("queryFilter timeout")), 10000)),
+      ]);
       for (const ev of events) {
         if (!("args" in ev)) continue;
         const amount = Number(ethers.formatUnits(ev.args.value, token.decimals));
@@ -112,7 +156,7 @@ async function scanChain(
         }
       }
     } catch {
-      // RPC timeout or error — skip this token
+      // Token query failed on this RPC — continue to next token
     }
   }
   return best;
