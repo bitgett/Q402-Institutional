@@ -270,7 +270,7 @@ Q402-Institutional/
 ### 브라우저
 
 ```html
-<script src="https://q402.xyz/q402-sdk.js"></script>
+<script src="https://q402-institutional.vercel.app/q402-sdk.js"></script>
 <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
 ```
 

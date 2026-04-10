@@ -134,9 +134,9 @@ class Q402Client {
    * @param {object} opts
    * @param {string} opts.apiKey     - Your Q402 API key (q402_live_xxx)
    * @param {"avax"|"bnb"|"eth"|"xlayer"} opts.chain - Target chain
-   * @param {string} [opts.relayUrl] - Override relay endpoint (default: https://q402.io/api/relay)
+   * @param {string} [opts.relayUrl] - Override relay endpoint (default: https://q402-institutional.vercel.app/api/relay)
    */
-  constructor({ apiKey, chain = "avax", relayUrl = "https://q402.io/api/relay" }) {
+  constructor({ apiKey, chain = "avax", relayUrl = "https://q402-institutional.vercel.app/api/relay" }) {
     this.apiKey   = apiKey;
     this.chain    = chain;
     this.relayUrl = relayUrl;

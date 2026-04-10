@@ -27,7 +27,7 @@ const envVars = Object.fromEntries(
 // ── Configuration ───────────────────────────────────────────────────────────────
 const API_KEY    = envVars.Q402_API_KEY;          // your q402_live_... key
 const AGENT_KEY  = envVars.TEST_PAYER_KEY;         // agent wallet private key
-const API_BASE   = envVars.Q402_API_BASE ?? "https://q402.xyz";
+const API_BASE   = envVars.Q402_API_BASE ?? "https://q402-institutional.vercel.app";
 
 // Chain configurations
 const CHAINS = {

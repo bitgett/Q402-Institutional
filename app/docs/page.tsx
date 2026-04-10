@@ -254,7 +254,7 @@ export default function DocsPage() {
             </p>
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Load the SDK</h3>
-            <CodeBlock lang="html" code={`<script src="https://q402.io/q402-sdk.js"></script>`} />
+            <CodeBlock lang="html" code={`<script src="https://q402-institutional.vercel.app/q402-sdk.js"></script>`} />
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · User signs (client-side, zero gas)</h3>
             <CodeBlock lang="javascript" code={`// Wallet popup appears — user signs, no gas required
@@ -272,7 +272,7 @@ const result = await Q402.sign({
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · Submit from your backend</h3>
             <CodeBlock lang="typescript" code={`// POST to Q402 relay — Q402 handles the rest
-const res = await fetch("https://q402.io/api/relay", {
+const res = await fetch("https://q402-institutional.vercel.app/api/relay", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
@@ -341,7 +341,7 @@ const data = await res.json();
 
           {/* ── API REFERENCE ── */}
           <Section id="api-ref" title="API Reference">
-            <p className="text-white/40 text-xs mb-8 font-mono">Base URL: https://q402.io/api</p>
+            <p className="text-white/40 text-xs mb-8 font-mono">Base URL: https://q402-institutional.vercel.app/api</p>
 
             {/* POST /relay */}
             <div className="mb-12">
@@ -484,7 +484,7 @@ const types = {
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Signing with ethers.js</h3>
             <CodeBlock lang="typescript" code={`// Fetch facilitator address first (required for all chains)
-const { facilitator } = await fetch("https://q402.io/api/relay/info").then(r => r.json());
+const { facilitator } = await fetch("https://q402-institutional.vercel.app/api/relay/info").then(r => r.json());
 
 const domain = {
   name:              DOMAIN_NAMES[chain],
