@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.8** · **Last updated: 2026-04-13**  
+**Version: v1.9** · **Last updated: 2026-04-13**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -255,10 +255,25 @@ Q402-Institutional/
 
 `/payment` 페이지는 셀프서브 온체인 결제 → API Key 자동 발급 플로우:
 
-1. **체인 선택** — 어떤 체인에서 릴레이할 것인가?
-2. **볼륨 선택** — 월간 예상 트랜잭션 수
+1. **체인 선택** — 어떤 체인에서 릴레이할 것인가? (체인마다 가격 다름)
+2. **TX 수 선택** — 이번에 구매할 가스리스 TX 건수
 3. **지갑 연결** — MetaMask or OKX Wallet
 4. **송금 + 검증** — Q402 주소(`0xfc77...`)로 USDC/USDT 전송 후 "Verify" 클릭 → API Key 자동 발급
+
+**결제 모델 (v1.9):**
+- **첫 결제** → 플랜 등급 설정 + TX 건수 추가 + 30일 기간 시작
+- **추가 결제** → TX 건수 추가 + 30일 연장 (플랜 등급 유지, 기간 스택됨)
+- TX 크레딧은 릴레이 1건당 1 차감. 만료일 도달 또는 크레딧 소진 시 정지.
+
+**체인별 가격 (BNB 기준, 체인마다 multiplier 적용):**
+| TX 수 | BNB/XLayer/Stable (1.0×) | AVAX (1.1×) | ETH (1.5×) |
+|-------|--------------------------|-------------|------------|
+| 500   | $30 | $30 | $40 |
+| 1,000 | $50 | $50 | $70 |
+| 5,000 | $90 | $100 | $130 |
+| 10,000 | $150 | $160 | $220 |
+| 50,000 | $450 | $490 | $670 |
+| 100,000 | $800 | $880 | $1,200 |
 
 결제 수단: **BNB USDC, BNB USDT, ETH USDC, ETH USDT** (구독 결제는 BNB/ETH 체인만, 의도적)  
 결제 주소: `0xfc77ff29178b7286a8ba703d7a70895ca74ff466`
@@ -388,9 +403,17 @@ EIP-191 서명(소유권 증명) 필요.
 ```json
 // 요청
 { "address": "0x...", "signature": "0x..." }
-// 응답
-{ "status": "activated", "plan": "growth" }
+// 응답 (공통)
+{
+  "status": "activated",
+  "plan": "starter",
+  "addedTxs": 500,
+  "totalTxs": 500,
+  "expiresAt": "2026-05-13T00:00:00.000Z"
+}
 ```
+- 첫 결제: `plan` 설정 + `addedTxs` 추가 + 30일 시작
+- 추가 결제: 기존 `plan` 유지 + `totalTxs` 누적 + 30일 연장
 
 ### POST /api/payment/check
 
@@ -448,22 +471,29 @@ API Key 유효성 검증 + 만료/교체 확인.
 
 ## 11. Subscription Plans & Rate Limits
 
-### 플랜별 월간 할당량
+### TX 크레딧 모델 (v1.9)
 
-| Plan | TX/월 | 일일 버스트 한도 | 비고 |
-|------|-------|----------------|------|
-| Starter ($30) | 500 | 50/day | |
-| Basic | 1,000 | 100/day | |
-| Growth | 10,000 | 1,000/day | |
-| Pro | 10,000 | 1,000/day | |
-| Scale | 100,000 | 10,000/day | |
-| Business | 100,000 | 10,000/day | |
-| Enterprise | 500,000 | 무제한 | 커스텀 SLA |
-| Enterprise Flex | 500,000+ | 무제한 | |
+구독은 **플랜 등급 + TX 크레딧 잔여량 + 만료일** 3가지로 관리됨.
+
+- **플랜 등급**: 첫 결제 시 결제 금액 기준으로 설정. 이후 변경 불가.
+  - 플랜은 일일 버스트 한도(Gas Tank 독점 방지)에만 영향.
+- **TX 크레딧**: 매 결제마다 추가. 릴레이 1건 성공 시 1 차감. 0 이하면 429.
+- **만료일**: 매 결제마다 +30일 연장 (기간 중 결제 시 현재 만료일 기준으로 누적).
+
+| Plan (첫 결제 금액 기준) | TX 크레딧 | 일일 버스트 한도 |
+|--------------------------|----------|----------------|
+| Starter ($30~) | 500 | 50/day |
+| Basic ($50~) | 1,000 | 100/day |
+| Growth ($90~) | 5,000 | 1,000/day |
+| Pro ($150~) | 10,000 | 1,000/day |
+| Scale ($450~) | 50,000 | 10,000/day |
+| Business ($800~) | 100,000 | 10,000/day |
+| Enterprise Flex ($2,000~) | 500,000 | 무제한 |
 | **Agent** | **무제한** | **무제한** | Gas Tank 선불, `/agents` 참조 |
 
 일일 한도 초과 시: `HTTP 429 Daily relay cap reached for plan {plan}` (86400s window)  
-Sandbox 키는 한도 적용 안 함.
+TX 크레딧 소진 시: `HTTP 429 No TX credits remaining`  
+Sandbox 키는 한도/크레딧 적용 안 함.
 
 ### API Rate Limits
 
@@ -499,7 +529,7 @@ kv.get("inquiries")                      → Inquiry[]
 **KV 용량 전략 (v1.6):**
 - TX 이력: 월별 키 `relaytx:{addr}:{YYYY-MM}` — 월 10,000건 상한 (초과 시 중단, 릴레이 지속)
 - 가스 소비: `gasused:{addr}` 별도 누적 — TX 배열 전체 스캔 불필요
-- 할당량 체크: `getThisMonthTxCount()` → 현재 월 키 단일 read (O(1))
+- **크레딧 체크 (v1.9):** `subscription.quotaBonus > 0` 단일 조건 (월별 카운트 불필요)
 - 잔고 계산: `getGasBalance()` → 입금배열 + 누적합계 2 read만 필요
 
 ### 데이터 구조
@@ -507,15 +537,17 @@ kv.get("inquiries")                      → Inquiry[]
 **Subscription**
 ```json
 {
-  "paidAt":      "2026-04-09T00:00:00.000Z",
-  "apiKey":      "q402_live_xxx",
+  "paidAt":        "2026-04-09T00:00:00.000Z",  // 만료 기산점 (결제마다 갱신)
+  "apiKey":        "q402_live_xxx",
   "sandboxApiKey": "q402_test_xxx",
-  "plan":        "growth",
-  "txHash":      "0xOnChainPaymentTxHash",
-  "amountUSD":   150,
-  "quotaBonus":  0
+  "plan":          "growth",                     // 첫 결제 시 설정, 이후 변경 없음
+  "txHash":        "0xOnChainPaymentTxHash",     // 최근 결제 TX
+  "amountUSD":     150,
+  "quotaBonus":    9850                          // 남은 TX 크레딧 (릴레이마다 -1)
 }
 ```
+> `paidAt` + 30일 = 만료일. 결제 시마다 현재 만료일 기준 +30일 연장.  
+> `quotaBonus` = 릴레이 가능 잔여 TX 수. 0 이하면 relay 429 반환.
 
 **ApiKeyRecord**
 ```json
@@ -668,13 +700,13 @@ const domain = {
 1. API Key 검증 (`getApiKeyRecord`, `active` 확인)
 2. 구독 만료 + 키 교체 확인 (30일 만료, `sub.apiKey !== apiKey` → 401)
 3. **일일 버스트 한도** 확인 (플랜별 KV sliding window 86400s) — v1.6
-4. 월간 할당량 확인 (`getThisMonthTxCount`) — v1.6
+4. **TX 크레딧 확인** (`subscription.quotaBonus > 0`, 0 이하 → 429) — v1.9
 5. Gas Tank 잔고 확인 (`getGasBalance[chain] > 0.0001`)
 6. 체인 분기:
    - xlayer + `authorization+xlayerNonce` → `settlePaymentXLayerEIP7702()`
    - xlayer + `eip3009Nonce` → `settlePaymentEIP3009()`
    - 기타 → `settlePayment()`
-7. TX 기록 (`recordRelayedTx` — 월별 배열 + 누적합계)
+7. TX 기록 (`recordRelayedTx` — 월별 배열 + 누적합계) + **크레딧 1 차감** (fire-and-forget)
 8. Webhook 발송 (등록된 경우)
 
 ---
@@ -879,7 +911,8 @@ Stable은 USDT0가 네이티브 가스 토큰인 Layer 1. AI 에이전트 생태
 - 파트너: Stable 팀 (Eunice, @eunicecyl)
 - 발표: 2026-04-04 Twitter 공동 포스팅 ✅
 - 메인넷 배포 완료: 2026-04-04 ✅
-- Sourcify 검증: 미완료
+- 컨트랙트 검증: Sourcify가 Chain ID 988 미지원 → stablescan.xyz에 소스 등재 예정
+  - 검증 방법: Stable 팀에 Sourcify chain 등록 요청 또는 stablescan.xyz 직접 검증 제출
 
 ---
 
@@ -893,7 +926,7 @@ Stable은 USDT0가 네이티브 가스 토큰인 Layer 1. AI 에이전트 생태
 | BNB Chain | 56 | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` | Q402 BNB Chain | ✅ Sourcify |
 | Ethereum | 1 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | Q402 Ethereum | ✅ Sourcify |
 | X Layer | 196 | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | Q402 X Layer | ✅ OKLink |
-| **Stable** | **988** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Q402 Stable | ⏳ 미검증 |
+| **Stable** | **988** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Q402 Stable | ⏳ Stablescan 등재 예정 |
 
 ### 토큰 주소
 
@@ -1053,7 +1086,7 @@ for (const chain of ["avax", "bnb", "eth"]) {
 
 | 항목 | 현황 | 우선순위 |
 |------|------|---------|
-| Stable 컨트랙트 Sourcify 검증 | 미완료 | 높음 |
+| Stable 컨트랙트 검증 | Sourcify Chain 988 미지원 → stablescan.xyz 제출 예정 | 높음 |
 | Gas Tank 충전 (전 체인 low) | BNB / ETH / AVAX / XLayer / Stable 저잔고 | 즉시 필요 |
 | quackai.ai/q402 도메인 연결 | 미완료 | 중간 |
 | Webhook retry on failure | fire-and-forget | 중간 |
@@ -1066,6 +1099,21 @@ for (const chain of ["avax", "bnb", "eth"]) {
 ---
 
 ## 25. Changelog
+
+### v1.9 (2026-04-13)
+
+#### 결제 모델 개편
+- **Refactor**: TX 크레딧 모델 도입 — 매 결제마다 +30일 연장 + TX 건수 추가 (플랜 등급 첫 결제 시 고정)
+- **Refactor**: `blockchain.ts` — `txQuotaFromAmount(usd, chain)` 추가, 체인별 가격 임계값 반영
+- **Refactor**: `activate/route.ts` — first/additional 분기 제거, 단일 로직으로 통합
+- **Refactor**: `relay/route.ts` — 월간 quota 체크 → `quotaBonus > 0` 크레딧 체크, 성공 시 크레딧 1 차감
+- **Fix**: Payment 페이지 자동 redirect 제거 — 기존 구독자도 추가 결제 가능
+- **UI**: Payment 페이지 copy 업데이트 — "+30 days · N TXs per payment"
+
+#### 체인별 가격 검증 강화
+- **Fix**: `planFromAmount()` / `txQuotaFromAmount()` 에 체인 파라미터 추가
+  - BNB/XLayer/Stable 1.0×, AVAX 1.1×, ETH 1.5× 적용
+  - ETH $30 결제 → BNB 기준($30) 통과했던 버그 수정 (ETH 임계값 $39 적용)
 
 ### v1.8 (2026-04-13)
 
