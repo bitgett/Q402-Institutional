@@ -239,14 +239,7 @@ export default function PaymentPage() {
     if (isConnected && payStep === "idle") setPayStep("ready");
   }, [isConnected, payStep]);
 
-  // Already subscribed → go to dashboard
-  useEffect(() => {
-    if (!address) return;
-    fetch(`/api/payment/check?address=${address}`)
-      .then(r => r.json())
-      .then(data => { if (data.status === "already_paid" && !data.isExpired) router.push("/dashboard"); })
-      .catch(() => {});
-  }, [address, router]);
+  // Removed: no longer redirect existing subscribers — they can top up credits
 
   async function verifyPayment() {
     if (!address) return;
