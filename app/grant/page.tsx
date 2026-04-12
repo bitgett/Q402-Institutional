@@ -164,12 +164,12 @@ export default function GrantPage() {
           <h2 className="text-xl font-bold mb-6">Why build with Q402?</h2>
           <div className="grid sm:grid-cols-3 gap-6">
             {[
-              { icon: "⚡", title: "5 chains, 1 API", body: "BNB Chain, Ethereum, Avalanche, X Layer, Stable — one integration covers all." },
-              { icon: "🔑", title: "No wallet friction", body: "Users sign EIP-712 off-chain. No gas token. No MetaMask gas dialogs. Just UX." },
-              { icon: "📈", title: "We grow together", body: "Grant recipients get co-marketing, joint announcements, and a direct line to the core team." },
+              { num: "01", title: "5 chains, 1 API", body: "BNB Chain, Ethereum, Avalanche, X Layer, Stable — one integration covers all." },
+              { num: "02", title: "No wallet friction", body: "Users sign EIP-712 off-chain. No gas token. No MetaMask gas dialogs. Just UX." },
+              { num: "03", title: "We grow together", body: "Grant recipients get co-marketing, joint announcements, and a direct line to the core team." },
             ].map(item => (
               <div key={item.title}>
-                <div className="text-2xl mb-3">{item.icon}</div>
+                <div className="text-xs font-bold text-yellow/50 font-mono mb-3">{item.num}</div>
                 <div className="font-semibold text-sm mb-1.5">{item.title}</div>
                 <div className="text-white/40 text-xs leading-relaxed">{item.body}</div>
               </div>
