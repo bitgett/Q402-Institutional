@@ -1,10 +1,8 @@
 "use client";
 
 import WalletButton from "./WalletButton";
-import { useWallet } from "../context/WalletContext";
 
 export default function Navbar() {
-  const { isConnected } = useWallet();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-navy/80 backdrop-blur-md border-b border-white/10">
@@ -23,11 +21,6 @@ export default function Navbar() {
           <a href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</a>
           <a href="/grant"         className="hover:text-yellow transition-colors text-yellow/70 font-medium">Grant</a>
           <a href="/docs"          className="hover:text-white transition-colors">Docs</a>
-          {isConnected && (
-            <a href="/dashboard" className="text-yellow hover:text-yellow-hover transition-colors font-medium">
-              My Page
-            </a>
-          )}
         </div>
 
         <WalletButton />
