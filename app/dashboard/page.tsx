@@ -741,7 +741,7 @@ export default function DashboardPage() {
                 const userUSD = userAmt * price;
                 const hasBalance = userAmt > 0;
                 return (
-                  <div key={key} className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+                  <div key={key} className="rounded-2xl p-5 border flex flex-col" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                     <div className="flex items-center gap-2.5 mb-3">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <div className={`w-7 h-7 ${meta.rounded} overflow-hidden flex-shrink-0`} style={{ background: meta.color }}>
@@ -767,7 +767,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                     <button onClick={() => setDepositChain({ chain: meta.name, token: meta.token })}
-                      className="mt-3 w-full text-xs font-semibold border border-yellow/25 text-yellow bg-yellow/5 hover:bg-yellow/10 py-1.5 rounded-lg transition-all">
+                      className="mt-auto pt-3 w-full text-xs font-semibold border border-yellow/25 text-yellow bg-yellow/5 hover:bg-yellow/10 py-1.5 rounded-lg transition-all">
                       {hasBalance ? `Manage ${meta.token}` : `Deposit ${meta.token}`}
                     </button>
                   </div>
