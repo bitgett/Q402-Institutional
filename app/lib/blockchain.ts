@@ -225,11 +225,6 @@ export async function verifyPaymentTx(txHash: string, fromAddress: string): Prom
 //   business      : $799  (100,000 txs)
 //   enterprise_flex: $1,999 (100K–500K txs)
 export function planFromAmount(usd: number): string | null {
-  // TEST_MODE=true: $1+ → starter (for E2E payment flow testing)
-  if (process.env.TEST_MODE?.trim() === "true") {
-    if (usd >= 1) return "starter";
-    return null;
-  }
   if (usd >= 1999) return "enterprise_flex";
   if (usd >= 799)  return "business";
   if (usd >= 449)  return "scale";

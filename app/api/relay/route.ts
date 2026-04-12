@@ -130,7 +130,13 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 3a. Sandbox key detection ────────────────────────────────────────────
-  const isSandbox = keyRecord.isSandbox === true || apiKey.startsWith("q402_test_");
+  // Only trust the DB field — never the key prefix (client-facing, spoofable)
+  const isSandbox = keyRecord.isSandbox === true;
+
+  // ── 3b. Per-API-key rate limit (30 relay calls / 60s per key) ────────────
+  if (!(await rateLimit(apiKey, "relay-key", 30, 60))) {
+    return NextResponse.json({ error: "Too many requests for this API key" }, { status: 429 });
+  }
 
   // ── 4. 현재 구독의 키와 일치하는지 + 만료 여부 확인 ────────────────────
   const subscription = await getSubscription(keyRecord.address);
@@ -332,7 +338,8 @@ export async function POST(req: NextRequest) {
   const tokenAmount = parseFloat(ethers.formatUnits(amount, tokenCfg.decimals));
 
   const relayedAt = new Date().toISOString();
-  await recordRelayedTx(keyRecord.address, {
+  // Fire-and-forget — on-chain TX already succeeded; don't block response on KV write
+  recordRelayedTx(keyRecord.address, {
     apiKey,
     address:      keyRecord.address,
     chain,
@@ -343,17 +350,22 @@ export async function POST(req: NextRequest) {
     gasCostNative,
     relayTxHash:  result.txHash ?? "",
     relayedAt,
-  });
+  }).catch(e => console.error("[relay] TX record failed (non-fatal):", e));
 
   // ── 11. Webhook 발동 (non-blocking, sandbox 포함) ─────────────────────────
   const webhookCfg = await getWebhookConfig(keyRecord.address);
   if (webhookCfg?.active && webhookCfg.url) {
-    // SSRF guard
+    // SSRF guard (same ruleset as /api/webhook registration)
     let webhookSafe = false;
     try {
       const wh = new URL(webhookCfg.url);
-      const h = wh.hostname.toLowerCase();
-      webhookSafe = !(/^(localhost|127\.|0\.0\.0\.0|::1$|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(h));
+      const h = wh.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+      webhookSafe = !(
+        /^(localhost|127\.|0\.0\.0\.0|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(h) ||
+        /^(::1$|::ffff:|fe80:|fc00:|fd[0-9a-f]{2}:)/i.test(h) ||
+        /^(metadata\.google\.internal|169\.254\.169\.254)/.test(h) ||
+        /^0[0-7]+\./.test(h)
+      );
     } catch { /* invalid URL — skip */ }
 
     if (webhookSafe) {
