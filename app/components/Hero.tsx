@@ -65,20 +65,45 @@ export default function Hero() {
 
             {/* LEFT */}
             <div>
-              {/* Chain badges */}
+              {/* Chain logos */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.1 }}
-                className="flex flex-wrap gap-2 mb-8"
+                className="flex items-center gap-5 mb-8"
               >
-                {CHAINS.map((c) => (
-                  <span key={c.name} className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border bg-white/4 text-white/60" style={{ borderColor: `${c.color}30` }}>
-                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color, boxShadow: `0 0 6px ${c.color}` }} />
-                    {c.name}
-                    <span className="text-[10px] font-bold ml-0.5" style={{ color: c.color }}>LIVE</span>
-                  </span>
+                {[
+                  { img: "/bnb.png",    color: "#F0B90B", label: "BNB"  },
+                  { img: "/eth.png",    color: "#627EEA", label: "ETH"  },
+                  { img: "/avax.png",   color: "#E84142", label: "AVAX" },
+                  { img: "/xlayer.png", color: "#CCCCCC", label: "X"    },
+                  { img: "/stable.jpg", color: "#4AE54A", label: "STB"  },
+                ].map((c, i) => (
+                  <motion.div
+                    key={c.label}
+                    initial={{ opacity: 0, scale: 0.7 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.4, delay: 0.15 + i * 0.07 }}
+                    className="relative flex-shrink-0"
+                  >
+                    {/* Pulse ring */}
+                    <motion.div
+                      className="absolute inset-0 rounded-full"
+                      animate={{ scale: [1, 1.55, 1], opacity: [0.5, 0, 0.5] }}
+                      transition={{ duration: 2.4, delay: i * 0.48, repeat: Infinity, ease: "easeInOut" }}
+                      style={{ background: `radial-gradient(circle, ${c.color}40 0%, transparent 70%)` }}
+                    />
+                    {/* Logo */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={c.img}
+                      alt={c.label}
+                      className="w-8 h-8 rounded-full object-cover relative z-10"
+                      style={{ boxShadow: `0 0 10px ${c.color}50` }}
+                    />
+                  </motion.div>
                 ))}
+                <span className="text-white/20 text-xs ml-1">5 chains live</span>
               </motion.div>
 
               {/* Headline */}
