@@ -273,7 +273,7 @@ export default function PaymentPage() {
         body:    JSON.stringify({ address, signature }),
       });
       const data = await res.json();
-      if (res.ok && (data.status === "activated" || data.status === "already_active")) {
+      if (res.ok && (data.status === "activated" || data.status === "already_active" || data.status === "credits_added")) {
         setActivatedPlan(data.plan);
         setPayStep("success");
       } else {
@@ -370,7 +370,7 @@ export default function PaymentPage() {
 
             {/* ── STEP 2: Volume ─────────────────────────────────────────── */}
             <div className="rounded-2xl p-6 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <StepHeader n="2" title="Monthly sponsored transactions" sub="How many gasless txs per month?" done={false} />
+              <StepHeader n="2" title="TX credits to purchase" sub="Credits are consumed per relayed transaction. No expiry on credits." done={false} />
               <div className="grid grid-cols-4 gap-2">
                 {VOLUMES.map(v => (
                   <button
@@ -569,7 +569,7 @@ export default function PaymentPage() {
                   <img src={chain.img} alt={chain.name} className={`w-8 h-8 flex-shrink-0 ${chain.rounded}`} />
                   <div>
                     <p className="text-sm font-semibold">{chain.name}</p>
-                    <p className="text-white/35 text-xs">{selectedVolume >= 500_000 ? "500,000+" : selectedVolume.toLocaleString()} txs/mo</p>
+                    <p className="text-white/35 text-xs">{selectedVolume >= 500_000 ? "500,000+" : selectedVolume.toLocaleString()} TX credits</p>
                   </div>
                 </div>
 
@@ -590,7 +590,7 @@ export default function PaymentPage() {
                       <span className="text-white/40 text-sm">Monthly</span>
                       <div>
                         <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
-                        <span className="text-white/30 text-sm">/mo</span>
+                        <span className="text-white/30 text-sm"> one-time</span>
                       </div>
                     </div>
                     <p className="text-white/25 text-xs text-right mb-1">

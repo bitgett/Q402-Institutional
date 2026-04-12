@@ -5,8 +5,7 @@ import {
   getGasBalance,
   recordRelayedTx,
   getSubscription,
-  getThisMonthTxCount,
-  getPlanQuota,
+  setSubscription,
   getWebhookConfig,
 } from "@/app/lib/db";
 import { createHmac, randomBytes } from "crypto";
@@ -152,15 +151,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 4a. 월간 quota 초과 여부 확인 (단일 KV 읽기) ────────────────────────
-  const thisMonthUsed = await getThisMonthTxCount(keyRecord.address);
-  const baseQuota     = getPlanQuota(keyRecord.plan);
-  const bonusQuota    = subscription?.quotaBonus ?? 0;
-  const totalQuota    = baseQuota + bonusQuota;
-
-  if (thisMonthUsed >= totalQuota) {
+  // ── 4a. TX 크레딧 잔여 확인 ─────────────────────────────────────────────
+  const remainingCredits = subscription?.quotaBonus ?? 0;
+  if (!isSandbox && remainingCredits <= 0) {
     return NextResponse.json({
-      error: `Monthly quota exceeded (${thisMonthUsed}/${totalQuota}). Upgrade your plan or request a quota top-up.`,
+      error: "No TX credits remaining. Purchase additional credits to continue.",
     }, { status: 429 });
   }
 
@@ -351,6 +346,17 @@ export async function POST(req: NextRequest) {
     relayTxHash:  result.txHash ?? "",
     relayedAt,
   }).catch(e => console.error("[relay] TX record failed (non-fatal):", e));
+
+  // Decrement TX credit (fire-and-forget — non-fatal if it fails)
+  if (subscription && !isSandbox) {
+    getSubscription(keyRecord.address).then(current => {
+      if (!current) return;
+      return setSubscription(keyRecord.address, {
+        ...current,
+        quotaBonus: Math.max(0, (current.quotaBonus ?? 0) - 1),
+      });
+    }).catch(e => console.error("[relay] credit decrement failed (non-fatal):", e));
+  }
 
   // ── 11. Webhook 발동 (non-blocking, sandbox 포함) ─────────────────────────
   const webhookCfg = await getWebhookConfig(keyRecord.address);

@@ -291,7 +291,7 @@ export default function DashboardPage() {
   const [sandboxApiKey, setSandboxApiKey] = useState<string>("");
   const [sandboxKeyCopied, setSandboxKeyCopied] = useState(false);
   const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
-  const [thisMonthCount, setThisMonthCount] = useState(0);
+  const [thisMonthCount, setThisMonthCount] = useState(0); // for chart only
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
   const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0 });
   const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
@@ -432,8 +432,12 @@ export default function DashboardPage() {
   const API_KEY = subscription?.apiKey ?? "—";
   const plan = subscription?.plan ?? "starter";
   const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
-  const quota = (PLAN_QUOTA[plan.toLowerCase()] ?? 1_000) + (subscription?.quotaBonus ?? 0);
-  const pct = Math.round((thisMonthCount / quota) * 100);
+  // TX credits remaining — direct field from subscription (decrements on each relay)
+  const remainingCredits = subscription?.quotaBonus ?? 0;
+  // For backward compat: estimate "original" credits from plan so we can show a % bar
+  const baseCredits = PLAN_QUOTA[plan.toLowerCase()] ?? 1_000;
+  // pct = how much has been consumed (credits go DOWN, so inverse)
+  const pct = remainingCredits > 0 ? Math.max(0, Math.round((1 - remainingCredits / Math.max(remainingCredits + thisMonthCount, baseCredits)) * 100)) : 100;
   const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000) : null;
   const totalUserUSD = Object.entries(userGasBalance).reduce((sum, [c, amt]) => {
     return sum + amt * (tokenPrices[c === "xlayer" ? "eth" : c] ?? 0);
@@ -652,7 +656,7 @@ export default function DashboardPage() {
                 <span className="text-xl mt-0.5">🔔</span>
                 <div>
                   <p className="font-semibold text-sm text-white">Would you like to receive usage alerts?</p>
-                  <p className="text-white/35 text-xs mt-0.5">We&apos;ll email you when you&apos;re at 20% and 10% of your monthly quota remaining.</p>
+                  <p className="text-white/35 text-xs mt-0.5">We&apos;ll email you when you&apos;re at 20% and 10% of your TX credits remaining.</p>
                 </div>
               </div>
               <button onClick={() => setShowEmailSetup(false)} className="text-white/25 hover:text-white text-lg leading-none flex-shrink-0">×</button>
@@ -688,10 +692,10 @@ export default function DashboardPage() {
               <span className={`text-lg ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>⚠</span>
               <div>
                 <p className={`font-semibold text-sm ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>
-                  {pct >= 90 ? "Only 10% of quota remaining" : "Only 20% of quota remaining"}
+                  {pct >= 90 ? "TX credits almost exhausted" : "TX credits running low"}
                 </p>
                 <p className="text-white/35 text-xs">
-                  {thisMonthCount.toLocaleString()} / {quota.toLocaleString()} transactions used this month
+                  {remainingCredits.toLocaleString()} credits remaining
                   {alertEmail && ` · Alert will be sent to ${alertEmail}`}
                 </p>
               </div>
@@ -715,7 +719,7 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Txs This Month", value: thisMonthCount.toLocaleString(), sub: `of ${quota.toLocaleString()} quota` },
+                { label: "TX Credits Left", value: remainingCredits.toLocaleString(), sub: `${plan} plan` },
                 { label: "Total Relayed",  value: relayedTxs.length.toLocaleString(), sub: "all time" },
                 { label: "My Gas Tank",    value: `$${totalUserUSD.toFixed(2)}`, sub: "deposited balance", accent: true },
                 { label: "Today's Txs",    value: dailyData[13].toLocaleString(), sub: "today", green: true },
@@ -742,8 +746,8 @@ export default function DashboardPage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="rounded-2xl p-6 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                 <div className="flex justify-between mb-3">
-                  <span className="text-sm font-medium">Monthly Quota</span>
-                  <span className="text-sm text-white/40">{pct}% used</span>
+                  <span className="text-sm font-medium">TX Credits</span>
+                  <span className="text-sm text-white/40">{remainingCredits.toLocaleString()} remaining</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
                   <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(pct, 100)}%` }} transition={{ duration: 1, delay: 0.3 }}
@@ -751,7 +755,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex justify-between mt-2 text-xs text-white/25">
                   <span>{thisMonthCount.toLocaleString()} used</span>
-                  <span>{Math.max(quota - thisMonthCount, 0).toLocaleString()} remaining</span>
+                  <span>{remainingCredits.toLocaleString()} left</span>
                 </div>
               </div>
 
@@ -997,7 +1001,7 @@ export default function DashboardPage() {
             <div className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
               <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
                 <span className="font-semibold">Relayed Transaction History</span>
-                <span className="text-white/25 text-xs">{thisMonthCount} this month · {relayedTxs.length} total</span>
+                <span className="text-white/25 text-xs">{relayedTxs.length} total · {remainingCredits.toLocaleString()} credits left</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px]">
