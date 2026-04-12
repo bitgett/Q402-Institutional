@@ -20,11 +20,11 @@ const PLAN_QUOTA: Record<string, number> = {
 
 const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string; gasNote?: string }> = {
   bnb:    { name: "BNB Chain",  token: "BNB",   color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
-  eth:    { name: "Ethereum",   token: "ETH",   color: "#627EEA", img: "/eth.png",    rounded: "rounded-lg"   },
-  xlayer: { name: "X Layer",    token: "OKB",   color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-sm"   },
+  eth:    { name: "Ethereum",   token: "ETH",   color: "#627EEA", img: "/eth.png",    rounded: "rounded-full" },
+  xlayer: { name: "X Layer",    token: "OKB",   color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-full" },
   avax:   { name: "Avalanche",  token: "AVAX",  color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
   // Stable: USDT0 is both the gas token and the payment token — no separate native coin
-  stable: { name: "Stable",     token: "USDT0", color: "#4AE54A", img: "/stable.jpg", rounded: "rounded-full", gasNote: "Gas + payment token" },
+  stable: { name: "Stable",     token: "USDT0", color: "#4AE54A", img: "/stable.jpg", rounded: "rounded-full" },
 };
 
 const STEPS = [
@@ -741,34 +741,48 @@ export default function DashboardPage() {
                 const userUSD = userAmt * price;
                 const hasBalance = userAmt > 0;
                 return (
-                  <div key={key} className="rounded-2xl p-5 border flex flex-col" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                    <div className="flex items-center gap-2.5 mb-3">
+                  <div key={key} className="rounded-2xl p-5 border flex flex-col gap-0 relative overflow-hidden"
+                    style={{ background: "linear-gradient(145deg, #0F1929 0%, #0B1220 100%)", borderColor: hasBalance ? "rgba(245,197,24,0.2)" : "rgba(255,255,255,0.07)" }}>
+                    {/* chain color accent top bar */}
+                    <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl" style={{ background: meta.color, opacity: 0.5 }} />
+
+                    {/* header */}
+                    <div className="flex items-center gap-2.5 mb-4">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <div className={`w-7 h-7 ${meta.rounded} overflow-hidden flex-shrink-0`} style={{ background: meta.color }}>
+                      <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-white/10">
                         <img src={meta.img} alt={meta.name} className="w-full h-full object-cover" />
                       </div>
-                      <div>
-                        <div className="text-xs font-semibold">{meta.name}</div>
-                        <div className="text-white/30 text-[10px]">{meta.token}</div>
-                        {meta.gasNote && (
-                          <div className="text-[9px] font-semibold mt-0.5 px-1.5 py-0.5 rounded-full inline-block"
-                            style={{ background: "rgba(74,229,74,0.1)", color: "#4AE54A" }}>
-                            {meta.gasNote}
-                          </div>
-                        )}
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold leading-tight truncate">{meta.name}</div>
+                        <div className="text-white/35 text-[11px]">{meta.token}</div>
                       </div>
                     </div>
-                    <div className="text-xl font-bold">{userAmt.toFixed(4)} <span className="text-sm font-normal text-white/40">{meta.token}</span></div>
-                    <div className="text-white/30 text-xs mt-0.5">{userUSD >= 0.01 ? `$${userUSD.toFixed(2)}` : "$0.00"} deposited</div>
+
+                    {/* balance */}
+                    <div className="text-2xl font-bold tracking-tight leading-none">
+                      {userAmt.toFixed(4)}
+                      <span className="text-sm font-normal text-white/35 ml-1">{meta.token}</span>
+                    </div>
+                    <div className="text-white/30 text-xs mt-1 mb-3">
+                      {userUSD >= 0.01 ? `$${userUSD.toFixed(2)}` : "$0.00"}
+                    </div>
+
+                    {/* wallet balance indicator */}
                     {(walletBalances[key] ?? 0) > 0 && (
-                      <div className="text-white/25 text-[10px] mt-1.5 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-400/60 inline-block" />
-                        Wallet: {(walletBalances[key] ?? 0).toFixed(4)} {meta.token}
+                      <div className="flex items-center gap-1.5 text-[10px] text-white/30 mb-3">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-400/50 flex-shrink-0" />
+                        <span>Wallet: {(walletBalances[key] ?? 0).toFixed(4)} {meta.token}</span>
                       </div>
                     )}
+
+                    {/* button */}
                     <button onClick={() => setDepositChain({ chain: meta.name, token: meta.token })}
-                      className="mt-auto pt-3 w-full text-xs font-semibold border border-yellow/25 text-yellow bg-yellow/5 hover:bg-yellow/10 py-1.5 rounded-lg transition-all">
-                      {hasBalance ? `Manage ${meta.token}` : `Deposit ${meta.token}`}
+                      className="mt-auto w-full text-xs font-bold py-2 rounded-xl transition-all"
+                      style={hasBalance
+                        ? { background: "rgba(245,197,24,0.12)", color: "#F5C518", border: "1px solid rgba(245,197,24,0.25)" }
+                        : { background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }
+                      }>
+                      {hasBalance ? `Manage ${meta.token}` : `+ Deposit`}
                     </button>
                   </div>
                 );
