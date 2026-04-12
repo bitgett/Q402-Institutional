@@ -3,7 +3,7 @@
 const tiers = [
   {
     name: "Starter",
-    price: "$29",
+    price: "$30",
     period: "/mo",
     description: "For indie developers and early-stage projects.",
     features: [
