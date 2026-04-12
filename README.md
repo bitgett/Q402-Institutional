@@ -452,7 +452,7 @@ API Key 유효성 검증 + 만료/교체 확인.
 
 | Plan | TX/월 | 일일 버스트 한도 | 비고 |
 |------|-------|----------------|------|
-| Starter ($29) | 500 | 50/day | |
+| Starter ($30) | 500 | 50/day | |
 | Basic | 1,000 | 100/day | |
 | Growth | 10,000 | 1,000/day | |
 | Pro | 10,000 | 1,000/day | |
@@ -1080,7 +1080,7 @@ for (const chain of ["avax", "bnb", "eth"]) {
 - **Fix**: 지갑 연결이 페이지 이동 시 끊기는 버그 수정 — `getConnectedAccount()` null 반환 시 localStorage 초기화 제거
 - **Fix**: My Page 페이월 Activate 버튼 — `<a href>` → `router.push()` (Next.js 클라이언트 내비게이션)
 - **Feature**: My Page 구독 만료 경고 배너 — 만료 7일 전 노란 배너, 만료 후 빨간 배너 + Renew 버튼
-- **Fix**: Pricing 페이지 가격 실제 결제 금액과 일치 ($29/$149/$799, Starter "BNB Chain only" → "All 5 EVM chains")
+- **Fix**: Pricing 페이지 가격 payment page 기준으로 통일 ($30/$150/$800 BNB 기준), Starter "BNB Chain only" → "All 5 EVM chains"
 - **Fix**: Relay TX 기록 fire-and-forget — KV write 실패가 성공 응답 blocking 하던 버그 수정
 
 #### Grant 프로그램
