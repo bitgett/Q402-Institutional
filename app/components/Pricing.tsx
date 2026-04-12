@@ -19,7 +19,7 @@ const tiers = [
   },
   {
     name: "Growth",
-    price: "$149",
+    price: "$150",
     period: "/mo",
     description: "For growing products with real users.",
     features: [
@@ -35,7 +35,7 @@ const tiers = [
   },
   {
     name: "Scale",
-    price: "$799",
+    price: "$800",
     period: "/mo",
     description: "For high-throughput DeFi applications.",
     features: [
