@@ -51,7 +51,7 @@ function WalletModal({ onClose }: { onClose: () => void }) {
       name: "OKX Wallet",
       desc: "Multi-chain Web3 wallet",
       icon: (
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        // eslint-disable-next-line @next/next/no-img-element
         <img src="/okx.jpg" alt="OKX Wallet" className="w-8 h-8 rounded-lg flex-shrink-0 object-cover" />
       ),
     },
