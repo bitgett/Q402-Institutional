@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
-import { checkPaymentOnChain, planFromAmount } from "@/app/lib/blockchain";
+import { checkPaymentOnChain, planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
 import { getSubscription, setSubscription, generateApiKey } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
@@ -54,15 +54,8 @@ export async function POST(req: NextRequest) {
 
   const existing = await getSubscription(addr);
 
-  // ── Already activated and not expired? ───────────────────────────────────
-  if (existing) {
-    const expiresAt = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
-    if (new Date() < expiresAt) {
-      return NextResponse.json({ status: "already_active", plan: existing.plan });
-    }
-  }
-
   // ── Verify on-chain payment ───────────────────────────────────────────────
+  // Note: no early return for already_active — users can top up at any time.
   const result = await checkPaymentOnChain(addr);
   if (!result.found) {
     return NextResponse.json({ error: "No payment found on-chain" }, { status: 402 });
@@ -78,44 +71,63 @@ export async function POST(req: NextRequest) {
   // Mark as used for 90 days (well beyond any block scan window)
   await kv.set(usedKey, addr, { ex: 90 * 24 * 60 * 60 });
 
-  const plan = planFromAmount(result.amountUSD ?? 0);
-  if (!plan) {
-    return NextResponse.json({ error: "Payment amount too low" }, { status: 402 });
+  const newCredits = txQuotaFromAmount(result.amountUSD ?? 0, result.chain);
+  if (newCredits === 0) {
+    return NextResponse.json({ error: "Payment amount too low for this chain" }, { status: 402 });
   }
 
-  // ── Renew: keep existing API key to avoid breaking integrations ───────────
-  // Only generate a new key if the account has no key at all.
-  let apiKey = existing?.apiKey ?? null;
-  if (apiKey) {
-    // Re-activate the existing key in case it was deactivated
-    const { getApiKeyRecord } = await import("@/app/lib/db");
-    const rec = await getApiKeyRecord(apiKey);
-    if (!rec || !rec.active) {
-      // Key was deactivated (e.g. manually rotated) — issue fresh one
+  if (!existing) {
+    // ── First payment: set plan tier + TX credits + 30-day period ─────────
+    const plan = planFromAmount(result.amountUSD ?? 0, result.chain)!;
+
+    const apiKey = await generateApiKey(addr, plan);
+    await setSubscription(addr, {
+      paidAt:     new Date().toISOString(),
+      apiKey,
+      plan,
+      txHash:     result.txHash!,
+      amountUSD:  result.amountUSD!,
+      quotaBonus: newCredits,
+    });
+    return NextResponse.json({ status: "activated", plan, txCredits: newCredits });
+
+  } else {
+    // ── Additional payment: add credits + extend 30 days (plan unchanged) ─
+    const plan = existing.plan; // keep existing plan tier
+
+    // Restore API key if it was deactivated
+    let apiKey = existing.apiKey;
+    if (apiKey) {
+      const { getApiKeyRecord } = await import("@/app/lib/db");
+      const rec = await getApiKeyRecord(apiKey);
+      if (!rec || !rec.active) {
+        apiKey = await generateApiKey(addr, plan);
+      }
+    } else {
       apiKey = await generateApiKey(addr, plan);
     }
-  } else {
-    apiKey = await generateApiKey(addr, plan);
-  }
 
-  // Extend from current expiry if renewing early, otherwise from now
-  let newPaidAt: string;
-  if (existing) {
+    // Extend from current expiry if still active, otherwise from now
     const currentExpiry = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
     const base = currentExpiry > new Date() ? currentExpiry : new Date();
-    newPaidAt = base.toISOString();
-  } else {
-    newPaidAt = new Date().toISOString();
+
+    const addedCredits = newCredits;
+    const totalCredits = (existing.quotaBonus ?? 0) + addedCredits;
+
+    await setSubscription(addr, {
+      ...existing,
+      paidAt:     base.toISOString(),
+      apiKey,
+      txHash:     result.txHash!,
+      amountUSD:  result.amountUSD!,
+      quotaBonus: totalCredits,
+    });
+    return NextResponse.json({
+      status:        "credits_added",
+      plan,
+      txCredits:     totalCredits,
+      addedCredits,
+      expiresAt:     new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    });
   }
-
-  await setSubscription(addr, {
-    ...(existing ?? {}),
-    paidAt:    newPaidAt,
-    apiKey,
-    plan,
-    txHash:    result.txHash!,
-    amountUSD: result.amountUSD!,
-  });
-
-  return NextResponse.json({ status: "activated", plan });
 }

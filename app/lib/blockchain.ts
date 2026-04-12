@@ -215,22 +215,52 @@ export async function verifyPaymentTx(txHash: string, fromAddress: string): Prom
   return { found: false };
 }
 
-// Map USD amount to plan
-// Thresholds = payment/page.tsx VOLUMES basePrice (BNB 1.0x = cheapest chain)
-//   starter       : $29   (500 txs)
-//   basic         : $49   (1,000 txs)
-//   growth        : $89   (5,000 txs)
-//   pro           : $149  (10,000 txs)
-//   scale         : $449  (50,000 txs)
-//   business      : $799  (100,000 txs)
-//   enterprise_flex: $1,999 (100K–500K txs)
-export function planFromAmount(usd: number): string | null {
-  if (usd >= 1999) return "enterprise_flex";
-  if (usd >= 799)  return "business";
-  if (usd >= 449)  return "scale";
-  if (usd >= 149)  return "pro";
-  if (usd >= 89)   return "growth";
-  if (usd >= 49)   return "basic";
-  if (usd >= 29)   return "starter";
+// ── Chain-aware pricing ────────────────────────────────────────────────────────
+// Mirrors calcPrice() in payment/page.tsx: Math.round(basePrice * multiplier / 10) * 10
+// Thresholds = calcPrice - 1  (floor that any correct payment comfortably exceeds)
+//
+// Tier order: [500tx, 1K, 5K, 10K, 50K, 100K, 300K]
+const TIER_CREDITS = [500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000];
+const TIER_PLANS   = ["starter", "basic", "growth", "pro", "scale", "business", "enterprise_flex"];
+
+// calcPrice output per chain per tier (pre-computed from payment/page.tsx formula)
+const CHAIN_THRESHOLDS: Record<string, number[]> = {
+  //                  500  1K   5K    10K   50K   100K   300K
+  "BNB Chain":  [  29,  49,  89,  149,  449,   799,  1999 ],
+  "X Layer":    [  29,  49,  89,  149,  449,   799,  1999 ],
+  "Stable":     [  29,  49,  89,  149,  449,   799,  1999 ],
+  "Avalanche":  [  29,  49,  99,  159,  489,   879,  2199 ],
+  "Ethereum":   [  39,  69, 129,  219,  669,  1199,  2999 ],
+};
+// Fallback = cheapest chain (BNB)
+const DEFAULT_THRESHOLDS = CHAIN_THRESHOLDS["BNB Chain"];
+
+function getThresholds(chain?: string): number[] {
+  if (!chain) return DEFAULT_THRESHOLDS;
+  return CHAIN_THRESHOLDS[chain] ?? DEFAULT_THRESHOLDS;
+}
+
+/**
+ * Returns the plan tier for the given payment.
+ * Chain name comes from checkPaymentOnChain().chain (e.g. "Ethereum", "BNB Chain").
+ * First payment only — subsequent payments don't change the plan.
+ */
+export function planFromAmount(usd: number, chain?: string): string | null {
+  const t = getThresholds(chain);
+  for (let i = TIER_PLANS.length - 1; i >= 0; i--) {
+    if (usd >= t[i]) return TIER_PLANS[i];
+  }
   return null;
+}
+
+/**
+ * Returns TX credits granted for this payment amount on this chain.
+ * Used for both initial activation and top-up purchases.
+ */
+export function txQuotaFromAmount(usd: number, chain?: string): number {
+  const t = getThresholds(chain);
+  for (let i = TIER_CREDITS.length - 1; i >= 0; i--) {
+    if (usd >= t[i]) return TIER_CREDITS[i];
+  }
+  return 0;
 }
