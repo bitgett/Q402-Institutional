@@ -71,63 +71,47 @@ export async function POST(req: NextRequest) {
   // Mark as used for 90 days (well beyond any block scan window)
   await kv.set(usedKey, addr, { ex: 90 * 24 * 60 * 60 });
 
-  const newCredits = txQuotaFromAmount(result.amountUSD ?? 0, result.chain);
-  if (newCredits === 0) {
+  const addedTxs = txQuotaFromAmount(result.amountUSD ?? 0, result.chain);
+  if (addedTxs === 0) {
     return NextResponse.json({ error: "Payment amount too low for this chain" }, { status: 402 });
   }
 
-  if (!existing) {
-    // ── First payment: set plan tier + TX credits + 30-day period ─────────
-    const plan = planFromAmount(result.amountUSD ?? 0, result.chain)!;
+  // ── Every payment: +30 days + TX transactions, plan set on first payment ─
+  const plan = existing?.plan ?? planFromAmount(result.amountUSD ?? 0, result.chain)!;
 
-    const apiKey = await generateApiKey(addr, plan);
-    await setSubscription(addr, {
-      paidAt:     new Date().toISOString(),
-      apiKey,
-      plan,
-      txHash:     result.txHash!,
-      amountUSD:  result.amountUSD!,
-      quotaBonus: newCredits,
-    });
-    return NextResponse.json({ status: "activated", plan, txCredits: newCredits });
-
+  // Restore or create API key
+  let apiKey = existing?.apiKey ?? null;
+  if (apiKey) {
+    const { getApiKeyRecord } = await import("@/app/lib/db");
+    const rec = await getApiKeyRecord(apiKey);
+    if (!rec || !rec.active) apiKey = await generateApiKey(addr, plan);
   } else {
-    // ── Additional payment: add credits + extend 30 days (plan unchanged) ─
-    const plan = existing.plan; // keep existing plan tier
-
-    // Restore API key if it was deactivated
-    let apiKey = existing.apiKey;
-    if (apiKey) {
-      const { getApiKeyRecord } = await import("@/app/lib/db");
-      const rec = await getApiKeyRecord(apiKey);
-      if (!rec || !rec.active) {
-        apiKey = await generateApiKey(addr, plan);
-      }
-    } else {
-      apiKey = await generateApiKey(addr, plan);
-    }
-
-    // Extend from current expiry if still active, otherwise from now
-    const currentExpiry = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
-    const base = currentExpiry > new Date() ? currentExpiry : new Date();
-
-    const addedCredits = newCredits;
-    const totalCredits = (existing.quotaBonus ?? 0) + addedCredits;
-
-    await setSubscription(addr, {
-      ...existing,
-      paidAt:     base.toISOString(),
-      apiKey,
-      txHash:     result.txHash!,
-      amountUSD:  result.amountUSD!,
-      quotaBonus: totalCredits,
-    });
-    return NextResponse.json({
-      status:        "credits_added",
-      plan,
-      txCredits:     totalCredits,
-      addedCredits,
-      expiresAt:     new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    });
+    apiKey = await generateApiKey(addr, plan);
   }
+
+  // Extend from current expiry if still active, otherwise from now
+  const currentExpiry = existing
+    ? new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000)
+    : new Date(0);
+  const base = currentExpiry > new Date() ? currentExpiry : new Date();
+  const newExpiry = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const totalTxs = (existing?.quotaBonus ?? 0) + addedTxs;
+
+  await setSubscription(addr, {
+    ...(existing ?? {}),
+    paidAt:     base.toISOString(),
+    apiKey,
+    plan,
+    txHash:     result.txHash!,
+    amountUSD:  result.amountUSD!,
+    quotaBonus: totalTxs,
+  });
+
+  return NextResponse.json({
+    status:    "activated",
+    plan,
+    addedTxs,
+    totalTxs,
+    expiresAt: newExpiry.toISOString(),
+  });
 }

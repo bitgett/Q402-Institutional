@@ -363,7 +363,7 @@ export default function PaymentPage() {
 
             {/* ── STEP 2: Volume ─────────────────────────────────────────── */}
             <div className="rounded-2xl p-6 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <StepHeader n="2" title="TX credits to purchase" sub="Credits are consumed per relayed transaction. No expiry on credits." done={false} />
+              <StepHeader n="2" title="Sponsored transactions" sub="Each payment adds 30 days + this many gasless TXs to your account." done={false} />
               <div className="grid grid-cols-4 gap-2">
                 {VOLUMES.map(v => (
                   <button
@@ -562,7 +562,7 @@ export default function PaymentPage() {
                   <img src={chain.img} alt={chain.name} className={`w-8 h-8 flex-shrink-0 ${chain.rounded}`} />
                   <div>
                     <p className="text-sm font-semibold">{chain.name}</p>
-                    <p className="text-white/35 text-xs">{selectedVolume >= 500_000 ? "500,000+" : selectedVolume.toLocaleString()} TX credits</p>
+                    <p className="text-white/35 text-xs">{selectedVolume >= 500_000 ? "500,000+" : selectedVolume.toLocaleString()} TXs · +30 days</p>
                   </div>
                 </div>
 
@@ -580,10 +580,9 @@ export default function PaymentPage() {
                 ) : (
                   <>
                     <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-white/40 text-sm">Monthly</span>
+                      <span className="text-white/40 text-sm">+30 days · {selectedVolume >= 500_000 ? "500K+" : selectedVolume.toLocaleString()} TXs</span>
                       <div>
                         <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
-                        <span className="text-white/30 text-sm"> one-time</span>
                       </div>
                     </div>
                     <p className="text-white/25 text-xs text-right mb-1">
