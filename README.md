@@ -911,8 +911,7 @@ Stable은 USDT0가 네이티브 가스 토큰인 Layer 1. AI 에이전트 생태
 - 파트너: Stable 팀 (Eunice, @eunicecyl)
 - 발표: 2026-04-04 Twitter 공동 포스팅 ✅
 - 메인넷 배포 완료: 2026-04-04 ✅
-- 컨트랙트 검증: Sourcify가 Chain ID 988 미지원 → stablescan.xyz에 소스 등재 예정
-  - 검증 방법: Stable 팀에 Sourcify chain 등록 요청 또는 stablescan.xyz 직접 검증 제출
+- 컨트랙트 검증: ✅ stablescan.xyz 검증 완료 (2026-04-13)
 
 ---
 
@@ -926,7 +925,7 @@ Stable은 USDT0가 네이티브 가스 토큰인 Layer 1. AI 에이전트 생태
 | BNB Chain | 56 | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` | Q402 BNB Chain | ✅ Sourcify |
 | Ethereum | 1 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | Q402 Ethereum | ✅ Sourcify |
 | X Layer | 196 | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | Q402 X Layer | ✅ OKLink |
-| **Stable** | **988** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Q402 Stable | ⏳ Stablescan 등재 예정 |
+| **Stable** | **988** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Q402 Stable | ✅ Stablescan |
 
 ### 토큰 주소
 
@@ -1086,7 +1085,7 @@ for (const chain of ["avax", "bnb", "eth"]) {
 
 | 항목 | 현황 | 우선순위 |
 |------|------|---------|
-| Stable 컨트랙트 검증 | Sourcify Chain 988 미지원 → stablescan.xyz 제출 예정 | 높음 |
+| Stable 컨트랙트 검증 | ✅ stablescan.xyz 완료 (2026-04-13) | 완료 |
 | Gas Tank 충전 (전 체인 low) | BNB / ETH / AVAX / XLayer / Stable 저잔고 | 즉시 필요 |
 | quackai.ai/q402 도메인 연결 | 미완료 | 중간 |
 | Webhook retry on failure | fire-and-forget | 중간 |
