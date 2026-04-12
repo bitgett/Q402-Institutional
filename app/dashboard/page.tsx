@@ -662,7 +662,7 @@ export default function DashboardPage() {
                 <span className="text-xl mt-0.5">🔔</span>
                 <div>
                   <p className="font-semibold text-sm text-white">Would you like to receive usage alerts?</p>
-                  <p className="text-white/35 text-xs mt-0.5">We&apos;ll email you when you&apos;re at 20% and 10% of your TX credits remaining.</p>
+                  <p className="text-white/35 text-xs mt-0.5">We&apos;ll email you when you&apos;re at 20% and 10% of your sponsored TXs remaining.</p>
                 </div>
               </div>
               <button onClick={() => setShowEmailSetup(false)} className="text-white/25 hover:text-white text-lg leading-none flex-shrink-0">×</button>
@@ -698,10 +698,10 @@ export default function DashboardPage() {
               <span className={`text-lg ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>⚠</span>
               <div>
                 <p className={`font-semibold text-sm ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>
-                  {pct >= 90 ? "TX credits almost exhausted" : "TX credits running low"}
+                  {pct >= 90 ? "Sponsored TXs almost exhausted" : "Sponsored TXs running low"}
                 </p>
                 <p className="text-white/35 text-xs">
-                  {remainingCredits.toLocaleString()} credits remaining
+                  {remainingCredits.toLocaleString()} TXs remaining
                   {alertEmail && ` · Alert will be sent to ${alertEmail}`}
                 </p>
               </div>
@@ -725,7 +725,7 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "TX Credits Left", value: remainingCredits.toLocaleString(), sub: `${plan} plan` },
+                { label: "Sponsored TXs Left", value: remainingCredits.toLocaleString(), sub: `${plan} plan` },
                 { label: "Total Relayed",  value: relayedTxs.length.toLocaleString(), sub: "all time" },
                 { label: "My Gas Tank",    value: `$${totalUserUSD.toFixed(2)}`, sub: "deposited balance", accent: true },
                 { label: "Today's Txs",    value: dailyData[13].toLocaleString(), sub: "today", green: true },
@@ -752,7 +752,7 @@ export default function DashboardPage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div className="rounded-2xl p-6 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                 <div className="flex justify-between mb-3">
-                  <span className="text-sm font-medium">TX Credits</span>
+                  <span className="text-sm font-medium">Sponsored TXs</span>
                   <span className="text-sm text-white/40">{remainingCredits.toLocaleString()} remaining</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
@@ -1007,7 +1007,7 @@ export default function DashboardPage() {
             <div className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
               <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
                 <span className="font-semibold">Relayed Transaction History</span>
-                <span className="text-white/25 text-xs">{relayedTxs.length} total · {remainingCredits.toLocaleString()} credits left</span>
+                <span className="text-white/25 text-xs">{relayedTxs.length} total · {remainingCredits.toLocaleString()} TXs left</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px]">
