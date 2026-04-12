@@ -4,13 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import RegisterModal from "./RegisterModal";
 
-const CHAINS = [
-  { name: "BNB Chain", color: "#F0B90B", live: true },
-  { name: "Ethereum",  color: "#627EEA", live: true },
-  { name: "Avalanche", color: "#E84142", live: true },
-  { name: "X Layer",   color: "#CCCCCC", live: true },
-  { name: "Stable",    color: "#4AE54A", live: true },
-];
 
 function useCountUp(target: number, duration = 2200) {
   const [count, setCount] = useState(0);
