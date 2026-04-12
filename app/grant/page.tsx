@@ -161,16 +161,33 @@ export default function GrantPage() {
         {/* Why Q402 */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.25 }}
           className="rounded-2xl border p-8 mb-20" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
-          <h2 className="text-xl font-bold mb-6">Why build with Q402?</h2>
-          <div className="grid sm:grid-cols-3 gap-6">
+          <h2 className="text-xl font-bold mb-2">Why build with Q402?</h2>
+          <p className="text-white/35 text-sm mb-8 leading-relaxed">
+            Gas abstraction is a solved problem on paper. In production, most solutions break under edge cases,
+            require users to acquire obscure tokens, or crumble the moment you try to go multi-chain.
+            Q402 doesn{"'"}t abstract the problem — it eliminates it.
+          </p>
+          <div className="grid sm:grid-cols-3 gap-8">
             {[
-              { num: "01", title: "5 chains, 1 API", body: "BNB Chain, Ethereum, Avalanche, X Layer, Stable — one integration covers all." },
-              { num: "02", title: "No wallet friction", body: "Users sign EIP-712 off-chain. No gas token. No MetaMask gas dialogs. Just UX." },
-              { num: "03", title: "We grow together", body: "Grant recipients get co-marketing, joint announcements, and a direct line to the core team." },
+              {
+                num: "01",
+                title: "Five chains. One integration. No migration.",
+                body: "BNB Chain, Ethereum, Avalanche, X Layer, Stable — not wrapped, not bridged. Native operations on each, through a single unified API. The multi-chain coverage that used to take months now takes an afternoon. And when the next chain matters, you're already there.",
+              },
+              {
+                num: "02",
+                title: "Your users forget gas exists. Entirely.",
+                body: "EIP-712 off-chain signatures mean no native token prompts, no gas estimation screens, no two-step approve flows, no rejected transactions from empty wallets. Q402 sponsors gas atomically and invisibly — users experience web-like simplicity, trustlessly on-chain.",
+              },
+              {
+                num: "03",
+                title: "We track your growth like it's ours.",
+                body: "Grant recipients aren't just given credit and sent off. You get co-marketing, joint launch announcements, dedicated Telegram access to the core team, and early access to every new chain we ship. Your transaction volume is the metric we care about.",
+              },
             ].map(item => (
-              <div key={item.title}>
-                <div className="text-xs font-bold text-yellow/50 font-mono mb-3">{item.num}</div>
-                <div className="font-semibold text-sm mb-1.5">{item.title}</div>
+              <div key={item.num} className="border-t border-white/8 pt-6">
+                <div className="text-xs font-bold text-yellow/40 font-mono mb-4">{item.num}</div>
+                <div className="font-semibold text-sm mb-3 leading-snug">{item.title}</div>
                 <div className="text-white/40 text-xs leading-relaxed">{item.body}</div>
               </div>
             ))}

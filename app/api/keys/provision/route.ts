@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
         apiKey: existing.apiKey,
         sandboxApiKey,
         plan: existing.plan,
+        hasPaid: (existing.amountUSD ?? 0) > 0,
         isNew: false,
       });
     }
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
       apiKey: existing.apiKey,
       sandboxApiKey: existing.sandboxApiKey,
       plan: existing.plan,
+      hasPaid: (existing.amountUSD ?? 0) > 0,
       isNew: false,
     });
   }
@@ -86,5 +88,5 @@ export async function POST(req: NextRequest) {
     amountUSD:  0,
   });
 
-  return NextResponse.json({ apiKey, sandboxApiKey, plan: "starter", isNew: true });
+  return NextResponse.json({ apiKey, sandboxApiKey, plan: "starter", hasPaid: false, isNew: true });
 }
