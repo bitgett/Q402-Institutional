@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.7** · **Last updated: 2026-04-11**  
+**Version: v1.8** · **Last updated: 2026-04-13**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -452,7 +452,7 @@ API Key 유효성 검증 + 만료/교체 확인.
 
 | Plan | TX/월 | 일일 버스트 한도 | 비고 |
 |------|-------|----------------|------|
-| Starter | 500 | 50/day | |
+| Starter ($29) | 500 | 50/day | |
 | Basic | 1,000 | 100/day | |
 | Growth | 10,000 | 1,000/day | |
 | Pro | 10,000 | 1,000/day | |
@@ -463,13 +463,13 @@ API Key 유효성 검증 + 만료/교체 확인.
 | **Agent** | **무제한** | **무제한** | Gas Tank 선불, `/agents` 참조 |
 
 일일 한도 초과 시: `HTTP 429 Daily relay cap reached for plan {plan}` (86400s window)  
-Sandbox 키(`q402_test_`)는 한도 적용 안 함.
+Sandbox 키는 한도 적용 안 함.
 
-### API Rate Limits (IP당)
+### API Rate Limits
 
-| Endpoint | 한도 |
-|----------|------|
-| /api/relay | 60 req/60s |
+| Endpoint | IP 기준 | API Key 기준 |
+|----------|---------|------------|
+| /api/relay | 60 req/60s | **30 req/60s** (v1.8 추가) |
 | /api/keys/provision | 10 req/60s |
 | /api/keys/rotate | 5 req/60s |
 | /api/payment/activate | 5 req/60s |
@@ -719,9 +719,13 @@ const valid = 'sha256=' + hmac.digest('hex') === req.headers['x-q402-signature']
 
 ### SSRF 방어
 
-등록/테스트/발송 시 private IP 차단:
+등록/테스트/발송 시 모두 검증 (v1.8 강화):
 ```
-/^(localhost|127\.|0\.0\.0\.0|::1$|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/
+RFC-1918:    10.x, 172.16-31.x, 192.168.x, 127.x, localhost, 0.0.0.0
+IPv6 내부:  ::1, ::ffff:, fe80:, fc00:, fd__:
+클라우드:   metadata.google.internal, 169.254.169.254, fd00:ec2::254
+Octal IP:   0177.0.0.1 형식 차단
+Production: HTTP(비HTTPS) 차단
 ```
 
 ---
@@ -949,10 +953,11 @@ function pay(
 | Replay 방지 | `usedNonces[owner][nonce]` 온체인 mapping |
 | Owner Binding | `owner != address(this)` → `OwnerMismatch()` revert |
 | Facilitator 검증 | `msg.sender != facilitator` → `UnauthorizedFacilitator()` revert (xlayer) |
-| SSRF 방지 | Webhook URL에서 private IP 범위 차단 (RFC-1918 + loopback) |
-| Rate limiting | KV sliding-window per IP per endpoint |
+| SSRF 방지 | Webhook URL 등록/발송 시 RFC-1918 + IPv6 내부 + 클라우드 메타데이터 차단 |
+| Rate limiting | KV sliding-window per IP **and per API key** (/api/relay: 30 req/60s per key) |
 | 에러 노출 방지 | 내부 에러 서버 로그, 클라이언트엔 generic 메시지 |
-| Sandbox 격리 | `q402_test_` 키는 온체인 미접근, `isSandbox` KV 플래그 |
+| Sandbox 격리 | KV `isSandbox` 플래그만 신뢰 — key prefix 기반 우회 차단 |
+| TX 재사용 방지 | `used_txhash:{hash}` KV 플래그 (90일 TTL) — 동일 TX 재활성화 불가 |
 | Webhook 무결성 | HMAC-SHA256 모든 아웃바운드 페이로드 |
 | ECDSA 강화 | low-s 강제 + zero-address 검증 |
 
@@ -1049,7 +1054,7 @@ for (const chain of ["avax", "bnb", "eth"]) {
 | 항목 | 현황 | 우선순위 |
 |------|------|---------|
 | Stable 컨트랙트 Sourcify 검증 | 미완료 | 높음 |
-| Gas Tank 충전 (전 체인 low) | BNB $0.43, ETH $1.81, AVAX $0.65, XLayer $0.34, Stable $0.12 | 즉시 필요 |
+| Gas Tank 충전 (전 체인 low) | BNB / ETH / AVAX / XLayer / Stable 저잔고 | 즉시 필요 |
 | quackai.ai/q402 도메인 연결 | 미완료 | 중간 |
 | Webhook retry on failure | fire-and-forget | 중간 |
 | 프로젝트별 별도 릴레이어 주소 | 단일 글로벌 지갑 | 높음 (P1) |
@@ -1061,6 +1066,28 @@ for (const chain of ["avax", "bnb", "eth"]) {
 ---
 
 ## 25. Changelog
+
+### v1.8 (2026-04-13)
+
+#### 보안 수정
+- **Security**: `TEST_MODE` 백도어 완전 제거 — `planFromAmount()` 에서 $1 → starter 우회 차단
+- **Security**: Sandbox 키 감지 로직 수정 — key prefix(`q402_test_`) 신뢰 제거, KV `isSandbox` 플래그만 사용
+- **Security**: 결제 TX 재사용 방지 — `used_txhash:{hash}` KV 플래그(90일 TTL)로 동일 TX 재활성화 차단
+- **Security**: Webhook SSRF 강화 — IPv6 loopback(`::1`, `::ffff:`), GCP/AWS/Azure 메타데이터 엔드포인트 차단 추가
+- **Security**: `/api/relay` per-API-key rate limit 추가 — 30 req/60s (기존 IP 기준에 추가)
+
+#### UX / 버그 수정
+- **Fix**: 지갑 연결이 페이지 이동 시 끊기는 버그 수정 — `getConnectedAccount()` null 반환 시 localStorage 초기화 제거
+- **Fix**: My Page 페이월 Activate 버튼 — `<a href>` → `router.push()` (Next.js 클라이언트 내비게이션)
+- **Feature**: My Page 구독 만료 경고 배너 — 만료 7일 전 노란 배너, 만료 후 빨간 배너 + Renew 버튼
+- **Fix**: Pricing 페이지 가격 실제 결제 금액과 일치 ($29/$149/$799, Starter "BNB Chain only" → "All 5 EVM chains")
+- **Fix**: Relay TX 기록 fire-and-forget — KV write 실패가 성공 응답 blocking 하던 버그 수정
+
+#### Grant 프로그램
+- **Feature**: `/grant` 페이지 — Seed/$500, Builder/$2K, Ecosystem 3단계 그랜트 티어
+- **Feature**: Grant 신청 폼 → Vercel KV 저장 + Telegram `@kwanyeonglee` 알림
+- **Feature**: Why build with Q402 섹션 — 01/02/03 넘버링, 기술적 강점 중심 copy
+- **Feature**: Navbar Grant 링크 추가
 
 ### v1.7 (2026-04-11)
 - **Feature**: Terms of Service (`/terms`) + Privacy Policy (`/privacy`) 페이지 추가
