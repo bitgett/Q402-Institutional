@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { checkPaymentOnChain, planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
-import { getSubscription, setSubscription, generateApiKey } from "@/app/lib/db";
+import { getSubscription, setSubscription, generateApiKey, generateSandboxKey } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 /**
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
   // ── Every payment: +30 days + TX transactions, plan set on first payment ─
   const plan = existing?.plan ?? planFromAmount(result.amountUSD ?? 0, result.chain)!;
 
-  // Restore or create API key
+  // Restore or create live API key
   let apiKey = existing?.apiKey ?? null;
   if (apiKey) {
     const { getApiKeyRecord } = await import("@/app/lib/db");
@@ -87,6 +87,12 @@ export async function POST(req: NextRequest) {
     if (!rec || !rec.active) apiKey = await generateApiKey(addr, plan);
   } else {
     apiKey = await generateApiKey(addr, plan);
+  }
+
+  // Ensure sandbox key exists
+  let sandboxApiKey = existing?.sandboxApiKey ?? null;
+  if (!sandboxApiKey) {
+    sandboxApiKey = await generateSandboxKey(addr, plan);
   }
 
   // Extend from current expiry if still active, otherwise from now
@@ -99,12 +105,13 @@ export async function POST(req: NextRequest) {
 
   await setSubscription(addr, {
     ...(existing ?? {}),
-    paidAt:     base.toISOString(),
+    paidAt:        base.toISOString(),
     apiKey,
+    sandboxApiKey,
     plan,
-    txHash:     result.txHash!,
-    amountUSD:  result.amountUSD!,
-    quotaBonus: totalTxs,
+    txHash:        result.txHash!,
+    amountUSD:     result.amountUSD!,
+    quotaBonus:    totalTxs,
   });
 
   return NextResponse.json({

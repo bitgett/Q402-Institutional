@@ -356,7 +356,13 @@ export default function DashboardPage() {
         .then(r => r.json())
         .then(data => {
           if (data.apiKey) {
-            setSubscription(prev => ({ ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }), apiKey: data.apiKey, plan: data.plan ?? "starter" }));
+            setSubscription(prev => ({
+              ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }),
+              apiKey:     data.apiKey,
+              plan:       data.plan ?? "starter",
+              quotaBonus: data.quotaBonus ?? prev?.quotaBonus ?? 0,
+              paidAt:     data.paidAt ?? prev?.paidAt ?? "",
+            }));
             if (data.sandboxApiKey) setSandboxApiKey(data.sandboxApiKey);
             setHasPaid(data.hasPaid === true);
           } else if (data.error === "Signature does not match address") {
@@ -432,12 +438,12 @@ export default function DashboardPage() {
   const API_KEY = subscription?.apiKey ?? "—";
   const plan = subscription?.plan ?? "starter";
   const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
-  // TX credits remaining — direct field from subscription (decrements on each relay)
+  // TX credits remaining — decrements on each successful relay
   const remainingCredits = subscription?.quotaBonus ?? 0;
-  // For backward compat: estimate "original" credits from plan so we can show a % bar
-  const baseCredits = PLAN_QUOTA[plan.toLowerCase()] ?? 1_000;
-  // pct = how much has been consumed (credits go DOWN, so inverse)
-  const pct = remainingCredits > 0 ? Math.max(0, Math.round((1 - remainingCredits / Math.max(remainingCredits + thisMonthCount, baseCredits)) * 100)) : 100;
+  // Use plan base quota as reference for the bar (credits start at plan quota per payment)
+  const baseCredits = PLAN_QUOTA[plan.toLowerCase()] ?? 500;
+  // pct consumed = how far below base we are (capped 0–100)
+  const pct = Math.min(100, Math.max(0, Math.round((1 - remainingCredits / Math.max(baseCredits, 1)) * 100)));
   const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000) : null;
   const totalUserUSD = Object.entries(userGasBalance).reduce((sum, [c, amt]) => {
     return sum + amt * (tokenPrices[c === "xlayer" ? "eth" : c] ?? 0);
