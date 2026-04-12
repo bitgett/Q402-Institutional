@@ -64,6 +64,8 @@ export async function POST(req: NextRequest) {
         sandboxApiKey,
         plan: existing.plan,
         hasPaid: (existing.amountUSD ?? 0) > 0,
+        quotaBonus: existing.quotaBonus ?? 0,
+        paidAt: existing.paidAt,
         isNew: false,
       });
     }
@@ -72,6 +74,8 @@ export async function POST(req: NextRequest) {
       sandboxApiKey: existing.sandboxApiKey,
       plan: existing.plan,
       hasPaid: (existing.amountUSD ?? 0) > 0,
+      quotaBonus: existing.quotaBonus ?? 0,
+      paidAt: existing.paidAt,
       isNew: false,
     });
   }
