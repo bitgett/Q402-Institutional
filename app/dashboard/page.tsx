@@ -736,12 +736,12 @@ export default function DashboardPage() {
               <div className="text-white/25 text-xs">Your deposited balance · used for gas sponsorship</div>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               {Object.entries(CHAIN_META).map(([key, meta]) => {
                 const userAmt = userGasBalance[key] ?? 0;
                 const price = tokenPrices[key === "xlayer" ? "eth" : key] ?? 0;
                 const userUSD = userAmt * price;
-                const relayerTank = relayerTanks.find(t => t.key === key);
+                const hasBalance = userAmt > 0;
                 return (
                   <div key={key} className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                     <div className="flex items-center gap-2.5 mb-3">
@@ -768,10 +768,9 @@ export default function DashboardPage() {
                         Wallet: {(walletBalances[key] ?? 0).toFixed(4)} {meta.token}
                       </div>
                     )}
-                    {relayerTank && <div className="text-white/15 text-[10px] mt-0.5">Pool: {relayerTank.balance} {meta.token}</div>}
                     <button onClick={() => setDepositChain({ chain: meta.name, token: meta.token })}
                       className="mt-3 w-full text-xs font-semibold border border-yellow/25 text-yellow bg-yellow/5 hover:bg-yellow/10 py-1.5 rounded-lg transition-all">
-                      Manage {meta.token}
+                      {hasBalance ? `Manage ${meta.token}` : `Deposit ${meta.token}`}
                     </button>
                   </div>
                 );
