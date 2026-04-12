@@ -534,7 +534,7 @@ export default function DashboardPage() {
             <div className="space-y-3">
               <a href="/payment"
                 className="block w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-full hover:bg-yellow-hover transition-colors">
-                Activate — from $5
+                Activate — from $30 / mo
               </a>
               <a href="/grant"
                 className="block w-full border text-sm font-medium py-3.5 rounded-full transition-colors hover:bg-yellow/5"
