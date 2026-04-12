@@ -580,8 +580,8 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Expiry warning banner */}
-      {daysLeft !== null && daysLeft <= 7 && !isExpired && (
+      {/* Expiry warning banner — only for paying users */}
+      {hasPaid && daysLeft !== null && daysLeft <= 7 && !isExpired && (
         <div className="border-b px-6 py-3 flex items-center justify-between gap-4"
           style={{ background: "rgba(245,197,24,0.06)", borderColor: "rgba(245,197,24,0.2)" }}>
           <p className="text-yellow text-sm font-medium">
@@ -593,7 +593,7 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
-      {isExpired && (
+      {hasPaid && isExpired && (
         <div className="border-b px-6 py-3 flex items-center justify-between gap-4"
           style={{ background: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.2)" }}>
           <p className="text-red-400 text-sm font-medium">
@@ -618,8 +618,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Expiry banner */}
-        {expiresAt && (
+        {/* Expiry banner — only for paying users */}
+        {hasPaid && expiresAt && (
           <div className={`mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border ${isExpired ? "bg-red-400/8 border-red-400/20" : daysLeft !== null && daysLeft <= 7 ? "bg-yellow/6 border-yellow/20" : "bg-white/4 border-white/8"}`}>
             <div className="flex items-center gap-3">
               <span className={`text-lg ${isExpired ? "text-red-400" : "text-yellow"}`}>{isExpired ? "⚠" : "📅"}</span>
@@ -691,8 +691,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Quota usage warning banner */}
-        {subscription && pct >= 80 && (
+        {/* Quota usage warning banner — only for paying users */}
+        {hasPaid && subscription && pct >= 80 && (
           <div className={`mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border ${pct >= 90 ? "bg-red-400/8 border-red-400/25" : "bg-yellow/6 border-yellow/20"}`}>
             <div className="flex items-center gap-3">
               <span className={`text-lg ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>⚠</span>
