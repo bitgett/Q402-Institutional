@@ -298,6 +298,7 @@ export default function DashboardPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [hasPaid, setHasPaid] = useState<boolean | null>(null);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookUrlInput, setWebhookUrlInput] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
@@ -357,6 +358,7 @@ export default function DashboardPage() {
           if (data.apiKey) {
             setSubscription(prev => ({ ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }), apiKey: data.apiKey, plan: data.plan ?? "starter" }));
             if (data.sandboxApiKey) setSandboxApiKey(data.sandboxApiKey);
+            setHasPaid(data.hasPaid === true);
           } else if (data.error === "Signature does not match address") {
             sessionStorage.removeItem(cacheKey);
           }
@@ -418,6 +420,14 @@ export default function DashboardPage() {
   }, [address, refreshUserBalance]);
 
   if (!mounted || !isConnected || !address) return null;
+
+  const MASTER_ADDRESSES_LC = [
+    "0xfc77ff29178b7286a8ba703d7a70895ca74ff466",
+    "0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28",
+    "0x3717d6ed5c2bce558e715cda158023db6705fd47",
+  ];
+  const isMaster = MASTER_ADDRESSES_LC.includes(address.toLowerCase());
+  const isGated = hasPaid === false && !isMaster;
 
   const API_KEY = subscription?.apiKey ?? "—";
   const plan = subscription?.plan ?? "starter";
@@ -502,6 +512,41 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
+      {/* Paywall gate — shown to connected-but-unpaid users */}
+      {isGated && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+          style={{ background: "rgba(5,7,10,0.88)", backdropFilter: "blur(14px)" }}>
+          <div className="w-full max-w-sm rounded-2xl border p-8 text-center shadow-2xl shadow-black"
+            style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }}>
+            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5"
+              style={{ background: "rgba(245,197,24,0.08)", border: "1px solid rgba(245,197,24,0.2)" }}>
+              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}
+                style={{ color: "#F5C518" }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold mb-2">Activate My Page</h2>
+            <p className="text-white/40 text-sm mb-7 leading-relaxed">
+              My Page is available to active Q402 subscribers.<br />
+              Make a one-time payment to unlock your API key, Gas Tank, and transaction history — or apply for a grant to get access at no cost.
+            </p>
+            <div className="space-y-3">
+              <a href="/payment"
+                className="block w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-full hover:bg-yellow-hover transition-colors">
+                Activate — from $5
+              </a>
+              <a href="/grant"
+                className="block w-full border text-sm font-medium py-3.5 rounded-full transition-colors hover:bg-yellow/5"
+                style={{ borderColor: "rgba(245,197,24,0.3)", color: "#F5C518" }}>
+                Apply for a Grant instead
+              </a>
+            </div>
+            <p className="text-white/20 text-xs mt-6">Connected as {shortAddr(address)}</p>
+          </div>
+        </div>
+      )}
+
       {depositChain && (
         <DepositModal chain={depositChain.chain} token={depositChain.token} onClose={() => setDepositChain(null)} address={address}
           onDepositVerified={balances => { setUserGasBalance(balances); setDepositChain(null); }}
