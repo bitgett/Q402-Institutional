@@ -52,11 +52,10 @@ function WalletModal({ onClose }: { onClose: () => void }) {
       desc: "Multi-chain Web3 wallet",
       icon: (
         <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center flex-shrink-0">
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="white">
-            <rect x="2" y="2" width="8" height="8" rx="1"/>
-            <rect x="14" y="2" width="8" height="8" rx="1"/>
-            <rect x="2" y="14" width="8" height="8" rx="1"/>
-            <rect x="14" y="14" width="8" height="8" rx="1"/>
+          <svg viewBox="0 0 60 24" className="w-6 h-auto" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M10.5 0C4.701 0 0 4.701 0 10.5S4.701 21 10.5 21 21 16.299 21 10.5 16.299 0 10.5 0zm0 15.75a5.25 5.25 0 110-10.5 5.25 5.25 0 010 10.5z" fill="white"/>
+            <path d="M30 0l-6 10.5L30 21l6-10.5L30 0zm0 14.7l-3.6-4.2L30 5.4l3.6 5.1L30 14.7z" fill="white"/>
+            <path d="M49.5 0C43.701 0 39 4.701 39 10.5S43.701 21 49.5 21 60 16.299 60 10.5 55.299 0 49.5 0zm0 15.75a5.25 5.25 0 110-10.5 5.25 5.25 0 010 10.5z" fill="white"/>
           </svg>
         </div>
       ),
