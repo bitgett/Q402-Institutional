@@ -294,7 +294,6 @@ export default function DashboardPage() {
   const [thisMonthCount, setThisMonthCount] = useState(0);
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
   const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0 });
-  const [_relayerTanks, setRelayerTanks] = useState<{ key: string; chain: string; token: string; balance: string; usd: string; price: number }[]>([]);
   const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
@@ -403,7 +402,6 @@ export default function DashboardPage() {
     setTankLoading(true);
     fetch("/api/gas-tank").then(r => r.json()).then(data => {
       if (data.tanks) {
-        setRelayerTanks(data.tanks);
         const prices: Record<string, number> = {};
         for (const t of data.tanks) prices[t.key] = t.price;
         setTokenPrices(prices);
