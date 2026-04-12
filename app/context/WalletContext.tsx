@@ -90,15 +90,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const init = async () => {
       const saved = localStorage.getItem("q402_wallet");
       const savedType = localStorage.getItem("q402_wallet_type") as "metamask" | "okx" | null;
+      // Immediately restore from localStorage so pages don't flash "disconnected"
       if (saved) setAddress(saved);
       if (savedType) setWalletType(savedType);
+      // Verify wallet is still connected — but only update, never clear from here.
+      // The accountsChanged event (empty array) handles actual disconnections.
+      // Clearing from init causes wallet to flash-disconnect on page navigation.
       const addr = await getConnectedAccount();
       if (addr) {
         setAddress(addr);
         localStorage.setItem("q402_wallet", addr);
-      } else if (saved) {
-        setAddress(null);
-        localStorage.removeItem("q402_wallet");
       }
       setMounted(true);
     };

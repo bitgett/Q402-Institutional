@@ -532,15 +532,17 @@ export default function DashboardPage() {
               Make a one-time payment to unlock your API key, Gas Tank, and transaction history — or apply for a grant to get access at no cost.
             </p>
             <div className="space-y-3">
-              <a href="/payment"
+              <button
+                onClick={() => router.push("/payment")}
                 className="block w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-full hover:bg-yellow-hover transition-colors">
                 Activate — from $30 / mo
-              </a>
-              <a href="/grant"
+              </button>
+              <button
+                onClick={() => router.push("/grant")}
                 className="block w-full border text-sm font-medium py-3.5 rounded-full transition-colors hover:bg-yellow/5"
                 style={{ borderColor: "rgba(245,197,24,0.3)", color: "#F5C518" }}>
                 Apply for a Grant instead
-              </a>
+              </button>
             </div>
             <p className="text-white/20 text-xs mt-6">Connected as {shortAddr(address)}</p>
           </div>
@@ -567,6 +569,32 @@ export default function DashboardPage() {
           <WalletButton />
         </div>
       </header>
+
+      {/* Expiry warning banner */}
+      {daysLeft !== null && daysLeft <= 7 && !isExpired && (
+        <div className="border-b px-6 py-3 flex items-center justify-between gap-4"
+          style={{ background: "rgba(245,197,24,0.06)", borderColor: "rgba(245,197,24,0.2)" }}>
+          <p className="text-yellow text-sm font-medium">
+            Your subscription expires in <span className="font-bold">{daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>. Renew now to avoid service interruption.
+          </p>
+          <button onClick={() => router.push("/payment")}
+            className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-1.5 rounded-full hover:bg-yellow-hover transition-colors">
+            Renew
+          </button>
+        </div>
+      )}
+      {isExpired && (
+        <div className="border-b px-6 py-3 flex items-center justify-between gap-4"
+          style={{ background: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.2)" }}>
+          <p className="text-red-400 text-sm font-medium">
+            Your subscription has expired. Your API key is currently inactive.
+          </p>
+          <button onClick={() => router.push("/payment")}
+            className="flex-shrink-0 bg-red-500 text-white font-bold text-xs px-4 py-1.5 rounded-full hover:bg-red-600 transition-colors">
+            Renew Now
+          </button>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         <div className="flex items-start justify-between mb-6 flex-wrap gap-4">

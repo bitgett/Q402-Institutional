@@ -68,6 +68,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No payment found on-chain" }, { status: 402 });
   }
 
+  // ── Prevent TX hash reuse (same TX cannot activate twice) ────────────────
+  const { kv } = await import("@vercel/kv");
+  const usedKey = `used_txhash:${result.txHash}`;
+  const alreadyUsed = await kv.get(usedKey);
+  if (alreadyUsed) {
+    return NextResponse.json({ error: "This transaction has already been used for activation" }, { status: 402 });
+  }
+  // Mark as used for 90 days (well beyond any block scan window)
+  await kv.set(usedKey, addr, { ex: 90 * 24 * 60 * 60 });
+
   const plan = planFromAmount(result.amountUSD ?? 0);
   if (!plan) {
     return NextResponse.json({ error: "Payment amount too low" }, { status: 402 });

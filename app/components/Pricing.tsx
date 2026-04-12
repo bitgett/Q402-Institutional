@@ -3,12 +3,12 @@
 const tiers = [
   {
     name: "Starter",
-    price: "$30",
+    price: "$29",
     period: "/mo",
     description: "For indie developers and early-stage projects.",
     features: [
       "500 sponsored transactions/mo",
-      "BNB Chain supported",
+      "All 5 EVM chains",
       "Full API access",
       "Community support",
     ],
@@ -19,7 +19,7 @@ const tiers = [
   },
   {
     name: "Growth",
-    price: "$150",
+    price: "$149",
     period: "/mo",
     description: "For growing products with real users.",
     features: [
@@ -35,7 +35,7 @@ const tiers = [
   },
   {
     name: "Scale",
-    price: "$800",
+    price: "$799",
     period: "/mo",
     description: "For high-throughput DeFi applications.",
     features: [

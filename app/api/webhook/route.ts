@@ -67,17 +67,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "address, signature, and url required" }, { status: 400 });
   }
 
-  // URL validation — block SSRF (private/loopback IPs)
+  // URL validation — block SSRF (private IPs, loopback, cloud metadata, IPv6 internals)
   try {
     const parsed = new URL(url);
     if (!["https:", "http:"].includes(parsed.protocol)) throw new Error("protocol");
-    const host = parsed.hostname.toLowerCase();
-    // Block loopback, link-local, private RFC-1918, metadata endpoints
-    const blocked = /^(localhost|127\.|0\.0\.0\.0|::1$|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(host);
+    const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+    const blocked =
+      // IPv4 loopback / link-local / RFC-1918
+      /^(localhost|127\.|0\.0\.0\.0|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(host) ||
+      // IPv6 loopback and link-local
+      /^(::1$|::ffff:|fe80:|fc00:|fd[0-9a-f]{2}:)/i.test(host) ||
+      // Cloud metadata endpoints (GCP, AWS, Azure)
+      /^(metadata\.google\.internal|169\.254\.169\.254|fd00:ec2::254)/.test(host) ||
+      // Octal/hex encoded IPs (e.g. 0177.0.0.1)
+      /^0[0-7]+\./.test(host);
     if (blocked) throw new Error("private");
+    // Require HTTPS in production
+    if (parsed.protocol === "http:" && process.env.NODE_ENV === "production") throw new Error("https_required");
   } catch (e) {
-    const msg = e instanceof Error && e.message === "private"
-      ? "Webhook URL must be a public endpoint"
+    const msg = e instanceof Error
+      ? (e.message === "private" ? "Webhook URL must be a public endpoint"
+        : e.message === "https_required" ? "Webhook URL must use HTTPS in production"
+        : "Invalid webhook URL")
       : "Invalid webhook URL";
     return NextResponse.json({ error: msg }, { status: 400 });
   }
