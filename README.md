@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.6** · **Last updated: 2026-04-09**  
+**Version: v1.7** · **Last updated: 2026-04-11**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -1049,18 +1049,33 @@ for (const chain of ["avax", "bnb", "eth"]) {
 | 항목 | 현황 | 우선순위 |
 |------|------|---------|
 | Stable 컨트랙트 Sourcify 검증 | 미완료 | 높음 |
-| Stable 메인넷 Gas Tank 충전 | 0.12 USDT0 (부족) | 높음 |
+| Gas Tank 충전 (전 체인 low) | BNB $0.43, ETH $1.81, AVAX $0.65, XLayer $0.34, Stable $0.12 | 즉시 필요 |
 | quackai.ai/q402 도메인 연결 | 미완료 | 중간 |
 | Webhook retry on failure | fire-and-forget | 중간 |
 | 프로젝트별 별도 릴레이어 주소 | 단일 글로벌 지갑 | 높음 (P1) |
 | SDK npm 패키지 | CDN 파일만 | 낮음 |
-| 자동화 테스트 (Jest/Vitest) | 미구현 | 중간 |
+| 자동화 테스트 (Jest/Vitest) | `scripts/test-api.mjs` 수동 스크립트만 존재 | 중간 |
 | PostgreSQL 마이그레이션 | Vercel KV로 충분 | 낮음 |
 | Gas Tank 자동 충전 | UI 토글 존재, 로직 미구현 | 중간 |
 
 ---
 
 ## 25. Changelog
+
+### v1.7 (2026-04-11)
+- **Feature**: Terms of Service (`/terms`) + Privacy Policy (`/privacy`) 페이지 추가
+- **Feature**: Footer에 Terms / Privacy 링크 추가
+- **Feature**: Gas Tank 저잔고 Telegram 알림 시스템 (`/api/gas-tank?check_alerts=1`)
+- **Feature**: Vercel Cron 매일 09:00 UTC 자동 알림 (`vercel.json`)
+- **Feature**: `TEST_MODE=true` 환경변수 — $1+ 결제를 starter 플랜으로 매핑 (E2E 테스트용)
+- **Feature**: `scripts/test-api.mjs` — API Key 유효성, Gas Tank, Sandbox Relay, 보안 체크 자동화
+- **Fix**: `checkPaymentOnChain` BNB RPC fallback 5개 추가 (`bsc.publicnode.com` rate limit 우회)
+- **Fix**: `anyQuerySucceeded` 플래그 — 모든 토큰 쿼리 실패 시 다음 RPC로 fallback
+- **Fix**: BNB blockWindow 2000 → 8000 (~7시간 범위)
+- **Fix**: `TEST_MODE` 값 trailing newline trim (`"true\n"` → `.trim() === "true"`)
+- **Fix**: Sandbox key가 relay route subscription 체크 통과 못하는 버그 수정
+- **Fix**: Gas Tank UI — 5개 체인 그리드 (`xl:grid-cols-5`), `Pool:` 라인 제거, 잔고 0 시 "Deposit" 버튼으로 표시
+- **E2E 검증**: 1 USDT BNB Chain → API Key 발급 → My Page → Sandbox Relay 전체 플로우 성공
 
 ### v1.6 (2026-04-09)
 - **Fix**: KV TX 이력 월별 키 샤딩 — 1MB 폭발 방지, 누적 가스 합계 별도 키

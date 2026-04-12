@@ -81,7 +81,7 @@ export default function DocsPage() {
               <span className="text-white/50 text-xs font-medium">docs</span>
             </a>
             <div className="hidden sm:flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-lg px-3 py-1.5">
-              <span className="text-white/25 text-xs font-mono">v1.3.0</span>
+              <span className="text-white/25 text-xs font-mono">v1.7.0</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -139,7 +139,7 @@ export default function DocsPage() {
           {/* Docs hero banner */}
           <div className="px-8 pt-12 pb-10 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, transparent 100%)" }}>
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.3.0</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.7.0</span>
               <span className="text-white/20 text-xs">·</span>
               <span className="text-white/30 text-xs">EIP-712 + EIP-7702</span>
             </div>
