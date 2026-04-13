@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { getGasBalance, addGasDeposit } from "@/app/lib/db";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   bnb:    { rpc: "https://bsc-dataseed1.binance.org/",         token: "BNB"  },
@@ -19,6 +20,10 @@ function checkAdminSecret(req: NextRequest): boolean {
 // Admin-only: Withdraw gas balance for an address.
 // Requires x-admin-secret header.
 export async function POST(req: NextRequest) {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "admin-withdraw", 5, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
   if (!checkAdminSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
