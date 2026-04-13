@@ -507,6 +507,10 @@ Sandbox 키는 한도/크레딧 적용 안 함.
 | /api/transactions | 30 req/60s |
 | /api/webhook | 10 req/60s |
 | /api/inquiry | 3 req/600s |
+| /api/inquiry (GET admin) | **5 req/60s** (v1.9 추가) |
+| /api/grant (GET admin) | **5 req/60s** (v1.9 추가) |
+| /api/gas-tank/withdraw | **5 req/60s** (v1.9 추가) |
+| /api/gas-tank/user-balance | 30 req/60s (v1.9 추가) |
 
 ---
 
@@ -805,7 +809,7 @@ const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 - 4개 체인에서 배치 RPC 블록 스캔 (BNB/AVAX/XLayer: 200블록, ETH: 50블록)
 - `from=유저, to=릴레이어, value≠0` 필터 → `addGasDeposit()`
 
-**잔고 조회:** `GET /api/gas-tank/user-balance?apiKey=q402_live_xxx`
+**잔고 조회:** `GET /api/gas-tank/user-balance?address=0x...`
 
 ```json
 {
@@ -1114,6 +1118,11 @@ for (const chain of ["avax", "bnb", "eth"]) {
   - BNB/XLayer/Stable 1.0×, AVAX 1.1×, ETH 1.5× 적용
   - ETH $30 결제 → BNB 기준($30) 통과했던 버그 수정 (ETH 임계값 $39 적용)
 
+#### 보안 감사 수정 (2026-04-13)
+- **Security**: `TEST_MODE` 환경변수 완전 제거 — `.env.local` + Vercel production 환경에서 삭제, `planFromAmount()` 우회 코드 제거
+- **Security**: Admin 엔드포인트 Rate Limit 추가 — `GET /api/grant`, `GET /api/inquiry`, `POST /api/gas-tank/withdraw` 모두 IP당 5 req/60s 적용 (admin secret 검증 전)
+- **Fix**: `/api/gas-tank/user-balance` 파라미터 변경 — `?apiKey=` → `?address=` (API 키 URL 노출 차단, Gas Tank $0 버그 수정)
+
 ### v1.8 (2026-04-13)
 
 #### 보안 수정
@@ -1141,7 +1150,7 @@ for (const chain of ["avax", "bnb", "eth"]) {
 - **Feature**: Footer에 Terms / Privacy 링크 추가
 - **Feature**: Gas Tank 저잔고 Telegram 알림 시스템 (`/api/gas-tank?check_alerts=1`)
 - **Feature**: Vercel Cron 매일 09:00 UTC 자동 알림 (`vercel.json`)
-- **Feature**: `TEST_MODE=true` 환경변수 — $1+ 결제를 starter 플랜으로 매핑 (E2E 테스트용)
+- **Feature**: `TEST_MODE=true` 환경변수 — $1+ 결제를 starter 플랜으로 매핑 (E2E 테스트용) ⚠️ v1.9에서 완전 제거됨
 - **Feature**: `scripts/test-api.mjs` — API Key 유효성, Gas Tank, Sandbox Relay, 보안 체크 자동화
 - **Fix**: `checkPaymentOnChain` BNB RPC fallback 5개 추가 (`bsc.publicnode.com` rate limit 우회)
 - **Fix**: `anyQuerySucceeded` 플래그 — 모든 토큰 쿼리 실패 시 다음 RPC로 fallback
