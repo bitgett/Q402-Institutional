@@ -166,6 +166,10 @@ export async function getGasBalance(address: string): Promise<Record<string, num
   for (const chain of Object.keys(usedTotals)) {
     totals[chain] = (totals[chain] ?? 0) - usedTotals[chain];
   }
+  // Clamp to 0 — negative balance means deposit was never recorded in KV
+  for (const chain of Object.keys(totals)) {
+    if (totals[chain] < 0) totals[chain] = 0;
+  }
   return totals;
 }
 
