@@ -83,13 +83,26 @@ const CHAINS = [
   },
 ];
 
+/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable") to CHAINS[].name */
+const INTENT_CHAIN_MAP: Record<string, string> = {
+  bnb:    "BNB Chain",
+  eth:    "Ethereum",
+  avax:   "Avalanche",
+  xlayer: "X Layer",
+  stable: "Stable",
+};
+
 /**
- * Scan all supported chains for USDC/USDT transfer from `fromAddress` to relayer.
- * Checks chains in parallel; returns the first (largest) payment found.
+ * Scan supported chains for USDC/USDT transfer from `fromAddress` to relayer.
+ * If `intentChain` is provided (e.g. "bnb"), only that chain is scanned.
+ * Checks remaining chains in parallel; returns the largest payment found.
  */
-export async function checkPaymentOnChain(fromAddress: string): Promise<PaymentResult> {
+export async function checkPaymentOnChain(fromAddress: string, intentChain?: string): Promise<PaymentResult> {
+  const targetName = intentChain ? INTENT_CHAIN_MAP[intentChain] : undefined;
+  const chainsToScan = targetName ? CHAINS.filter(c => c.name === targetName) : CHAINS;
+
   const results = await Promise.allSettled(
-    CHAINS.map(chain => scanChain(chain, fromAddress))
+    chainsToScan.map(chain => scanChain(chain, fromAddress))
   );
 
   let best: PaymentResult = { found: false };

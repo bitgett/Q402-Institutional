@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useWallet } from "@/app/context/WalletContext";
 import { isWalletInstalled } from "@/app/lib/wallet";
+import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -246,26 +247,48 @@ export default function PaymentPage() {
     setPayStep("verifying");
     setVerifyError(null);
     try {
-      // Prove address ownership before activating — same message as provision
-      const PROVISION_MSG = `Q402 API Key Request\nAddress: ${address.toLowerCase()}`;
-      const cacheKey      = `q402_sig_${address.toLowerCase()}`;
-      let signature = sessionStorage.getItem(cacheKey);
-      if (!signature) {
-        signature = await signMessage(PROVISION_MSG);
-        if (!signature) {
-          setVerifyError("__sig_declined__");
+      // Get nonce-based auth credentials (cached 7.5h; wallet popup once per session)
+      const auth = await getAuthCreds(address, signMessage);
+      if (!auth) {
+        setVerifyError("__sig_declined__");
+        setPayStep("error");
+        return;
+      }
+      const { nonce, signature } = auth;
+
+      // Record payment intent (chain + expected USD) before scanning blockchain.
+      // activate route validates the found TX against this intent.
+      if (!isEnterprise && price > 0) {
+        const intentRes = await fetch("/api/payment/intent", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ address, nonce, signature, chain: selectedChain, expectedUSD: price }),
+        });
+        if (!intentRes.ok) {
+          const d = await intentRes.json();
+          if (intentRes.status === 401 && d.code === "NONCE_EXPIRED") { clearAuthCache(address); }
+          setVerifyAttempts(v => v + 1);
+          setVerifyError(d.error ?? "Could not record payment intent.");
           setPayStep("error");
           return;
         }
-        sessionStorage.setItem(cacheKey, signature);
       }
 
       const res  = await fetch("/api/payment/activate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ address, signature }),
+        body:    JSON.stringify({ address, nonce, signature }),
       });
       const data = await res.json();
+
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") {
+        clearAuthCache(address);
+        setVerifyAttempts(v => v + 1);
+        setVerifyError("Session expired. Please try again.");
+        setPayStep("error");
+        return;
+      }
+
       if (res.ok && (data.status === "activated" || data.status === "already_active" || data.status === "credits_added")) {
         setActivatedPlan(data.plan);
         setPayStep("success");

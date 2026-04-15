@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.9** · **Last updated: 2026-04-13**  
+**Version: v1.12** · **Last updated: 2026-04-15**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -456,16 +456,26 @@ API Key 유효성 검증 + 만료/교체 확인.
 
 ## 10. Authentication Model
 
-**EIP-191 personal_sign** — 모든 유저용 API에서 지갑 소유권 증명:
+**Nonce 기반 EIP-191 personal_sign (v1.12~)** — 모든 유저용 API에서 지갑 소유권 증명:
 
 ```
-서명 메시지: "Q402 API Key Request\nAddress: {address_lowercase}"
+서명 메시지: "Q402 Auth\nAddress: {address_lowercase}\nNonce: {nonce}"
+nonce: GET /api/auth/nonce?address=0x...  → { nonce, expiresIn: 28800 }
 ```
 
-1. 클라이언트가 한 번 서명 → `sessionStorage["q402_sig_0xaddr"]`에 캐시
-2. 서버: `ethers.verifyMessage(msg, sig)` → 주소 일치 확인
+**플로우:**
+1. `GET /api/auth/nonce?address=0x...` → 서버가 KV에 nonce 저장 (8시간 TTL)
+2. 클라이언트가 서명 → `sessionStorage["q402_auth_0xaddr"]`에 `{nonce, signature}` 캐시 (7.5h TTL)
+3. 모든 보호 요청에 `{address, nonce, signature}` 전달
+4. 서버: `verifyNonceSignature(addr, nonce, sig)` — nonce KV 검증 + ECDSA 검증
+5. 401 `NONCE_EXPIRED` 수신 시: 클라이언트 캐시 삭제 → 다음 요청에서 재서명
 
-`/api/keys/provision`, `/api/keys/rotate`, `/api/transactions`, `/api/payment/activate`에 적용.
+**키 로테이션 후** `invalidateNonce(addr)` 호출 → 다음 민감한 요청에서 강제 재서명.
+
+**적용 엔드포인트:**
+- `POST`: `/api/keys/provision`, `/api/keys/rotate`, `/api/payment/activate`, `/api/payment/intent`
+- `POST`: `/api/webhook` (등록/수정/삭제), `/api/webhook/test`
+- `GET` (쿼리파라미터): `/api/transactions?address=&nonce=&sig=`, `/api/webhook?address=&nonce=&sig=`
 
 ---
 
@@ -1102,6 +1112,52 @@ for (const chain of ["avax", "bnb", "eth"]) {
 ---
 
 ## 25. Changelog
+
+### v1.12 (2026-04-15)
+
+#### P0 보안 강화 — Nonce 기반 인증 + Sandbox-Only 프로비저닝 + Payment Intent
+
+**[P0] Nonce 기반 EIP-191 인증 시스템 (전 엔드포인트)**
+- `app/lib/auth.ts` 신규 — 서버사이드 nonce 코어
+  - `createOrGetNonce(addr)` — `auth_nonce:{addr}` KV에 8시간 TTL로 저장, 멱등적
+  - `verifyNonceSignature(addr, nonce, sig)` — 서명 메시지: `"Q402 Auth\nAddress: {addr}\nNonce: {nonce}"`
+  - `invalidateNonce(addr)` — 키 로테이션 후 강제 재서명 유도
+  - `requireAuth(address, nonce, signature)` — 모든 보호 라우트에서 공유하는 헬퍼
+- `app/lib/auth-client.ts` 신규 — 클라이언트 nonce 캐시
+  - `getAuthCreds(addr, signFn)` — sessionStorage 7.5h 캐시, 지갑 팝업 1회/세션
+  - `clearAuthCache(addr)` — NONCE_EXPIRED 수신 시 호출
+- `app/api/auth/nonce/route.ts` 신규 — `GET /api/auth/nonce?address=0x...`
+  - 20 req/60s rate limit, fail-closed
+
+**[P0] 신규 계정 Sandbox Key만 발급 (live key는 결제 후 activate에서만 발급)**
+- `app/api/keys/provision/route.ts` 리팩터
+  - 기존 정적 서명 (`Q402 API Key Request\nAddress: {addr}`) → `requireAuth()` 교체
+  - 신규 계정: `apiKey: null`, `sandboxApiKey: "q402_test_..."`, `hasPaid: false`
+  - 기존 유료 계정: live key 정상 반환
+
+**[P1] Payment Intent — 결제 전 체인+금액 바인딩**
+- `app/api/payment/intent/route.ts` 신규 — `POST /api/payment/intent`
+  - body: `{address, nonce, signature, chain, expectedUSD}`
+  - KV에 2시간 TTL로 intent 저장 (`payment_intent:{addr}`)
+- `app/api/payment/activate/route.ts` 업데이트
+  - intent 없으면 402 (`NO_INTENT` 코드)
+  - 발견된 TX의 체인이 intent와 다르면 402 (`CHAIN_MISMATCH`)
+  - 결제 금액이 intent의 95% 미만이면 402 (`AMOUNT_LOW`)
+  - `clearPaymentIntent(addr)` — 활성화 성공 후 intent 삭제 (재사용 방지)
+- `app/lib/blockchain.ts` — `checkPaymentOnChain(from, intentChain?)` optional chain filter 추가
+
+**나머지 서버 라우트 nonce 인증 마이그레이션:**
+- `app/api/keys/rotate/route.ts` — `requireAuth()` + 로테이션 후 `invalidateNonce(addr)`
+- `app/api/transactions/route.ts` — GET 파라미터에 `nonce` 추가
+- `app/api/webhook/route.ts` (GET/POST/DELETE) — GET은 쿼리파라미터 nonce, POST/DELETE는 body
+- `app/api/webhook/test/route.ts` — `requireAuth()` 교체
+
+**프론트엔드 (dashboard, payment)**
+- `app/dashboard/page.tsx` — `q402_sig_*` sessionStorage 패턴 → `getAuthCreds()` 전면 교체
+  - provision, transactions, webhook GET, rotateKey, saveWebhook, testWebhook 모두 업데이트
+  - 401 NONCE_EXPIRED 수신 시 `clearAuthCache()` → 다음 로드에서 자동 재서명
+  - `apiKey: null` 응답 처리 (미결제 계정은 live key 표시 안 함)
+- `app/payment/page.tsx` — `getAuthCreds()` 교체 + activate 전 intent POST 추가
 
 ### v1.11 (2026-04-15)
 
