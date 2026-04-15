@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ethers } from "ethers";
 import { rotateApiKey } from "@/app/lib/db";
+import { requireAuth, invalidateNonce } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
-
-const PROVISION_MSG = (addr: string) =>
-  `Q402 API Key Request\nAddress: ${addr.toLowerCase()}`;
 
 /**
  * POST /api/keys/rotate
  *
  * Deactivates the current live API key and issues a new one.
- * Requires the same EIP-191 proof-of-ownership signature.
+ * Requires nonce-based EIP-191 proof-of-ownership to prevent address spoofing.
+ * Nonce is invalidated after rotation, forcing re-sign on the next sensitive action.
  *
- * Body: { address: string, signature: string }
+ * Body: { address, nonce, signature }
+ *   nonce obtained from GET /api/auth/nonce?address={addr}
  */
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
@@ -20,26 +19,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; signature?: string };
+  let body: { address?: string; nonce?: string; signature?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { address, signature } = body;
-  if (!address || !signature) {
-    return NextResponse.json({ error: "address and signature required" }, { status: 400 });
+  const authResult = await requireAuth(body.address, body.nonce, body.signature);
+  if (typeof authResult !== "string") {
+    return NextResponse.json(
+      { error: authResult.error, code: authResult.code },
+      { status: authResult.status },
+    );
   }
-
-  const addr = address.toLowerCase();
-
-  try {
-    const recovered = ethers.verifyMessage(PROVISION_MSG(addr), signature);
-    if (recovered.toLowerCase() !== addr) throw new Error();
-  } catch {
-    return NextResponse.json({ error: "Signature does not match address" }, { status: 401 });
-  }
+  const addr = authResult;
 
   try {
     const newKey = await rotateApiKey(addr);
+    // Invalidate nonce after key rotation — forces re-sign on next sensitive action
+    await invalidateNonce(addr);
     return NextResponse.json({ apiKey: newKey });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Rotation failed";

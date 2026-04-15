@@ -1,27 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ethers } from "ethers";
 import {
   getWebhookConfig,
   setWebhookConfig,
   deleteWebhookConfig,
 } from "@/app/lib/db";
+import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
-const PROVISION_MSG = (addr: string) =>
-  `Q402 API Key Request\nAddress: ${addr.toLowerCase()}`;
-
-function verifySignature(addr: string, signature: string): boolean {
-  try {
-    const recovered = ethers.verifyMessage(PROVISION_MSG(addr), signature);
-    return recovered.toLowerCase() === addr.toLowerCase();
-  } catch {
-    return false;
-  }
-}
-
 /**
- * GET /api/webhook?address=0x...&sig=0x...
+ * GET /api/webhook?address=0x...&nonce=xxx&sig=0x...
  * Returns current webhook config (URL only, not secret).
+ * nonce obtained from GET /api/auth/nonce?address={addr}
  */
 export async function GET(req: NextRequest) {
   const ip = getClientIP(req);
@@ -30,11 +19,19 @@ export async function GET(req: NextRequest) {
   }
 
   const address = req.nextUrl.searchParams.get("address");
+  const nonce   = req.nextUrl.searchParams.get("nonce");
   const sig     = req.nextUrl.searchParams.get("sig");
-  if (!address || !sig) return NextResponse.json({ error: "address and sig required" }, { status: 400 });
-  if (!verifySignature(address, sig)) return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
 
-  const config = await getWebhookConfig(address.toLowerCase());
+  const authResult = await requireAuth(address, nonce, sig);
+  if (typeof authResult !== "string") {
+    return NextResponse.json(
+      { error: authResult.error, code: authResult.code },
+      { status: authResult.status },
+    );
+  }
+  const addr = authResult;
+
+  const config = await getWebhookConfig(addr);
   if (!config) return NextResponse.json({ configured: false });
 
   return NextResponse.json({
@@ -49,7 +46,8 @@ export async function GET(req: NextRequest) {
 /**
  * POST /api/webhook
  * Register or update webhook URL.
- * Body: { address, signature, url }
+ * Body: { address, nonce, signature, url }
+ *   nonce obtained from GET /api/auth/nonce?address={addr}
  * Returns the signing secret (shown ONCE — store it).
  */
 export async function POST(req: NextRequest) {
@@ -58,13 +56,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; signature?: string; url?: string };
+  let body: { address?: string; nonce?: string; signature?: string; url?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { address, signature, url } = body;
-  if (!address || !signature || !url) {
-    return NextResponse.json({ error: "address, signature, and url required" }, { status: 400 });
+  const { url } = body;
+  if (!url) {
+    return NextResponse.json({ error: "url required" }, { status: 400 });
   }
 
   // URL validation — block SSRF (private IPs, loopback, cloud metadata, IPv6 internals)
@@ -93,16 +91,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  if (!verifySignature(address, signature)) {
-    return NextResponse.json({ error: "Signature does not match address" }, { status: 401 });
+  const authResult = await requireAuth(body.address, body.nonce, body.signature);
+  if (typeof authResult !== "string") {
+    return NextResponse.json(
+      { error: authResult.error, code: authResult.code },
+      { status: authResult.status },
+    );
   }
+  const addr = authResult;
 
   const { randomBytes } = await import("crypto");
   // Reuse existing secret if re-registering — keeps client's stored secret valid
-  const existing = await getWebhookConfig(address.toLowerCase());
+  const existing = await getWebhookConfig(addr);
   const secret = existing?.secret ?? randomBytes(32).toString("hex");
 
-  await setWebhookConfig(address.toLowerCase(), {
+  await setWebhookConfig(addr, {
     url,
     secret,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
@@ -123,7 +126,8 @@ export async function POST(req: NextRequest) {
 /**
  * DELETE /api/webhook
  * Remove webhook config.
- * Body: { address, signature }
+ * Body: { address, nonce, signature }
+ *   nonce obtained from GET /api/auth/nonce?address={addr}
  */
 export async function DELETE(req: NextRequest) {
   const ip = getClientIP(req);
@@ -131,18 +135,19 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; signature?: string };
+  let body: { address?: string; nonce?: string; signature?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { address, signature } = body;
-  if (!address || !signature) {
-    return NextResponse.json({ error: "address and signature required" }, { status: 400 });
+  const authResult = await requireAuth(body.address, body.nonce, body.signature);
+  if (typeof authResult !== "string") {
+    return NextResponse.json(
+      { error: authResult.error, code: authResult.code },
+      { status: authResult.status },
+    );
   }
-  if (!verifySignature(address, signature)) {
-    return NextResponse.json({ error: "Signature does not match address" }, { status: 401 });
-  }
+  const addr = authResult;
 
-  await deleteWebhookConfig(address.toLowerCase());
+  await deleteWebhookConfig(addr);
   return NextResponse.json({ success: true });
 }

@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ethers } from "ethers";
 import { getWebhookConfig } from "@/app/lib/db";
+import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { createHmac } from "crypto";
-
-const PROVISION_MSG = (addr: string) =>
-  `Q402 API Key Request\nAddress: ${addr.toLowerCase()}`;
 
 /**
  * POST /api/webhook/test
  * Fires a test event to the registered webhook URL.
- * Body: { address, signature }
+ * Body: { address, nonce, signature }
+ *   nonce obtained from GET /api/auth/nonce?address={addr}
  */
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
@@ -18,23 +16,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; signature?: string };
+  let body: { address?: string; nonce?: string; signature?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const { address, signature } = body;
-  if (!address || !signature) {
-    return NextResponse.json({ error: "address and signature required" }, { status: 400 });
+  const authResult = await requireAuth(body.address, body.nonce, body.signature);
+  if (typeof authResult !== "string") {
+    return NextResponse.json(
+      { error: authResult.error, code: authResult.code },
+      { status: authResult.status },
+    );
   }
+  const addr = authResult;
 
-  try {
-    const recovered = ethers.verifyMessage(PROVISION_MSG(address.toLowerCase()), signature);
-    if (recovered.toLowerCase() !== address.toLowerCase()) throw new Error();
-  } catch {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
-  }
-
-  const config = await getWebhookConfig(address.toLowerCase());
+  const config = await getWebhookConfig(addr);
   if (!config?.active) {
     return NextResponse.json({ error: "No webhook configured" }, { status: 404 });
   }
@@ -54,7 +49,7 @@ export async function POST(req: NextRequest) {
     event: "relay.test",
     txHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
     chain: "avax",
-    from: address,
+    from: addr,
     to: "0x000000000000000000000000000000000000dEaD",
     amount: 1.0,
     token: "USDC",
