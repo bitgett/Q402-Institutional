@@ -81,7 +81,7 @@ export default function DocsPage() {
               <span className="text-white/50 text-xs font-medium">docs</span>
             </a>
             <div className="hidden sm:flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-lg px-3 py-1.5">
-              <span className="text-white/25 text-xs font-mono">v1.7.0</span>
+              <span className="text-white/25 text-xs font-mono">v1.10</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -139,7 +139,7 @@ export default function DocsPage() {
           {/* Docs hero banner */}
           <div className="px-8 pt-12 pb-10 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, transparent 100%)" }}>
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.7.0</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.10</span>
               <span className="text-white/20 text-xs">·</span>
               <span className="text-white/30 text-xs">EIP-712 + EIP-7702</span>
             </div>
@@ -256,42 +256,39 @@ export default function DocsPage() {
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Load the SDK</h3>
             <CodeBlock lang="html" code={`<script src="https://q402-institutional.vercel.app/q402-sdk.js"></script>`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · User signs (client-side, zero gas)</h3>
-            <CodeBlock lang="javascript" code={`// Wallet popup appears — user signs, no gas required
-const result = await Q402.sign({
-  chain:    "bnb",         // "bnb" | "avax" | "eth" | "xlayer" | "stable"
-  token:    "USDC",
-  from:     userWalletAddress,
-  to:       recipientAddress,
-  amount:   "50000000",   // atomic units (6 decimals = 50 USDC)
-  deadline: Math.floor(Date.now() / 1000) + 3600,
-  apiKey:   "q402_live_YOUR_KEY",
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · One-line gasless payment (client-side)</h3>
+            <CodeBlock lang="javascript" code={`// Initialize once with your API key + chain
+const q402 = new Q402Client({
+  apiKey: "q402_live_YOUR_KEY",
+  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable"
 });
-// result → { witnessSig, authorization, ... }
+
+// Wallet popup appears — user signs, Q402 relays on-chain
+// amount is human-readable (e.g. "50.00" = 50 USDC)
+const result = await q402.pay({
+  to:     recipientAddress,
+  amount: "50.00",
+  token:  "USDC",
+});
+// result → { success: true, txHash: "0xabc...", tokenAmount: 50, chain: "bnb" }
 `} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · Submit from your backend</h3>
-            <CodeBlock lang="typescript" code={`// POST to Q402 relay — Q402 handles the rest
-const res = await fetch("https://q402-institutional.vercel.app/api/relay", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    apiKey:        "q402_live_YOUR_KEY",
-    chain:         "bnb",
-    token:         "USDC",
-    from:          userWalletAddress,
-    to:            recipientAddress,
-    amount:        "50000000",
-    deadline:      deadline,
-    witnessSig:    result.witnessSig,
-    authorization: result.authorization,
-  }),
-});
-const data = await res.json();
-// { success: true, txHash: "0xabc123...", chain: "bnb", blockNumber: "38482910" }`} />
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · That&apos;s it</h3>
+            <CodeBlock lang="typescript" code={`// Full result shape:
+// {
+//   success:       true,
+//   txHash:        "0xdef456...",
+//   chain:         "bnb",
+//   blockNumber:   "38482910",
+//   tokenAmount:   50,
+//   token:         "USDC",
+//   gasCostNative: 0.000021,
+//   method:        "eip7702",
+// }
+console.log("Paid! TX:", result.txHash);`} />
 
             <Callout type="tip">
-              That&apos;s the full integration. The user never touches BNB, ETH, or AVAX. Gas is deducted from your pre-funded gas pool automatically.
+              The SDK handles signing <em>and</em> relay in one call — no separate backend step needed. The user never touches BNB, ETH, or AVAX. Gas is deducted from your pre-funded gas pool automatically.
             </Callout>
           </Section>
 
@@ -317,7 +314,7 @@ const data = await res.json();
             </div>
 
             <Callout type="warn">
-              If your gas pool is empty, transactions will fail. Q402 sends email alerts before depletion. Top up via your dashboard or directly to the gas pool address.
+              If your gas pool is empty, transactions will fail. Q402 sends Telegram alerts before depletion. Top up via your dashboard or directly to the gas pool address.
             </Callout>
           </Section>
 
@@ -468,9 +465,21 @@ const DOMAIN_NAMES = {
 //   avax / bnb / eth / stable → CONTRACTS[chain]  (impl contract address)
 //   xlayer                    → user's own EOA     (address(this) under EIP-7702)`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Witness Type: TransferAuthorization</h3>
-            <CodeBlock lang="typescript" code={`// All chains use TransferAuthorization (7 fields, same structure)
-const types = {
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Witness Types (chain-specific)</h3>
+            <CodeBlock lang="typescript" code={`// ── avax / bnb / eth ── PaymentWitness (6 fields)
+const typesStandard = {
+  PaymentWitness: [
+    { name: "owner",     type: "address" }, // token sender (user's EOA)
+    { name: "token",     type: "address" }, // ERC-20 contract (USDC / USDT)
+    { name: "amount",    type: "uint256" }, // atomic units
+    { name: "to",        type: "address" }, // payment destination
+    { name: "deadline",  type: "uint256" }, // unix timestamp
+    { name: "paymentId", type: "bytes32" }, // unique payment ID (replay protection)
+  ],
+};
+
+// ── xlayer / stable ── TransferAuthorization (7 fields)
+const typesXL = {
   TransferAuthorization: [
     { name: "owner",       type: "address" }, // token sender (user's EOA)
     { name: "facilitator", type: "address" }, // gas sponsor (Q402 relayer)
@@ -480,7 +489,11 @@ const types = {
     { name: "nonce",       type: "uint256" }, // random uint256, replay protection
     { name: "deadline",    type: "uint256" }, // unix timestamp
   ],
-};`} />
+};
+
+// verifyingContract:
+//   avax / bnb / eth / stable → CONTRACTS[chain]  (impl contract address)
+//   xlayer                    → user's own EOA     (address(this) under EIP-7702)`} />
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Signing with ethers.js</h3>
             <CodeBlock lang="typescript" code={`// Fetch facilitator address first (required for all chains)
@@ -522,7 +535,7 @@ const signature = await signer.signTypedData(domain, types, {
                 { code: "DEADLINE_EXPIRED",      http: "400", desc: "The deadline timestamp has passed. Generate a new payload with a future deadline." },
                 { code: "INSUFFICIENT_BALANCE", http: "400", desc: "Sender wallet has insufficient USDC for the requested amount." },
                 { code: "GAS_POOL_EMPTY",       http: "402", desc: "Your gas pool is empty. Top up via dashboard to resume transactions." },
-                { code: "QUOTA_EXCEEDED",       http: "429", desc: "Monthly API quota exhausted. Upgrade plan or wait for reset." },
+                { code: "QUOTA_EXCEEDED",       http: "429", desc: "Sponsored TX credits exhausted. Purchase additional credits or upgrade your plan." },
                 { code: "CHAIN_NOT_SUPPORTED",  http: "400", desc: "Chain is not currently supported or still deploying." },
                 { code: "UNAUTHORIZED",         http: "401", desc: "Missing or invalid API key." },
                 { code: "INTERNAL_ERROR",       http: "500", desc: "Q402 server error. Retry with exponential backoff." },
