@@ -13,9 +13,14 @@ function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.
 const RELAYER_ADDRESS = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
 
 const PLAN_QUOTA: Record<string, number> = {
-  starter:     1_000,
-  growth:     10_000,
-  enterprise: 100_000,
+  starter:          500,
+  basic:          1_000,
+  growth:        10_000,
+  pro:           10_000,
+  scale:        100_000,
+  business:     100_000,
+  enterprise:   100_000,
+  enterprise_flex: 500_000,
 };
 
 const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string; gasNote?: string }> = {

@@ -1103,6 +1103,18 @@ for (const chain of ["avax", "bnb", "eth"]) {
 
 ## 25. Changelog
 
+### v1.10 (2026-04-15)
+
+#### 보안 감사 수정 (Codex audit 반영)
+- **Security [P0]**: 무료 provision 계정 `paidAt` 빈 문자열로 변경 — `isSubscriptionActive()` 오남용 차단
+  - `relay/route.ts`: 만료 체크를 `amountUSD > 0 && paidAt` 유료 계정에만 적용, sandbox 스킵
+  - `payment/check/route.ts`: 무료 계정을 `not_found` 처리 (결제 페이지 유도)
+  - `db.ts`: `isSubscriptionActive()` / `getSubscriptionExpiry()` 빈 paidAt 방어 추가
+- **Security [P1]**: Rate limit `failOpen` 파라미터 추가 — `/api/relay`, `/api/gas-tank/verify-deposit` fail-closed로 변경 (KV 장애 시 차단)
+- **Fix [P1]**: Gas Tank 출금 `tx.wait(1)` 추가 — receipt 1 confirmation 확인 후 잔고 차감 (dropped TX 방지)
+- **Fix [P2]**: Dashboard `PLAN_QUOTA` starter `1_000 → 500` 수정, 누락 플랜(basic/pro/scale/business/enterprise_flex) 추가
+- **Fix [P3]**: `/api/gas-tank/verify-deposit` `newDeposits` 카운트 수정 — `addGasDeposit()` 반환값으로 중복 TX 제외
+
 ### v1.9 (2026-04-13)
 
 #### 결제 모델 개편

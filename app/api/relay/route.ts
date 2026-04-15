@@ -54,9 +54,9 @@ export async function POST(req: NextRequest) {
     facilitator?:  string;
   };
 
-  // ── 0. Rate limit: 60 relay calls / 60 s per IP ──────────────────────────
+  // ── 0. Rate limit: 60 relay calls / 60 s per IP (fail-closed — KV down = block) ──
   const ip = getClientIP(req);
-  if (!(await rateLimit(ip, "relay", 60, 60))) {
+  if (!(await rateLimit(ip, "relay", 60, 60, false))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
@@ -132,8 +132,8 @@ export async function POST(req: NextRequest) {
   // Only trust the DB field — never the key prefix (client-facing, spoofable)
   const isSandbox = keyRecord.isSandbox === true;
 
-  // ── 3b. Per-API-key rate limit (30 relay calls / 60s per key) ────────────
-  if (!(await rateLimit(apiKey, "relay-key", 30, 60))) {
+  // ── 3b. Per-API-key rate limit (30 relay calls / 60s per key, fail-closed) ─
+  if (!(await rateLimit(apiKey, "relay-key", 30, 60, false))) {
     return NextResponse.json({ error: "Too many requests for this API key" }, { status: 429 });
   }
 
@@ -145,9 +145,15 @@ export async function POST(req: NextRequest) {
     if (!isCurrentKey) {
       return NextResponse.json({ error: "API key has been rotated. Please use your current key." }, { status: 401 });
     }
-    const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
-    if (new Date() >= expiresAt) {
-      return NextResponse.json({ error: "Subscription expired. Please renew to continue." }, { status: 403 });
+    // Expiry check: only for paid accounts (amountUSD > 0) with a real paidAt timestamp.
+    // Provisioned free accounts have paidAt="" — skip to avoid false "expired" errors.
+    // Sandbox requests also bypass expiry (they don't consume the paid quota).
+    const isPaidAccount = (subscription.amountUSD ?? 0) > 0 && !!subscription.paidAt;
+    if (!isSandbox && isPaidAccount) {
+      const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+      if (new Date() >= expiresAt) {
+        return NextResponse.json({ error: "Subscription expired. Please renew to continue." }, { status: 403 });
+      }
     }
   }
 

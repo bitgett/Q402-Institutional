@@ -81,10 +81,12 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Auto-provision free starter key + sandbox key ─────────────────────────
+  // amountUSD: 0 → hasPaid=false → live relay blocked (requires quotaBonus > 0)
+  // paidAt: "" → no subscription expiry calculated; relay expiry check skipped for unpaid accounts
   const apiKey       = await generateApiKey(addr, "starter");
   const sandboxApiKey = await generateSandboxKey(addr, "starter");
   await setSubscription(addr, {
-    paidAt:     new Date().toISOString(),
+    paidAt:     "",
     apiKey,
     sandboxApiKey,
     plan:       "starter",
@@ -92,5 +94,5 @@ export async function POST(req: NextRequest) {
     amountUSD:  0,
   });
 
-  return NextResponse.json({ apiKey, sandboxApiKey, plan: "starter", hasPaid: false, isNew: true });
+  return NextResponse.json({ apiKey, sandboxApiKey, plan: "starter", hasPaid: false, isNew: true, quotaBonus: 0, paidAt: "" });
 }
