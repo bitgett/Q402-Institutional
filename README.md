@@ -1103,6 +1103,19 @@ for (const chain of ["avax", "bnb", "eth"]) {
 
 ## 25. Changelog
 
+### v1.11 (2026-04-15)
+
+#### Codex 2차 감사 수정
+- **Fix [P2]**: `/api/inquiry` KV 저장 방식 변경 — `get→set` array 패턴 → Redis `rpush/lrange` (동시 요청 시 last-write-wins 유실 방지)
+- **Docs [P1]**: `docs/page.tsx` Quick Start 코드 수정
+  - `Q402.sign()` (존재하지 않던 메서드) → `new Q402Client({apiKey, chain}).pay({to, amount, token})`
+  - amount 형식: atomic units `"50000000"` → human-readable `"50.00"`
+  - 2-step flow(sign + backend relay) → SDK가 모두 처리하는 단일 `pay()` 호출로 통일
+- **Docs [P1]**: EIP-712 Witness 타입 체인별 분리 명시
+  - avax/bnb/eth: `PaymentWitness` (6 fields: owner, token, amount, to, deadline, paymentId)
+  - xlayer/stable: `TransferAuthorization` (7 fields: owner, facilitator, token, recipient, amount, nonce, deadline)
+- **Docs**: 버전 배지 `v1.7.0 → v1.10`, 에러코드 `QUOTA_EXCEEDED` 설명 TX credits 모델로 수정, Gas Pool alert email → Telegram
+
 ### v1.10 (2026-04-15)
 
 #### 보안 감사 수정 (Codex audit 반영)
