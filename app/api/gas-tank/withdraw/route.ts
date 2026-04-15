@@ -72,6 +72,13 @@ export async function POST(req: NextRequest) {
       gasLimit,
     });
 
+    // Wait for 1 confirmation before recording the deduction.
+    // If the TX is dropped or replaced, this throws — balance stays intact.
+    const receipt = await tx.wait(1);
+    if (!receipt || receipt.status !== 1) {
+      throw new Error("Transaction reverted on-chain");
+    }
+
     await addGasDeposit(address, {
       chain,
       token: chainCfg.token,
