@@ -51,8 +51,9 @@ export async function POST(req: NextRequest) {
     submittedAt: new Date().toISOString(),
   };
 
-  const existing = (await kv.get<Inquiry[]>("inquiries")) ?? [];
-  await kv.set("inquiries", [...existing, inquiry]);
+  // Use Redis list (rpush) instead of read-modify-write array to prevent
+  // concurrent request data loss (last-write-wins race condition).
+  await kv.rpush("inquiries", inquiry);
 
   // Telegram alert
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -92,6 +93,6 @@ export async function GET(req: NextRequest) {
   if (!secret || secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const inquiries = (await kv.get<Inquiry[]>("inquiries")) ?? [];
+  const inquiries = (await kv.lrange<Inquiry>("inquiries", 0, -1)) ?? [];
   return NextResponse.json({ inquiries });
 }
