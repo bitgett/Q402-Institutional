@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
   // ── Rate limit: 5 scans / 60 s per IP ────────────────────────────────────
   // Each scan triggers up to 250 RPC calls across 5 chains — must be restricted.
   const ip = getClientIP(req);
-  if (!(await rateLimit(ip, "verify-deposit", 5, 60))) {
+  if (!(await rateLimit(ip, "verify-deposit", 5, 60, false))) {
     return NextResponse.json({ error: "Too many requests. Please wait before scanning again." }, { status: 429 });
   }
 
@@ -93,14 +93,14 @@ export async function POST(req: NextRequest) {
     if (r.status !== "fulfilled") continue;
     const { chain, txs } = r.value;
     for (const tx of txs) {
-      await addGasDeposit(address, {
+      const added = await addGasDeposit(address, {
         chain: chain.key,
         token: chain.token,
         amount: tx.amount,
         txHash: tx.txHash,
         depositedAt: new Date().toISOString(),
       });
-      newDeposits++;
+      if (added) newDeposits++;
     }
   }
 

@@ -28,6 +28,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ status: "not_found" });
   }
 
+  // Provisioned (free) accounts have paidAt="" and amountUSD=0 — treat as unpaid
+  if (!existing.paidAt || (existing.amountUSD ?? 0) === 0) {
+    return NextResponse.json({ status: "not_found" });
+  }
+
   const expiresAt = new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
   const isExpired = new Date() >= expiresAt;
 

@@ -24,7 +24,10 @@ export async function rateLimit(
   identifier: string,
   endpoint: string,
   limit: number,
-  windowSec: number
+  windowSec: number,
+  /** failOpen=true: allow when KV is down (safe for read-only or low-risk paths).
+   *  failOpen=false: block when KV is down (required for expensive/critical paths). */
+  failOpen = true
 ): Promise<boolean> {
   try {
     // Bucket key changes every `windowSec` seconds — fixed window
@@ -38,8 +41,8 @@ export async function rateLimit(
     }
     return count <= limit;
   } catch {
-    // KV unavailable — allow (fail open for uptime, not security-critical paths)
-    return true;
+    // KV unavailable — behaviour depends on caller's risk tolerance
+    return failOpen;
   }
 }
 

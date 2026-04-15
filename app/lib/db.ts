@@ -150,10 +150,12 @@ export async function getGasDeposits(address: string): Promise<GasDeposit[]> {
   return (await kv.get<GasDeposit[]>(gasDepKey(address))) ?? [];
 }
 
-export async function addGasDeposit(address: string, deposit: GasDeposit) {
+/** Returns true if the deposit was added, false if it was a duplicate (already recorded). */
+export async function addGasDeposit(address: string, deposit: GasDeposit): Promise<boolean> {
   const existing = await getGasDeposits(address);
-  if (existing.some(d => d.txHash === deposit.txHash)) return; // deduplicate
+  if (existing.some(d => d.txHash === deposit.txHash)) return false; // deduplicate
   await kv.set(gasDepKey(address), [...existing, deposit]);
+  return true;
 }
 
 export async function getGasBalance(address: string): Promise<Record<string, number>> {
@@ -255,13 +257,13 @@ export function getPlanQuota(plan: string): number {
 
 export async function isSubscriptionActive(address: string): Promise<boolean> {
   const sub = await getSubscription(address);
-  if (!sub) return false;
+  if (!sub || !sub.paidAt || (sub.amountUSD ?? 0) === 0) return false;
   const expiresAt = new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
   return new Date() < expiresAt;
 }
 
 export async function getSubscriptionExpiry(address: string): Promise<Date | null> {
   const sub = await getSubscription(address);
-  if (!sub) return null;
+  if (!sub || !sub.paidAt || (sub.amountUSD ?? 0) === 0) return null;
   return new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
 }
