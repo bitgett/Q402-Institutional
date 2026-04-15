@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
+import { getAuthCreds, clearAuthCache } from "../lib/auth-client";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
@@ -340,44 +341,44 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
-
-    // Provision requires a personal_sign proof-of-ownership signature.
-    // Cache it in sessionStorage so the user is only prompted once per session.
-    const PROVISION_MSG = `Q402 API Key Request\nAddress: ${address.toLowerCase()}`;
-    const cacheKey      = `q402_sig_${address.toLowerCase()}`;
+    const addr = address; // narrow to string for async closures
 
     async function provision() {
-      let sig = sessionStorage.getItem(cacheKey);
-      if (!sig) {
-        sig = await signMessage(PROVISION_MSG);
-        if (!sig) return; // user rejected
-        sessionStorage.setItem(cacheKey, sig);
-      }
-      fetch("/api/keys/provision", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ address, signature: sig }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.apiKey) {
-            setSubscription(prev => ({
-              ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }),
-              apiKey:     data.apiKey,
-              plan:       data.plan ?? "starter",
-              quotaBonus: data.quotaBonus ?? prev?.quotaBonus ?? 0,
-              paidAt:     data.paidAt ?? prev?.paidAt ?? "",
-            }));
-            if (data.sandboxApiKey) setSandboxApiKey(data.sandboxApiKey);
-            setHasPaid(data.hasPaid === true);
-          } else if (data.error === "Signature does not match address") {
-            sessionStorage.removeItem(cacheKey);
-          }
-        })
-        .catch(() => {});
+      // getAuthCreds caches {nonce, signature} in sessionStorage for 7.5h.
+      // On 401 NONCE_EXPIRED the caller clears the cache and the user re-signs on next load.
+      const auth = await getAuthCreds(addr, signMessage);
+      if (!auth) return; // user rejected wallet prompt
+
+      const { nonce, signature } = auth;
+
+      let provData: Record<string, unknown> = {};
+      try {
+        const res = await fetch("/api/keys/provision", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ address: addr, nonce, signature }),
+        });
+        provData = await res.json();
+        if (res.status === 401 && provData.code === "NONCE_EXPIRED") {
+          clearAuthCache(addr);
+          return;
+        }
+      } catch { return; }
+
+      if (provData.sandboxApiKey) setSandboxApiKey(provData.sandboxApiKey as string);
+      setHasPaid(provData.hasPaid === true);
+
+      setSubscription(prev => ({
+        ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }),
+        apiKey:     (provData.hasPaid ? provData.apiKey : "") as string ?? "",
+        plan:       provData.plan as string ?? "starter",
+        quotaBonus: provData.quotaBonus as number ?? prev?.quotaBonus ?? 0,
+        paidAt:     provData.paidAt as string ?? prev?.paidAt ?? "",
+        amountUSD:  prev?.amountUSD ?? 0,
+      }));
 
       // Fetch subscription expiry & status
-      fetch(`/api/payment/check?address=${address}`)
+      fetch(`/api/payment/check?address=${addr}`)
         .then(r => r.json())
         .then(data => {
           if (data.expiresAt) { setExpiresAt(new Date(data.expiresAt)); setIsExpired(data.isExpired ?? false); }
@@ -385,13 +386,10 @@ export default function DashboardPage() {
         .catch(() => {});
 
       // Fetch webhook config
-      const sig2 = sessionStorage.getItem(cacheKey) ?? sig;
-      if (sig2) {
-        fetch(`/api/webhook?address=${address}&sig=${encodeURIComponent(sig2)}`)
-          .then(r => r.json())
-          .then(data => { if (data.configured && data.url) setWebhookUrl(data.url); })
-          .catch(() => {});
-      }
+      fetch(`/api/webhook?address=${addr}&nonce=${encodeURIComponent(nonce)}&sig=${encodeURIComponent(signature)}`)
+        .then(r => r.json())
+        .then(data => { if (data.configured && data.url) setWebhookUrl(data.url); })
+        .catch(() => {});
     }
 
     provision();
@@ -400,16 +398,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
-    const cacheKey = `q402_sig_${address.toLowerCase()}`;
-    const sig = sessionStorage.getItem(cacheKey);
-    if (!sig) return; // wait until provision completes and caches sig
-    fetch(`/api/transactions?address=${address}&sig=${encodeURIComponent(sig)}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.txs) setRelayedTxs(data.txs);
-        if (data.thisMonthCount !== undefined) setThisMonthCount(data.thisMonthCount);
-      }).catch(() => {});
-  }, [address, subscription]); // re-run after provision sets subscription (sig now cached)
+    const addr = address;
+    async function fetchTxs() {
+      const auth = await getAuthCreds(addr, signMessage);
+      if (!auth) return;
+      const { nonce, signature } = auth;
+      const res = await fetch(`/api/transactions?address=${addr}&nonce=${encodeURIComponent(nonce)}&sig=${encodeURIComponent(signature)}`);
+      if (res.status === 401) { const d = await res.json(); if (d.code === "NONCE_EXPIRED") clearAuthCache(addr); return; }
+      const data = await res.json();
+      if (data.txs) setRelayedTxs(data.txs);
+      if (data.thisMonthCount !== undefined) setThisMonthCount(data.thisMonthCount);
+    }
+    fetchTxs().catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address, subscription]);
 
   useEffect(() => {
     setTankLoading(true);
@@ -474,13 +476,14 @@ export default function DashboardPage() {
 
   async function rotateKey() {
     if (!address) return;
-    const cacheKey = `q402_sig_${address.toLowerCase()}`;
-    let sig = sessionStorage.getItem(cacheKey);
-    if (!sig) { sig = await signMessage(`Q402 API Key Request\nAddress: ${address.toLowerCase()}`); if (!sig) return; sessionStorage.setItem(cacheKey, sig); }
+    const auth = await getAuthCreds(address, signMessage);
+    if (!auth) return;
+    const { nonce, signature } = auth;
     setRotatingKey(true);
     try {
-      const res = await fetch("/api/keys/rotate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, signature: sig }) });
+      const res = await fetch("/api/keys/rotate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, nonce, signature }) });
       const data = await res.json();
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
       if (data.apiKey) {
         setSubscription(prev => prev ? { ...prev, apiKey: data.apiKey } : null);
         setRotateConfirm(false);
@@ -490,14 +493,15 @@ export default function DashboardPage() {
 
   async function saveWebhook() {
     if (!address) return;
-    const cacheKey = `q402_sig_${address.toLowerCase()}`;
-    let sig = sessionStorage.getItem(cacheKey);
-    if (!sig) { sig = await signMessage(`Q402 API Key Request\nAddress: ${address.toLowerCase()}`); if (!sig) return; sessionStorage.setItem(cacheKey, sig); }
+    const auth = await getAuthCreds(address, signMessage);
+    if (!auth) return;
+    const { nonce, signature } = auth;
     if (!webhookUrlInput) return;
     setWebhookSaving(true);
     try {
-      const res = await fetch("/api/webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, signature: sig, url: webhookUrlInput }) });
+      const res = await fetch("/api/webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, nonce, signature, url: webhookUrlInput }) });
       const data = await res.json();
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
       if (data.success) {
         setWebhookUrl(webhookUrlInput);
         if (data.secret) setWebhookSecret(data.secret);
@@ -507,13 +511,14 @@ export default function DashboardPage() {
 
   async function testWebhook() {
     if (!address) return;
-    const cacheKey = `q402_sig_${address.toLowerCase()}`;
-    let sig = sessionStorage.getItem(cacheKey);
-    if (!sig) { sig = await signMessage(`Q402 API Key Request\nAddress: ${address.toLowerCase()}`); if (!sig) return; sessionStorage.setItem(cacheKey, sig); }
+    const auth = await getAuthCreds(address, signMessage);
+    if (!auth) return;
+    const { nonce, signature } = auth;
     setWebhookTesting(true); setWebhookTestResult(null);
     try {
-      const res = await fetch("/api/webhook/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, signature: sig }) });
+      const res = await fetch("/api/webhook/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, nonce, signature }) });
       const data = await res.json();
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); setWebhookTestResult({ ok: false, msg: "Session expired. Please reload." }); return; }
       setWebhookTestResult({ ok: data.success, msg: data.success ? `Delivered (HTTP ${data.statusCode})` : (data.error ?? "Failed") });
     } catch { setWebhookTestResult({ ok: false, msg: "Network error" }); } finally { setWebhookTesting(false); }
   }

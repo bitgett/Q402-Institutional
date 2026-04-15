@@ -1,25 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ethers } from "ethers";
 import { checkPaymentOnChain, planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
 import { getSubscription, setSubscription, generateApiKey, generateSandboxKey } from "@/app/lib/db";
+import { requireAuth } from "@/app/lib/auth";
+import { getPaymentIntent, clearPaymentIntent } from "@/app/api/payment/intent/route";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 /**
  * POST /api/payment/activate
  *
  * Scans the blockchain for an on-chain USDC/USDT payment from `address`,
- * then activates a subscription and issues an API key.
+ * then activates a subscription and issues a live API key.
  *
- * Requires a personal_sign proof-of-ownership signature identical to
- * /api/keys/provision — prevents an attacker from triggering key rotation
- * on behalf of another address.
+ * Requires nonce-based EIP-191 proof-of-ownership to prevent address spoofing.
+ * Validates the found TX against the payment intent (chain + expectedUSD) recorded
+ * by POST /api/payment/intent before the user sent the on-chain transaction.
  *
- * Body: { address: string, signature: string }
+ * Body: { address, nonce, signature }
+ *   nonce obtained from GET /api/auth/nonce?address={addr}
  */
-
-// Shared with provision — same proof-of-ownership message
-const ACTIVATE_MSG = (addr: string) =>
-  `Q402 API Key Request\nAddress: ${addr.toLowerCase()}`;
 
 export async function POST(req: NextRequest) {
   // ── Rate limit: 5 activation attempts / 60 s per IP ──────────────────────
@@ -28,37 +26,63 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; signature?: string };
+  let body: { address?: string; nonce?: string; signature?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { address, signature } = body;
-  if (!address || !signature) {
-    return NextResponse.json({ error: "address and signature required" }, { status: 400 });
-  }
-
-  const addr = address.toLowerCase();
-
   // ── Verify wallet ownership ───────────────────────────────────────────────
-  try {
-    const recovered = ethers.verifyMessage(ACTIVATE_MSG(addr), signature);
-    if (recovered.toLowerCase() !== addr) {
-      return NextResponse.json({ error: "Signature does not match address" }, { status: 401 });
-    }
-  } catch {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  const authResult = await requireAuth(body.address, body.nonce, body.signature);
+  if (typeof authResult !== "string") {
+    return NextResponse.json(
+      { error: authResult.error, code: authResult.code },
+      { status: authResult.status },
+    );
   }
+  const addr = authResult;
 
   const existing = await getSubscription(addr);
 
+  // ── Verify payment intent (chain + expectedUSD must match TX) ───────────
+  const intent = await getPaymentIntent(addr);
+  if (!intent) {
+    return NextResponse.json(
+      { error: "No payment intent found. Call POST /api/payment/intent first.", code: "NO_INTENT" },
+      { status: 402 },
+    );
+  }
+
   // ── Verify on-chain payment ───────────────────────────────────────────────
   // Note: no early return for already_active — users can top up at any time.
-  const result = await checkPaymentOnChain(addr);
+  const result = await checkPaymentOnChain(addr, intent.chain);
   if (!result.found) {
     return NextResponse.json({ error: "No payment found on-chain" }, { status: 402 });
+  }
+
+  // ── Validate TX matches intent ────────────────────────────────────────────
+  // result.chain is full name ("BNB Chain"), intent.chain is short id ("bnb")
+  // Since we already filtered the scan to intent.chain, this is a belt-and-suspenders check
+  if (result.chain) {
+    const CHAIN_NAME_MAP: Record<string, string> = {
+      bnb: "BNB Chain", eth: "Ethereum", avax: "Avalanche", xlayer: "X Layer", stable: "Stable",
+    };
+    const expectedName = CHAIN_NAME_MAP[intent.chain];
+    if (expectedName && result.chain !== expectedName) {
+      return NextResponse.json(
+        { error: `Payment found on ${result.chain} but intent was for ${intent.chain}`, code: "CHAIN_MISMATCH" },
+        { status: 402 },
+      );
+    }
+  }
+  // Allow 5% tolerance on USD amount (price feed drift)
+  const minExpected = intent.expectedUSD * 0.95;
+  if ((result.amountUSD ?? 0) < minExpected) {
+    return NextResponse.json(
+      { error: `Payment amount $${result.amountUSD} is less than intended $${intent.expectedUSD}`, code: "AMOUNT_LOW" },
+      { status: 402 },
+    );
   }
 
   // ── Prevent TX hash reuse (same TX cannot activate twice) ────────────────
@@ -113,6 +137,9 @@ export async function POST(req: NextRequest) {
     amountUSD:     result.amountUSD!,
     quotaBonus:    totalTxs,
   });
+
+  // Clear intent after successful activation — prevents replay
+  await clearPaymentIntent(addr);
 
   return NextResponse.json({
     status:    "activated",

@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ethers } from "ethers";
 import { getRelayedTxs } from "@/app/lib/db";
+import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
-const PROVISION_MSG = (addr: string) =>
-  `Q402 API Key Request\nAddress: ${addr.toLowerCase()}`;
-
 /**
- * GET /api/transactions?address=0x...&sig=0x...
+ * GET /api/transactions?address=0x...&nonce=xxx&sig=0x...
  *
  * Returns relayed TX history for the given address.
- * Requires the same EIP-191 signature used for provisioning (cached in sessionStorage).
+ * Requires nonce-based EIP-191 proof-of-ownership.
+ * nonce obtained from GET /api/auth/nonce?address={addr}
  */
 export async function GET(req: NextRequest) {
   const ip = getClientIP(req);
@@ -19,20 +17,17 @@ export async function GET(req: NextRequest) {
   }
 
   const address   = req.nextUrl.searchParams.get("address");
+  const nonce     = req.nextUrl.searchParams.get("nonce");
   const signature = req.nextUrl.searchParams.get("sig");
 
-  if (!address) return NextResponse.json({ error: "address required" }, { status: 400 });
-  if (!signature) return NextResponse.json({ error: "sig required" }, { status: 400 });
-
-  const addr = address.toLowerCase();
-
-  // Verify wallet ownership — same message as provision
-  try {
-    const recovered = ethers.verifyMessage(PROVISION_MSG(addr), signature);
-    if (recovered.toLowerCase() !== addr) throw new Error();
-  } catch {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  const authResult = await requireAuth(address, nonce, signature);
+  if (typeof authResult !== "string") {
+    return NextResponse.json(
+      { error: authResult.error, code: authResult.code },
+      { status: authResult.status },
+    );
   }
+  const addr = authResult;
 
   const txs = await getRelayedTxs(addr);
 
