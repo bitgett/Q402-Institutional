@@ -4,21 +4,27 @@ import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { randomBytes } from "crypto";
 import { intentKey } from "@/app/lib/payment-intent";
+import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/blockchain";
 
 /**
  * POST /api/payment/intent
  *
  * Records what the user INTENDS to pay before they send the on-chain transaction.
- * /api/payment/activate validates the found TX against this intent, preventing:
- *   - Wrong-chain activations (BNB TX activating on ETH subscription)
- *   - Accidental activation from unrelated transfers
- *   - Sender mismatch (someone else's TX activating your subscription)
+ * Locks quotedPlan and quotedCredits server-side at creation time so that
+ * /api/payment/activate uses these pre-computed values — eliminating drift
+ * between the price the user saw and what the server would grant.
  *
- * Body: { address, nonce, signature, chain, expectedUSD, token? }
- *   token: "USDC" | "USDT" | "USDT0" (optional — used for cross-check in activate)
+ * /api/payment/activate also validates the found TX against this intent,
+ * preventing wrong-chain activations, accidental activations from unrelated
+ * transfers, and sender mismatches.
  *
- * Intent is stored for 2 hours (enough time to send TX + verify).
- * Only one active intent per address — overwritten when plan selection changes.
+ * Body: { address, nonce, signature, chain, expectedUSD, token?, planChain? }
+ *   chain:      payment chain id — "bnb" | "eth" (where funds actually move)
+ *   planChain:  selected relay chain — "bnb" | "avax" | "eth" | "xlayer" | "stable"
+ *               (used for display/reference; plan is determined by payment chain thresholds)
+ *   token:      "USDC" | "USDT" | "USDT0" (optional — cross-checked in activate)
+ *
+ * Intent is stored for 2 hours. Only one active intent per address.
  */
 
 const INTENT_TTL = 2 * 60 * 60; // 2 hours
@@ -40,6 +46,7 @@ export async function POST(req: NextRequest) {
     chain?: string;
     expectedUSD?: number;
     token?: string;
+    planChain?: string;
   };
   try {
     body = await req.json();
@@ -47,7 +54,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const { address, nonce, signature, chain, expectedUSD, token } = body;
+  const { address, nonce, signature, chain, expectedUSD, token, planChain } = body;
 
   // Verify ownership
   const authResult = await requireAuth(address, nonce, signature);
@@ -78,18 +85,40 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Lock plan and credits at intent creation time using payment chain thresholds.
+  // activate will use these stored values directly — no re-calculation from result.chain.
+  const payChainName = INTENT_CHAIN_MAP[chain];
+  const quotedPlan    = planFromAmount(expectedUSD, payChainName);
+  const quotedCredits = txQuotaFromAmount(expectedUSD, payChainName);
+
+  if (quotedCredits === 0) {
+    return NextResponse.json(
+      { error: `Payment amount $${expectedUSD} is below the minimum for ${chain}` },
+      { status: 400 },
+    );
+  }
+
   const intentId = randomBytes(8).toString("hex");
   const intent = {
     intentId,
     chain,
     expectedUSD,
-    token: token ?? null,   // null = any token accepted
-    address: addr,
-    createdAt: new Date().toISOString(),
+    token:         token ?? null,   // null = any token accepted
+    address:       addr,
+    createdAt:     new Date().toISOString(),
+    planChain:     planChain ?? chain,
+    quotedPlan,
+    quotedCredits,
   };
 
   await kv.set(intentKey(addr), intent, { ex: INTENT_TTL });
 
-  return NextResponse.json({ intentId, chain, expectedUSD, token: token ?? null, expiresIn: INTENT_TTL });
+  return NextResponse.json({
+    intentId, chain, expectedUSD,
+    token:         token ?? null,
+    quotedPlan,
+    quotedCredits,
+    expiresIn:     INTENT_TTL,
+  });
 }
 
