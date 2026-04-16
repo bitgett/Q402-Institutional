@@ -85,11 +85,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Lock plan and credits at intent creation time using payment chain thresholds.
-  // activate will use these stored values directly — no re-calculation from result.chain.
-  const payChainName = INTENT_CHAIN_MAP[chain];
-  const quotedPlan    = planFromAmount(expectedUSD, payChainName);
-  const quotedCredits = txQuotaFromAmount(expectedUSD, payChainName);
+  // Lock plan and credits at intent creation time.
+  //
+  // Calculation basis: planChain (the relay service the user selected on the
+  // pricing page) — NOT the payment chain.  Payment chain is used only to
+  // validate that the on-chain TX came from the right network; it must never
+  // influence what plan/credits the user receives.
+  //
+  //   Example: user selects "BNB plan" ($150, BNB thresholds), pays with ETH.
+  //     planChain="bnb" → planFromAmount(150, "BNB Chain") → "pro" / 10K ✓
+  //     If we used payChain="eth" → planFromAmount(150, "Ethereum") → "growth" / 5K ✗
+  //
+  const planChainResolved = planChain ?? chain;   // default: same as payment chain
+  const planChainName     = INTENT_CHAIN_MAP[planChainResolved] ?? INTENT_CHAIN_MAP[chain];
+  const quotedPlan        = planFromAmount(expectedUSD, planChainName);
+  const quotedCredits     = txQuotaFromAmount(expectedUSD, planChainName);
 
   if (quotedCredits === 0) {
     return NextResponse.json(
