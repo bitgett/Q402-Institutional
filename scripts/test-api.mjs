@@ -9,7 +9,13 @@
  */
 
 const BASE = process.env.BASE_URL ?? "https://q402-institutional.vercel.app";
-const LIVE_KEY = process.env.API_KEY ?? "q402_live_c6a41b863a2d57af347ec201682a2ef2552229d77479be2b";
+
+if (!process.env.API_KEY) {
+  console.error("Error: API_KEY environment variable is required.");
+  console.error("Usage: API_KEY=q402_live_... node scripts/test-api.mjs");
+  process.exit(1);
+}
+const LIVE_KEY = process.env.API_KEY;
 
 // Minimal valid-format hex values for sandbox relay (signatures not actually verified in sandbox)
 const FAKE_SIG    = "0x" + "ab".repeat(65);
