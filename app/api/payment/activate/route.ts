@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkPaymentOnChain, planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
-import { getSubscription, setSubscription, generateApiKey, generateSandboxKey } from "@/app/lib/db";
-import { requireAuth } from "@/app/lib/auth";
+import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits } from "@/app/lib/db";
+import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/api/payment/intent/route";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
@@ -11,12 +11,12 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
  * Scans the blockchain for an on-chain USDC/USDT payment from `address`,
  * then activates a subscription and issues a live API key.
  *
- * Requires nonce-based EIP-191 proof-of-ownership to prevent address spoofing.
+ * Requires a fresh one-time challenge (GET /api/auth/challenge) to prevent replay.
  * Validates the found TX against the payment intent (chain + expectedUSD) recorded
  * by POST /api/payment/intent before the user sent the on-chain transaction.
  *
- * Body: { address, nonce, signature }
- *   nonce obtained from GET /api/auth/nonce?address={addr}
+ * Body: { address, challenge, signature }
+ *   challenge obtained from GET /api/auth/challenge?address={addr}
  */
 
 export async function POST(req: NextRequest) {
@@ -26,15 +26,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; nonce?: string; signature?: string };
+  let body: { address?: string; challenge?: string; signature?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  // ── Verify wallet ownership ───────────────────────────────────────────────
-  const authResult = await requireAuth(body.address, body.nonce, body.signature);
+  // ── Verify wallet ownership (fresh one-time challenge) ────────────────────
+  const authResult = await requireFreshAuth(body.address, body.challenge, body.signature);
   if (typeof authResult !== "string") {
     return NextResponse.json(
       { error: authResult.error, code: authResult.code },
@@ -62,8 +62,16 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Validate TX matches intent ────────────────────────────────────────────
-  // result.chain is full name ("BNB Chain"), intent.chain is short id ("bnb")
-  // Since we already filtered the scan to intent.chain, this is a belt-and-suspenders check
+
+  // 1. Sender must be the authenticated address (prevents using someone else's TX)
+  if (result.from && result.from.toLowerCase() !== addr) {
+    return NextResponse.json(
+      { error: "TX sender does not match your address", code: "SENDER_MISMATCH" },
+      { status: 402 },
+    );
+  }
+
+  // 2. Chain must match (belt-and-suspenders — scan was already filtered by intentChain)
   if (result.chain) {
     const CHAIN_NAME_MAP: Record<string, string> = {
       bnb: "BNB Chain", eth: "Ethereum", avax: "Avalanche", xlayer: "X Layer", stable: "Stable",
@@ -76,7 +84,16 @@ export async function POST(req: NextRequest) {
       );
     }
   }
-  // Allow 5% tolerance on USD amount (price feed drift)
+
+  // 3. Token must match if specified in intent
+  if (intent.token && result.token && result.token !== intent.token) {
+    return NextResponse.json(
+      { error: `Payment was in ${result.token} but intent specified ${intent.token}`, code: "TOKEN_MISMATCH" },
+      { status: 402 },
+    );
+  }
+
+  // 4. Amount: allow 5% tolerance (price feed drift / fee deduction)
   const minExpected = intent.expectedUSD * 0.95;
   if ((result.amountUSD ?? 0) < minExpected) {
     return NextResponse.json(
@@ -125,18 +142,24 @@ export async function POST(req: NextRequest) {
     : new Date(0);
   const base = currentExpiry > new Date() ? currentExpiry : new Date();
   const newExpiry = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const totalTxs = (existing?.quotaBonus ?? 0) + addedTxs;
+  // currentQuota: remaining credits before this payment (reads atomic key, falls back to sub)
+  const currentQuota = await getQuotaCredits(addr);
+  const totalTxs = currentQuota + addedTxs;
 
-  await setSubscription(addr, {
-    ...(existing ?? {}),
-    paidAt:        base.toISOString(),
-    apiKey,
-    sandboxApiKey,
-    plan,
-    txHash:        result.txHash!,
-    amountUSD:     result.amountUSD!,
-    quotaBonus:    totalTxs,
-  });
+  await Promise.all([
+    setSubscription(addr, {
+      ...(existing ?? {}),
+      paidAt:        base.toISOString(),
+      apiKey,
+      sandboxApiKey,
+      plan,
+      txHash:        result.txHash!,
+      amountUSD:     result.amountUSD!,
+      quotaBonus:    totalTxs,
+    }),
+    // Atomically add credits to the quota counter (INCRBY — race-safe)
+    addCredits(addr, addedTxs),
+  ]);
 
   // Clear intent after successful activation — prevents replay
   await clearPaymentIntent(addr);
