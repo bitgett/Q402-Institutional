@@ -94,7 +94,7 @@ async function main() {
   }
 
   // ── 파라미터 ──────────────────────────────────────────────────────────────────
-  const amountRaw   = BigInt(Math.round(parseFloat(AMOUNT_USDC) * 10 ** USDC_DECIMALS));
+  const amountRaw   = ethers.parseUnits(AMOUNT_USDC, USDC_DECIMALS);
   const validAfter  = 0n;
   const validBefore = BigInt(Math.floor(Date.now() / 1000) + 600); // +10분
   const nonce       = ethers.hexlify(ethers.randomBytes(32)); // bytes32

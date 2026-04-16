@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSubscription, addQuotaBonus, getPlanQuota } from "@/app/lib/db";
-
-function checkAdminSecret(req: NextRequest): boolean {
-  const secret = req.headers.get("x-admin-secret");
-  const expected = process.env.ADMIN_SECRET;
-  return !!expected && secret === expected;
-}
+import { checkAdminSecret } from "@/app/lib/admin-auth";
 
 // Admin-only: Add quota bonus to a subscription.
 // Requires x-admin-secret header.

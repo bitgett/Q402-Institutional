@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { checkAdminSecret } from "@/app/lib/admin-auth";
 
 function escapeMd(text: string): string {
   return text.replace(/[_*`[]/g, "\\$&");
@@ -98,8 +99,7 @@ export async function GET(req: NextRequest) {
   if (!(await rateLimit(ip, "admin-grant", 5, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
-  const secret = req.headers.get("x-admin-secret");
-  if (!secret || secret !== process.env.ADMIN_SECRET) {
+  if (!checkAdminSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   // Prefer list reads; fall back to legacy JSON array for pre-migration data.
