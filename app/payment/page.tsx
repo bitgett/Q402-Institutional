@@ -230,6 +230,7 @@ export default function PaymentPage() {
   const [verifyAttempts,   setVerifyAttempts]   = useState(0);
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
+  const [txHashInput,      setTxHashInput]      = useState("");
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, isEnterprise, perTx } = calcPrice(selectedChain, selectedVolume);
@@ -285,7 +286,14 @@ export default function PaymentPage() {
       const res  = await fetch("/api/payment/activate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ address, challenge: chal.challenge, signature: chal.signature }),
+        body:    JSON.stringify({
+          address,
+          challenge:  chal.challenge,
+          signature:  chal.signature,
+          // If user provided a txHash, pass it for deterministic verification.
+          // activate route uses verifyPaymentTx(txHash) instead of block scan.
+          ...(txHashInput.trim() ? { txHash: txHashInput.trim() } : {}),
+        }),
       });
       const data = await res.json();
 
@@ -551,6 +559,23 @@ export default function PaymentPage() {
                     </div>
                     <p className="text-white/20 text-[10px] mt-2">
                       ⚠ Send from <span className="font-mono text-white/35">{address ? shortAddr(address) : "—"}</span> only. Payments from other wallets will not activate your account.
+                    </p>
+                  </div>
+
+                  {/* Optional txHash input */}
+                  <div>
+                    <label className="block text-[10px] text-white/25 uppercase tracking-widest mb-1">
+                      Transaction Hash <span className="normal-case text-white/15">(optional — paste for instant verification)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="0x..."
+                      value={txHashInput}
+                      onChange={e => setTxHashInput(e.target.value)}
+                      className="w-full bg-white/[0.03] border border-white/8 rounded-xl px-3 py-2.5 text-xs font-mono text-white/70 placeholder-white/20 focus:outline-none focus:border-yellow/30"
+                    />
+                    <p className="text-[10px] text-white/15 mt-1">
+                      If left blank, Q402 will scan the blockchain for your payment automatically.
                     </p>
                   </div>
 

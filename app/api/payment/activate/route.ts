@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkPaymentOnChain, planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
+import { checkPaymentOnChain, verifyPaymentTx, planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
 import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; challenge?: string; signature?: string };
+  let body: { address?: string; challenge?: string; signature?: string; txHash?: string };
   try {
     body = await req.json();
   } catch {
@@ -55,10 +55,21 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Verify on-chain payment ───────────────────────────────────────────────
-  // Note: no early return for already_active — users can top up at any time.
-  const result = await checkPaymentOnChain(addr, intent.chain);
+  // If the client provided a txHash, use direct single-TX verification (deterministic).
+  // Otherwise fall back to block-window scan (handles wallets that don't expose txHash).
+  const clientTxHash = typeof body.txHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(body.txHash)
+    ? body.txHash
+    : null;
+
+  const result = clientTxHash
+    ? await verifyPaymentTx(clientTxHash, addr)
+    : await checkPaymentOnChain(addr, intent.chain);
+
   if (!result.found) {
-    return NextResponse.json({ error: "No payment found on-chain" }, { status: 402 });
+    return NextResponse.json(
+      { error: clientTxHash ? "Transaction not found or does not match your address" : "No payment found on-chain" },
+      { status: 402 },
+    );
   }
 
   // ── Validate TX matches intent ────────────────────────────────────────────

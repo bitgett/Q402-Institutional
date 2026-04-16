@@ -33,6 +33,15 @@ export interface WebhookConfig {
   active: boolean;
 }
 
+export interface WebhookDelivery {
+  timestamp: string;
+  event: string;
+  ok: boolean;
+  statusCode?: number;
+  error?: string;
+  attempt: number;  // 1-based attempt number that succeeded or final attempt on failure
+}
+
 export interface GasDeposit {
   chain: string;       // "bnb" | "eth" | "avax" | "xlayer"
   token: string;       // "BNB" | "ETH" | "AVAX"
@@ -56,10 +65,11 @@ export interface RelayedTx {
 
 // ── Key helpers ──────────────────────────────────────────────────────────────
 
-const subKey        = (addr: string) => `sub:${addr.toLowerCase()}`;
-const apiKeyRecKey  = (key: string)  => `apikey:${key}`;
-const gasDepKey     = (addr: string) => `gasdep:${addr.toLowerCase()}`;
-const webhookKey    = (addr: string) => `webhook:${addr.toLowerCase()}`;
+const subKey             = (addr: string) => `sub:${addr.toLowerCase()}`;
+const apiKeyRecKey       = (key: string)  => `apikey:${key}`;
+const gasDepKey          = (addr: string) => `gasdep:${addr.toLowerCase()}`;
+const webhookKey         = (addr: string) => `webhook:${addr.toLowerCase()}`;
+const webhookDeliveryKey = (addr: string) => `webhook_delivery:${addr.toLowerCase()}`;
 
 // ── TX history: monthly keys to avoid 1 MB KV limit ──────────────────────────
 // relaytx:{addr}:{YYYY-MM}  → RelayedTx[]  (one key per calendar month)
@@ -144,16 +154,56 @@ export async function deleteWebhookConfig(address: string) {
   await kv.del(webhookKey(address));
 }
 
+/**
+ * Prepend a delivery record (LPUSH) and cap list at 20 entries.
+ * Most recent delivery is always at index 0.
+ */
+export async function recordWebhookDelivery(address: string, delivery: WebhookDelivery) {
+  const key = webhookDeliveryKey(address);
+  await kv.lpush(key, delivery);
+  kv.ltrim(key, 0, 19).catch(() => {});
+}
+
+/** Returns up to 20 most recent delivery records, newest first. */
+export async function getWebhookDeliveries(address: string): Promise<WebhookDelivery[]> {
+  return kv.lrange<WebhookDelivery>(webhookDeliveryKey(address), 0, 19);
+}
+
 // ── Gas Deposits ─────────────────────────────────────────────────────────────
 
+// Separate SET key for O(1) dedup — avoids reading the full deposit list
+const gasDepDedupKey = (addr: string) => `gasdep_hashes:${addr.toLowerCase()}`;
+
+/**
+ * Returns gas deposits for `address`.
+ * New format: Redis List (LRANGE). Fallback: legacy JSON array stored as string.
+ */
 export async function getGasDeposits(address: string): Promise<GasDeposit[]> {
+  try {
+    const list = await kv.lrange<GasDeposit>(gasDepKey(address), 0, -1);
+    if (list.length > 0) return list;
+  } catch { /* WRONGTYPE — legacy JSON array key */ }
   return (await kv.get<GasDeposit[]>(gasDepKey(address))) ?? [];
 }
 
-/** Returns true if the deposit was added, false if it was a duplicate (already recorded). */
+/**
+ * Appends a deposit atomically using RPUSH.
+ * Dedup is enforced via a separate Redis SET (SADD) — O(1) and race-safe.
+ * Returns true if added, false if duplicate.
+ */
 export async function addGasDeposit(address: string, deposit: GasDeposit): Promise<boolean> {
+  if (deposit.txHash) {
+    try {
+      const added = await kv.sadd(gasDepDedupKey(address), deposit.txHash);
+      if (added === 0) return false; // duplicate
+      kv.expire(gasDepDedupKey(address), 90 * 24 * 60 * 60).catch(() => {});
+      await kv.rpush(gasDepKey(address), deposit);
+      return true;
+    } catch { /* fall through to legacy */ }
+  }
+  // Legacy fallback (old JSON array keys or txHash missing)
   const existing = await getGasDeposits(address);
-  if (existing.some(d => d.txHash === deposit.txHash)) return false; // deduplicate
+  if (existing.some(d => d.txHash === deposit.txHash)) return false;
   await kv.set(gasDepKey(address), [...existing, deposit]);
   return true;
 }
@@ -180,6 +230,7 @@ export async function getGasBalance(address: string): Promise<Record<string, num
 /**
  * Returns relayed TXs for the given address across the specified months.
  * Defaults to current + previous month (covers quota checks and dashboard).
+ * New format: Redis List (LRANGE). Fallback: legacy JSON array stored as string.
  */
 export async function getRelayedTxs(
   address: string,
@@ -188,7 +239,14 @@ export async function getRelayedTxs(
   const targets = months ?? [ym(), ym(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))];
   const unique = [...new Set(targets)];
   const results = await Promise.all(
-    unique.map(m => kv.get<RelayedTx[]>(relayTxMonthKey(address, m)).then(v => v ?? []))
+    unique.map(async (m) => {
+      const key = relayTxMonthKey(address, m);
+      try {
+        const list = await kv.lrange<RelayedTx>(key, 0, -1);
+        if (list.length > 0) return list;
+      } catch { /* WRONGTYPE — legacy JSON array key */ }
+      return (await kv.get<RelayedTx[]>(key)) ?? [];
+    })
   );
   return results.flat();
 }
@@ -197,30 +255,60 @@ export async function getRelayedTxs(
  * Returns only this month's TX count — cheap single KV read for quota checks.
  */
 export async function getThisMonthTxCount(address: string): Promise<number> {
-  const txs = await kv.get<RelayedTx[]>(relayTxMonthKey(address, ym()));
+  const key = relayTxMonthKey(address, ym());
+  try {
+    const len = await kv.llen(key);
+    if (len > 0) return len;
+  } catch { /* WRONGTYPE — legacy format */ }
+  const txs = await kv.get<RelayedTx[]>(key);
   return txs?.length ?? 0;
 }
 
 /**
- * Returns per-chain gas used as a running total (separate from TX list).
- * Much cheaper than summing all TX records.
+ * Returns per-chain gas used as a running total.
+ * New format: Redis Hash (HGETALL). Fallback: legacy JSON object stored as string.
  */
 export async function getGasUsedTotals(address: string): Promise<Record<string, number>> {
+  try {
+    const raw = await kv.hgetall<Record<string, string>>(gasUsedKey(address));
+    if (raw && Object.keys(raw).length > 0) {
+      return Object.fromEntries(
+        Object.entries(raw).map(([k, v]) => [k, parseFloat(String(v)) || 0])
+      );
+    }
+  } catch { /* WRONGTYPE — legacy JSON object key */ }
   return (await kv.get<Record<string, number>>(gasUsedKey(address))) ?? {};
 }
 
+/**
+ * Appends a TX record atomically using RPUSH (no read-modify-write race).
+ * Gas totals updated atomically via HINCRBYFLOAT.
+ * Legacy JSON array/object keys are handled via try/catch fallback.
+ */
 export async function recordRelayedTx(address: string, tx: RelayedTx) {
   const month = ym(new Date(tx.relayedAt));
-  const existing = (await kv.get<RelayedTx[]>(relayTxMonthKey(address, month))) ?? [];
-  // Cap per-month array at 10,000 entries (safety valve)
-  if (existing.length < 10_000) {
-    await kv.set(relayTxMonthKey(address, month), [...existing, tx]);
+  const key   = relayTxMonthKey(address, month);
+
+  try {
+    const len = await kv.rpush(key, tx);
+    // Trim to last 10,000 entries per month (safety valve)
+    if (len > 10_000) kv.ltrim(key, -10_000, -1).catch(() => {});
+  } catch {
+    // Legacy fallback for existing JSON array keys
+    const existing = (await kv.get<RelayedTx[]>(key)) ?? [];
+    if (existing.length < 10_000) await kv.set(key, [...existing, tx]);
   }
-  // Update running gas total
+
   if (tx.gasCostNative > 0) {
-    const totals = await getGasUsedTotals(address);
-    totals[tx.chain] = (totals[tx.chain] ?? 0) + tx.gasCostNative;
-    await kv.set(gasUsedKey(address), totals);
+    try {
+      // HINCRBYFLOAT is atomic — no read-modify-write race on gas totals
+      await kv.hincrbyfloat(gasUsedKey(address), tx.chain, tx.gasCostNative);
+    } catch {
+      // Legacy fallback for existing JSON object keys
+      const totals = (await kv.get<Record<string, number>>(gasUsedKey(address))) ?? {};
+      totals[tx.chain] = (totals[tx.chain] ?? 0) + tx.gasCostNative;
+      await kv.set(gasUsedKey(address), totals);
+    }
   }
 }
 
