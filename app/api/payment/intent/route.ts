@@ -21,7 +21,7 @@ import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/b
  * Body: { address, nonce, signature, chain, expectedUSD, token?, planChain? }
  *   chain:      payment chain id — "bnb" | "eth" (where funds actually move)
  *   planChain:  selected relay chain — "bnb" | "avax" | "eth" | "xlayer" | "stable"
- *               (used for display/reference; plan is determined by payment chain thresholds)
+ *               (determines plan/credit thresholds; defaults to `chain` if omitted)
  *   token:      "USDC" | "USDT" | "USDT0" (optional — cross-checked in activate)
  *
  * Intent is stored for 2 hours. Only one active intent per address.
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
 
   if (quotedCredits === 0) {
     return NextResponse.json(
-      { error: `Payment amount $${expectedUSD} is below the minimum for ${chain}` },
+      { error: `Payment amount $${expectedUSD} is below the minimum for ${planChainResolved}` },
       { status: 400 },
     );
   }

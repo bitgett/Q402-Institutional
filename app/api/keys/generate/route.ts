@@ -24,10 +24,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No subscription found" }, { status: 404 });
   }
 
-  // Revoke old key before issuing new one
-  if (sub.apiKey) await deactivateApiKey(sub.apiKey);
+  // Safe ordering (matches rotateApiKey in db.ts):
+  //   1. Create new key          — if this fails, old key still works
+  //   2. Point subscription at it — if this fails, old key still works
+  //   3. Deactivate old key      — best-effort; dangling-active > lockout
+  const oldKey = sub.apiKey;
   const newKey = await generateApiKey(address, sub.plan);
   await setSubscription(address, { ...sub, apiKey: newKey });
+  if (oldKey) {
+    deactivateApiKey(oldKey).catch(e =>
+      console.error(`[admin:generate] old key deactivation failed (non-fatal): ${e}`)
+    );
+  }
 
   return NextResponse.json({ success: true, plan: sub.plan });
 }
