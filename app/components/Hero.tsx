@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import RegisterModal from "./RegisterModal";
-import { TrustStrip } from "./EnvBadge";
 
 
 function useCountUp(target: number, duration = 2200) {
@@ -107,12 +106,11 @@ export default function Hero() {
                 transition={{ duration: 0.7, delay: 0.2 }}
               >
                 <h1 className="text-5xl md:text-[3.8rem] font-extrabold leading-[1.06] mb-4 tracking-tight">
-                  The relay layer for{" "}
-                  <span className="text-shimmer">stablecoin payments.</span>
+                  The Final Layer for{" "}
+                  <span className="text-shimmer">Web3 Payments.</span>
                 </h1>
-                <p className="text-lg md:text-xl text-white/45 font-light tracking-wide mb-6 max-w-xl">
-                  Fund one gas tank. Issue keys. Monitor every relay across five EVM chains.
-                  Your users settle in USDC and USDT — they never hold a native token.
+                <p className="text-xl text-white/40 font-light tracking-wide mb-6">
+                  No Native Tokens. No Gas Fees. Just Pure USDC.
                 </p>
               </motion.div>
 
@@ -124,9 +122,9 @@ export default function Hero() {
                 className="space-y-3 mb-9 text-sm text-white/50"
               >
                 {[
-                  "One gas tank funds every chain — stop juggling BNB, ETH, AVAX, OKB, USDT0",
-                  "Sandbox and live API keys, HMAC-signed webhooks, per-key daily caps",
-                  "EIP-712 off-chain signatures — your users never touch a native token",
+                  "User signs EIP-712 off-chain — no gas token needed, ever",
+                  "Your API submits 1 tx, pays micro-gas on any EVM chain",
+                  "USDC settles instantly — on-chain, auditable, gasless",
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <span className="text-yellow font-bold text-xs mt-0.5 flex-shrink-0">0{i + 1}</span>
@@ -182,16 +180,6 @@ export default function Hero() {
                   <div className="text-2xl font-bold">5 chains</div>
                   <div className="text-xs text-white/30 mt-0.5">mainnet live</div>
                 </div>
-              </motion.div>
-
-              {/* Trust strip — real capabilities the infra ships with */}
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.65 }}
-                className="mt-8"
-              >
-                <TrustStrip />
               </motion.div>
             </div>
 
