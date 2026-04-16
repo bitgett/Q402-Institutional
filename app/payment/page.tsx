@@ -231,6 +231,7 @@ export default function PaymentPage() {
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
   const [txHashInput,      setTxHashInput]      = useState("");
+  const [intentId,         setIntentId]         = useState<string | null>(null);
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, isEnterprise, perTx } = calcPrice(selectedChain, selectedVolume);
@@ -263,9 +264,9 @@ export default function PaymentPage() {
         const intentRes = await fetch("/api/payment/intent", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          // chain = payment chain (where funds move), not plan chain (selectedChain).
-        // activate validates the TX against this chain, so must match what the user actually pays on.
-        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, expectedUSD: price, token: payToken?.token }),
+          // chain = payment chain (where funds move); planChain = selected relay chain.
+        // Server locks quotedPlan/quotedCredits at intent time — activate uses those values.
+        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, planChain: selectedChain, expectedUSD: price, token: payToken?.token }),
         });
         if (!intentRes.ok) {
           const d = await intentRes.json();
@@ -275,6 +276,9 @@ export default function PaymentPage() {
           setPayStep("error");
           return;
         }
+        // Store intentId so activate can validate we're using the right quote.
+        const intentData = await intentRes.json();
+        setIntentId(intentData.intentId ?? null);
       }
 
       // Step 2: fresh one-time challenge for activation (always prompts wallet)
@@ -292,8 +296,9 @@ export default function PaymentPage() {
           address,
           challenge:  chal.challenge,
           signature:  chal.signature,
+          // intentId validates the server uses the same quote the user saw.
+          ...(intentId ? { intentId } : {}),
           // If user provided a txHash, pass it for deterministic verification.
-          // activate route uses verifyPaymentTx(txHash) instead of block scan.
           ...(txHashInput.trim() ? { txHash: txHashInput.trim() } : {}),
         }),
       });

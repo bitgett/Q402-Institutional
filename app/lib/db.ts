@@ -134,10 +134,34 @@ export async function generateSandboxKey(address: string, plan: string): Promise
 export async function rotateApiKey(address: string): Promise<string> {
   const sub = await getSubscription(address);
   if (!sub) throw new Error("No subscription found");
-  if (sub.apiKey) await deactivateApiKey(sub.apiKey);
-  const newKey = await generateApiKey(address, sub.plan);
-  await setSubscription(address, { ...sub, apiKey: newKey });
-  return newKey;
+
+  // Distributed lock — prevent concurrent rotations for the same address.
+  const rotLockKey = `rotation_pending:${address.toLowerCase()}`;
+  const locked = await kv.set(rotLockKey, "1", { nx: true, ex: 30 });
+  if (!locked) throw new Error("Key rotation already in progress. Please wait a moment.");
+
+  try {
+    const oldKey = sub.apiKey;
+
+    // Step 1: Create new key (immediately active).
+    const newKey = await generateApiKey(address, sub.plan);
+
+    // Step 2: Point subscription at new key.
+    // If this throws, old key is still valid — user can retry safely.
+    await setSubscription(address, { ...sub, apiKey: newKey });
+
+    // Step 3: Deactivate old key (best-effort — new key is already live).
+    // Non-fatal: a dangling active old key is preferable to a user locked out.
+    if (oldKey) {
+      deactivateApiKey(oldKey).catch(e =>
+        console.error(`[rotate] old key deactivation failed (non-fatal): ${e}`)
+      );
+    }
+
+    return newKey;
+  } finally {
+    kv.del(rotLockKey).catch(() => {});
+  }
 }
 
 // ── Webhook Config ────────────────────────────────────────────────────────────
