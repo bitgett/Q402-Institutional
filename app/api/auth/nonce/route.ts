@@ -5,10 +5,11 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 /**
  * GET /api/auth/nonce?address=0x...
  *
- * Issues (or returns the existing) one-time-per-window nonce for the given address.
- * The nonce is stored server-side for 8 hours.  Clients sign:
+ * Issues (or returns the existing) session nonce for the given address.
+ * The nonce is stored server-side for 1 hour.  Clients sign:
  *   "Q402 Auth\nAddress: {addr}\nNonce: {nonce}"
- * and pass { address, nonce, signature } with every protected request.
+ * and pass { address, nonce, signature } with low-risk protected requests.
+ * High-risk actions (key rotation, payment activation) use GET /api/auth/challenge instead.
  *
  * Rate-limited to 20 req / 60 s per IP to prevent enumeration abuse.
  */
