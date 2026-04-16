@@ -14,10 +14,10 @@ import { getAuthCreds, clearAuthCache, getFreshChallenge } from "@/app/lib/auth-
 const PAYMENT_ADDRESS = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
 
 const PAY_TOKENS = [
-  { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", token: "USDC", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "bnb-usdt", label: "BNB USDT", chain: "BNB Chain", token: "USDT", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "eth-usdc", label: "ETH USDC", chain: "Ethereum",  token: "USDC", color: "#627EEA", img: "/eth.png"  },
-  { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  token: "USDT", color: "#627EEA", img: "/eth.png"  },
+  { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", chainId: "bnb", token: "USDC", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "bnb-usdt", label: "BNB USDT", chain: "BNB Chain", chainId: "bnb", token: "USDT", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "eth-usdc", label: "ETH USDC", chain: "Ethereum",  chainId: "eth", token: "USDC", color: "#627EEA", img: "/eth.png"  },
+  { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  chainId: "eth", token: "USDT", color: "#627EEA", img: "/eth.png"  },
 ];
 
 const CHAINS = [
@@ -263,7 +263,9 @@ export default function PaymentPage() {
         const intentRes = await fetch("/api/payment/intent", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ address, nonce, signature, chain: selectedChain, expectedUSD: price, token: payToken?.token }),
+          // chain = payment chain (where funds move), not plan chain (selectedChain).
+        // activate validates the TX against this chain, so must match what the user actually pays on.
+        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, expectedUSD: price, token: payToken?.token }),
         });
         if (!intentRes.ok) {
           const d = await intentRes.json();
