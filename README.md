@@ -304,7 +304,12 @@ const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
 const result3 = await q402s.pay({ to: "0xRecipient", amount: "10.00", token: "USDT" });
 ```
 
-SDK: **v1.3.0** — 5개 체인 지원 (avax, bnb, eth, xlayer, stable)
+SDK: **v1.3.1** — 5개 체인 지원 (avax, bnb, eth, xlayer, stable)
+
+> **⚠ `amount` 파라미터 규칙** — 반드시 **human-readable decimal 문자열** ("5.00", "0.123456")로
+> 전달할 것. 내부적으로 `ethers.parseUnits(amount, decimals)`로 정확히 변환되며, 토큰 decimals를
+> 초과하는 정밀도(예: 6-dec USDC에 "5.1234567")나 숫자/지수 표기는 명시적으로 throw한다.
+> JS `Number`를 그대로 넘기면 18-dec 토큰에서 IEEE-754 정밀도 손실이 발생하기 때문.
 
 ### Node.js Agent
 
@@ -1146,6 +1151,59 @@ for (const chain of ["avax", "bnb", "eth"]) {
 ---
 
 ## 25. Changelog
+
+### v1.15 (2026-04-17)
+
+#### 프로덕션 하드닝 — Next 16 / React 19 / lint 파이프라인 / SDK 금액 정밀도 / 레거시 필드 제거
+
+v1.14 체인 통합 이후 같은 날 진행한 런칭 전 정비. 컴파일/린트 파이프라인을 현 세대에 맞추고,
+릴레이 계약에서 더는 쓰이지 않는 레거시 입력을 강제로 거절하고, SDK의 금액 변환에서 부동소수점
+경로를 완전히 제거했다.
+
+**[P0] SDK 금액 변환 정밀도 복구 — `public/q402-sdk.js` (커밋 `85c8851`)**
+- 기존: `BigInt(Math.round(parseFloat(amount) * 10 ** decimals))` — IEEE-754 double이 유효자릿수 15~17개만
+  보존하므로 18-dec 토큰(BNB USDC/USDT, Stable USDT0)에서 `"1.000000000000000001"` → `1000000000000000000`
+  처럼 dust가 조용히 반올림되던 실버그
+- 수정: `toRawAmount(amount, decimals)` 헬퍼 추출 → `ethers.parseUnits` 기반 정확한 decimal-string 파싱
+- 입력 검증 강화: 빈 문자열 / whitespace / 비-decimal 문자열 / 지수 표기 / 부호 / 0 / 음수 /
+  토큰 decimals 초과 정밀도에 대해 사람이 읽을 수 있는 에러로 throw
+- 동작 변경 (breaking for misuse): 이전에 조용히 반올림되던 과잉 정밀도 입력(예: 6-dec USDC에 `"5.1234567"`)
+  은 이제 명시적 에러. 공개 API 시그니처 (`pay()`, relay payload shape)는 변경 없음
+- `__tests__/sdk-amount.test.ts` 14 케이스로 회귀 방지 (정확도 5 + 검증 9)
+
+**[P1] `/api/relay`에서 레거시 `paymentId` 필드 제거 (커밋 `749aec4`)**
+- v1.3+ SDK는 `nonce` (uint256 string)만 사용 — 수 개월간 활성 호출자 없음
+- 서버의 조용한 `paymentId → keccak-truncate` fallback을 명시적 400 거절로 교체
+  (`"paymentId is deprecated — upgrade SDK (v1.3+) to use nonce"`)
+- `__tests__/relay-body-shape.test.ts`에 2개 assertion 추가로 fallback 부활 차단
+
+**[P1] Next.js 14.2 → 16.2 업그레이드 + React 18 → 19 (커밋 `e88880e`, `5c5a7c7`)**
+- `next` 14.2.35 → 16.2.4, `react` / `react-dom` 18 → 19
+- React 19 규칙 대응: `Spinner`를 `DepositModal` 스코프 밖으로 호이스트
+  (`no-component-definition-in-render`), payment flow에서 `useEffect` setState 캐스케이드를 파생 상태로 리팩터
+  (`set-state-in-effect`)
+- 내부 라우트 prefetch를 위한 `<a>` → `next/link` 교체 (dashboard / Navbar / docs / grant)
+- `tsconfig.json` Next 16 자동 rewrite (`jsx: "react-jsx"`, `.next/dev/types/**/*.ts`)
+- 빌드를 `next build --webpack`에 고정 (Turbopack build가 일부 API route에서 `PageNotFoundError`
+  던지는 이슈 — dev는 Turbopack 유지)
+- `opengraph-image.tsx` runtime을 `edge` → `nodejs`로 변경: Next 16 / React 19 번들이 Vercel의
+  Edge Function 1 MB 한도를 초과 (1.06 MB)했고, OG 이미지 생성은 지연 민감도가 없음
+
+**[P2] ESLint 파이프라인 복구 + 22개 잠재 위반 정리 (커밋 `103773a`)**
+- Next 16이 `next lint`를 제거 → `lint` 스크립트를 `eslint .`로 전환
+- `.eslintrc.json` (legacy) → `eslint.config.mjs` (flat config, ESLint 9 요구사항) 마이그레이션
+- ESLint 10은 `eslint-plugin-react`가 의존하는 `context.getFilename()`을 제거했기에 ESLint 9에 고정
+  (`eslint-config-next@16`의 peer 범위)
+- `argsIgnorePattern: "^_"` + `varsIgnorePattern: "^_"`로 의도적 미사용 파라미터 관용
+- 22개 latent warning 해소 (미사용 변수, deprecated 패턴) — 린트 출력은 이제 0 issue
+- `npm audit`의 picomatch 취약점도 dev-only로 조정
+
+**[P3] Vercel KV — 유지**
+- `@vercel/kv`의 deprecation 경고는 있으나 현재 플랫폼에서 정상 동작. 프로덕션에서 며칠간
+  운영 중이므로 즉시 마이그레이션 필요성 없음. 로드맵으로만 기록 (아래 "남은 작업" 참조)
+
+커밋 순서: `e88880e` Next 16 업그레이드 → `5c5a7c7` OG runtime fix → `103773a` lint 복구 →
+`749aec4` paymentId 거절 → `85c8851` SDK 금액 정밀도. 총 138/138 테스트 통과, webpack build clean.
 
 ### v1.14 (2026-04-17)
 
