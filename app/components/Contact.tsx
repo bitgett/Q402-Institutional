@@ -4,42 +4,45 @@ import { useEffect, useState, useRef } from "react";
 import RegisterModal from "./RegisterModal";
 
 const CODE_LINES = [
-  { tokens: [{ t: "import", c: "text-purple-400" }, { t: " { Q402 } ", c: "text-white/80" }, { t: "from", c: "text-purple-400" }, { t: ' "@quackai/q402"', c: "text-orange-300" }, { t: ";", c: "text-white/30" }] },
+  { tokens: [{ t: "// ",          c: "text-white/25" }, { t: "Drop-in script, no bundler required", c: "text-white/45" }] },
+  { tokens: [{ t: "<script src=", c: "text-white/40" }, { t: '"https://q402-institutional.vercel.app/q402-sdk.js"', c: "text-orange-300" }, { t: "></script>", c: "text-white/40" }] },
   { tokens: [] },
-  { tokens: [{ t: "const", c: "text-purple-400" }, { t: " q402 ", c: "text-blue-300" }, { t: "= ", c: "text-white/40" }, { t: "new", c: "text-yellow" }, { t: " Q402", c: "text-blue-300" }, { t: "({", c: "text-white/40" }] },
-  { tokens: [{ t: "  apiKey", c: "text-green-300" }, { t: ": ", c: "text-white/40" }, { t: "process.env", c: "text-orange-300" }, { t: ".Q402_KEY,", c: "text-white/40" }] },
-  { tokens: [{ t: "  chain", c: "text-green-300" }, { t: ":  ", c: "text-white/40" }, { t: '"bnb"', c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
-  { tokens: [{ t: "});", c: "text-white/40" }] },
+  { tokens: [{ t: "const",        c: "text-purple-400" }, { t: " q402 ",         c: "text-blue-300" }, { t: "= ",   c: "text-white/40" }, { t: "new",        c: "text-yellow" }, { t: " Q402Client", c: "text-blue-300" }, { t: "({", c: "text-white/40" }] },
+  { tokens: [{ t: "  apiKey",     c: "text-green-300" }, { t: ": ",              c: "text-white/40" }, { t: '"q402_live_..."', c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
+  { tokens: [{ t: "  chain",      c: "text-green-300" }, { t: ":  ",             c: "text-white/40" }, { t: '"bnb"', c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
+  { tokens: [{ t: "});",          c: "text-white/40" }] },
   { tokens: [] },
-  { tokens: [{ t: "const", c: "text-purple-400" }, { t: " result ", c: "text-blue-300" }, { t: "= ", c: "text-white/40" }, { t: "await", c: "text-yellow" }, { t: " q402", c: "text-blue-300" }, { t: ".", c: "text-white/40" }, { t: "send", c: "text-blue-300" }, { t: "({", c: "text-white/40" }] },
-  { tokens: [{ t: "  payload", c: "text-green-300" }, { t: ",", c: "text-white/40" }] },
-  { tokens: [{ t: "  signature", c: "text-green-300" }, { t: ",", c: "text-white/40" }] },
-  { tokens: [{ t: "});", c: "text-white/40" }] },
+  { tokens: [{ t: "const",        c: "text-purple-400" }, { t: " result ",       c: "text-blue-300" }, { t: "= ",   c: "text-white/40" }, { t: "await",      c: "text-yellow" }, { t: " q402",       c: "text-blue-300" }, { t: ".", c: "text-white/40" }, { t: "pay",   c: "text-blue-300" }, { t: "({", c: "text-white/40" }] },
+  { tokens: [{ t: "  to",         c: "text-green-300" }, { t: ":     recipient", c: "text-white/60" }, { t: ",", c: "text-white/40" }] },
+  { tokens: [{ t: "  amount",     c: "text-green-300" }, { t: ": ",              c: "text-white/40" }, { t: '"50.00"', c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
+  { tokens: [{ t: "  token",      c: "text-green-300" }, { t: ":  ",             c: "text-white/40" }, { t: '"USDC"',  c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
+  { tokens: [{ t: "});",          c: "text-white/40" }] },
   { tokens: [] },
-  { tokens: [{ t: "// ✓ ", c: "text-white/25" }, { t: "result.success", c: "text-green-400" }, { t: "  true", c: "text-white/40" }] },
-  { tokens: [{ t: "// ✓ ", c: "text-white/25" }, { t: "result.txHash", c: "text-green-400" }, { t: "   0xd4e8...a3f1", c: "text-white/40" }] },
-  { tokens: [{ t: "// ✓ ", c: "text-white/25" }, { t: "result.gasUsed", c: "text-yellow" }, { t: "  $0.000000", c: "text-yellow font-bold" }] },
+  { tokens: [{ t: "// ✓ ",        c: "text-white/25" }, { t: "result.success",   c: "text-green-400" }, { t: "  true",         c: "text-white/40" }] },
+  { tokens: [{ t: "// ✓ ",        c: "text-white/25" }, { t: "result.txHash",    c: "text-green-400" }, { t: "   0xd4e8…a3f1",  c: "text-white/40" }] },
+  { tokens: [{ t: "// ✓ ",        c: "text-white/25" }, { t: "result.method",    c: "text-green-400" }, { t: "   eip7702",      c: "text-white/40" }] },
+  { tokens: [{ t: "// ✓ ",        c: "text-white/25" }, { t: "gas paid by user", c: "text-yellow"      }, { t: "  $0.000000",    c: "text-yellow font-bold" }] },
 ];
 
 const TERMINAL_LINES = [
-  { text: "$ node gasless.js",                  color: "text-white/70",  delay: 0    },
-  { text: "",                                     color: "",               delay: 500  },
-  { text: "  Connecting to BNB Chain...",        color: "text-white/30",  delay: 800  },
-  { text: "✓ Connected",                         color: "text-green-400", delay: 1400 },
-  { text: "",                                     color: "",               delay: 1600 },
-  { text: "  Building EIP-712 payload...",       color: "text-white/30",  delay: 1800 },
-  { text: "✓ Payload created",                   color: "text-green-400", delay: 2300 },
-  { text: "",                                     color: "",               delay: 2500 },
-  { text: "  Waiting for user signature...",     color: "text-white/30",  delay: 2700 },
-  { text: "✓ Signed  gas: $0.000000",           color: "text-green-400", delay: 3400 },
-  { text: "",                                     color: "",               delay: 3600 },
-  { text: "  Submitting transaction...",         color: "text-white/30",  delay: 3800 },
-  { text: "✓ Submitted",                         color: "text-green-400", delay: 4300 },
-  { text: "✓ Confirmed  block #38,482,910",      color: "text-green-400", delay: 4900 },
-  { text: "",                                     color: "",               delay: 5200 },
-  { text: "  txHash    0xd4e8...a3f1",           color: "text-white/25",  delay: 5400 },
-  { text: "  gasUsed   $0.000000  ← user paid",  color: "text-yellow",    delay: 5600 },
-  { text: "  USDC      50.00 transferred ✓",     color: "text-white/55",  delay: 5800 },
+  { text: "$ q402.pay({ to, amount: \"50.00\", token: \"USDC\" })", color: "text-white/70",  delay: 0    },
+  { text: "",                                                  color: "",               delay: 500  },
+  { text: "  Fetching facilitator · /api/relay/info",          color: "text-white/30",  delay: 800  },
+  { text: "✓ Facilitator resolved",                            color: "text-green-400", delay: 1400 },
+  { text: "",                                                  color: "",               delay: 1600 },
+  { text: "  Signing EIP-712 TransferAuthorization",           color: "text-white/30",  delay: 1800 },
+  { text: "✓ witnessSig  0x5a3f…bc19",                         color: "text-green-400", delay: 2300 },
+  { text: "",                                                  color: "",               delay: 2500 },
+  { text: "  Signing EIP-7702 authorization",                  color: "text-white/30",  delay: 2700 },
+  { text: "✓ Authorization signed  gas: $0.000000",            color: "text-green-400", delay: 3400 },
+  { text: "",                                                  color: "",               delay: 3600 },
+  { text: "  Relaying via Q402 facilitator",                   color: "text-white/30",  delay: 3800 },
+  { text: "✓ Submitted",                                       color: "text-green-400", delay: 4300 },
+  { text: "✓ Confirmed  block #38,482,910",                    color: "text-green-400", delay: 4900 },
+  { text: "",                                                  color: "",               delay: 5200 },
+  { text: "  result.txHash     0xd4e8…a3f1",                   color: "text-white/25",  delay: 5400 },
+  { text: "  result.method     eip7702  ← 5-chain unified",    color: "text-white/25",  delay: 5600 },
+  { text: "  result.success    true   50.00 USDC settled",     color: "text-yellow",    delay: 5800 },
 ];
 
 function BigTerminal() {
@@ -52,20 +55,21 @@ function BigTerminal() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const timerList = timers.current;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && !started.current) {
           started.current = true;
           TERMINAL_LINES.forEach((_, i) => {
             const t = setTimeout(() => setTermLines(i + 1), TERMINAL_LINES[i].delay);
-            timers.current.push(t);
+            timerList.push(t);
           });
         }
       },
       { threshold: 0.2 }
     );
     observer.observe(el);
-    return () => { observer.disconnect(); timers.current.forEach(clearTimeout); };
+    return () => { observer.disconnect(); timerList.forEach(clearTimeout); };
   }, []);
 
   useEffect(() => {

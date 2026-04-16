@@ -1,8 +1,24 @@
 import type { Metadata } from "next";
+import { Poppins, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "./components/Providers";
 
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  variable: "--font-poppins",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://q402-institutional.vercel.app"),
   title: "Q402 | Gasless Payments on EVM | Quack AI",
   description:
     "Q402 is a gasless payment protocol for EVM chains. Your users pay zero gas. You sponsor it, invisibly and instantly.",
@@ -10,13 +26,13 @@ export const metadata: Metadata = {
     title: "Q402 | Gasless Payments on EVM",
     description: "Your users pay zero gas. Powered by EIP-712 + EIP-7702.",
     siteName: "Quack AI",
-    images: [{ url: "https://q402-institutional.vercel.app/opengraph-image", width: 1200, height: 630 }],
+    images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Q402 | Gasless Payments on EVM",
     description: "Your users pay zero gas. Powered by EIP-712 + EIP-7702.",
-    images: ["https://q402-institutional.vercel.app/opengraph-image"],
+    images: ["/opengraph-image"],
   },
 };
 
@@ -26,13 +42,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <head>
-        <link
-          href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={`${poppins.variable} ${jetbrainsMono.variable}`}>
       <body className="font-poppins antialiased bg-navy text-white">
         <Providers>
           {children}

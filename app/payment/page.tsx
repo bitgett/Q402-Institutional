@@ -235,7 +235,6 @@ export default function PaymentPage() {
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
   const [txHashInput,      setTxHashInput]      = useState("");
-  const [intentId,         setIntentId]         = useState<string | null>(null);
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, isEnterprise, perTx } = calcPrice(selectedChain, selectedVolume);
@@ -252,6 +251,7 @@ export default function PaymentPage() {
     if (!address) return;
     setPayStep("verifying");
     setVerifyError(null);
+    let nextIntentId: string | null = null;
     try {
       // Step 1: session nonce for intent (cached 55 min; one wallet popup per session)
       const auth = await getAuthCreds(address, signMessage);
@@ -280,9 +280,11 @@ export default function PaymentPage() {
           setPayStep("error");
           return;
         }
-        // Store intentId so activate can validate we're using the right quote.
+        // Capture intentId in a local so the activate call below sees it on
+        // the first render — setState would be async and leave intentId null
+        // in the very same tick, defeating the per-intent cross-tab guarantee.
         const intentData = await intentRes.json();
-        setIntentId(intentData.intentId ?? null);
+        nextIntentId = intentData.intentId ?? null;
       }
 
       // Step 2: fresh one-time challenge for activation (always prompts wallet)
@@ -301,7 +303,7 @@ export default function PaymentPage() {
           challenge:  chal.challenge,
           signature:  chal.signature,
           // intentId validates the server uses the same quote the user saw.
-          ...(intentId ? { intentId } : {}),
+          ...(nextIntentId ? { intentId: nextIntentId } : {}),
           // If user provided a txHash, pass it for deterministic verification.
           ...(txHashInput.trim() ? { txHash: txHashInput.trim() } : {}),
         }),

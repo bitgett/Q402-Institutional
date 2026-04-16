@@ -15,8 +15,8 @@ const config: Config = {
         "yellow-hover": "#D4AA10",
       },
       fontFamily: {
-        poppins: ["Poppins", "sans-serif"],
-        mono:    ["JetBrains Mono", "monospace"],
+        poppins: ["var(--font-poppins)", "Poppins", "sans-serif"],
+        mono:    ["var(--font-mono)", "JetBrains Mono", "monospace"],
       },
     },
   },
