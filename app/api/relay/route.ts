@@ -241,6 +241,12 @@ export async function POST(req: NextRequest) {
     await initQuotaIfNeeded(keyRecord.address, subscription?.quotaBonus ?? 0);
     const dec = await decrementCredit(keyRecord.address);
     if (!dec.ok) {
+      // Refund daily cap — no relay will happen, so the slot wasn't actually used.
+      if (dailyCapCharged) {
+        refundRateLimit(dailyCapKey, "daily", 86400).catch(e =>
+          console.error("[relay] daily cap refund failed after credit underflow:", e)
+        );
+      }
       return NextResponse.json({
         error: "No TX credits remaining. Purchase additional credits to continue.",
       }, { status: 429 });

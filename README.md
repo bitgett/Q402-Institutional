@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.3.0** · **Last updated: 2026-04-16**  
+**Version: v1.3.0** · **Docs revision: v1.13** · **Last updated: 2026-04-16**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -1119,6 +1119,61 @@ for (const chain of ["avax", "bnb", "eth"]) {
 ---
 
 ## 25. Changelog
+
+### v1.13 (2026-04-16)
+
+#### 전체 감사 기반 하드닝 — Tier 정합성 + 레이어별 원자성 + 보안 모델 문서화
+
+**[P1] Credit Tier UI ↔ 서버 정합성 복구**
+- `app/payment/page.tsx` VOLUMES 수정
+  - `{ label: "100K~500K", value: 300_000, basePrice: 1999 }` → `{ label: "500,000", value: 500_000, basePrice: 1999 }`
+  - `{ label: "500K+", value: 500_000, basePrice: 0 }` → `{ label: "500K+", value: 1_000_000, basePrice: 0 }`
+  - `calcPrice` 내부 Enterprise 게이트를 `basePrice === 0` 단일 조건으로 단순화
+  - UI 임계값 `>= 500_000` → `>= 1_000_000`로 이동 (서버 `TIER_CREDITS[6] = 500_000` 유지)
+- Why: 서버는 $1999 결제 시 500K 크레딧을 지급하지만 UI는 "100K~500K" 레인지로 표시되어 불일치 — 서버 지급량을 기준으로 UI 정렬
+
+**[P2] Relay 일일 캡 환불 — 크레딧 언더플로우 시 원자성 보장**
+- `app/api/relay/route.ts`
+  - `decrementCredit()`가 실패하면 이미 차감된 `dailyCapCharged` 카운터를 `refundRateLimit(dailyCapKey, "daily", 86400)`로 복구
+  - 잔액 없는 요청이 경쟁 조건으로 하루 캡을 잠식하던 경로 차단
+- Why: 크레딧 경쟁 조건으로 인한 캡 선소진 → 정당한 유저의 요청이 조기에 429
+
+**[P2] Admin Keys Generate — 안전한 로테이션 순서**
+- `app/api/keys/generate/route.ts`
+  - 기존: 구 키 deactivate → 신 키 발급 → subscription 업데이트 (구 키 실패 시 잠금)
+  - 수정: 신 키 발급 → subscription 업데이트 → 구 키 deactivate (fire-and-forget)
+  - 공개 rotate 엔드포인트(`app/lib/db.ts` `rotateApiKey`)와 동일한 순서로 통일
+- Why: "dangling-active > lockout" — 순서 역전으로 인한 잠금 사고 방지
+
+**[P2] Grant Applications — RPUSH 기반 레이스 제거**
+- `app/api/grant/route.ts`
+  - POST: `kv.get + kv.set` read-modify-write → `kv.rpush("grant_applications", application)` (atomic)
+  - GET: `kv.lrange("grant_applications", 0, -1)`로 읽기, 구버전 JSON 배열 데이터 fallback 유지
+  - catch 블록에서 legacy `kv.get/kv.set` 경로 보존 — 무중단 마이그레이션
+- Why: 동시 제출 시 last-write-wins로 신청서 유실되는 경로 차단
+
+**[P3] Gas Tank Verify-Deposit — 보안 모델 명시**
+- `app/api/gas-tank/verify-deposit/route.ts`
+  - POST 핸들러 상단에 보안 모델 주석 추가:
+    - 서명 미요구 설계 근거 (addGasDeposit이 SADD txHash로 dedupe, 실제 온체인 TX만 기록)
+    - 공격자가 타 주소로 호출해도 그 유저의 실제 입금만 반영되므로 권한 상승/위조 없음
+    - Rate limit 5/60s fail-closed가 public RPC 남용 방지
+
+**[P3] Payment Intent Route 정리**
+- `app/api/payment/intent/route.ts`
+  - `planChain` 주석: "display/reference용" → "plan/credit thresholds 결정; 생략 시 chain으로 fallback"
+  - 에러 메시지 `Unsupported plan chain: ${chain}` → `${planChainResolved}` (실제 검증된 값 반영)
+- Why: planChain 분리 이후에도 남아있던 레거시 문언 정정
+
+**[P3] Payment Security Copy 업데이트**
+- `app/payment/page.tsx`
+  - "Pay in USDC / USDT on BNB or Ethereum" → "Pay in USDC / USDT on BNB Chain or Ethereum — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable)"
+- Why: intent/activate가 planChain과 payment chain을 분리한 새 모델을 유저에게 설명
+
+**감사에서 "그대로 둠" 결정**
+- cron `api/cron/gas-alert` 내부 fetch self-call — 실행 비용 무시 가능, 호출자 인증 분리 유지
+- `rateLimit` fail-open 기본값 — KV 장애 시에도 핵심 결제 경로 유지, 관리자/결제 엔드포인트만 fail-closed로 명시
+- `verify-deposit` 서명 미요구 — 위 P3에 근거 명시
 
 ### v1.12 (2026-04-15)
 
