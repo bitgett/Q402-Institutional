@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkPaymentOnChain, verifyPaymentTx, planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
+import { checkPaymentOnChain, verifyPaymentTx } from "@/app/lib/blockchain";
 import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; challenge?: string; signature?: string; txHash?: string };
+  let body: { address?: string; challenge?: string; signature?: string; txHash?: string; intentId?: string };
   try {
     body = await req.json();
   } catch {
@@ -51,6 +51,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "No payment intent found. Call POST /api/payment/intent first.", code: "NO_INTENT" },
       { status: 402 },
+    );
+  }
+
+  // If the client passed the intentId it received from POST /api/payment/intent,
+  // validate it matches — catches stale tabs that have a different quote open.
+  if (body.intentId && intent.intentId !== body.intentId) {
+    return NextResponse.json(
+      { error: "Intent ID mismatch. Your quote may have changed — please refresh and try again.", code: "INTENT_MISMATCH" },
+      { status: 409 },
     );
   }
 
@@ -158,15 +167,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Quota + plan ──────────────────────────────────────────────────────────
-  const addedTxs = txQuotaFromAmount(result.amountUSD ?? 0, result.chain);
+  // ── Quota + plan — use intent's locked quote ─────────────────────────────
+  // quotedPlan and quotedCredits were computed server-side at intent creation,
+  // so the user always gets exactly what the payment page showed them.
+  // Fallback to recalculation only for intents created before this field existed.
+  const addedTxs = intent.quotedCredits > 0
+    ? intent.quotedCredits
+    : 0;
   if (addedTxs === 0) {
     kv.del(claimKey).catch(() => {});
     return NextResponse.json({ error: "Payment amount too low for this chain" }, { status: 402 });
   }
 
   // ── Every payment: +30 days + TX credits, plan set on first payment ───────
-  const plan = existing?.plan ?? planFromAmount(result.amountUSD ?? 0, result.chain)!;
+  const plan = existing?.plan ?? (intent.quotedPlan ?? "starter");
 
   // Restore or create live API key
   let apiKey = existing?.apiKey ?? null;
