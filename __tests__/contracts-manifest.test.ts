@@ -24,7 +24,7 @@ type ManifestChain = {
   relayMode: string;
   implContract: string;
   witness: {
-    type: "PaymentWitness" | "TransferAuthorization";
+    type: "TransferAuthorization";
     domainName: string;
     verifyingContractRule: "implContract" | "userEOA";
   };
@@ -78,11 +78,22 @@ describe("contracts.manifest.json ↔ public SDK", () => {
     expect(sdkSource).toMatch(new RegExp(`chainId:\\s*${m.chainId}\\b`));
   });
 
-  it("SDK exposes PaymentWitness type for avax/bnb/eth and TransferAuthorization for xlayer/stable", () => {
-    expect(sdkSource).toContain("Q402_WITNESS_TYPES");
-    expect(sdkSource).toContain("PaymentWitness:");
-    expect(sdkSource).toContain("Q402_XLAYER_TRANSFER_TYPES");
-    expect(sdkSource).toContain("Q402_STABLE_TRANSFER_TYPES");
+  it("SDK uses the unified TransferAuthorization witness type for all 5 chains", () => {
+    expect(sdkSource).toContain("Q402_TRANSFER_AUTH_TYPES");
+    expect(sdkSource).toContain("TransferAuthorization:");
+    expect(sdkSource).not.toContain("PaymentWitness");
+    expect(sdkSource).not.toContain("Q402_WITNESS_TYPES");
+  });
+
+  it.each(CHAINS)("%s: SDK embeds the manifest domain name", (chain) => {
+    const m = manifest.chains[chain];
+    expect(sdkSource).toContain(m.witness.domainName);
+  });
+
+  it.each(CHAINS)("%s: manifest declares TransferAuthorization + userEOA verifyingContract", (chain) => {
+    const m = manifest.chains[chain];
+    expect(m.witness.type).toBe("TransferAuthorization");
+    expect(m.witness.verifyingContractRule).toBe("userEOA");
   });
 
   it("Stable chain USDC and USDT both alias to USDT0", () => {

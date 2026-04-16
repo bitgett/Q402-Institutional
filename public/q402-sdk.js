@@ -5,19 +5,19 @@
  * The authoritative source for witness type, domain, and contract mapping is
  * contracts.manifest.json at the repo root. This SDK mirrors that manifest.
  *
- * ── Chain signing matrix (mirrors contracts.manifest.json) ─────────────────────
+ * ── Chain signing matrix (verified against deployed contract source) ───────────
  *
- *  Chain      Witness type            Domain name                     verifyingContract     Decimals
- *  ─────────  ──────────────────────  ──────────────────────────────  ──────────────────    ────────
- *  avax       PaymentWitness          "Q402PaymentImplementation"     impl contract         6
- *  bnb        PaymentWitness          "Q402PaymentImplementation"     impl contract         18  ← BSC USDC/USDT are 18 dec
- *  eth        PaymentWitness          "Q402PaymentImplementation"     impl contract         6
- *  xlayer     TransferAuthorization   "Q402 X Layer"                  user's EOA ★          6
- *  stable     TransferAuthorization   "Q402 Stable"                   impl contract         18  ← USDT0 only, 18 dec
+ *  Chain      Witness type           Domain name         verifyingContract   Decimals
+ *  ─────────  ─────────────────────  ──────────────────  ─────────────────   ────────
+ *  avax       TransferAuthorization  "Q402 Avalanche"    user's EOA          6
+ *  bnb        TransferAuthorization  "Q402 BNB Chain"    user's EOA          18
+ *  eth        TransferAuthorization  "Q402 Ethereum"     user's EOA          6
+ *  xlayer     TransferAuthorization  "Q402 X Layer"      user's EOA          6
+ *  stable     TransferAuthorization  "Q402 Stable"       user's EOA          18  ← USDT0 only
  *
- *  ★ X Layer: verifyingContract = address(this) under EIP-7702 = user's own EOA
+ *  All 5 deployed contracts compute _domainSeparator() with `address(this)`, which
+ *  under EIP-7702 delegation equals the user's EOA — NOT the impl contract.
  *
- *  PaymentWitness fields:        owner, token, amount, to, deadline, paymentId
  *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
  *
  * ── EIP-3009 fallback (X Layer only) ───────────────────────────────────────────
@@ -47,6 +47,7 @@ const Q402_CHAIN_CONFIG = {
     name:         "Avalanche",
     chainId:      43114,
     mode:         "eip7702",
+    domainName:   "Q402 Avalanche",
     implContract: "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
     usdc: { address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6 },
     usdt: { address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", decimals: 6 },
@@ -55,6 +56,7 @@ const Q402_CHAIN_CONFIG = {
     name:         "BNB Chain",
     chainId:      56,
     mode:         "eip7702",
+    domainName:   "Q402 BNB Chain",
     implContract: "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
     usdc: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
     usdt: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
@@ -63,6 +65,7 @@ const Q402_CHAIN_CONFIG = {
     name:         "Ethereum",
     chainId:      1,
     mode:         "eip7702",
+    domainName:   "Q402 Ethereum",
     implContract: "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
     usdc: { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
     usdt: { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
@@ -70,7 +73,8 @@ const Q402_CHAIN_CONFIG = {
   xlayer: {
     name:         "X Layer",
     chainId:      196,
-    mode:         "eip7702_xlayer",  // EIP-7702 지원 확인됨 (2026-03-12)
+    mode:         "eip7702_xlayer",
+    domainName:   "Q402 X Layer",
     implContract: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     usdc: { address: "0x74b7F16337b8972027F6196A17a631aC6dE26d22", decimals: 6 },
     usdt: { address: "0x1E4a5963aBFD975d8c9021ce480b42188849D41D", decimals: 6 },
@@ -87,19 +91,22 @@ const Q402_CHAIN_CONFIG = {
   },
 };
 
-// EIP-7702 모드 EIP-712 타입
-const Q402_WITNESS_TYPES = {
-  PaymentWitness: [
-    { name: "owner",     type: "address" },
-    { name: "token",     type: "address" },
-    { name: "amount",    type: "uint256" },
-    { name: "to",        type: "address" },
-    { name: "deadline",  type: "uint256" },
-    { name: "paymentId", type: "bytes32" },
+// EIP-7702 witness type — shared by all 5 chains (avax/bnb/eth/xlayer/stable).
+// All Q402PaymentImplementation* contracts use the identical TransferAuthorization
+// typehash. verifyingContract = address(this), which under EIP-7702 delegation = user EOA.
+const Q402_TRANSFER_AUTH_TYPES = {
+  TransferAuthorization: [
+    { name: "owner",       type: "address" },
+    { name: "facilitator", type: "address" },
+    { name: "token",       type: "address" },
+    { name: "recipient",   type: "address" },
+    { name: "amount",      type: "uint256" },
+    { name: "nonce",       type: "uint256" },
+    { name: "deadline",    type: "uint256" },
   ],
 };
 
-// EIP-3009 모드 (X Layer USDC TransferWithAuthorization 타입) — fallback only
+// EIP-3009 type (X Layer USDC fallback only) — matches on-chain USDC TransferWithAuthorization.
 const Q402_EIP3009_TYPES = {
   TransferWithAuthorization: [
     { name: "from",        type: "address" },
@@ -108,36 +115,6 @@ const Q402_EIP3009_TYPES = {
     { name: "validAfter",  type: "uint256" },
     { name: "validBefore", type: "uint256" },
     { name: "nonce",       type: "bytes32" },
-  ],
-};
-
-// EIP-7702 Stable 모드 — Q402PaymentImplementationStable witness 타입
-// verifyingContract = impl contract (avax/bnb/eth와 동일, xlayer와 다름)
-// gas token = USDT0 (18 decimals)
-const Q402_STABLE_TRANSFER_TYPES = {
-  TransferAuthorization: [
-    { name: "owner",       type: "address" },
-    { name: "facilitator", type: "address" },
-    { name: "token",       type: "address" },
-    { name: "recipient",   type: "address" },
-    { name: "amount",      type: "uint256" },
-    { name: "nonce",       type: "uint256" },
-    { name: "deadline",    type: "uint256" },
-  ],
-};
-
-// EIP-7702 X Layer 모드 — Q402PaymentImplementationXLayer witness 타입
-// verifyingContract = user's EOA (address(this) under delegation)
-// nonce = uint256 (random, replay protection via usedNonces mapping)
-const Q402_XLAYER_TRANSFER_TYPES = {
-  TransferAuthorization: [
-    { name: "owner",       type: "address" },
-    { name: "facilitator", type: "address" },
-    { name: "token",       type: "address" },
-    { name: "recipient",   type: "address" },
-    { name: "amount",      type: "uint256" },
-    { name: "nonce",       type: "uint256" },
-    { name: "deadline",    type: "uint256" },
   ],
 };
 
@@ -179,8 +156,7 @@ class Q402Client {
 
     const decimals  = tokenCfg.decimals;
     const amountRaw = BigInt(Math.round(parseFloat(amount) * 10 ** decimals)).toString();
-    const deadline  = Math.floor(Date.now() / 1000) + 600; // +10분
-    const pid       = paymentId ?? ethers.hexlify(ethers.randomBytes(32));
+    const deadline  = Math.floor(Date.now() / 1000) + 600; // +10min
 
     if (this.chainCfg.mode === "eip7702_xlayer") {
       return this._payXLayerEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg);
@@ -189,52 +165,66 @@ class Q402Client {
     } else if (this.chainCfg.mode === "eip3009") {
       return this._payEIP3009(signer, owner, to, amountRaw, deadline, token, tokenCfg);
     } else {
-      return this._payEIP7702(signer, provider, owner, to, amountRaw, deadline, pid, token, tokenCfg);
+      return this._payEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg);
     }
   }
 
   // ── EIP-7702 결제 (avax / bnb / eth) ─────────────────────────────────────────
-  async _payEIP7702(signer, provider, owner, to, amountRaw, deadline, pid, token, tokenCfg) {
-    // 1. EIP-712 witness 서명
+  // Q402PaymentImplementation.transferWithAuthorization() 사용
+  // witness type: TransferAuthorization
+  // domain name: per-chain (contract NAME 상수와 일치)
+  // verifyingContract: user's EOA (address(this) under EIP-7702 delegation)
+  async _payEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg) {
+    // 1. Fetch facilitator (relayer wallet) — must match on-chain msg.sender
+    const infoUrl  = this.relayUrl.replace(/\/relay$/, "/relay/info");
+    const infoResp = await fetch(infoUrl);
+    if (!infoResp.ok) throw new Error("Failed to fetch relay facilitator info");
+    const { facilitator } = await infoResp.json();
+
+    // 2. EIP-712 TransferAuthorization signature
     const domain = {
-      name:              "Q402PaymentImplementation",
+      name:              this.chainCfg.domainName,
       version:           "1",
       chainId:           this.chainCfg.chainId,
-      verifyingContract: this.chainCfg.implContract,
+      verifyingContract: owner,
     };
 
-    const witnessSig = await signer.signTypedData(domain, Q402_WITNESS_TYPES, {
+    const paymentNonce = ethers.toBigInt(ethers.randomBytes(32));
+
+    const witnessSig = await signer.signTypedData(domain, Q402_TRANSFER_AUTH_TYPES, {
       owner,
+      facilitator,
       token:     tokenCfg.address,
+      recipient: to,
       amount:    BigInt(amountRaw),
-      to,
+      nonce:     paymentNonce,
       deadline:  BigInt(deadline),
-      paymentId: pid,
     });
 
-    // 2. EIP-7702 authorization 서명
-    const nonce         = await provider.getTransactionCount(owner);
+    // 3. EIP-7702 authorization signature
+    const authNonce     = await provider.getTransactionCount(owner);
     const authorization = await this._signAuthorization(signer, {
       chainId: this.chainCfg.chainId,
       address: this.chainCfg.implContract,
-      nonce,
+      nonce:   authNonce,
     });
 
-    // 3. Relay API 호출
+    // 4. Relay API call
     const resp = await fetch(this.relayUrl, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
-        apiKey:       this.apiKey,
-        chain:        this.chain,
+        apiKey:  this.apiKey,
+        chain:   this.chain,
         token,
-        from:         owner,
+        from:    owner,
         to,
-        amount:       amountRaw,
+        amount:  amountRaw,
         deadline,
-        paymentId:    pid,
+        nonce:   paymentNonce.toString(),
         witnessSig,
         authorization,
+        facilitator,
       }),
     });
 
@@ -257,7 +247,7 @@ class Q402Client {
     // 2. EIP-712 TransferAuthorization 서명
     //    verifyingContract = owner's EOA (address(this) under EIP-7702 delegation)
     const domain = {
-      name:              "Q402 X Layer",
+      name:              this.chainCfg.domainName,
       version:           "1",
       chainId:           this.chainCfg.chainId,
       verifyingContract: owner,  // ← user's own EOA, NOT impl contract
@@ -267,7 +257,7 @@ class Q402Client {
     const nonceBuf    = ethers.randomBytes(32);
     const xlayerNonce = ethers.toBigInt(nonceBuf);
 
-    const witnessSig = await signer.signTypedData(domain, Q402_XLAYER_TRANSFER_TYPES, {
+    const witnessSig = await signer.signTypedData(domain, Q402_TRANSFER_AUTH_TYPES, {
       owner,
       facilitator,
       token:     tokenCfg.address,
@@ -313,7 +303,7 @@ class Q402Client {
   // Q402PaymentImplementationStable.transferWithAuthorization() 사용
   // witness type: TransferAuthorization
   // domain name: "Q402 Stable" (contract NAME 일치)
-  // verifyingContract: impl contract (avax/bnb/eth 방식, xlayer와 다름)
+  // verifyingContract: user's EOA (address(this) under EIP-7702 delegation)
   // gas token: USDT0 (18 decimals)
   async _payStableEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg) {
     // 1. Relay 서버에서 facilitator 주소 조회
@@ -323,18 +313,18 @@ class Q402Client {
     const { facilitator } = await infoResp.json();
 
     // 2. EIP-712 TransferAuthorization 서명
-    //    verifyingContract = impl contract (NOT user's EOA — Stable differs from X Layer)
+    //    verifyingContract = owner's EOA (address(this) under EIP-7702 delegation)
     const domain = {
-      name:              this.chainCfg.domainName,  // "Q402 Stable"
+      name:              this.chainCfg.domainName,
       version:           "1",
       chainId:           this.chainCfg.chainId,
-      verifyingContract: this.chainCfg.implContract,
+      verifyingContract: owner,
     };
 
     const nonceBuf    = ethers.randomBytes(32);
     const stableNonce = ethers.toBigInt(nonceBuf);
 
-    const witnessSig = await signer.signTypedData(domain, Q402_STABLE_TRANSFER_TYPES, {
+    const witnessSig = await signer.signTypedData(domain, Q402_TRANSFER_AUTH_TYPES, {
       owner,
       facilitator,
       token:     tokenCfg.address,
