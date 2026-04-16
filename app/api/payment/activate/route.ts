@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkPaymentOnChain, planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
 import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
-import { getPaymentIntent, clearPaymentIntent } from "@/app/api/payment/intent/route";
+import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 /**
