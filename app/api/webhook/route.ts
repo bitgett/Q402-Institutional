@@ -3,6 +3,7 @@ import {
   getWebhookConfig,
   setWebhookConfig,
   deleteWebhookConfig,
+  getWebhookDeliveries,
 } from "@/app/lib/db";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -34,11 +35,13 @@ export async function GET(req: NextRequest) {
   const config = await getWebhookConfig(addr);
   if (!config) return NextResponse.json({ configured: false });
 
+  const deliveries = await getWebhookDeliveries(addr);
   return NextResponse.json({
-    configured: true,
-    url: config.url,
-    active: config.active,
-    createdAt: config.createdAt,
+    configured:   true,
+    url:          config.url,
+    active:       config.active,
+    createdAt:    config.createdAt,
+    lastDelivery: deliveries[0] ?? null,
     // secret intentionally omitted
   });
 }

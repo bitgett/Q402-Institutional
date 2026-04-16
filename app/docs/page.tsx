@@ -578,7 +578,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "How do I get an API key?",
-                a: "Connect your wallet on the dashboard — an API key is automatically provisioned for your address. Deposit native tokens into the Gas Tank to start relaying."
+                a: "Connect your wallet on the dashboard — a sandbox API key (q402_test_ prefix) is provisioned for free so you can test the integration. To get a live key, complete an on-chain payment on the /payment page. Your live key is issued automatically after the payment is confirmed."
               },
             ].map((item, i) => (
               <div key={i} className="mb-4 p-5 rounded-xl border border-white/8">
@@ -591,7 +591,7 @@ const signature = await signer.signTypedData(domain, types, {
           {/* Bottom CTA */}
           <div className="border border-yellow/15 rounded-2xl p-8 text-center" style={{ background: "rgba(245,197,24,0.04)" }}>
             <h3 className="text-xl font-bold mb-2">Ready to go gasless?</h3>
-            <p className="text-white/40 text-sm mb-6">Pick a plan, connect your wallet, and get your API key. Live in minutes.</p>
+            <p className="text-white/40 text-sm mb-6">Pick a plan, send an on-chain payment, and your live API key is issued automatically. Sandbox key available for free to test first.</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <a href="/payment" className="bg-yellow text-navy font-bold px-8 py-3 rounded-full hover:bg-yellow-hover transition-colors text-sm">
                 Get API Key →

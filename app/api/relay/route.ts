@@ -11,6 +11,7 @@ import {
   initQuotaIfNeeded,
   decrementCredit,
   refundCredit,
+  recordWebhookDelivery,
 } from "@/app/lib/db";
 import { createHmac, randomBytes } from "crypto";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -408,29 +409,62 @@ export async function POST(req: NextRequest) {
     } catch { /* invalid URL — skip */ }
 
     if (webhookSafe) {
-    const payload = JSON.stringify({
-      event:       "relay.success",
-      sandbox:     isSandbox,
-      txHash:      result.txHash,
-      chain,
-      from,
-      to,
-      amount:      tokenAmount,
-      token,
-      gasCostNative,
-      timestamp:   relayedAt,
-    });
-    const hmac = createHmac("sha256", webhookCfg.secret).update(payload).digest("hex");
-    fetch(webhookCfg.url, {
-      method:  "POST",
-      headers: {
-        "Content-Type":      "application/json",
-        "X-Q402-Signature":  `sha256=${hmac}`,
-        "X-Q402-Event":      "relay.success",
-      },
-      body:   payload,
-      signal: AbortSignal.timeout(8_000),
-    }).catch(() => {}); // fire-and-forget
+      const payload = JSON.stringify({
+        event:        "relay.success",
+        sandbox:      isSandbox,
+        txHash:       result.txHash,
+        chain,
+        from,
+        to,
+        amount:       tokenAmount,
+        token,
+        gasCostNative,
+        timestamp:    relayedAt,
+      });
+      const hmac = createHmac("sha256", webhookCfg.secret).update(payload).digest("hex");
+      const webhookUrl     = webhookCfg.url;
+      const webhookAddr    = keyRecord.address;
+
+      // Retry up to 3 times with exponential backoff (fire-and-forget after response).
+      // Delivery result is recorded in KV for visibility.
+      const dispatchWebhook = async () => {
+        const DELAYS = [0, 1_000, 3_000];
+        let lastStatus: number | undefined;
+        let lastError:  string | undefined;
+        for (let i = 0; i < DELAYS.length; i++) {
+          if (DELAYS[i] > 0) await new Promise(r => setTimeout(r, DELAYS[i]));
+          try {
+            const res = await fetch(webhookUrl, {
+              method:  "POST",
+              headers: {
+                "Content-Type":     "application/json",
+                "X-Q402-Signature": `sha256=${hmac}`,
+                "X-Q402-Event":     "relay.success",
+                ...(i > 0 ? { "X-Q402-Retry": String(i) } : {}),
+              },
+              body:   payload,
+              signal: AbortSignal.timeout(8_000),
+            });
+            lastStatus = res.status;
+            if (res.ok) {
+              recordWebhookDelivery(webhookAddr, {
+                timestamp: new Date().toISOString(), event: "relay.success",
+                ok: true, statusCode: res.status, attempt: i + 1,
+              }).catch(() => {});
+              return;
+            }
+            lastError = `HTTP ${res.status}`;
+          } catch (e) {
+            lastError = e instanceof Error ? e.message : String(e);
+          }
+        }
+        // All attempts failed — record for visibility
+        recordWebhookDelivery(webhookAddr, {
+          timestamp: new Date().toISOString(), event: "relay.success",
+          ok: false, statusCode: lastStatus, error: lastError, attempt: DELAYS.length,
+        }).catch(() => {});
+      };
+      dispatchWebhook().catch(() => {});
     } // end webhookSafe
   }
 
