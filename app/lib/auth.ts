@@ -140,31 +140,57 @@ export async function createFreshChallenge(
 }
 
 /**
- * Verify a fresh challenge signature AND consume it (one-time use).
+ * Verify a fresh challenge signature AND consume it (truly single-use).
+ *
+ * Atomicity guarantee:
+ *   Step 1 — SET NX on a "consumed" marker (auth_challenge_consumed:{addr}:{challenge}).
+ *            Redis SET NX is atomic: only the first concurrent caller wins; the rest see
+ *            null immediately and are rejected before any signature work begins.
+ *   Step 2 — Read the original challenge to confirm it exists and matches.
+ *   Step 3 — Verify EIP-191 signature.
+ *   Step 4 — Delete the original challenge key (best-effort; the consumed marker already
+ *            blocks any future attempt even if the delete fails).
  *
  * Returns:
- *  { ok: true }                           — valid, challenge deleted
- *  { ok: false, code: "NONCE_EXPIRED" }   — challenge not in KV (expired / never issued)
- *  { ok: false, code: "SIG_MISMATCH"  }   — challenge found but sig doesn't match
+ *  { ok: true }                           — valid; challenge permanently consumed
+ *  { ok: false, code: "NONCE_EXPIRED" }   — challenge expired/already used/concurrent claim lost
+ *  { ok: false, code: "SIG_MISMATCH"  }   — challenge valid but signature wrong
  */
 export async function verifyAndConsumeChallenge(
   addr: string,
   challenge: string,
   signature: string,
 ): Promise<{ ok: true } | { ok: false; code: "NONCE_EXPIRED" | "SIG_MISMATCH" }> {
-  const key = challengeKvKey(addr);
+  const key         = challengeKvKey(addr);
+  // Consumed marker includes both addr and the challenge value so different challenges
+  // don't interfere with each other.
+  const consumedKey = `auth_challenge_consumed:${addr.toLowerCase()}:${challenge}`;
 
+  // ── Step 1: Atomically claim this challenge ───────────────────────────────
+  // SET NX returns "OK" (truthy) if the key was set (we own it), null if it already existed.
+  // TTL matches the challenge window — consumed markers auto-expire with challenges.
+  try {
+    const claimed = await kv.set(consumedKey, "1", { nx: true, ex: CHALLENGE_TTL_SEC });
+    if (!claimed) {
+      // Another concurrent request already claimed this challenge.
+      return { ok: false, code: "NONCE_EXPIRED" };
+    }
+  } catch {
+    return { ok: false, code: "NONCE_EXPIRED" };
+  }
+
+  // ── Step 2: Confirm the challenge exists and matches ─────────────────────
   let storedChallenge: string | null;
   try {
     storedChallenge = await kv.get<string>(key);
   } catch {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
-
   if (!storedChallenge || storedChallenge !== challenge) {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
 
+  // ── Step 3: Verify EIP-191 signature ─────────────────────────────────────
   try {
     const msg = buildChallengeMessage(addr.toLowerCase(), challenge);
     const recovered = ethers.verifyMessage(msg, signature);
@@ -175,7 +201,8 @@ export async function verifyAndConsumeChallenge(
     return { ok: false, code: "SIG_MISMATCH" };
   }
 
-  // Consume — delete regardless of any error so it cannot be replayed
+  // ── Step 4: Delete original challenge (best-effort) ──────────────────────
+  // The consumed marker already makes this key unreachable for any future attempt.
   kv.del(key).catch(() => { /* best-effort */ });
 
   return { ok: true };
