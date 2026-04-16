@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.3.0** · **Docs revision: v1.13** · **Last updated: 2026-04-16**  
+**Version: v1.3.0** · **Docs revision: v1.14** · **Last updated: 2026-04-17**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -63,28 +63,23 @@
 
 Q402는 **EIP-7702 + EIP-712 기반 가스리스 결제 인프라**다. 개발자가 SDK를 통합하면 Q402 릴레이어가 모든 온체인 가스를 대납한다.
 
-**avax / bnb / eth / stable — EIP-7702 플로우:**
-```
-User clicks "Pay USDC"
-  → SDK: EIP-712 witnessSig + EIP-7702 authorization 서명 (2 sigs)
-    → POST /api/relay { witnessSig, authorization }
-      → Q402 relayer: Type 4 TX 제출 (가스 대납)
-        → Q402PaymentImplementation.pay() 실행
-          → USDC: user EOA → recipient
-```
-
-**xlayer — EIP-7702 플로우** (2026-03-12 확인):
+**모든 5개 체인 — 통합 EIP-7702 플로우:**
 ```
 User clicks "Pay USDC"
   → SDK: GET /api/relay/info (facilitator 주소 조회)
-    → EIP-712 TransferAuthorization + EIP-7702 authorization (2 sigs)
-      → POST /api/relay { witnessSig, authorization, xlayerNonce }
-        → Q402 relayer: Type 4 TX 제출 (OKB 가스 대납)
-          → Q402PaymentImplementationXLayer.transferWithAuthorization()
-            → USDC: user EOA → recipient
+    → EIP-712 TransferAuthorization witnessSig (verifyingContract = user EOA)
+    → EIP-7702 authorization 서명 (2 sigs 총 2회)
+      → POST /api/relay { witnessSig, authorization }
+        → Q402 relayer: Type 4 TX 제출 (가스 대납)
+          → 위임된 Q402PaymentImplementation.transferWithAuthorization() 실행
+            → USDC/USDT(0): user EOA → recipient
 ```
 
-> X Layer는 EIP-3009 fallback도 지원 — `eip3009Nonce` 전달 시 자동 선택.
+> 5개 체인 모두 동일한 witness 타입 `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`과
+> 동일한 `verifyingContract = user EOA` 규칙을 사용한다. 체인별 차이는 `domainName`(예: "Q402 Avalanche")과
+> impl 주소뿐.
+>
+> X Layer는 레거시 EIP-3009 fallback도 지원 — `eip3009Nonce` 전달 시 자동 선택 (**USDC only**).
 
 ---
 
@@ -245,9 +240,8 @@ Q402-Institutional/
 │   ├── docs/page.tsx               # API Reference
 │   └── page.tsx                    # 랜딩 메인
 ├── scripts/
-│   ├── test-bnb-eip7702.mjs        # BNB EIP-7702 E2E 테스트
-│   ├── test-eth-eip7702.mjs        # ETH EIP-7702 E2E 테스트
-│   └── agent-example.mjs           # Node.js Agent SDK (5체인 예제)
+│   ├── test-eip7702.mjs            # 통합 EIP-7702 E2E 테스트 (--chain avax|bnb|eth|xlayer|stable)
+│   └── agent-example.mjs           # Node.js Agent SDK (5체인 통합 예제 — TransferAuthorization)
 └── public/
     ├── q402-sdk.js                 # 클라이언트 SDK v1.3.0
     ├── bnb.png / eth.png / avax.png / xlayer.png / stable.jpg
@@ -329,26 +323,20 @@ console.log(result.txHash);
 
 ### SDK 내부 동작
 
-**EIP-7702 체인 (avax / bnb / eth / stable)**
+**5개 체인 공통 — EIP-7702 (`method: "eip7702" | "eip7702_xlayer" | "eip7702_stable"`)**
 ```
 q402.pay() 호출
+  ├─ 0. GET /api/relay/info → facilitator 주소
   ├─ 1. EIP-712 witnessSig 서명
-  │      domain: { name, version, chainId, verifyingContract: implContract }
+  │      domain: { name: "Q402 <Chain>", version: "1", chainId, verifyingContract: 유저 EOA }
   │      types:  TransferAuthorization { owner, facilitator, token, recipient, amount, nonce, deadline }
   ├─ 2. EIP-7702 authorization 서명
   │      { address: implContract, nonce: EOA_nonce }
   └─ 3. POST /api/relay { witnessSig, authorization }
+         (xlayer는 nonce를 xlayerNonce 별도 필드로도 전달 — 레거시 호환)
 ```
 
-**EIP-7702 XLayer**
-```
-q402xl.pay() 호출
-  ├─ 0. GET /api/relay/info → facilitator 주소
-  ├─ 1. TransferAuthorization EIP-712 서명
-  │      verifyingContract = 유저 EOA (avax/bnb/eth와 핵심 차이)
-  ├─ 2. EIP-7702 authorization { address: xlayerImpl }
-  └─ 3. POST /api/relay { witnessSig, authorization, xlayerNonce }
-```
+**X Layer EIP-3009 fallback (USDC only)** — `eip3009Nonce` 제공 시만 선택됨.
 
 ---
 
@@ -633,23 +621,25 @@ kv.get("inquiries")                      → Inquiry[]
 
 ## 13. Relay 내부 동작
 
-### 13-A. EIP-7702 (avax / bnb / eth / stable)
+### 13-A. EIP-7702 (공통, 5개 체인 동일)
 
 ```
 유저 EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
-                                         .pay() 실행 시 유저 EOA처럼 동작
+                                         .transferWithAuthorization() 실행 시
+                                         _domainSeparator()의 address(this)가
+                                         유저 EOA로 resolve됨 (그래서 verifyingContract = EOA)
 ```
 
-**EIP-712 서명 도메인:**
+**EIP-712 서명 도메인 (5개 체인 공통 규칙):**
 ```javascript
 {
-  name:              "Q402 Avalanche",  // 체인별 다름
+  name:              "Q402 Avalanche",   // 체인별: Avalanche | BNB Chain | Ethereum | X Layer | Stable
   version:           "1",
-  chainId:           43114,
-  verifyingContract: "0x96a8..."        // impl contract
+  chainId:           43114,              // 체인별
+  verifyingContract: userEOA,            // ⭐ 모든 체인 동일 — 절대 impl 주소 아님
 }
 
-// types
+// types — 5개 체인 모두 동일
 TransferAuthorization: [
   { name: "owner",       type: "address" },
   { name: "facilitator", type: "address" },
@@ -661,12 +651,18 @@ TransferAuthorization: [
 ]
 ```
 
+**컨트랙트 측 불변식:**
+- `owner == address(this)` 검증 (Owner Binding, P0 감사 대응)
+- `msg.sender == facilitator` 검증 (Unauthorized Facilitator 방어, P1 감사 대응)
+- `usedNonces[owner][nonce]` 매핑으로 replay 방지
+- `_domainSeparator()` 가 `address(this)`를 사용 → EIP-7702 위임 컨텍스트에서 유저 EOA로 resolve
+
 **viem Type 4 TX 전송 (`app/lib/relayer.ts`):**
 ```typescript
 const txHash = await walletClient.sendTransaction({
   chain: null,
-  to:   params.owner,     // 유저 EOA
-  data: callData,         // Q402PaymentImplementation.pay() calldata
+  to:   params.owner,                    // 유저 EOA
+  data: callData,                        // transferWithAuthorization() calldata
   gas:  BigInt(300000),
   authorizationList: [{ ...params.authorization }],
 });
@@ -677,27 +673,21 @@ const txHash = await walletClient.sendTransaction({
 const gasCostNative = parseFloat(formatEther(receipt.gasUsed * receipt.effectiveGasPrice));
 ```
 
-### 13-B. EIP-7702 (xlayer) — avax/bnb/eth와의 차이
+### 13-B. 체인별 차이점 요약
 
-| 항목 | avax / bnb / eth / stable | xlayer |
-|------|--------------------------|--------|
-| 컨트랙트 | `Q402PaymentImplementation` | `Q402PaymentImplementationXLayer` |
-| 함수 | `pay()` | `transferWithAuthorization()` |
-| `verifyingContract` | implContract | **유저 EOA** (`address(this)` under delegation) |
-| nonce 타입 | `uint256` (random) | `uint256` (random, usedNonces mapping) |
-| facilitator 체크 | 없음 | `msg.sender == facilitator` 필수 |
+| 항목 | avax / bnb / eth | xlayer | stable |
+|------|------------------|--------|--------|
+| 컨트랙트 클래스 | `Q402PaymentImplementation` | `Q402PaymentImplementationXLayer` | `Q402PaymentImplementationStable` |
+| 진입 함수 | `transferWithAuthorization()` | `transferWithAuthorization()` | `transferWithAuthorization()` |
+| witness 타입 | TransferAuthorization | TransferAuthorization | TransferAuthorization |
+| `verifyingContract` | 유저 EOA | 유저 EOA | 유저 EOA |
+| 도메인 이름 | "Q402 Avalanche" / "Q402 BNB Chain" / "Q402 Ethereum" | "Q402 X Layer" | "Q402 Stable" |
+| EIP-3009 fallback | ✗ | ✓ (USDC only, 레거시) | ✗ |
+| 릴레이 API `method` | `"eip7702"` | `"eip7702_xlayer"` / `"eip3009"` | `"eip7702_stable"` |
 
-```javascript
-// XLayer — verifyingContract = owner (EOA)
-const domain = {
-  name:              "Q402 X Layer",
-  version:           "1",
-  chainId:           196,
-  verifyingContract: owner,  // ← 유저 EOA
-};
-```
-
-> SDK가 서명 전 `GET /api/relay/info`로 facilitator 주소 자동 조회.
+> 역사적 메모: v1.3.0 이전에는 avax/bnb/eth가 `PaymentWitness`라는 별개 witness 타입을 썼다고 문서화돼 있었지만,
+> 실제 배포된 컨트랙트는 5개 체인 모두 `TransferAuthorization` + `_domainSeparator(address(this))` 단일 스킴이다.
+> v1.14 문서 리비전에서 SDK/manifest/tests/docs가 모두 이 배포 현실에 맞춰졌다.
 
 **검증된 XLayer EIP-7702 테스트 결과 (2026-03-12):**
 
@@ -890,9 +880,8 @@ newPaidAt = base.toISOString();
 
 | 파일 | 내용 |
 |------|------|
-| `scripts/test-bnb-eip7702.mjs` | BNB Chain EIP-7702 E2E 테스트 |
-| `scripts/test-eth-eip7702.mjs` | Ethereum EIP-7702 + USDC 잔고 체크 |
-| `scripts/agent-example.mjs` | Node.js Agent SDK — 5체인 워크플로 예제 + 모듈 export |
+| `scripts/test-eip7702.mjs` | 통합 EIP-7702 E2E 테스트 — `--chain avax\|bnb\|eth\|xlayer\|stable` |
+| `scripts/agent-example.mjs` | Node.js Agent SDK — 5체인 통합 예제 (TransferAuthorization + 모듈 export) |
 
 ---
 
@@ -911,9 +900,9 @@ Stable은 USDT0가 네이티브 가스 토큰인 Layer 1. AI 에이전트 생태
 |------|---------|---------|
 | Chain ID | `988` | `2201` |
 | RPC | `https://rpc.stable.xyz` | `https://rpc.testnet.stable.xyz` |
-| Explorer | `https://stablescan.xyz` | `https://testnet.stablescan.xyz` |
+| Explorer | `https://stablescan.org` | `https://testnet.stablescan.xyz` |
 | 가스 토큰 | USDT0 (18 dec) | USDT0 |
-| USDT0 주소 | `0x5FD84259d66Cd46123540766Be93DFE6D43130D7` | `0x78Cf24370174180738C5B8E352B6D14c83a6c9A9` |
+| USDT0 주소 | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | `0x78Cf24370174180738C5B8E352B6D14c83a6c9A9` |
 
 ### 배포된 컨트랙트
 
@@ -931,7 +920,7 @@ Stable은 USDT0가 네이티브 가스 토큰인 Layer 1. AI 에이전트 생태
   name:              "Q402 Stable",
   version:           "1",
   chainId:           988,
-  verifyingContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350"  // impl (X Layer와 달리 EOA 아님)
+  verifyingContract: userEOA,   // 5개 체인 공통 — _domainSeparator가 address(this) 사용
 }
 ```
 
@@ -983,22 +972,23 @@ Stable은 USDT0가 네이티브 가스 토큰인 Layer 1. AI 에이전트 생태
 | USDT | `0x1E4a5963aBFD975d8c9021ce480b42188849D41D` | 6 | |
 
 #### Stable
-| 토큰 | 주소 | Dec |
-|------|------|-----|
-| USDT0 | `0x5FD84259d66Cd46123540766Be93DFE6D43130D7` | 18 |
+| 토큰 | 주소 | Dec | 비고 |
+|------|------|-----|------|
+| USDT0 | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | 18 | API의 `USDC`/`USDT` 키 모두 이 주소로 resolve |
 
-### 컨트랙트 ABI 요약
+### 컨트랙트 ABI 요약 (5개 체인 공통)
 
 ```solidity
-// EIP-7702로 위임된 EOA에서 실행
-function pay(
-  address owner,           // 결제자 EOA
-  address token,           // USDC/USDT 토큰 주소
-  uint256 amount,          // atomic (USDC: 1 = 0.000001)
-  address to,              // 수신자
-  uint256 deadline,        // 만료 타임스탬프
-  uint256 nonce,           // 랜덤 uint256 (replay 방지)
-  bytes calldata witnessSig // EIP-712 TransferAuthorization 서명
+// EIP-7702로 위임된 EOA에서 실행 — msg.sender = facilitator(릴레이어), address(this) = owner(유저 EOA)
+function transferWithAuthorization(
+  address owner,            // 결제자 EOA (address(this)와 일치해야 함)
+  address facilitator,      // 릴레이어 주소 (msg.sender와 일치해야 함)
+  address token,            // USDC/USDT(Stable은 USDT0) 토큰 주소
+  address recipient,        // 수신자
+  uint256 amount,           // atomic (체인별 decimals)
+  uint256 nonce,            // 랜덤 uint256 (usedNonces 매핑으로 replay 방지)
+  uint256 deadline,         // 만료 타임스탬프
+  bytes calldata witnessSignature  // EIP-712 TransferAuthorization 서명
 ) external;
 ```
 
@@ -1083,13 +1073,14 @@ git push origin main
 ## 23. 테스트 스크립트 & Agent SDK
 
 ```bash
-# BNB Chain EIP-7702 E2E 테스트
-node scripts/test-bnb-eip7702.mjs
+# 통합 EIP-7702 E2E 테스트 — 체인 지정
+node scripts/test-eip7702.mjs --chain avax   [--amount 0.05] [--to 0x...]
+node scripts/test-eip7702.mjs --chain bnb
+node scripts/test-eip7702.mjs --chain eth
+node scripts/test-eip7702.mjs --chain xlayer
+node scripts/test-eip7702.mjs --chain stable
 
-# Ethereum EIP-7702 E2E 테스트 (USDC 잔고 체크 포함)
-node scripts/test-eth-eip7702.mjs
-
-# 전체 5체인 Agent 예제
+# 5체인 Agent SDK 예제 (TransferAuthorization 통합 플로우)
 node scripts/agent-example.mjs
 ```
 
@@ -1127,6 +1118,56 @@ for (const chain of ["avax", "bnb", "eth"]) {
 ---
 
 ## 25. Changelog
+
+### v1.14 (2026-04-17)
+
+#### 5개 체인 통합 — TransferAuthorization 단일 witness + user-EOA verifyingContract
+
+배포된 Q402PaymentImplementation 컨트랙트를 직접 읽어 확인한 결과, avax/bnb/eth/xlayer/stable 5개 체인이
+모두 동일한 witness 타입 `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`과
+동일한 `_domainSeparator() → address(this)` 스킴을 사용한다. EIP-7702 위임 컨텍스트에서 `address(this)`는
+유저의 EOA로 resolve되므로, 모든 체인의 `verifyingContract`는 유저 EOA다.
+
+이전 문서/SDK/테스트는 avax/bnb/eth가 별개 `PaymentWitness` 타입에 `verifyingContract = impl`을 쓴다고
+주장했지만 — 그 경로는 배포된 컨트랙트에 존재하지 않는다. v1.14에서 이 배포 현실에 맞춰 전 코드베이스 정렬.
+
+**[P0] `public/q402-sdk.js` 통합**
+- `Q402_WITNESS_TYPES` / `Q402_XLAYER_TRANSFER_TYPES` / `Q402_STABLE_TRANSFER_TYPES` 세 개 타입 정의 제거
+- 단일 `Q402_TRANSFER_AUTH_TYPES` 로 교체 (5개 체인 공용)
+- 모든 체인의 `verifyingContract`를 `owner` (유저 EOA)로 고정, 체인별 `domainName`만 다르게 적용
+- `_payEIP7702()` / `_payStableEIP7702()` / `_payXLayerEIP7702()` 내부 도메인 + witness 전부 통합
+
+**[P0] `contracts.manifest.json` 정정**
+- avax/bnb/eth/stable의 `witness.verifyingContractRule`을 `implContract` → `userEOA`로 수정
+- 각 체인에 `domainName` 명시 (`Q402 Avalanche` / `Q402 BNB Chain` / `Q402 Ethereum` / `Q402 X Layer` / `Q402 Stable`)
+- 매니페스트 노트에 "verifyingContract = user's own EOA under EIP-7702 delegation" 명시
+
+**[P0] `__tests__/contracts-manifest.test.ts` 강화**
+- 5개 체인 전수에 `witness.type === "TransferAuthorization"` + `verifyingContractRule === "userEOA"` 검증 추가
+- 체인별 `domainName`이 SDK 소스에 embedding 돼 있는지 확인
+- 과거 `PaymentWitness` / `Q402_WITNESS_TYPES` 키워드가 SDK에 남아있으면 실패하는 네거티브 테스트 추가
+- 112/112 테스트 통과 (`tsc --noEmit` clean)
+
+**[P1] `app/docs/page.tsx` EIP-712 섹션 재작성**
+- 체인별 분리 스펙 제거 → 5개 체인 공용 단일 스펙으로 통합
+- 서명 예제의 `verifyingContract`를 `userAddress` 고정
+
+**[P1] `scripts/` 전면 교체**
+- 삭제: `test-bnb-eip7702.mjs` / `test-eth-eip7702.mjs` / `test-xlayer-eip7702.mjs` / `test-relay.mjs` (모두 구 PaymentWitness + 구 X Layer impl 주소 사용)
+- 신규: `scripts/test-eip7702.mjs` — `--chain <key>` CLI 인자 하나로 5개 체인 모두 커버
+  - 정정된 X Layer impl `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` (구 `0x31E9D105...` 아님)
+  - 정정된 Stable RPC `https://rpc.stable.xyz` + USDT0 토큰 `0x779ded0c9e1022225f8e0630b35a9b54be713736` (18 dec)
+- 재작성: `scripts/agent-example.mjs` — `isXLayer` 분기 제거, 통합 TransferAuthorization 스킴 + 올바른 Stable 주소
+
+**[P2] `app/lib/relayer.ts` 주석 정정**
+- 런타임 코드는 이미 8-param `transferWithAuthorization` + facilitator/nonce 전달로 올바름 (수정 없음)
+- 과거 PaymentWitness를 가리키던 주석만 TransferAuthorization을 기술하도록 정정
+
+**감사 노트 — "그대로 둠"**
+- `authorizationGuard` (서버가 chainId + impl 주소 일치 검증) — 이미 제대로 작동, 변경 없음
+- X Layer의 `xlayerNonce` 별도 필드 — 레거시 API 호환성을 위해 유지 (서버가 `nonce`와 동일 의미로 처리)
+
+커밋: `6cbb406 unify all 5 chains on single TransferAuthorization + user-EOA verifyingContract`
 
 ### v1.13 (2026-04-16)
 
