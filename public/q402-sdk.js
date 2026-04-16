@@ -118,6 +118,33 @@ const Q402_EIP3009_TYPES = {
   ],
 };
 
+// Human-readable decimal string → raw token units (string form of uint256).
+// Must NOT go through Number/parseFloat: IEEE-754 doubles only preserve ~15–17
+// significant digits, so 18-decimal tokens (BNB USDC/USDT, Stable USDT0) lose
+// precision below the dust threshold and silently round the wrong way.
+function toRawAmount(amount, decimals) {
+  if (typeof amount !== "string" || amount.trim() === "") {
+    throw new Error('Q402: amount must be a non-empty decimal string (e.g. "5.00")');
+  }
+  if (!/^\d+(\.\d+)?$/.test(amount)) {
+    throw new Error(
+      `Q402: invalid amount "${amount}" — use a positive decimal string like "5.00" (no sign, no scientific notation, no whitespace)`
+    );
+  }
+  let raw;
+  try {
+    raw = ethers.parseUnits(amount, decimals);
+  } catch {
+    throw new Error(
+      `Q402: amount "${amount}" has more than ${decimals} decimal places for this token`
+    );
+  }
+  if (raw <= 0n) {
+    throw new Error(`Q402: amount must be greater than zero (got "${amount}")`);
+  }
+  return raw.toString();
+}
+
 class Q402Client {
   /**
    * @param {object} opts
@@ -137,10 +164,16 @@ class Q402Client {
    * Make a gasless token payment.
    *
    * @param {object} opts
-   * @param {string} opts.to          - Recipient address
-   * @param {string} opts.amount      - Human-readable amount e.g. "5.00"
+   * @param {string} opts.to     - Recipient address (0x-prefixed, 40 hex chars)
+   * @param {string} opts.amount - Human-readable decimal STRING e.g. "5.00" or "0.123456".
+   *                               Must not exceed the token's decimal precision. Numbers
+   *                               and scientific notation are rejected — never pass a
+   *                               JS Number, since IEEE-754 loses precision for
+   *                               18-decimal tokens.
    * @param {"USDC"|"USDT"} opts.token
    * @returns {Promise<{success, txHash, blockNumber, tokenAmount, token, chain, method}>}
+   * @throws  When amount is empty, malformed, negative, zero, or has more
+   *          decimal places than the target token supports.
    */
   async pay({ to, amount, token = "USDC" }) {
     const ethereum = window.ethereum || window.okxwallet;
@@ -154,7 +187,7 @@ class Q402Client {
     if (!tokenCfg) throw new Error(`Unsupported token: ${token} on chain ${this.chain}`);
 
     const decimals  = tokenCfg.decimals;
-    const amountRaw = BigInt(Math.round(parseFloat(amount) * 10 ** decimals)).toString();
+    const amountRaw = toRawAmount(amount, decimals);
     const deadline  = Math.floor(Date.now() / 1000) + 600; // +10min
 
     if (this.chainCfg.mode === "eip7702_xlayer") {
@@ -434,5 +467,8 @@ class Q402Client {
 }
 
 // Export for ESM / CommonJS / browser globals
-if (typeof module !== "undefined") module.exports = { Q402Client };
-if (typeof window !== "undefined") window.Q402Client = Q402Client;
+if (typeof module !== "undefined") module.exports = { Q402Client, toRawAmount };
+if (typeof window !== "undefined") {
+  window.Q402Client = Q402Client;
+  window.Q402Client.toRawAmount = toRawAmount;
+}
