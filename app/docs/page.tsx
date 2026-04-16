@@ -309,7 +309,7 @@ console.log("Paid! TX:", result.txHash);`} />
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-green-400 text-xs font-semibold mb-2">Withdraw</div>
-                <p className="text-xs text-white/50 leading-relaxed">Withdraw remaining balance any time from your dashboard. Funds always remain yours.</p>
+                <p className="text-xs text-white/50 leading-relaxed">Withdrawals are processed manually by Q402 operations. Contact hello@quackai.ai to request a refund. Funds always remain yours.</p>
               </div>
             </div>
 
@@ -562,7 +562,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "Who pays the gas fees?",
-                a: "You do — from your gas pool. You deposit native tokens (BNB on BNB Chain, ETH on Ethereum, etc.) to your project's gas pool address. Q402 auto-deducts the exact gas cost per transaction. You can deposit and withdraw anytime from the dashboard."
+                a: "You do — from your gas pool. You deposit native tokens (BNB on BNB Chain, ETH on Ethereum, etc.) to your project's gas pool address. Q402 auto-deducts the exact gas cost per transaction. To withdraw, contact hello@quackai.ai — withdrawals are processed manually by Q402 operations."
               },
               {
                 q: "Is Q402 non-custodial?",

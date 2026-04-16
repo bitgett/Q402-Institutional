@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.12** · **Last updated: 2026-04-15**  
+**Version: v1.3.0** · **Last updated: 2026-04-16**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -456,7 +456,7 @@ API Key 유효성 검증 + 만료/교체 확인.
 
 ## 10. Authentication Model
 
-**Nonce 기반 EIP-191 personal_sign (v1.12~)** — 모든 유저용 API에서 지갑 소유권 증명:
+**하이브리드 EIP-191 personal_sign** — 세션 nonce (1h TTL) + 고위험 액션 fresh challenge:
 
 ```
 서명 메시지: "Q402 Auth\nAddress: {address_lowercase}\nNonce: {nonce}"
