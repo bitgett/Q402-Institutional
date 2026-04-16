@@ -9,7 +9,9 @@ export interface PaymentIntent {
   createdAt:     string;
   // Locked at intent creation — activate uses these instead of recalculating.
   // Eliminates drift between the price the user saw and what the server grants.
-  planChain?:    string;       // selected relay chain (for display / reference)
+  // Selected relay chain. Drives plan/credit thresholds — `chain` is only
+  // the payment rail. Defaults to `chain` on intent if omitted.
+  planChain?:    string;
   quotedPlan:    string | null;
   quotedCredits: number;
 }
