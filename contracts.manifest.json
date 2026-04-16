@@ -14,11 +14,12 @@
       "relayMode": "eip7702",
       "implContract": "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
       "witness": {
-        "type": "PaymentWitness",
-        "fields": ["owner", "token", "amount", "to", "deadline", "paymentId"],
-        "domainName": "Q402PaymentImplementation",
+        "type": "TransferAuthorization",
+        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "domainName": "Q402 Avalanche",
         "domainVersion": "1",
-        "verifyingContractRule": "implContract"
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
         "USDC": { "address": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", "decimals": 6 },
@@ -33,11 +34,12 @@
       "relayMode": "eip7702",
       "implContract": "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
       "witness": {
-        "type": "PaymentWitness",
-        "fields": ["owner", "token", "amount", "to", "deadline", "paymentId"],
-        "domainName": "Q402PaymentImplementation",
+        "type": "TransferAuthorization",
+        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "domainName": "Q402 BNB Chain",
         "domainVersion": "1",
-        "verifyingContractRule": "implContract"
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
         "USDC": { "address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "decimals": 18 },
@@ -52,11 +54,12 @@
       "relayMode": "eip7702",
       "implContract": "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
       "witness": {
-        "type": "PaymentWitness",
-        "fields": ["owner", "token", "amount", "to", "deadline", "paymentId"],
-        "domainName": "Q402PaymentImplementation",
+        "type": "TransferAuthorization",
+        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "domainName": "Q402 Ethereum",
         "domainVersion": "1",
-        "verifyingContractRule": "implContract"
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
         "USDC": { "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "decimals": 6 },
@@ -97,7 +100,8 @@
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
         "domainName": "Q402 Stable",
         "domainVersion": "1",
-        "verifyingContractRule": "implContract"
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
         "USDC": { "address": "0x779ded0c9e1022225f8e0630b35a9b54be713736", "decimals": 18, "aliasFor": "USDT0" },

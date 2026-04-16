@@ -220,9 +220,9 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
 
 // ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
 // Contract: 0x8D854436ab0426F5BC6Cc70865C90576AD523E73 (X Layer mainnet)
-// Witness type: TransferAuthorization (different from PaymentWitness on avax/bnb/eth)
-// Key difference: verifyingContract = user's EOA (not impl contract)
-//                 msg.sender must equal facilitator param
+// Witness type: TransferAuthorization (identical scheme across all 5 chains)
+// Key detail: verifyingContract = user's EOA (address(this) under EIP-7702)
+//             msg.sender must equal facilitator param
 const XLAYER_EIP7702_ABI = [
   {
     type: "function",
