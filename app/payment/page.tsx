@@ -376,9 +376,14 @@ export default function PaymentPage() {
           {/* ── LEFT: all 4 steps ──────────────────────────────────────────── */}
           <div className="space-y-4">
 
-            {/* ── STEP 1: Chain ──────────────────────────────────────────── */}
+            {/* ── STEP 1: Service chain ─────────────────────────────────── */}
             <div className="rounded-2xl p-6 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <StepHeader n="1" title="Which chain do you need?" sub="Select the chain your product runs on" done={false} />
+              <StepHeader
+                n="1"
+                title="Service chain"
+                sub="Where your relay credits will run. You can pay on a different chain in step 4."
+                done={false}
+              />
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {CHAINS.map(c => {
                   const active = selectedChain === c.id;
@@ -536,7 +541,10 @@ export default function PaymentPage() {
 
                   {/* Token selector */}
                   <div>
-                    <p className="text-xs text-white/30 uppercase tracking-widest mb-2 font-semibold">Pay with</p>
+                    <div className="flex items-baseline justify-between mb-2">
+                      <p className="text-xs text-white/30 uppercase tracking-widest font-semibold">Payment rail</p>
+                      <p className="text-[10px] text-white/25">Different from your service chain above</p>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       {PAY_TOKENS.map(t => (
                         <button
@@ -622,14 +630,36 @@ export default function PaymentPage() {
                 <p className="text-yellow font-bold text-sm uppercase tracking-widest">Your Quote</p>
               </div>
               <div className="p-6">
-                {/* Chain + volume */}
-                <div className="flex items-center gap-3 mb-5 p-3 rounded-xl border border-white/6" style={{ background: "rgba(255,255,255,0.02)" }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={chain.img} alt={chain.name} className={`w-8 h-8 flex-shrink-0 ${chain.rounded}`} />
-                  <div>
-                    <p className="text-sm font-semibold">{chain.name}</p>
-                    <p className="text-white/35 text-xs">{selectedVolume >= 1_000_000 ? "500,000+" : selectedVolume.toLocaleString()} TXs · +30 days</p>
+                {/* Service chain — where credits run */}
+                <div className="mb-3">
+                  <p className="text-[10px] text-white/30 uppercase tracking-[0.18em] mb-1.5 font-semibold">Service chain</p>
+                  <div className="flex items-center gap-3 p-3 rounded-xl border border-white/6" style={{ background: "rgba(255,255,255,0.02)" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={chain.img} alt={chain.name} className={`w-8 h-8 flex-shrink-0 ${chain.rounded}`} />
+                    <div>
+                      <p className="text-sm font-semibold">{chain.name}</p>
+                      <p className="text-white/35 text-xs">{selectedVolume >= 1_000_000 ? "500,000+" : selectedVolume.toLocaleString()} TXs · +30 days</p>
+                    </div>
                   </div>
+                </div>
+
+                {/* Payment rail — where funds actually move */}
+                <div className="mb-5">
+                  <p className="text-[10px] text-white/30 uppercase tracking-[0.18em] mb-1.5 font-semibold">Payment rail</p>
+                  {payStep !== "idle" ? (
+                    <div className="flex items-center gap-3 p-3 rounded-xl border border-white/6" style={{ background: "rgba(255,255,255,0.02)" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={payToken.img} alt={payToken.chain} className="w-8 h-8 flex-shrink-0 rounded-full" />
+                      <div>
+                        <p className="text-sm font-semibold">{payToken.label}</p>
+                        <p className="text-white/35 text-xs">Funds settle on {payToken.chain}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl border border-dashed border-white/10 text-xs text-white/30" style={{ background: "rgba(255,255,255,0.01)" }}>
+                      Pick a pay token after connecting your wallet
+                    </div>
+                  )}
                 </div>
 
                 {/* Price */}
@@ -658,18 +688,6 @@ export default function PaymentPage() {
                       <p className="text-white/20 text-xs text-right">
                         Includes {chain.name} +{Math.round((chain.multiplier - 1) * 100)}% rate
                       </p>
-                    )}
-
-                    {/* Pay token summary */}
-                    {payStep !== "idle" && (
-                      <div className="mt-4 pt-4 border-t border-white/8">
-                        <p className="text-xs text-white/25 mb-2">Paying with</p>
-                        <div className="flex items-center gap-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={payToken.img} alt={payToken.chain} className="w-4 h-4 rounded-full" />
-                          <span className="text-sm font-semibold text-white/70">{payToken.label}</span>
-                        </div>
-                      </div>
                     )}
                   </>
                 )}
