@@ -3,7 +3,7 @@ import { kv } from "@vercel/kv";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { randomBytes } from "crypto";
-import { intentKey } from "@/app/lib/payment-intent";
+import { intentByIdKey, intentLatestKey } from "@/app/lib/payment-intent";
 import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/blockchain";
 
 /**
@@ -24,7 +24,9 @@ import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/b
  *               (determines plan/credit thresholds; defaults to `chain` if omitted)
  *   token:      "USDC" | "USDT" | "USDT0" (optional — cross-checked in activate)
  *
- * Intent is stored for 2 hours. Only one active intent per address.
+ * Each intent is stored under its own intentId for 2 hours. The "latest"
+ * pointer for the address is updated on every creation — clients that don't
+ * echo the intentId back on activate will match against the most recent one.
  */
 
 const INTENT_TTL = 2 * 60 * 60; // 2 hours
@@ -121,7 +123,13 @@ export async function POST(req: NextRequest) {
     quotedCredits,
   };
 
-  await kv.set(intentKey(addr), intent, { ex: INTENT_TTL });
+  // Store under the intentId and advance the latest-pointer for this address.
+  // Multiple concurrent intents per address coexist until they expire or one
+  // of them is consumed by activate.
+  await Promise.all([
+    kv.set(intentByIdKey(intentId), intent, { ex: INTENT_TTL }),
+    kv.set(intentLatestKey(addr), intentId, { ex: INTENT_TTL }),
+  ]);
 
   return NextResponse.json({
     intentId, chain, expectedUSD,
