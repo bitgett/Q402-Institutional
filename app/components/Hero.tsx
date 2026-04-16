@@ -230,7 +230,7 @@ export default function Hero() {
                     <span className="w-3 h-3 rounded-full bg-red-500/60" />
                     <span className="w-3 h-3 rounded-full bg-yellow/50" />
                     <span className="w-3 h-3 rounded-full bg-green-400/50" />
-                    <span className="ml-4 text-white/20 text-xs font-mono">q402-sdk · v1.3.0</span>
+                    <span className="ml-4 text-white/20 text-xs font-mono">q402-sdk · v1.3.1</span>
                     <div className="ml-auto flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
                       <span className="text-[10px] text-white/25 font-mono">connected</span>

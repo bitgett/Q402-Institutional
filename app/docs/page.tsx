@@ -82,7 +82,7 @@ export default function DocsPage() {
               <span className="text-white/50 text-xs font-medium">docs</span>
             </Link>
             <div className="hidden sm:flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-lg px-3 py-1.5">
-              <span className="text-white/25 text-xs font-mono">v1.3.0</span>
+              <span className="text-white/25 text-xs font-mono">v1.3.1</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -140,7 +140,7 @@ export default function DocsPage() {
           {/* Docs hero banner */}
           <div className="px-8 pt-12 pb-10 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, transparent 100%)" }}>
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.3.0</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.3.1</span>
               <span className="text-white/20 text-xs">·</span>
               <span className="text-white/30 text-xs">EIP-712 + EIP-7702</span>
             </div>
@@ -299,7 +299,9 @@ const q402 = new Q402Client({
 });
 
 // Wallet popup appears — user signs, Q402 relays on-chain
-// amount is human-readable (e.g. "50.00" = 50 USDC)
+// amount MUST be a human-readable decimal STRING (e.g. "50.00", "0.123456").
+// Never pass a JS Number — IEEE-754 loses precision on 18-decimal tokens.
+// Inputs exceeding the token's decimals or non-decimal strings throw.
 const result = await q402.pay({
   to:     recipientAddress,
   amount: "50.00",

@@ -1,6 +1,7 @@
 /**
  * Q402 Client SDK (browser-compatible)
- * v1.3.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable) + EIP-3009 (xlayer USDC fallback)
+ * v1.3.1 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable) + EIP-3009 (xlayer USDC fallback)
+ *          Exact decimal→raw conversion via ethers.parseUnits (no IEEE-754 precision loss).
  *
  * The authoritative source for witness type, domain, and contract mapping is
  * contracts.manifest.json at the repo root. This SDK mirrors that manifest.
