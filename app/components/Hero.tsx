@@ -44,13 +44,44 @@ export default function Hero() {
 
   return (
     <>
-      <section className="min-h-screen flex flex-col justify-center px-6 pt-20 pb-16 relative overflow-hidden" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 60%, #0D1628 100%)" }}>
+      <section className="min-h-screen flex flex-col justify-center px-6 pt-20 pb-16 relative overflow-hidden" style={{ background: "radial-gradient(ellipse at 20% 10%, #1A1530 0%, transparent 55%), radial-gradient(ellipse at 85% 90%, #0E1A2E 0%, transparent 60%), linear-gradient(160deg, #06060C 0%, #0A0E1C 45%, #10142A 100%)" }}>
         {/* Background glows */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[160px]" style={{ background: "rgba(245,197,24,0.05)" }} />
-          <div className="absolute top-1/3 right-1/4 w-[400px] h-[400px] rounded-full blur-[120px]" style={{ background: "rgba(98,126,234,0.04)" }} />
-          <div className="absolute bottom-1/4 left-1/3 w-[300px] h-[300px] rounded-full blur-[100px]" style={{ background: "rgba(240,185,11,0.03)" }} />
-          <div className="absolute inset-0 opacity-[0.025]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)", backgroundSize: "60px 60px" }} />
+          {/* Warm yellow core */}
+          <motion.div
+            className="absolute top-1/2 left-[22%] -translate-y-1/2 w-[640px] h-[640px] rounded-full blur-[160px]"
+            animate={{ opacity: [0.55, 0.9, 0.55], scale: [1, 1.08, 1] }}
+            transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: "rgba(245,197,24,0.07)" }}
+          />
+          {/* Violet accent top-right */}
+          <motion.div
+            className="absolute -top-10 right-[12%] w-[440px] h-[440px] rounded-full blur-[130px]"
+            animate={{ opacity: [0.5, 0.85, 0.5] }}
+            transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
+            style={{ background: "rgba(139,92,246,0.09)" }}
+          />
+          {/* Cyan accent bottom-right */}
+          <motion.div
+            className="absolute bottom-[8%] right-[28%] w-[360px] h-[360px] rounded-full blur-[120px]"
+            animate={{ opacity: [0.4, 0.75, 0.4] }}
+            transition={{ duration: 13, repeat: Infinity, ease: "easeInOut", delay: 3 }}
+            style={{ background: "rgba(56,189,248,0.06)" }}
+          />
+          {/* Deep red-orange ember bottom-left */}
+          <motion.div
+            className="absolute bottom-[4%] left-[8%] w-[320px] h-[320px] rounded-full blur-[110px]"
+            animate={{ opacity: [0.35, 0.65, 0.35] }}
+            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+            style={{ background: "rgba(232,65,66,0.05)" }}
+          />
+          {/* Diagonal light sweep */}
+          <div
+            className="absolute -top-[20%] -left-[10%] w-[120%] h-[60%] blur-[80px] rotate-[-12deg] pointer-events-none"
+            style={{ background: "linear-gradient(90deg, transparent 0%, rgba(255,235,180,0.035) 50%, transparent 100%)" }}
+          />
+          {/* Noise-ish grid */}
+          <div className="absolute inset-0 opacity-[0.035]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)", backgroundSize: "60px 60px", maskImage: "radial-gradient(ellipse at center, black 40%, transparent 85%)", WebkitMaskImage: "radial-gradient(ellipse at center, black 40%, transparent 85%)" }} />
         </div>
 
         <div className="relative z-10 w-full max-w-6xl mx-auto">
@@ -106,11 +137,11 @@ export default function Hero() {
                 transition={{ duration: 0.7, delay: 0.2 }}
               >
                 <h1 className="text-5xl md:text-[3.8rem] font-extrabold leading-[1.06] mb-4 tracking-tight">
-                  The Final Layer for{" "}
-                  <span className="text-shimmer">Web3 Payments.</span>
+                  The final layer for{" "}
+                  <span className="text-shimmer">stablecoin rails.</span>
                 </h1>
-                <p className="text-xl text-white/40 font-light tracking-wide mb-6">
-                  No Native Tokens. No Gas Fees. Just Pure USDC.
+                <p className="text-xl text-white/45 font-light tracking-wide mb-6">
+                  Zero gas. Five EVM chains. Pure stablecoin flow.
                 </p>
               </motion.div>
 
@@ -122,9 +153,9 @@ export default function Hero() {
                 className="space-y-3 mb-9 text-sm text-white/50"
               >
                 {[
-                  "User signs EIP-712 off-chain — no gas token needed, ever",
-                  "Your API submits 1 tx, pays micro-gas on any EVM chain",
-                  "USDC settles instantly — on-chain, auditable, gasless",
+                  "EIP-712 off-chain — users never hold a gas token",
+                  "One relay call — we cover micro-gas on every chain",
+                  "USDC settles in seconds, every tx auditable on-chain",
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <span className="text-yellow font-bold text-xs mt-0.5 flex-shrink-0">0{i + 1}</span>
