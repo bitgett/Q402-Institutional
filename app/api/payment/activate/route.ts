@@ -115,27 +115,28 @@ export async function POST(req: NextRequest) {
 
   // ── Claim/commit pattern for atomic activation ───────────────────────────
   //
-  // Two-phase approach to prevent "paid but can't retry" states:
-  //
   //   PHASE 1 — Claim:
   //     a. Check used_txhash — if set, permanently committed → reject.
-  //     b. SET NX on activation_claim:{txHash} (5-min TTL) — atomic distributed lock.
-  //        Only one concurrent request wins; the rest are rejected immediately.
+  //     b. SET NX on activation_claim:{txHash} (5-min TTL) — distributed lock.
+  //        Only one concurrent request wins; the rest get 409 immediately.
   //
-  //   PHASE 2 — Commit (after both writes succeed):
-  //     a. setSubscription + addCredits via Promise.all.
-  //     b. Only on full success: mark used_txhash permanently (90 days).
-  //     c. Release claim + clear intent (best-effort).
+  //   PHASE 2 — Write (idempotent by design):
+  //     a. addCredits guarded by credit_grant:{txHash} SET NX (90-day TTL):
+  //          NX wins  → call addCredits (INCRBY); if it throws, DEL grant key
+  //                     so the next retry can re-attempt cleanly.
+  //          NX loses → credits already granted in a prior attempt; skip.
+  //        This eliminates the double-credit risk on partial failure + retry.
+  //     b. setSubscription is idempotent (overwrites same data) — always safe.
   //
-  //   On partial write failure: claim is released, used_txhash is NOT set.
-  //   The user can retry with the same txHash.  setSubscription is idempotent
-  //   (overwrites with same data); addCredits may double-add in the rare case
-  //   where one write succeeded before Promise.all threw — acceptable given
-  //   the very low probability and manual recoverability.
+  //   PHASE 3 — Commit:
+  //     Only on full success: mark used_txhash permanently (90 days).
+  //     Release claim + clear intent (best-effort).
 
   const { kv } = await import("@vercel/kv");
-  const usedKey  = `used_txhash:${result.txHash}`;
-  const claimKey = `activation_claim:${result.txHash}`;
+  const USED_TTL       = 90 * 24 * 60 * 60;
+  const usedKey        = `used_txhash:${result.txHash}`;
+  const claimKey       = `activation_claim:${result.txHash}`;
+  const creditGrantKey = `credit_grant:${result.txHash}`;
 
   // Phase 1a — permanent used check
   const alreadyUsed = await kv.get(usedKey);
@@ -189,28 +190,48 @@ export async function POST(req: NextRequest) {
     : new Date(0);
   const base = currentExpiry > new Date() ? currentExpiry : new Date();
   const newExpiry = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000);
-  const currentQuota = await getQuotaCredits(addr);
-  const totalTxs = currentQuota + addedTxs;
-
-  // ── Phase 2 — Write, then commit ─────────────────────────────────────────
+  // ── Phase 2 — Write (idempotent) ─────────────────────────────────────────
   try {
-    await Promise.all([
-      setSubscription(addr, {
-        ...(existing ?? {}),
-        paidAt:        base.toISOString(),
-        apiKey,
-        sandboxApiKey,
-        plan,
-        txHash:        result.txHash!,
-        amountUSD:     result.amountUSD!,
-        quotaBonus:    totalTxs,
-      }),
-      // Atomically add credits (INCRBY — race-safe)
-      addCredits(addr, addedTxs),
-    ]);
+    // addCredits (INCRBY) is non-idempotent — guard with credit_grant NX key.
+    const canGrant = await kv.set(creditGrantKey, addedTxs, { nx: true, ex: USED_TTL });
+    if (canGrant) {
+      try {
+        await addCredits(addr, addedTxs);
+      } catch (e) {
+        // addCredits failed — roll back grant key so next retry can re-attempt.
+        kv.del(creditGrantKey).catch(() => {});
+        throw e;
+      }
+    }
+    // Read actual balance after grant (correct on first attempt and on retry).
+    const totalTxs = await getQuotaCredits(addr);
+
+    // setSubscription is idempotent (overwrites same data) — safe on every attempt.
+    await setSubscription(addr, {
+      ...(existing ?? {}),
+      paidAt:        base.toISOString(),
+      apiKey,
+      sandboxApiKey,
+      plan,
+      txHash:        result.txHash!,
+      amountUSD:     result.amountUSD!,
+      quotaBonus:    totalTxs,
+    });
+
+    // ── Phase 3 — Commit ───────────────────────────────────────────────────
+    // Only reached if all writes succeeded.
+    await kv.set(usedKey, addr, { ex: USED_TTL });
+    kv.del(claimKey).catch(() => {});
+    clearPaymentIntent(addr).catch(() => {});
+
+    return NextResponse.json({
+      status:    "activated",
+      plan,
+      addedTxs,
+      totalTxs,
+      expiresAt: newExpiry.toISOString(),
+    });
   } catch (e) {
-    // Both writes are not guaranteed to have succeeded.
-    // Release claim so the user can retry — used_txhash is NOT set yet.
     kv.del(claimKey).catch(() => {});
     console.error(`[activate] write failure addr=${addr} txHash=${result.txHash}:`, e);
     return NextResponse.json(
@@ -218,20 +239,4 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-
-  // ── Commit: permanently mark txHash as used ───────────────────────────────
-  // Only reached if both writes succeeded.
-  await kv.set(usedKey, addr, { ex: 90 * 24 * 60 * 60 });
-
-  // Release claim + clear intent (best-effort — activation is already committed above)
-  kv.del(claimKey).catch(() => {});
-  clearPaymentIntent(addr).catch(() => {});
-
-  return NextResponse.json({
-    status:    "activated",
-    plan,
-    addedTxs,
-    totalTxs,
-    expiresAt: newExpiry.toISOString(),
-  });
 }
