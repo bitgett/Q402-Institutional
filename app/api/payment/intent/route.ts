@@ -3,6 +3,7 @@ import { kv } from "@vercel/kv";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { randomBytes } from "crypto";
+import { intentKey } from "@/app/lib/payment-intent";
 
 /**
  * POST /api/payment/intent
@@ -25,9 +26,6 @@ const INTENT_TTL = 2 * 60 * 60; // 2 hours
 const VALID_CHAINS = ["bnb", "avax", "eth", "xlayer", "stable"];
 const VALID_TOKENS = ["USDC", "USDT", "USDT0"];
 
-function intentKey(addr: string) {
-  return `payment_intent:${addr.toLowerCase()}`;
-}
 
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
@@ -95,19 +93,3 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ intentId, chain, expectedUSD, token: token ?? null, expiresIn: INTENT_TTL });
 }
 
-/** Internal: read intent for an address (used by activate route). */
-export async function getPaymentIntent(addr: string) {
-  return kv.get<{
-    intentId: string;
-    chain: string;
-    expectedUSD: number;
-    token: string | null;
-    address: string;
-    createdAt: string;
-  }>(intentKey(addr));
-}
-
-/** Internal: delete intent after successful activation. */
-export async function clearPaymentIntent(addr: string) {
-  await kv.del(intentKey(addr));
-}
