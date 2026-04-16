@@ -44,7 +44,6 @@ export async function POST(req: NextRequest) {
     amount:       string;
     deadline:     number;
     nonce?:       string;  // uint256 nonce for avax/bnb/eth (v1.2 contract)
-    paymentId?:   string;  // legacy bytes32 (fallback if nonce absent)
     witnessSig:   string;
     authorization?: {
       chainId:  number;
@@ -74,8 +73,16 @@ export async function POST(req: NextRequest) {
 
   const {
     apiKey, chain, token, from, to, amount, deadline,
-    nonce, paymentId, witnessSig, authorization, eip3009Nonce, xlayerNonce, stableNonce,
+    nonce, witnessSig, authorization, eip3009Nonce, xlayerNonce, stableNonce,
   } = body;
+
+  // Reject legacy paymentId field — SDK must send `nonce` (uint256 string).
+  if ((body as { paymentId?: unknown }).paymentId !== undefined) {
+    return NextResponse.json(
+      { error: "paymentId is deprecated — upgrade SDK (v1.3+) to use nonce" },
+      { status: 400 }
+    );
+  }
 
   // ── 1. 공통 필수 필드 검증 ────────────────────────────────────────────────
   if (!apiKey || !chain || !token || !from || !to || !amount || !deadline || !witnessSig) {
@@ -243,22 +250,12 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 7. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
-  // SDK sends `nonce` as a uint256 string. Legacy `paymentId` as fallback.
-  let paymentNonce: bigint;
-  if (nonce) {
-    paymentNonce = BigInt(nonce);
-  } else if (paymentId) {
-    // Derive uint256 nonce from paymentId hash (truncate bytes32 to uint256)
-    const hash = paymentId.startsWith("0x") && paymentId.length === 66
-      ? paymentId
-      : ethers.keccak256(ethers.toUtf8Bytes(paymentId));
-    paymentNonce = BigInt(hash);
-  } else {
-    // Auto-generate from tx context
-    paymentNonce = BigInt(ethers.keccak256(
-      ethers.toUtf8Bytes(`${from}-${to}-${amount}-${deadline}-${Date.now()}`)
-    ));
-  }
+  // SDK sends `nonce` as a uint256 string. Absent → derive from tx context.
+  const paymentNonce: bigint = nonce
+    ? BigInt(nonce)
+    : BigInt(ethers.keccak256(
+        ethers.toUtf8Bytes(`${from}-${to}-${amount}-${deadline}-${Date.now()}`)
+      ));
 
   const tokenCfg = getTokenConfig(chain, token);
   let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };

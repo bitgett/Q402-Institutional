@@ -25,6 +25,10 @@ const agentSource = readFileSync(
   resolve(__dirname, "..", "scripts", "agent-example.mjs"),
   "utf8"
 );
+const routeSource = readFileSync(
+  resolve(__dirname, "..", "app", "api", "relay", "route.ts"),
+  "utf8"
+);
 
 describe("SDK relay body shape", () => {
   it("avax/bnb/eth path sends `nonce:` (not xlayerNonce/stableNonce)", () => {
@@ -50,6 +54,22 @@ describe("SDK relay body shape", () => {
   it("pay() destructures `token` as the symbol argument", () => {
     // `async pay({ to, amount, token = "USDC" })`
     expect(sdkSource).toMatch(/async\s+pay\s*\(\s*\{[^}]*\btoken\s*=\s*"USDC"/);
+  });
+});
+
+describe("relay route server contract", () => {
+  it("rejects requests that include a legacy paymentId field", () => {
+    // Early 400 guard — the server should explicitly reject the deprecated field
+    // so old SDKs surface a clear error instead of silently hashing paymentId.
+    expect(routeSource).toMatch(/paymentId is deprecated/);
+    expect(routeSource).toMatch(/\(body as \{ paymentId\?: unknown \}\)\.paymentId/);
+  });
+
+  it("no longer derives a nonce from paymentId", () => {
+    // The old `else if (paymentId)` fallback must be gone; nonce is either the
+    // SDK-supplied value or auto-generated from tx context.
+    expect(routeSource).not.toMatch(/else if \(paymentId\)/);
+    expect(routeSource).not.toMatch(/paymentId\?:\s*string;\s*\/\/ legacy/);
   });
 });
 
