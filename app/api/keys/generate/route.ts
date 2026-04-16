@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSubscription, generateApiKey, setSubscription, deactivateApiKey } from "@/app/lib/db";
-
-function checkAdminSecret(req: NextRequest): boolean {
-  const secret = req.headers.get("x-admin-secret");
-  const expected = process.env.ADMIN_SECRET;
-  return !!expected && secret === expected;
-}
+import { checkAdminSecret } from "@/app/lib/admin-auth";
 
 // Admin-only: Regenerate API key for a given address.
 // Requires x-admin-secret header.

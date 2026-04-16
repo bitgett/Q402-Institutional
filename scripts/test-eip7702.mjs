@@ -131,7 +131,7 @@ async function main() {
   );
 
   const recipient = toArg ?? relayer.address;
-  const amountRaw = BigInt(Math.round(parseFloat(amountIn) * 10 ** cfg.decimals));
+  const amountRaw = ethers.parseUnits(amountIn, cfg.decimals);
   const deadline  = BigInt(Math.floor(Date.now() / 1000) + 600);
   const nonce     = ethers.toBigInt(ethers.randomBytes(32));
 

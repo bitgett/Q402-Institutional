@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { checkAdminSecret } from "@/app/lib/admin-auth";
 
 /**
  * Escape Telegram MarkdownV1 special characters in user-supplied strings.
@@ -89,8 +90,7 @@ export async function GET(req: NextRequest) {
   if (!(await rateLimit(ip, "admin-inquiry", 5, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
-  const secret = req.headers.get("x-admin-secret");
-  if (!secret || secret !== process.env.ADMIN_SECRET) {
+  if (!checkAdminSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const inquiries = (await kv.lrange<Inquiry>("inquiries", 0, -1)) ?? [];
