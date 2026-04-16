@@ -491,12 +491,12 @@ API Key 유효성 검증 + 만료/교체 확인.
 
 ```
 서명 메시지: "Q402 Auth\nAddress: {address_lowercase}\nNonce: {nonce}"
-nonce: GET /api/auth/nonce?address=0x...  → { nonce, expiresIn: 28800 }
+nonce: GET /api/auth/nonce?address=0x...  → { nonce, expiresIn: 3600 }
 ```
 
 **플로우:**
-1. `GET /api/auth/nonce?address=0x...` → 서버가 KV에 nonce 저장 (8시간 TTL)
-2. 클라이언트가 서명 → `sessionStorage["q402_auth_0xaddr"]`에 `{nonce, signature}` 캐시 (7.5h TTL)
+1. `GET /api/auth/nonce?address=0x...` → 서버가 KV에 nonce 저장 (1시간 TTL — `app/lib/auth.ts` `NONCE_TTL_SEC`)
+2. 클라이언트가 서명 → `sessionStorage["q402_auth_0xaddr"]`에 `{nonce, signature}` 캐시 (55분 TTL, 서버보다 5분 일찍 만료시켜 race 방지 — `app/lib/auth-client.ts` `CLIENT_NONCE_TTL_MS`)
 3. 모든 보호 요청에 `{address, nonce, signature}` 전달
 4. 서버: `verifyNonceSignature(addr, nonce, sig)` — nonce KV 검증 + ECDSA 검증
 5. 401 `NONCE_EXPIRED` 수신 시: 클라이언트 캐시 삭제 → 다음 요청에서 재서명
@@ -1139,7 +1139,7 @@ for (const chain of ["avax", "bnb", "eth"]) {
 | Webhook retry on failure | fire-and-forget | 중간 |
 | 프로젝트별 별도 릴레이어 주소 | 단일 글로벌 지갑 | 높음 (P1) |
 | SDK npm 패키지 | CDN 파일만 | 낮음 |
-| 자동화 테스트 (Jest/Vitest) | `scripts/test-api.mjs` 수동 스크립트만 존재 | 중간 |
+| 자동화 테스트 (Jest/Vitest) | Vitest — `__tests__/` 8 파일 / 122 테스트 (contracts-manifest · relay-body-shape · auth · blockchain · intent · quote · rotate · ratelimit) | 완료 |
 | PostgreSQL 마이그레이션 | Vercel KV로 충분 | 낮음 |
 | Gas Tank 자동 충전 | UI 토글 존재, 로직 미구현 | 중간 |
 
@@ -1258,12 +1258,12 @@ for (const chain of ["avax", "bnb", "eth"]) {
 
 **[P0] Nonce 기반 EIP-191 인증 시스템 (전 엔드포인트)**
 - `app/lib/auth.ts` 신규 — 서버사이드 nonce 코어
-  - `createOrGetNonce(addr)` — `auth_nonce:{addr}` KV에 8시간 TTL로 저장, 멱등적
+  - `createOrGetNonce(addr)` — `auth_nonce:{addr}` KV에 1시간 TTL로 저장, 멱등적 (`NONCE_TTL_SEC = 60 * 60`)
   - `verifyNonceSignature(addr, nonce, sig)` — 서명 메시지: `"Q402 Auth\nAddress: {addr}\nNonce: {nonce}"`
   - `invalidateNonce(addr)` — 키 로테이션 후 강제 재서명 유도
   - `requireAuth(address, nonce, signature)` — 모든 보호 라우트에서 공유하는 헬퍼
 - `app/lib/auth-client.ts` 신규 — 클라이언트 nonce 캐시
-  - `getAuthCreds(addr, signFn)` — sessionStorage 7.5h 캐시, 지갑 팝업 1회/세션
+  - `getAuthCreds(addr, signFn)` — sessionStorage 55분 캐시 (`CLIENT_NONCE_TTL_MS`), 서버 1h보다 5분 일찍 만료 → race 방지, 지갑 팝업 1회/세션
   - `clearAuthCache(addr)` — NONCE_EXPIRED 수신 시 호출
 - `app/api/auth/nonce/route.ts` 신규 — `GET /api/auth/nonce?address=0x...`
   - 20 req/60s rate limit, fail-closed

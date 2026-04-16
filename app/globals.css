@@ -2,7 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Fonts are loaded via next/font in app/layout.tsx and exposed as
+   CSS variables --font-poppins / --font-mono (see tailwind.config.ts). */
 
 * { box-sizing: border-box; }
 
@@ -19,7 +20,7 @@
 body {
   background-color: var(--bg-base);
   color: #ffffff;
-  font-family: 'Poppins', sans-serif;
+  font-family: var(--font-poppins), 'Poppins', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -74,7 +75,7 @@ html { scroll-behavior: smooth; }
 .delay-500 { animation-delay: 0.5s; }
 .delay-600 { animation-delay: 0.6s; }
 
-.font-mono { font-family: 'JetBrains Mono', monospace; }
+.font-mono { font-family: var(--font-mono), 'JetBrains Mono', monospace; }
 
 /* Blinking cursor */
 .cursor::after {
