@@ -95,10 +95,15 @@ User clicks "Pay USDC"
 | Avalanche C-Chain | 43114 | EIP-7702 | `0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c` | ✅ |
 | BNB Chain | 56 | EIP-7702 | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` | ✅ |
 | Ethereum | 1 | EIP-7702 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | ✅ |
-| X Layer | 196 | EIP-7702 + EIP-3009 fallback | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | ✅ |
+| X Layer | 196 | EIP-7702 + EIP-3009 USDC fallback | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | ✅ |
 | **Stable** | **988** | **EIP-7702** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | ✅ |
 
 > Stable 특이사항: USDT0가 가스 토큰이자 결제 토큰 (네이티브 코인 = USD 페그).
+
+> **Single source of truth**: 체인별 컨트랙트 · 도메인 · witness 타입 · 토큰 매핑은
+> [`contracts.manifest.json`](./contracts.manifest.json)에 canonical 형태로 정리돼 있다.
+> 서버(`app/lib/relayer.ts`) · SDK(`public/q402-sdk.js`) · 이 문서 값이 드리프트될 경우
+> 매니페스트가 최종 진실이며, `__tests__/contracts-manifest.test.ts`가 일치성을 검증한다.
 
 ---
 
@@ -300,9 +305,9 @@ const q402xl = new Q402Client({ apiKey: "q402_live_xxx", chain: "xlayer" });
 const result2 = await q402xl.pay({ to: "0xRecipient", amount: "1.00", token: "USDC" });
 console.log(result2.txHash); // method: "eip7702_xlayer"
 
-// Stable (USDT0, 18 decimals)
+// Stable — token key is "USDT" (resolves to USDT0 on-chain), amount in USDT0 units
 const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
-const result3 = await q402s.pay({ to: "0xRecipient", amount: "10.00", token: "USDT0" });
+const result3 = await q402s.pay({ to: "0xRecipient", amount: "10.00", token: "USDT" });
 ```
 
 SDK: **v1.3.0** — 5개 체인 지원 (avax, bnb, eth, xlayer, stable)
@@ -371,7 +376,10 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
 ```
 
 **xlayer EIP-7702 추가 필드:** `xlayerNonce` (uint256 string)  
-**xlayer EIP-3009 fallback:** `authorization` 대신 `eip3009Nonce` (bytes32 hex)
+**xlayer EIP-3009 fallback:** `authorization` 대신 `eip3009Nonce` (bytes32 hex). **USDC only** — USDT는 EIP-7702 경로를 사용해야 함.
+
+> **Authorization 잠금 (v1.3+)**: 서버는 `authorization.chainId`와 `authorization.address`가
+> `contracts.manifest.json`의 해당 체인 공식 impl contract와 정확히 일치하지 않으면 400을 반환한다.
 
 **응답:**
 ```json
