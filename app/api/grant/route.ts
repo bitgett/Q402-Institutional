@@ -52,8 +52,14 @@ export async function POST(req: NextRequest) {
     submittedAt: new Date().toISOString(),
   };
 
-  const existing = (await kv.get<GrantApplication[]>("grant_applications")) ?? [];
-  await kv.set("grant_applications", [...existing, application]);
+  // Atomic RPUSH avoids the read-modify-write race between concurrent submissions.
+  try {
+    await kv.rpush("grant_applications", application);
+  } catch {
+    // Legacy fallback: prior versions stored the applications as a single JSON array.
+    const existing = (await kv.get<GrantApplication[]>("grant_applications")) ?? [];
+    await kv.set("grant_applications", [...existing, application]);
+  }
 
   // Telegram alert
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -96,6 +102,15 @@ export async function GET(req: NextRequest) {
   if (!secret || secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const applications = (await kv.get<GrantApplication[]>("grant_applications")) ?? [];
+  // Prefer list reads; fall back to legacy JSON array for pre-migration data.
+  let applications: GrantApplication[] = [];
+  try {
+    applications = await kv.lrange<GrantApplication>("grant_applications", 0, -1);
+  } catch {
+    applications = (await kv.get<GrantApplication[]>("grant_applications")) ?? [];
+  }
+  if (applications.length === 0) {
+    applications = (await kv.get<GrantApplication[]>("grant_applications")) ?? [];
+  }
   return NextResponse.json({ applications });
 }

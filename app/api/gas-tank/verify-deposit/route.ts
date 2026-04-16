@@ -74,8 +74,13 @@ async function scanNativeDeposits(
 }
 
 export async function POST(req: NextRequest) {
-  // ── Rate limit: 5 scans / 60 s per IP ────────────────────────────────────
-  // Each scan triggers up to 250 RPC calls across 5 chains — must be restricted.
+  // ── Security model: no wallet signature required by design ───────────────
+  // This endpoint only records on-chain TXs that ALREADY happened from
+  // `address` → RELAYER, and addGasDeposit dedupes via SADD txHash.
+  // An attacker calling this for someone else's address just helps that
+  // user's balance reflect real deposits — no privilege escalation, no
+  // fake-deposit risk. The rate-limit (5 scans/60s/IP, fail-closed) is the
+  // abuse control for the ~250 public-RPC calls per scan.
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "verify-deposit", 5, 60, false))) {
     return NextResponse.json({ error: "Too many requests. Please wait before scanning again." }, { status: 429 });

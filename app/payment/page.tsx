@@ -30,6 +30,9 @@ const CHAINS = [
   { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
 ];
 
+// value = credits granted at that price tier. Must stay in sync with
+// TIER_CREDITS in app/lib/blockchain.ts — the server grants `value` credits
+// at checkout, so the UI label must reflect the actual amount.
 const VOLUMES = [
   { label: "500",       value: 500,     basePrice: 29   },
   { label: "1,000",     value: 1_000,   basePrice: 49   },
@@ -37,8 +40,8 @@ const VOLUMES = [
   { label: "10,000",    value: 10_000,  basePrice: 149  },
   { label: "50,000",    value: 50_000,  basePrice: 449  },
   { label: "100,000",   value: 100_000, basePrice: 799  },
-  { label: "100K~500K", value: 300_000, basePrice: 1999 },
-  { label: "500K+",     value: 500_000, basePrice: 0    },
+  { label: "500,000",   value: 500_000, basePrice: 1999 },
+  { label: "500K+",     value: 1_000_000, basePrice: 0  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,7 +51,8 @@ const VOLUMES = [
 function calcPrice(chainId: string, volume: number) {
   const chain = CHAINS.find(c => c.id === chainId)!;
   const vol   = VOLUMES.find(v => v.value === volume)!;
-  if (vol.basePrice === 0 || volume >= 500_000) return { price: 0, isEnterprise: true, perTx: 0 };
+  // Enterprise tier: basePrice=0 means "Contact Sales" (no self-serve checkout)
+  if (vol.basePrice === 0) return { price: 0, isEnterprise: true, perTx: 0 };
   const price = Math.round(vol.basePrice * chain.multiplier / 10) * 10;
   return { price, isEnterprise: false, perTx: price / vol.value };
 }
@@ -624,7 +628,7 @@ export default function PaymentPage() {
                   <img src={chain.img} alt={chain.name} className={`w-8 h-8 flex-shrink-0 ${chain.rounded}`} />
                   <div>
                     <p className="text-sm font-semibold">{chain.name}</p>
-                    <p className="text-white/35 text-xs">{selectedVolume >= 500_000 ? "500,000+" : selectedVolume.toLocaleString()} TXs · +30 days</p>
+                    <p className="text-white/35 text-xs">{selectedVolume >= 1_000_000 ? "500,000+" : selectedVolume.toLocaleString()} TXs · +30 days</p>
                   </div>
                 </div>
 
@@ -642,7 +646,7 @@ export default function PaymentPage() {
                 ) : (
                   <>
                     <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-white/40 text-sm">+30 days · {selectedVolume >= 500_000 ? "500K+" : selectedVolume.toLocaleString()} TXs</span>
+                      <span className="text-white/40 text-sm">+30 days · {selectedVolume >= 1_000_000 ? "500K+" : selectedVolume.toLocaleString()} TXs</span>
                       <div>
                         <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
                       </div>
@@ -674,7 +678,7 @@ export default function PaymentPage() {
                 <div className="mt-5 pt-4 border-t border-white/6 flex gap-2">
                   <span className="text-yellow/40 text-xs flex-shrink-0">🔒</span>
                   <p className="text-white/20 text-[10px] leading-relaxed">
-                    API key tied to your wallet. Payment accepted in USDC or USDT on BNB Chain or Ethereum.
+                    API key tied to your wallet. Pay in USDC / USDT on BNB Chain or Ethereum — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable).
                   </p>
                 </div>
               </div>
