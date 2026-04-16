@@ -140,10 +140,9 @@ class Q402Client {
    * @param {string} opts.to          - Recipient address
    * @param {string} opts.amount      - Human-readable amount e.g. "5.00"
    * @param {"USDC"|"USDT"} opts.token
-   * @param {string} [opts.paymentId] - Optional unique ID (auto-generated if omitted)
    * @returns {Promise<{success, txHash, blockNumber, tokenAmount, token, chain, method}>}
    */
-  async pay({ to, amount, token = "USDC", paymentId }) {
+  async pay({ to, amount, token = "USDC" }) {
     const ethereum = window.ethereum || window.okxwallet;
     if (!ethereum) throw new Error("No Web3 wallet found. Install MetaMask or OKX Wallet.");
 

@@ -332,8 +332,8 @@ q402.pay() 호출
   │      types:  TransferAuthorization { owner, facilitator, token, recipient, amount, nonce, deadline }
   ├─ 2. EIP-7702 authorization 서명
   │      { address: implContract, nonce: EOA_nonce }
-  └─ 3. POST /api/relay { witnessSig, authorization }
-         (xlayer는 nonce를 xlayerNonce 별도 필드로도 전달 — 레거시 호환)
+  └─ 3. POST /api/relay { witnessSig, authorization, <chain-specific nonce field> }
+         avax/bnb/eth → nonce   |   xlayer → xlayerNonce   |   stable → stableNonce
 ```
 
 **X Layer EIP-3009 fallback (USDC only)** — `eip3009Nonce` 제공 시만 선택됨.
@@ -347,15 +347,22 @@ q402.pay() 호출
 EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.  
 `apiKey` 필수, 구독 만료 및 키 교체 검증.
 
-**avax / bnb / eth / stable 요청:**
+**공통 필드** (모든 체인):
+- `token`: **심볼 문자열** `"USDC"` 또는 `"USDT"` — 절대 주소가 아님. 서버가 `CHAIN_CONFIG[chain][token]`으로 주소를 조회함.
+- `amount`: atomic uint256 문자열 (예: 0.05 USDC @ 6dp → `"50000"`)
+- `witnessSig`: EIP-712 TransferAuthorization 서명
+- `authorization`: EIP-7702 위임 증명 `{ chainId, address, nonce, yParity, r, s }`
+- **nonce 필드명은 체인별로 다름** (아래 참조)
+
+**avax / bnb / eth 요청** (nonce 필드: `nonce`):
 ```json
 {
   "apiKey":        "q402_live_xxx",
   "chain":         "avax",
-  "token":         "0xB97EF9Ef8734...",
+  "token":         "USDC",
   "from":          "0xPayerEOA",
   "to":            "0xRecipient",
-  "amount":        "5000000",
+  "amount":        "50000",
   "deadline":      1712345678,
   "nonce":         "98237498237492834",
   "witnessSig":    "0x...",
@@ -363,8 +370,29 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
 }
 ```
 
-**xlayer EIP-7702 추가 필드:** `xlayerNonce` (uint256 string)  
-**xlayer EIP-3009 fallback:** `authorization` 대신 `eip3009Nonce` (bytes32 hex). **USDC only** — USDT는 EIP-7702 경로를 사용해야 함.
+**xlayer EIP-7702 요청** (nonce 필드: `xlayerNonce`):
+```json
+{
+  "apiKey": "q402_live_xxx", "chain": "xlayer", "token": "USDC",
+  "from": "0x...", "to": "0x...", "amount": "50000", "deadline": 1712345678,
+  "xlayerNonce":   "98237498237492834",
+  "witnessSig":    "0x...",
+  "authorization": { "chainId": 196, "address": "0x8D85...", "nonce": 0, "yParity": 0, "r": "0x...", "s": "0x..." }
+}
+```
+
+**stable EIP-7702 요청** (nonce 필드: `stableNonce`, token은 "USDC"/"USDT" 모두 USDT0로 라우팅):
+```json
+{
+  "apiKey": "q402_live_xxx", "chain": "stable", "token": "USDC",
+  "from": "0x...", "to": "0x...", "amount": "50000000000000000", "deadline": 1712345678,
+  "stableNonce":   "98237498237492834",
+  "witnessSig":    "0x...",
+  "authorization": { "chainId": 988, "address": "0x2fb2...", "nonce": 0, "yParity": 0, "r": "0x...", "s": "0x..." }
+}
+```
+
+**xlayer EIP-3009 fallback:** `authorization`/`xlayerNonce` 대신 `eip3009Nonce` (bytes32 hex). **USDC only** — USDT는 EIP-7702 경로를 사용해야 함.
 
 > **Authorization 잠금 (v1.3+)**: 서버는 `authorization.chainId`와 `authorization.address`가
 > `contracts.manifest.json`의 해당 체인 공식 impl contract와 정확히 일치하지 않으면 400을 반환한다.
