@@ -128,6 +128,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ── 2a. EIP-3009 fallback on X Layer is USDC-only ────────────────────────────
+  // The USDC_EIP3009_ABI in relayer.ts targets X Layer USDC (9-param v,r,s form).
+  // X Layer USDT uses a different authorization surface — don't pretend to support it.
+  if (isXLayerEIP3009 && token !== "USDC") {
+    return NextResponse.json(
+      { error: "EIP-3009 fallback on X Layer supports USDC only. Use EIP-7702 (authorization + xlayerNonce) for USDT." },
+      { status: 400 }
+    );
+  }
+
   // ── 3. API Key 검증 ───────────────────────────────────────────────────────
   const keyRecord = await getApiKeyRecord(apiKey);
   if (!keyRecord || !keyRecord.active) {
@@ -199,6 +209,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable.`,
     }, { status: 400 });
+  }
+
+  // ── 5a. authorization 강제 잠금 — 공식 impl contract + chainId 만 허용 ─────
+  // 클라이언트가 잘못된 delegation 주소나 chainId를 보내면 on-chain revert로
+  // 이어져 결국 환불되지만, "어느 배포 컨트랙트와 계약하는지"는 서버가
+  // 명시적으로 잠가야 기관 관점에서 증빙 가능한 결합이 된다.
+  // contracts.manifest.json의 chains[chain].implContract와 1:1 대응.
+  if (authorization) {
+    if (Number(authorization.chainId) !== chainCfg.chainId) {
+      return NextResponse.json({
+        error: `authorization.chainId ${authorization.chainId} does not match ${chain} (expected ${chainCfg.chainId})`,
+      }, { status: 400 });
+    }
+    const expectedImpl = chainCfg.implContract.toLowerCase();
+    const actualImpl   = String(authorization.address ?? "").toLowerCase();
+    if (!ETH_ADDR.test(String(authorization.address ?? "")) || actualImpl !== expectedImpl) {
+      return NextResponse.json({
+        error: `authorization.address must be the official Q402 ${chain} implementation contract`,
+      }, { status: 400 });
+    }
   }
 
   // ── 6. Gas Tank 잔고 확인 (sandbox는 스킵) ───────────────────────────────

@@ -1,25 +1,37 @@
 /**
  * Q402 Client SDK (browser-compatible)
- * v1.3.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable) + EIP-3009 (xlayer fallback)
+ * v1.3.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable) + EIP-3009 (xlayer USDC fallback)
  *
- * ── Chain signing matrix ────────────────────────────────────────────────────────
+ * The authoritative source for witness type, domain, and contract mapping is
+ * contracts.manifest.json at the repo root. This SDK mirrors that manifest.
  *
- *  Chain      Witness type            Domain name         verifyingContract     Decimals
- *  ─────────  ──────────────────────  ──────────────────  ──────────────────    ────────
- *  avax       TransferAuthorization   "Q402 Avalanche"    impl contract         6
- *  bnb        TransferAuthorization   "Q402 BNB Chain"    impl contract         18  ← BSC USDC/USDT are 18 dec
- *  eth        TransferAuthorization   "Q402 Ethereum"     impl contract         6
- *  xlayer     TransferAuthorization   "Q402 X Layer"      user's EOA ★          6
- *  stable     TransferAuthorization   "Q402 Stable"       impl contract         18  ← USDT0 only, 18 dec
+ * ── Chain signing matrix (mirrors contracts.manifest.json) ─────────────────────
+ *
+ *  Chain      Witness type            Domain name                     verifyingContract     Decimals
+ *  ─────────  ──────────────────────  ──────────────────────────────  ──────────────────    ────────
+ *  avax       PaymentWitness          "Q402PaymentImplementation"     impl contract         6
+ *  bnb        PaymentWitness          "Q402PaymentImplementation"     impl contract         18  ← BSC USDC/USDT are 18 dec
+ *  eth        PaymentWitness          "Q402PaymentImplementation"     impl contract         6
+ *  xlayer     TransferAuthorization   "Q402 X Layer"                  user's EOA ★          6
+ *  stable     TransferAuthorization   "Q402 Stable"                   impl contract         18  ← USDT0 only, 18 dec
  *
  *  ★ X Layer: verifyingContract = address(this) under EIP-7702 = user's own EOA
+ *
+ *  PaymentWitness fields:        owner, token, amount, to, deadline, paymentId
+ *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
+ *
+ * ── EIP-3009 fallback (X Layer only) ───────────────────────────────────────────
+ *  - Path:        xlayer + eip3009Nonce (no `authorization` object)
+ *  - Tokens:      USDC only (X Layer USDT does not expose a compatible 9-param ABI)
+ *  - Primary:     use EIP-7702 (authorization + xlayerNonce) for USDC or USDT
  *
  * ── Stable chain specifics ──────────────────────────────────────────────────────
  *  - Token:      USDT0 only (0x779ded0c9e1022225f8e0630b35a9b54be713736, mainnet)
  *  - Decimals:   18 (not 6 — parse with ethers.parseUnits(amount, 18))
  *  - Gas token:  USDT0 — the GasTank must be funded with USDT0, not a native coin
  *  - Chain ID:   988 (mainnet), 2201 (testnet)
- *  - The "USDC" and "USDT" token keys both resolve to the USDT0 address on this chain.
+ *  - API input:  pass token: "USDC" or "USDT" — both resolve to USDT0 on this chain.
+ *                "USDT0" is NOT a valid API token key; it's the on-chain asset name.
  *
  * ── Usage ───────────────────────────────────────────────────────────────────────
  *   const q402 = new Q402Client({ apiKey: "q402_live_xxx", chain: "avax" });
@@ -133,7 +145,7 @@ class Q402Client {
   /**
    * @param {object} opts
    * @param {string} opts.apiKey     - Your Q402 API key (q402_live_xxx)
-   * @param {"avax"|"bnb"|"eth"|"xlayer"} opts.chain - Target chain
+   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"} opts.chain - Target chain
    * @param {string} [opts.relayUrl] - Override relay endpoint (default: https://q402-institutional.vercel.app/api/relay)
    */
   constructor({ apiKey, chain = "avax", relayUrl = "https://q402-institutional.vercel.app/api/relay" }) {
