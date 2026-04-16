@@ -162,7 +162,41 @@ export default function DocsPage() {
           {/* ── OVERVIEW ── */}
           <Section id="overview" title="Overview">
             <p className="text-white/60 text-base leading-relaxed mb-6">
-              Q402 is a <span className="text-white font-medium">gasless transaction relay</span> for EVM chains. Your users send USDC — without ever needing BNB, ETH, or AVAX for gas. You integrate one API. The rest is invisible.
+              Q402 is a <span className="text-white font-medium">managed relay layer for stablecoin payments</span> across EVM chains.
+              Your product sends USDC or USDT from a user&apos;s wallet without the user ever holding a native token —
+              Q402&apos;s relayer submits the on-chain transaction and pays the gas.
+            </p>
+
+            {/* Architecture — one picture before any code */}
+            <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
+              <div className="px-4 py-2 border-b border-white/8 flex items-center justify-between" style={{ background: "rgba(255,255,255,0.02)" }}>
+                <span className="text-[10px] text-white/30 uppercase tracking-[0.18em] font-semibold">Architecture</span>
+                <span className="text-[10px] text-white/25 font-mono">end-to-end flow</span>
+              </div>
+              <pre className="p-5 overflow-x-auto text-[11px] leading-[1.7] font-mono text-white/65 whitespace-pre">
+{`  User wallet              Q402 API                 On-chain                 Your app
+  ───────────              ────────                 ────────                 ────────
+
+  1. Sign EIP-712  ──▶  /api/payment/intent   lock quote, planChain
+                        /api/payment/activate scan TX, grant credits
+  2. Get API key   ◀──  (sandbox or live)
+
+  3. Call pay()    ──▶  /api/relay            ──▶  EIP-7702 Type-4 TX
+                        verify · decrement         USDC/USDT transfer
+                        credits · cap checks       user EOA ──▶ recipient
+                                                                          ◀── webhook
+                                                                              HMAC-signed
+                                                                              relay.success
+
+                        Dashboard ◀── delivery log · key rotation · gas tank balance`}
+              </pre>
+            </div>
+
+            <p className="text-white/45 text-sm leading-relaxed mb-6">
+              Three moving parts: an <span className="text-white/70">intent</span> that locks the quote before payment,
+              an <span className="text-white/70">activate</span> step that scans the on-chain transfer and issues credits,
+              and a <span className="text-white/70">relay</span> that submits gasless payments for your users.
+              Every relay can fire a signed webhook and is recorded for audit.
             </p>
 
             {/* What is an API? — plain language */}
