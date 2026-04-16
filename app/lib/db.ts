@@ -229,13 +229,81 @@ export async function getGasUsed(address: string): Promise<RelayedTx[]> {
   return getRelayedTxs(address);
 }
 
+// ── Atomic TX credit counter ──────────────────────────────────────────────────
+// quota:{addr} is a Redis integer key updated via DECRBY/INCRBY.
+// This avoids the read-modify-write race in concurrent relay requests.
+// subscription.quotaBonus is kept in sync (fire-and-forget) for display only.
+
+const quotaKey = (addr: string) => `quota:${addr.toLowerCase()}`;
+
+/**
+ * Returns current remaining TX credits from the atomic quota key.
+ * Falls back to subscription.quotaBonus for accounts not yet migrated.
+ */
+export async function getQuotaCredits(address: string): Promise<number> {
+  const val = await kv.get<number>(quotaKey(address));
+  if (val !== null) return Math.max(0, val);
+  // Fallback for pre-migration accounts — read from subscription JSON
+  const sub = await getSubscription(address);
+  return Math.max(0, sub?.quotaBonus ?? 0);
+}
+
+/**
+ * Initialize the atomic quota key from `initialAmount` only if the key does
+ * not already exist (SET NX — safe to call on every relay, no-op after first).
+ * Migrates old accounts on their first relay after this change.
+ */
+export async function initQuotaIfNeeded(address: string, initialAmount: number): Promise<void> {
+  await kv.set(quotaKey(address), Math.max(0, initialAmount), { nx: true });
+}
+
+/**
+ * Atomically decrement TX credit by 1 (DECRBY).
+ * Returns { ok: true, remaining } if a credit was available,
+ *         { ok: false, remaining: 0 } if the counter was already at 0.
+ * On underflow (result < 0), the credit is immediately restored so the
+ * counter stays at 0 and the caller must not proceed with the relay.
+ */
+export async function decrementCredit(
+  address: string,
+): Promise<{ ok: boolean; remaining: number }> {
+  const key = quotaKey(address);
+  const newVal = await kv.decrby(key, 1);
+  if (newVal < 0) {
+    // Compensate: restore counter to 0 (another concurrent request may also be here)
+    await kv.incrby(key, 1);
+    return { ok: false, remaining: 0 };
+  }
+  return { ok: true, remaining: newVal };
+}
+
+/**
+ * Refund 1 TX credit — call when a relay attempt fails after credit was reserved.
+ */
+export async function refundCredit(address: string): Promise<void> {
+  await kv.incrby(quotaKey(address), 1);
+}
+
+/**
+ * Atomically add TX credits (INCRBY).  Used by payment activation and admin topup.
+ * Returns the new total remaining credits.
+ */
+export async function addCredits(address: string, amount: number): Promise<number> {
+  if (amount <= 0) return getQuotaCredits(address);
+  return kv.incrby(quotaKey(address), amount);
+}
+
 export async function addQuotaBonus(address: string, additionalTxs: number) {
   const sub = await getSubscription(address);
   if (!sub) throw new Error("No subscription found");
-  await setSubscription(address, {
-    ...sub,
-    quotaBonus: (sub.quotaBonus ?? 0) + additionalTxs,
-  });
+  // Update atomic counter + subscription JSON in parallel
+  await Promise.all([
+    addCredits(address, additionalTxs),
+    setSubscription(address, {
+      ...sub,
+      quotaBonus: (sub.quotaBonus ?? 0) + additionalTxs,
+    }),
+  ]);
 }
 
 // ── Plan helpers ──────────────────────────────────────────────────────────────

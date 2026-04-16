@@ -17,7 +17,17 @@ function checkAdminSecret(req: NextRequest): boolean {
   return !!expected && secret === expected;
 }
 
-// Admin-only: Withdraw gas balance for an address.
+/**
+ * POST /api/gas-tank/withdraw
+ *
+ * INTERNAL / ADMIN ONLY — requires x-admin-secret header.
+ * This endpoint is NOT accessible to end users.
+ *
+ * End-user withdrawal requests are handled manually by Q402 operations.
+ * Users should contact hello@quackai.ai for refund requests.
+ *
+ * Body: { address: string, chain: string }
+ */
 // Requires x-admin-secret header.
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);

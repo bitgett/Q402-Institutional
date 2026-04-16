@@ -7,6 +7,10 @@ import {
   getSubscription,
   setSubscription,
   getWebhookConfig,
+  getQuotaCredits,
+  initQuotaIfNeeded,
+  decrementCredit,
+  refundCredit,
 } from "@/app/lib/db";
 import { createHmac, randomBytes } from "crypto";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -157,12 +161,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 4a. TX 크레딧 잔여 확인 ─────────────────────────────────────────────
-  const remainingCredits = subscription?.quotaBonus ?? 0;
-  if (!isSandbox && remainingCredits <= 0) {
-    return NextResponse.json({
-      error: "No TX credits remaining. Purchase additional credits to continue.",
-    }, { status: 429 });
+  // ── 4a. TX 크레딧 빠른 사전 체크 (stale OK — 실제 게이트는 원자 차감) ──────
+  if (!isSandbox) {
+    const quickCredits = await getQuotaCredits(keyRecord.address);
+    if (quickCredits <= 0) {
+      return NextResponse.json({
+        error: "No TX credits remaining. Purchase additional credits to continue.",
+      }, { status: 429 });
+    }
   }
 
   // ── 4b. 일일 burst 상한 (단일 고객이 Gas Tank 독점 소진 방지) ──────────────
@@ -222,6 +228,23 @@ export async function POST(req: NextRequest) {
 
   const tokenCfg = getTokenConfig(chain, token);
   let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };
+
+  // ── 7b. 크레딧 원자 예약 (relay 직전 — 경쟁 안전) ────────────────────────
+  // initQuotaIfNeeded: 첫 릴레이 시 기존 계정을 quota 키로 lazy-migrate (SET NX)
+  // decrementCredit:   Redis DECRBY — 결과 < 0이면 즉시 보상 후 차단
+  let creditReserved = false;
+  let creditRemaining = 0;
+  if (!isSandbox) {
+    await initQuotaIfNeeded(keyRecord.address, subscription?.quotaBonus ?? 0);
+    const dec = await decrementCredit(keyRecord.address);
+    if (!dec.ok) {
+      return NextResponse.json({
+        error: "No TX credits remaining. Purchase additional credits to continue.",
+      }, { status: 429 });
+    }
+    creditReserved = true;
+    creditRemaining = dec.remaining;
+  }
 
   // ── 8. 릴레이 실행 (sandbox → mock, live → on-chain) ─────────────────────
   if (isSandbox) {
@@ -327,6 +350,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (!result.success) {
+    // Relay failed — refund the credit we reserved so the user isn't double-charged
+    if (creditReserved) {
+      refundCredit(keyRecord.address).catch(e =>
+        console.error("[relay] credit refund failed after relay failure:", e)
+      );
+    }
     // Don't leak internal RPC errors or contract revert reasons to callers
     console.error(`[relay] failed chain=${chain} from=${from}: ${result.error}`);
     return NextResponse.json({ error: "Relay failed. Check your signature and parameters." }, { status: 400 });
@@ -353,15 +382,13 @@ export async function POST(req: NextRequest) {
     relayedAt,
   }).catch(e => console.error("[relay] TX record failed (non-fatal):", e));
 
-  // Decrement TX credit (fire-and-forget — non-fatal if it fails)
-  if (subscription && !isSandbox) {
-    getSubscription(keyRecord.address).then(current => {
-      if (!current) return;
-      return setSubscription(keyRecord.address, {
-        ...current,
-        quotaBonus: Math.max(0, (current.quotaBonus ?? 0) - 1),
-      });
-    }).catch(e => console.error("[relay] credit decrement failed (non-fatal):", e));
+  // Sync subscription.quotaBonus for dashboard display (fire-and-forget, non-critical).
+  // The authoritative counter is quota:{addr} (atomically decremented above).
+  if (subscription && !isSandbox && creditReserved) {
+    setSubscription(keyRecord.address, {
+      ...subscription,
+      quotaBonus: creditRemaining,
+    }).catch(e => console.error("[relay] quotaBonus display sync failed (non-fatal):", e));
   }
 
   // ── 11. Webhook 발동 (non-blocking, sandbox 포함) ─────────────────────────
