@@ -15,6 +15,7 @@ import {
 } from "@/app/lib/db";
 import { createHmac, randomBytes } from "crypto";
 import { rateLimit, refundRateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { validateWebhookUrl } from "@/app/lib/webhook-validator";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   CHAIN_CONFIG,
@@ -409,18 +410,10 @@ export async function POST(req: NextRequest) {
   // ── 11. Webhook 발동 (non-blocking, sandbox 포함) ─────────────────────────
   const webhookCfg = await getWebhookConfig(keyRecord.address);
   if (webhookCfg?.active && webhookCfg.url) {
-    // SSRF guard (same ruleset as /api/webhook registration)
-    let webhookSafe = false;
-    try {
-      const wh = new URL(webhookCfg.url);
-      const h = wh.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-      webhookSafe = !(
-        /^(localhost|127\.|0\.0\.0\.0|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(h) ||
-        /^(::1$|::ffff:|fe80:|fc00:|fd[0-9a-f]{2}:)/i.test(h) ||
-        /^(metadata\.google\.internal|169\.254\.169\.254)/.test(h) ||
-        /^0[0-7]+\./.test(h)
-      );
-    } catch { /* invalid URL — skip */ }
+    // SSRF guard — shared ruleset with /api/webhook save + test paths.
+    // Re-check at dispatch time so legacy rows stored under older rules
+    // can't be used to pivot into internal networks.
+    const webhookSafe = validateWebhookUrl(webhookCfg.url) === null;
 
     if (webhookSafe) {
       const payload = JSON.stringify({

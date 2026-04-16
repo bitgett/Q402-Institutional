@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getWebhookConfig } from "@/app/lib/db";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { validateWebhookUrl } from "@/app/lib/webhook-validator";
 import { createHmac } from "crypto";
 
 /**
@@ -34,15 +35,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No webhook configured" }, { status: 404 });
   }
 
-  // SSRF guard — paranoia check even though URL was validated on save
-  try {
-    const parsed = new URL(config.url);
-    const host = parsed.hostname.toLowerCase();
-    if (/^(localhost|127\.|0\.0\.0\.0|::1$|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(host)) {
-      return NextResponse.json({ error: "Webhook URL is not a public endpoint" }, { status: 400 });
-    }
-  } catch {
-    return NextResponse.json({ error: "Invalid stored webhook URL" }, { status: 400 });
+  // Re-validate stored URL — legacy rows may predate the current SSRF rules.
+  const urlErr = validateWebhookUrl(config.url);
+  if (urlErr) {
+    return NextResponse.json(urlErr, { status: 400 });
   }
 
   const payload = {
