@@ -12,15 +12,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ valid: false });
   }
 
-  // Check key is still the current key for this subscription
+  // Check key is still the current live or sandbox key for this subscription
   const subscription = await getSubscription(record.address);
   if (subscription) {
-    if (subscription.apiKey !== apiKey) {
+    const isCurrentKey =
+      subscription.apiKey === apiKey ||
+      subscription.sandboxApiKey === apiKey;
+    if (!isCurrentKey) {
       return NextResponse.json({ valid: false, error: "API key has been rotated" });
     }
-    const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
-    if (new Date() >= expiresAt) {
-      return NextResponse.json({ valid: false, error: "Subscription expired" });
+    // Expiry only applies to paid live keys.
+    // Sandbox keys and provisioned-only accounts (paidAt="") are never expired.
+    const isSandboxKey  = record.isSandbox === true;
+    const isPaidAccount = (subscription.amountUSD ?? 0) > 0 && !!subscription.paidAt;
+    if (!isSandboxKey && isPaidAccount) {
+      const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
+      if (new Date() >= expiresAt) {
+        return NextResponse.json({ valid: false, error: "Subscription expired" });
+      }
     }
   }
 

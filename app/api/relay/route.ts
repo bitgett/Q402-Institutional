@@ -14,7 +14,7 @@ import {
   recordWebhookDelivery,
 } from "@/app/lib/db";
 import { createHmac, randomBytes } from "crypto";
-import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { rateLimit, refundRateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   CHAIN_CONFIG,
@@ -174,20 +174,22 @@ export async function POST(req: NextRequest) {
 
   // ── 4b. 일일 burst 상한 (단일 고객이 Gas Tank 독점 소진 방지) ──────────────
   // 플랜별 일일 최대: starter=50, growth=1000, scale=10000, others=무제한
+  // dailyCapCharged: relay 실패 시 환불(DECR)할 수 있도록 추적
   const DAILY_CAP: Record<string, number> = {
     starter: 50, basic: 100, growth: 1_000, pro: 1_000,
     scale: 10_000, business: 10_000,
   };
-  const dailyCap = DAILY_CAP[keyRecord.plan?.toLowerCase()];
+  const dailyCap          = DAILY_CAP[keyRecord.plan?.toLowerCase()];
+  const dailyCapKey       = `relay:daily:${keyRecord.address}`;
+  let   dailyCapCharged   = false;
   if (dailyCap !== undefined && !isSandbox) {
-    const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-    const { rateLimit: rl } = await import("@/app/lib/ratelimit");
-    const withinDailyCap = await rl(`relay:daily:${keyRecord.address}`, "daily", dailyCap, 86400);
+    const withinDailyCap = await rateLimit(dailyCapKey, "daily", dailyCap, 86400);
     if (!withinDailyCap) {
       return NextResponse.json({
         error: `Daily relay cap reached (${dailyCap}/day for ${keyRecord.plan} plan). Resets at midnight UTC.`,
       }, { status: 429 });
     }
+    dailyCapCharged = true;
   }
 
   // ── 5. 체인 지원 확인 ──────────────────────────────────────────────────────
@@ -351,10 +353,16 @@ export async function POST(req: NextRequest) {
   }
 
   if (!result.success) {
-    // Relay failed — refund the credit we reserved so the user isn't double-charged
+    // Relay failed — refund quota credit so the user isn't charged for a failed attempt
     if (creditReserved) {
       refundCredit(keyRecord.address).catch(e =>
         console.error("[relay] credit refund failed after relay failure:", e)
+      );
+    }
+    // Refund daily cap — only successful relays should count against the daily limit
+    if (dailyCapCharged) {
+      refundRateLimit(dailyCapKey, "daily", 86400).catch(e =>
+        console.error("[relay] daily cap refund failed after relay failure:", e)
       );
     }
     // Don't leak internal RPC errors or contract revert reasons to callers
