@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
@@ -50,6 +51,13 @@ interface RelayedTx {
 interface GasDeposit { chain: string; token: string; amount: number; txHash: string; depositedAt: string; }
 
 // ── Deposit Modal ─────────────────────────────────────────────────────────────
+const Spinner = ({ color = "text-yellow" }: { color?: string }) => (
+  <svg className={`animate-spin w-10 h-10 ${color}`} viewBox="0 0 24 24" fill="none">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
+    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
+  </svg>
+);
+
 // Note: Gas Tank withdrawals are currently processed manually by Q402 operations.
 // Contact hello@quackai.ai to request a withdrawal.
 function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
@@ -74,13 +82,6 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
       else setPhase("not_found");
     } catch { setPhase("not_found"); }
   }
-
-  const Spinner = ({ color = "text-yellow" }: { color?: string }) => (
-    <svg className={`animate-spin w-10 h-10 ${color}`} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
-      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-    </svg>
-  );
 
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(10px)" }} onClick={onClose}>
@@ -556,10 +557,10 @@ export default function DashboardPage() {
 
       <header className="border-b px-6 h-16 flex items-center justify-between max-w-7xl mx-auto sticky top-0 z-40 backdrop-blur-md"
         style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(5,7,10,0.85)" }}>
-        <a href="/" className="flex items-baseline gap-2">
+        <Link href="/" className="flex items-baseline gap-2">
           <span className="text-yellow font-bold text-base">Q402</span>
           <span className="text-white/25 text-xs hidden sm:block">Dashboard</span>
-        </a>
+        </Link>
         <div className="flex items-center gap-4">
           <div className="hidden sm:flex items-center gap-2 bg-white/5 border border-white/8 rounded-full px-3 py-1.5">
             <span className="text-xs text-white/30 font-mono">{shortAddr(address)}</span>
@@ -820,8 +821,8 @@ export default function DashboardPage() {
 
                     {/* header */}
                     <div className="flex items-center gap-2.5 mb-4">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-white/10">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={meta.img} alt={meta.name} className="w-full h-full object-cover" />
                       </div>
                       <div className="min-w-0">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -84,20 +85,20 @@ export default function GrantPage() {
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-navy/80 backdrop-blur-md border-b border-white/10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <a href="/" className="flex items-baseline gap-1.5">
+          <Link href="/" className="flex items-baseline gap-1.5">
             <span className="text-yellow font-bold text-lg">Q402</span>
             <span className="text-white/30 text-xs hidden sm:block">by Quack AI</span>
-          </a>
+          </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-white/50">
-            <a href="/#how-it-works" className="hover:text-white transition-colors">How it works</a>
-            <a href="/#pricing"      className="hover:text-white transition-colors">Pricing</a>
-            <a href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</a>
-            <a href="/grant"         className="text-yellow hover:text-yellow-hover transition-colors font-medium">Grant</a>
-            <a href="/docs"          className="hover:text-white transition-colors">Docs</a>
+            <Link href="/#how-it-works" className="hover:text-white transition-colors">How it works</Link>
+            <Link href="/#pricing"      className="hover:text-white transition-colors">Pricing</Link>
+            <Link href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</Link>
+            <Link href="/grant"         className="text-yellow hover:text-yellow-hover transition-colors font-medium">Grant</Link>
+            <Link href="/docs"          className="hover:text-white transition-colors">Docs</Link>
           </div>
-          <a href="/payment" className="bg-yellow text-navy text-xs font-bold px-5 py-2.5 rounded-full hover:bg-yellow-hover transition-colors">
+          <Link href="/payment" className="bg-yellow text-navy text-xs font-bold px-5 py-2.5 rounded-full hover:bg-yellow-hover transition-colors">
             Get API Key →
-          </a>
+          </Link>
         </div>
       </nav>
 
@@ -211,7 +212,7 @@ export default function GrantPage() {
                 <p className="text-white/45 text-sm max-w-md">
                   Thanks! We&apos;ll review your application and reach out within 3–5 business days via email or Telegram.
                 </p>
-                <a href="/" className="mt-2 text-xs text-white/30 hover:text-white transition-colors">← Back to home</a>
+                <Link href="/" className="mt-2 text-xs text-white/30 hover:text-white transition-colors">← Back to home</Link>
               </motion.div>
             ) : (
               <motion.form key="form" onSubmit={handleSubmit} className="px-8 py-8 space-y-6">

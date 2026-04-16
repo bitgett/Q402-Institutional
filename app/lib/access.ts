@@ -7,11 +7,9 @@ export const MASTER_ADDRESSES = [
 ];
 
 /** Always returns true — paywall has been removed. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function isPaid(_address: string): boolean {
   return true;
 }
 
 /** No-op — kept for backward compatibility. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function setPaid(_address: string) {}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useWallet } from "@/app/context/WalletContext";
@@ -227,7 +228,7 @@ export default function PaymentPage() {
   const [selectedPayToken, setSelectedPayToken] = useState("bnb-usdc");
   // Read localStorage synchronously so Step 3 shows "connected" immediately
   // if the user already connected on the landing page — no flash.
-  const [payStep, setPayStep] = useState<PayStep>(() => {
+  const [payStepState, setPayStep] = useState<PayStep>(() => {
     try { return localStorage.getItem("q402_wallet") ? "ready" : "idle"; } catch { return "idle"; }
   });
   const [showWalletModal,  setShowWalletModal]  = useState(false);
@@ -240,10 +241,9 @@ export default function PaymentPage() {
   const { price, isEnterprise, perTx } = calcPrice(selectedChain, selectedVolume);
   const payToken = PAY_TOKENS.find(t => t.id === selectedPayToken)!;
 
-  // Wallet connects → advance to ready
-  useEffect(() => {
-    if (isConnected && payStep === "idle") setPayStep("ready");
-  }, [isConnected, payStep]);
+  // Derived: once wallet connects, treat idle as ready. Computed at render so
+  // React 19 doesn't flag a setState-in-effect cascade.
+  const payStep: PayStep = isConnected && payStepState === "idle" ? "ready" : payStepState;
 
   // Removed: no longer redirect existing subscribers — they can top up credits
 
@@ -337,10 +337,10 @@ export default function PaymentPage() {
 
       {/* ── Nav ────────────────────────────────────────────────────────────── */}
       <nav className="border-b border-white/8 px-6 h-16 flex items-center justify-between max-w-6xl mx-auto">
-        <a href="/" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <span className="text-yellow font-bold text-lg">Q402</span>
           <span className="text-white/30 text-sm">by Quack AI</span>
-        </a>
+        </Link>
         <div className="flex items-center gap-4">
           {isConnected && address ? (
             <div className="flex items-center gap-2 bg-white/[0.04] border border-white/8 rounded-full px-3 py-1.5">
@@ -355,7 +355,7 @@ export default function PaymentPage() {
               Connect Wallet
             </button>
           )}
-          <a href="/" className="text-white/40 text-sm hover:text-white transition-colors">← Back</a>
+          <Link href="/" className="text-white/40 text-sm hover:text-white transition-colors">← Back</Link>
         </div>
       </nav>
 
