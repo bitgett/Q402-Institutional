@@ -33,7 +33,6 @@ import { rotateApiKey } from "@/app/lib/db";
 
 const ADDR = "0xtest";
 const OLD_KEY = "q402_live_old_key";
-const NEW_KEY = `q402_live_${"aabbccddeeff00112233445566778899aabbccdd"}`;
 
 const SUBSCRIPTION = {
   paidAt:    "2026-01-01T00:00:00.000Z",

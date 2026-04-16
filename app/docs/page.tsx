@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 const NAV = [
@@ -75,21 +76,21 @@ export default function DocsPage() {
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(8,14,28,0.92)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-5">
-            <a href="/" className="flex items-center gap-2">
+            <Link href="/" className="flex items-center gap-2">
               <span className="text-yellow font-bold text-base">Q402</span>
               <span className="text-white/20 text-xs">/</span>
               <span className="text-white/50 text-xs font-medium">docs</span>
-            </a>
+            </Link>
             <div className="hidden sm:flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-lg px-3 py-1.5">
               <span className="text-white/25 text-xs font-mono">v1.3.0</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <a href="/" className="text-xs text-white/35 hover:text-white/70 transition-colors">← Landing</a>
-            <a href="/#pricing" className="text-xs text-white/35 hover:text-white/70 transition-colors">Pricing</a>
-            <a href="/payment" className="bg-yellow text-navy text-xs font-bold px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">
+            <Link href="/" className="text-xs text-white/35 hover:text-white/70 transition-colors">← Landing</Link>
+            <Link href="/#pricing" className="text-xs text-white/35 hover:text-white/70 transition-colors">Pricing</Link>
+            <Link href="/payment" className="bg-yellow text-navy text-xs font-bold px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">
               Get API Key →
-            </a>
+            </Link>
           </div>
         </div>
         {/* yellow accent line */}
