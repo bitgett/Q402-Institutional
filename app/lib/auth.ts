@@ -1,23 +1,27 @@
 /**
  * auth.ts — server-side nonce-based authentication
  *
- * Flow:
- *   1. Client calls GET /api/auth/nonce?address=0x...  → server stores nonce in KV (8h TTL)
- *   2. Client signs:  "Q402 Auth\nAddress: {addr}\nNonce: {nonce}"
- *   3. Client sends { address, nonce, signature } with every protected request
- *   4. Server calls verifyNonceSignature() — validates nonce exists AND signature matches
+ * Two-tier auth model:
  *
- * The same nonce is reused within its 8-hour window (good UX: one wallet popup per session).
- * Nonces expire automatically — stolen signatures become useless after ≤8 hours.
- * Call invalidateNonce() on sensitive operations (key rotation) to force re-sign.
+ * SESSION NONCE (low-risk actions — read, webhook config, provision):
+ *   1. Client calls GET /api/auth/nonce?address=0x...  → server stores nonce in KV (1h TTL)
+ *   2. Client signs:  "Q402 Auth\nAddress: {addr}\nNonce: {nonce}"
+ *   3. Same nonce+sig reused within 1-hour window (one wallet popup per session).
+ *
+ * FRESH CHALLENGE (high-risk actions — key rotate, payment activate):
+ *   1. Client calls GET /api/auth/challenge?address=0x... → server stores one-time challenge (5m TTL)
+ *   2. Client signs:  "Q402 Action\nAddress: {addr}\nChallenge: {challenge}"
+ *   3. Server verifies AND deletes challenge (cannot be replayed).
  */
 
 import { ethers } from "ethers";
 import { kv } from "@vercel/kv";
 
-// Nonce lives 8 hours in KV.  Client-side cache is set to 7.5h so it
-// refreshes slightly before the server-side key expires.
-const NONCE_TTL_SEC = 8 * 60 * 60;
+// Session nonce lives 1 hour in KV.  Client-side cache is set to 55min.
+const NONCE_TTL_SEC = 60 * 60;
+
+// One-time challenge lives 5 minutes in KV.
+const CHALLENGE_TTL_SEC = 5 * 60;
 
 function nonceKvKey(addr: string) {
   return `auth_nonce:${addr.toLowerCase()}`;
@@ -104,6 +108,111 @@ export async function invalidateNonce(addr: string): Promise<void> {
   try {
     await kv.del(nonceKvKey(addr));
   } catch { /* best-effort */ }
+}
+
+// ── Fresh challenge (high-risk actions) ────────────────────────────────────
+
+function challengeKvKey(addr: string) {
+  return `auth_challenge:${addr.toLowerCase()}`;
+}
+
+/** Message the client must sign for high-risk actions.  Must stay in sync with auth-client.ts. */
+export function buildChallengeMessage(addr: string, challenge: string): string {
+  return `Q402 Action\nAddress: ${addr.toLowerCase()}\nChallenge: ${challenge}`;
+}
+
+/**
+ * Issue a one-time challenge for `addr`.
+ * Overwrites any existing challenge (only the latest is valid).
+ */
+export async function createFreshChallenge(
+  addr: string,
+): Promise<{ challenge: string; ttlSec: number }> {
+  const key = challengeKvKey(addr);
+  try {
+    const { randomBytes } = await import("crypto");
+    const challenge = randomBytes(16).toString("hex");
+    await kv.set(key, challenge, { ex: CHALLENGE_TTL_SEC });
+    return { challenge, ttlSec: CHALLENGE_TTL_SEC };
+  } catch {
+    throw new Error("Auth service unavailable. Please try again shortly.");
+  }
+}
+
+/**
+ * Verify a fresh challenge signature AND consume it (one-time use).
+ *
+ * Returns:
+ *  { ok: true }                           — valid, challenge deleted
+ *  { ok: false, code: "NONCE_EXPIRED" }   — challenge not in KV (expired / never issued)
+ *  { ok: false, code: "SIG_MISMATCH"  }   — challenge found but sig doesn't match
+ */
+export async function verifyAndConsumeChallenge(
+  addr: string,
+  challenge: string,
+  signature: string,
+): Promise<{ ok: true } | { ok: false; code: "NONCE_EXPIRED" | "SIG_MISMATCH" }> {
+  const key = challengeKvKey(addr);
+
+  let storedChallenge: string | null;
+  try {
+    storedChallenge = await kv.get<string>(key);
+  } catch {
+    return { ok: false, code: "NONCE_EXPIRED" };
+  }
+
+  if (!storedChallenge || storedChallenge !== challenge) {
+    return { ok: false, code: "NONCE_EXPIRED" };
+  }
+
+  try {
+    const msg = buildChallengeMessage(addr.toLowerCase(), challenge);
+    const recovered = ethers.verifyMessage(msg, signature);
+    if (recovered.toLowerCase() !== addr.toLowerCase()) {
+      return { ok: false, code: "SIG_MISMATCH" };
+    }
+  } catch {
+    return { ok: false, code: "SIG_MISMATCH" };
+  }
+
+  // Consume — delete regardless of any error so it cannot be replayed
+  kv.del(key).catch(() => { /* best-effort */ });
+
+  return { ok: true };
+}
+
+/**
+ * requireFreshAuth — same interface as requireAuth but verifies a one-time challenge.
+ * Use for high-risk operations: key rotation, payment activation.
+ */
+export async function requireFreshAuth(
+  rawAddress: string | undefined | null,
+  rawChallenge: string | undefined | null,
+  rawSignature: string | undefined | null,
+): Promise<string | { error: string; code?: string; status: number }> {
+  if (!rawAddress || !rawChallenge || !rawSignature) {
+    return { error: "address, challenge, and signature are required", status: 400 };
+  }
+
+  const addr = rawAddress.toLowerCase();
+  const result = await verifyAndConsumeChallenge(addr, rawChallenge, rawSignature);
+
+  if (!result.ok) {
+    if (result.code === "NONCE_EXPIRED") {
+      return {
+        error: "Challenge expired or invalid. Please re-authenticate.",
+        code: "NONCE_EXPIRED",
+        status: 401,
+      };
+    }
+    return {
+      error: "Signature does not match address",
+      code: "SIG_MISMATCH",
+      status: 401,
+    };
+  }
+
+  return addr;
 }
 
 /**

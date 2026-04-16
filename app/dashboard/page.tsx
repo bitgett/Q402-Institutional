@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
-import { getAuthCreds, clearAuthCache } from "../lib/auth-client";
+import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
@@ -49,18 +49,17 @@ interface RelayedTx {
 }
 interface GasDeposit { chain: string; token: string; amount: number; txHash: string; depositedAt: string; }
 
-// ── Deposit / Withdraw Modal ───────────────────────────────────────────────────
-function DepositModal({ chain, token, onClose, address, onDepositVerified, onWithdraw }: {
+// ── Deposit Modal ─────────────────────────────────────────────────────────────
+// Note: Gas Tank withdrawals are currently processed manually by Q402 operations.
+// Contact hello@quackai.ai to request a withdrawal.
+function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
   chain: string; token: string; onClose: () => void; address: string;
   onDepositVerified?: (balances: Record<string, number>) => void;
-  onWithdraw?: () => void;
 }) {
   const chainKey = Object.entries(CHAIN_META).find(([, v]) => v.name === chain)?.[0] ?? chain.toLowerCase();
-  const [phase, setPhase] = useState<"loading"|"main"|"checking"|"deposit_verified"|"withdrawing"|"withdraw_done"|"not_found">("loading");
+  const [phase, setPhase] = useState<"loading"|"main"|"checking"|"deposit_verified"|"not_found">("loading");
   const [copied, setCopied] = useState(false);
   const [verifiedBalances, setVerifiedBalances] = useState<Record<string, number>>({});
-  const [withdrawTx, setWithdrawTx] = useState("");
-  const [withdrawAmount, setWithdrawAmount] = useState("");
 
   useEffect(() => { const t = setTimeout(() => setPhase("main"), 1000); return () => clearTimeout(t); }, []);
 
@@ -74,16 +73,6 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified, onWit
       if (res.ok && data.newDeposits > 0) { setVerifiedBalances(data.balances); setPhase("deposit_verified"); onDepositVerified?.(data.balances); }
       else setPhase("not_found");
     } catch { setPhase("not_found"); }
-  }
-
-  async function doWithdraw() {
-    setPhase("withdrawing");
-    try {
-      const res = await fetch("/api/gas-tank/withdraw", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, chain: chainKey }) });
-      const data = await res.json();
-      if (res.ok && data.success) { setWithdrawTx(data.txHash); setWithdrawAmount(data.amount); setPhase("withdraw_done"); onWithdraw?.(); }
-      else { alert(data.error ?? "Withdraw failed"); setPhase("main"); }
-    } catch { setPhase("main"); }
   }
 
   const Spinner = ({ color = "text-yellow" }: { color?: string }) => (
@@ -132,16 +121,16 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified, onWit
               I&apos;ve deposited — Verify
             </button>
             <div className="border-t border-white/8 pt-4">
-              <p className="text-xs text-white/30 mb-2">Withdraw remaining balance back to your wallet</p>
-              <button onClick={doWithdraw} className="w-full py-2.5 rounded-xl text-sm border border-red-400/20 text-red-400/70 hover:text-red-400 hover:border-red-400/40 transition-all">
-                Withdraw {token}
-              </button>
+              <p className="text-xs text-white/30 mb-1">Gas Tank withdrawals</p>
+              <p className="text-xs text-white/20 leading-relaxed">
+                Withdrawals are processed manually by Q402 operations.
+                Contact <span className="text-white/40">hello@quackai.ai</span> to request a refund.
+              </p>
             </div>
           </div>
         )}
 
         {phase === "checking" && <div className="flex flex-col items-center gap-4 py-8"><Spinner /><p className="text-white/40 text-sm">Scanning on-chain…</p></div>}
-        {phase === "withdrawing" && <div className="flex flex-col items-center gap-4 py-8"><Spinner color="text-red-400" /><p className="text-white/40 text-sm">Sending withdrawal…</p></div>}
 
         {phase === "deposit_verified" && (
           <div className="space-y-4 py-2">
@@ -161,16 +150,6 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified, onWit
           </div>
         )}
 
-        {phase === "withdraw_done" && (
-          <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3 bg-green-400/8 border border-green-400/20 rounded-xl px-4 py-3">
-              <span className="text-green-400 text-xl">✓</span>
-              <div><p className="text-green-400 font-bold text-sm">Withdrawal Sent!</p><p className="text-white/40 text-xs">{withdrawAmount} {token} → your wallet</p></div>
-            </div>
-            <div><p className="text-xs text-white/30 mb-1.5">TX Hash</p><div className="font-mono text-xs text-white/50 bg-white/4 border border-white/10 rounded-xl px-3 py-3 break-all">{withdrawTx}</div></div>
-            <button onClick={onClose} className="w-full py-3 rounded-xl font-bold text-sm bg-yellow text-navy hover:bg-yellow-hover transition-all">Done</button>
-          </div>
-        )}
 
         {phase === "not_found" && (
           <div className="space-y-4 py-2">
@@ -476,12 +455,13 @@ export default function DashboardPage() {
 
   async function rotateKey() {
     if (!address) return;
-    const auth = await getAuthCreds(address, signMessage);
-    if (!auth) return;
-    const { nonce, signature } = auth;
+    // Key rotation requires a fresh one-time challenge (not the cached session nonce)
+    const chal = await getFreshChallenge(address, signMessage);
+    if (!chal) return;
+    const { challenge, signature } = chal;
     setRotatingKey(true);
     try {
-      const res = await fetch("/api/keys/rotate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, nonce, signature }) });
+      const res = await fetch("/api/keys/rotate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, challenge, signature }) });
       const data = await res.json();
       if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
       if (data.apiKey) {
@@ -571,8 +551,7 @@ export default function DashboardPage() {
 
       {depositChain && (
         <DepositModal chain={depositChain.chain} token={depositChain.token} onClose={() => setDepositChain(null)} address={address}
-          onDepositVerified={balances => { setUserGasBalance(balances); setDepositChain(null); }}
-          onWithdraw={() => { refreshUserBalance(address); setDepositChain(null); }} />
+          onDepositVerified={balances => { setUserGasBalance(balances); setDepositChain(null); }} />
       )}
 
       <header className="border-b px-6 h-16 flex items-center justify-between max-w-7xl mx-auto sticky top-0 z-40 backdrop-blur-md"

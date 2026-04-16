@@ -12,6 +12,8 @@ export interface PaymentResult {
   amountUSD?: number;
   token?: string;
   chain?: string;
+  /** Sender address (lowercase) — used by activate to verify intent.address === TX sender */
+  from?: string;
 }
 
 // ── Chain configs ──────────────────────────────────────────────────────────────
@@ -167,6 +169,7 @@ async function scanChainWithRpc(
             amountUSD: amount,
             token: token.symbol,
             chain: chain.name,
+            from: (ev.args.from as string)?.toLowerCase() ?? fromAddress.toLowerCase(),
           };
         }
       }
@@ -216,6 +219,7 @@ export async function verifyPaymentTx(txHash: string, fromAddress: string): Prom
               amountUSD: amount,
               token: token.symbol,
               chain: chain.name,
+              from: (ev.args.from as string)?.toLowerCase() ?? fromAddress.toLowerCase(),
             };
           }
         }

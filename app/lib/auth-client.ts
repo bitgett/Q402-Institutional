@@ -1,22 +1,24 @@
 /**
  * auth-client.ts — browser-side nonce + signature management
  *
- * Keeps the wallet popup count to 1 per session by caching {nonce, signature}
- * in sessionStorage with a 7.5-hour TTL (slightly shorter than the server's 8h).
+ * Two-tier auth:
  *
- * Usage in a component:
- *   import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
- *   const auth = await getAuthCreds(address, signMessage);
- *   if (!auth) return; // user rejected
- *   // use auth.nonce + auth.signature in all protected API calls
+ * SESSION (low-risk — getAuthCreds):
+ *   Caches {nonce, signature} in sessionStorage for 55 min (server TTL: 1h).
+ *   One wallet popup per session.  Reused for: read, webhook, provision.
  *
- *   // On 401 NONCE_EXPIRED from server:
- *   clearAuthCache(address);
- *   const auth2 = await getAuthCreds(address, signMessage); // re-prompts wallet
+ * FRESH CHALLENGE (high-risk — getFreshChallenge):
+ *   One-time challenge, 5-min TTL, consumed after first use.
+ *   Always prompts the wallet.  Used for: key rotation, payment activation.
+ *
+ * Usage:
+ *   import { getAuthCreds, clearAuthCache, getFreshChallenge } from "@/app/lib/auth-client";
+ *   const auth = await getAuthCreds(address, signMessage);      // session
+ *   const chal = await getFreshChallenge(address, signMessage); // fresh challenge
  */
 
 // Must stay in sync with auth.ts on the server
-const CACHE_TTL_MS = 7.5 * 60 * 60 * 1000; // 7.5 hours
+const CACHE_TTL_MS = 55 * 60 * 1000; // 55 minutes (server TTL: 1h)
 
 interface AuthCache {
   nonce:     string;
@@ -103,4 +105,30 @@ export async function getAuthCreds(
 
   saveCache(addr, nonce, signature);
   return { nonce, signature };
+}
+
+/**
+ * Obtain and sign a fresh one-time challenge for high-risk operations.
+ * Always prompts the wallet (no caching).
+ * Returns { challenge, signature } or null if the user rejects / network error.
+ */
+export async function getFreshChallenge(
+  addr: string,
+  signMessage: (msg: string) => Promise<string | null>,
+): Promise<{ challenge: string; signature: string } | null> {
+  try {
+    const resp = await fetch(`/api/auth/challenge?address=${encodeURIComponent(addr)}`);
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const challenge: string = json.challenge;
+    if (typeof challenge !== "string") return null;
+
+    const msg = `Q402 Action\nAddress: ${addr.toLowerCase()}\nChallenge: ${challenge}`;
+    const signature = await signMessage(msg);
+    if (!signature) return null;
+
+    return { challenge, signature };
+  } catch {
+    return null;
+  }
 }

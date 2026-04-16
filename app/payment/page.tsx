@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useWallet } from "@/app/context/WalletContext";
 import { isWalletInstalled } from "@/app/lib/wallet";
-import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
+import { getAuthCreds, clearAuthCache, getFreshChallenge } from "@/app/lib/auth-client";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -247,7 +247,7 @@ export default function PaymentPage() {
     setPayStep("verifying");
     setVerifyError(null);
     try {
-      // Get nonce-based auth credentials (cached 7.5h; wallet popup once per session)
+      // Step 1: session nonce for intent (cached 55 min; one wallet popup per session)
       const auth = await getAuthCreds(address, signMessage);
       if (!auth) {
         setVerifyError("__sig_declined__");
@@ -262,7 +262,7 @@ export default function PaymentPage() {
         const intentRes = await fetch("/api/payment/intent", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
-          body:    JSON.stringify({ address, nonce, signature, chain: selectedChain, expectedUSD: price }),
+          body:    JSON.stringify({ address, nonce, signature, chain: selectedChain, expectedUSD: price, token: payToken?.token }),
         });
         if (!intentRes.ok) {
           const d = await intentRes.json();
@@ -274,17 +274,24 @@ export default function PaymentPage() {
         }
       }
 
+      // Step 2: fresh one-time challenge for activation (always prompts wallet)
+      const chal = await getFreshChallenge(address, signMessage);
+      if (!chal) {
+        setVerifyError("__sig_declined__");
+        setPayStep("error");
+        return;
+      }
+
       const res  = await fetch("/api/payment/activate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ address, nonce, signature }),
+        body:    JSON.stringify({ address, challenge: chal.challenge, signature: chal.signature }),
       });
       const data = await res.json();
 
       if (res.status === 401 && data.code === "NONCE_EXPIRED") {
-        clearAuthCache(address);
         setVerifyAttempts(v => v + 1);
-        setVerifyError("Session expired. Please try again.");
+        setVerifyError("Challenge expired. Please try again.");
         setPayStep("error");
         return;
       }

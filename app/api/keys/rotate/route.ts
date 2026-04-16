@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rotateApiKey } from "@/app/lib/db";
-import { requireAuth, invalidateNonce } from "@/app/lib/auth";
+import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 /**
  * POST /api/keys/rotate
  *
  * Deactivates the current live API key and issues a new one.
- * Requires nonce-based EIP-191 proof-of-ownership to prevent address spoofing.
- * Nonce is invalidated after rotation, forcing re-sign on the next sensitive action.
+ * Requires a fresh one-time challenge (GET /api/auth/challenge) — not the session nonce.
+ * The challenge is consumed on first use and cannot be replayed.
  *
- * Body: { address, nonce, signature }
- *   nonce obtained from GET /api/auth/nonce?address={addr}
+ * Body: { address, challenge, signature }
+ *   challenge obtained from GET /api/auth/challenge?address={addr}
  */
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
@@ -19,11 +19,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; nonce?: string; signature?: string };
+  let body: { address?: string; challenge?: string; signature?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
-  const authResult = await requireAuth(body.address, body.nonce, body.signature);
+  const authResult = await requireFreshAuth(body.address, body.challenge, body.signature);
   if (typeof authResult !== "string") {
     return NextResponse.json(
       { error: authResult.error, code: authResult.code },
@@ -34,8 +34,6 @@ export async function POST(req: NextRequest) {
 
   try {
     const newKey = await rotateApiKey(addr);
-    // Invalidate nonce after key rotation — forces re-sign on next sensitive action
-    await invalidateNonce(addr);
     return NextResponse.json({ apiKey: newKey });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Rotation failed";
