@@ -496,24 +496,11 @@ const DOMAIN_NAMES = {
 };
 
 // verifyingContract:
-//   avax / bnb / eth / stable → CONTRACTS[chain]  (impl contract address)
-//   xlayer                    → user's own EOA     (address(this) under EIP-7702)`} />
+//   ALL chains → user's own EOA  (address(this) under EIP-7702 delegation)`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Witness Types (chain-specific)</h3>
-            <CodeBlock lang="typescript" code={`// ── avax / bnb / eth ── PaymentWitness (6 fields)
-const typesStandard = {
-  PaymentWitness: [
-    { name: "owner",     type: "address" }, // token sender (user's EOA)
-    { name: "token",     type: "address" }, // ERC-20 contract (USDC / USDT)
-    { name: "amount",    type: "uint256" }, // atomic units
-    { name: "to",        type: "address" }, // payment destination
-    { name: "deadline",  type: "uint256" }, // unix timestamp
-    { name: "paymentId", type: "bytes32" }, // unique payment ID (replay protection)
-  ],
-};
-
-// ── xlayer / stable ── TransferAuthorization (7 fields)
-const typesXL = {
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Witness Type (unified across all chains)</h3>
+            <CodeBlock lang="typescript" code={`// Every deployed Q402 impl contract uses the same EIP-712 typed struct:
+const types = {
   TransferAuthorization: [
     { name: "owner",       type: "address" }, // token sender (user's EOA)
     { name: "facilitator", type: "address" }, // gas sponsor (Q402 relayer)
@@ -525,9 +512,8 @@ const typesXL = {
   ],
 };
 
-// verifyingContract:
-//   avax / bnb / eth / stable → CONTRACTS[chain]  (impl contract address)
-//   xlayer                    → user's own EOA     (address(this) under EIP-7702)`} />
+// verifyingContract is ALWAYS the user's own EOA — the contract computes its
+// domain separator with address(this), which equals the user EOA under EIP-7702.`} />
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Signing with ethers.js</h3>
             <CodeBlock lang="typescript" code={`// Fetch facilitator address first (required for all chains)
@@ -537,7 +523,7 @@ const domain = {
   name:              DOMAIN_NAMES[chain],
   version:           "1",
   chainId:           chainId,
-  verifyingContract: chain === "xlayer" ? userAddress : CONTRACTS[chain],
+  verifyingContract: userAddress,  // user's own EOA — same for all chains under EIP-7702
 };
 
 const nonce = ethers.toBigInt(ethers.randomBytes(32)); // random uint256
