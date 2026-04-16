@@ -102,22 +102,58 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Prevent TX hash reuse (same TX cannot activate twice) ────────────────
+  // ── Claim/commit pattern for atomic activation ───────────────────────────
+  //
+  // Two-phase approach to prevent "paid but can't retry" states:
+  //
+  //   PHASE 1 — Claim:
+  //     a. Check used_txhash — if set, permanently committed → reject.
+  //     b. SET NX on activation_claim:{txHash} (5-min TTL) — atomic distributed lock.
+  //        Only one concurrent request wins; the rest are rejected immediately.
+  //
+  //   PHASE 2 — Commit (after both writes succeed):
+  //     a. setSubscription + addCredits via Promise.all.
+  //     b. Only on full success: mark used_txhash permanently (90 days).
+  //     c. Release claim + clear intent (best-effort).
+  //
+  //   On partial write failure: claim is released, used_txhash is NOT set.
+  //   The user can retry with the same txHash.  setSubscription is idempotent
+  //   (overwrites with same data); addCredits may double-add in the rare case
+  //   where one write succeeded before Promise.all threw — acceptable given
+  //   the very low probability and manual recoverability.
+
   const { kv } = await import("@vercel/kv");
-  const usedKey = `used_txhash:${result.txHash}`;
+  const usedKey  = `used_txhash:${result.txHash}`;
+  const claimKey = `activation_claim:${result.txHash}`;
+
+  // Phase 1a — permanent used check
   const alreadyUsed = await kv.get(usedKey);
   if (alreadyUsed) {
-    return NextResponse.json({ error: "This transaction has already been used for activation" }, { status: 402 });
+    return NextResponse.json(
+      { error: "This transaction has already been used for activation" },
+      { status: 402 },
+    );
   }
-  // Mark as used for 90 days (well beyond any block scan window)
-  await kv.set(usedKey, addr, { ex: 90 * 24 * 60 * 60 });
 
+  // Phase 1b — atomic claim (SET NX EX 300)
+  // Returns "OK" (truthy) if we own the lock, null if another request beat us.
+  const CLAIM_TTL = 5 * 60; // 5 min — enough time for writes to complete
+  const claimed = await kv.set(claimKey, addr, { nx: true, ex: CLAIM_TTL });
+  if (!claimed) {
+    return NextResponse.json(
+      { error: "This transaction is already being processed. Please wait a moment and try again.", code: "ACTIVATION_IN_PROGRESS" },
+      { status: 409 },
+    );
+  }
+
+  // ── Quota + plan ──────────────────────────────────────────────────────────
   const addedTxs = txQuotaFromAmount(result.amountUSD ?? 0, result.chain);
   if (addedTxs === 0) {
+    kv.del(claimKey).catch(() => {});
     return NextResponse.json({ error: "Payment amount too low for this chain" }, { status: 402 });
   }
 
-  // ── Every payment: +30 days + TX transactions, plan set on first payment ─
+  // ── Every payment: +30 days + TX credits, plan set on first payment ───────
   const plan = existing?.plan ?? planFromAmount(result.amountUSD ?? 0, result.chain)!;
 
   // Restore or create live API key
@@ -142,27 +178,43 @@ export async function POST(req: NextRequest) {
     : new Date(0);
   const base = currentExpiry > new Date() ? currentExpiry : new Date();
   const newExpiry = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000);
-  // currentQuota: remaining credits before this payment (reads atomic key, falls back to sub)
   const currentQuota = await getQuotaCredits(addr);
   const totalTxs = currentQuota + addedTxs;
 
-  await Promise.all([
-    setSubscription(addr, {
-      ...(existing ?? {}),
-      paidAt:        base.toISOString(),
-      apiKey,
-      sandboxApiKey,
-      plan,
-      txHash:        result.txHash!,
-      amountUSD:     result.amountUSD!,
-      quotaBonus:    totalTxs,
-    }),
-    // Atomically add credits to the quota counter (INCRBY — race-safe)
-    addCredits(addr, addedTxs),
-  ]);
+  // ── Phase 2 — Write, then commit ─────────────────────────────────────────
+  try {
+    await Promise.all([
+      setSubscription(addr, {
+        ...(existing ?? {}),
+        paidAt:        base.toISOString(),
+        apiKey,
+        sandboxApiKey,
+        plan,
+        txHash:        result.txHash!,
+        amountUSD:     result.amountUSD!,
+        quotaBonus:    totalTxs,
+      }),
+      // Atomically add credits (INCRBY — race-safe)
+      addCredits(addr, addedTxs),
+    ]);
+  } catch (e) {
+    // Both writes are not guaranteed to have succeeded.
+    // Release claim so the user can retry — used_txhash is NOT set yet.
+    kv.del(claimKey).catch(() => {});
+    console.error(`[activate] write failure addr=${addr} txHash=${result.txHash}:`, e);
+    return NextResponse.json(
+      { error: "Activation failed during save. Please try again.", code: "ACTIVATION_RETRY" },
+      { status: 500 },
+    );
+  }
 
-  // Clear intent after successful activation — prevents replay
-  await clearPaymentIntent(addr);
+  // ── Commit: permanently mark txHash as used ───────────────────────────────
+  // Only reached if both writes succeeded.
+  await kv.set(usedKey, addr, { ex: 90 * 24 * 60 * 60 });
+
+  // Release claim + clear intent (best-effort — activation is already committed above)
+  kv.del(claimKey).catch(() => {});
+  clearPaymentIntent(addr).catch(() => {});
 
   return NextResponse.json({
     status:    "activated",
