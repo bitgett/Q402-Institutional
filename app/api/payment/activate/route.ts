@@ -46,7 +46,10 @@ export async function POST(req: NextRequest) {
   const existing = await getSubscription(addr);
 
   // ── Verify payment intent (chain + expectedUSD must match TX) ───────────
-  const intent = await getPaymentIntent(addr);
+  // When intentId is supplied, look the intent up by id directly — this lets
+  // concurrent tabs activate independently without overwriting each other.
+  // Without intentId we fall back to the "latest" pointer for this address.
+  const intent = await getPaymentIntent(addr, body.intentId);
   if (!intent) {
     return NextResponse.json(
       { error: "No payment intent found. Call POST /api/payment/intent first.", code: "NO_INTENT" },
@@ -54,8 +57,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // If the client passed the intentId it received from POST /api/payment/intent,
-  // validate it matches — catches stale tabs that have a different quote open.
+  // Defence in depth: id-keyed lookup should always match, but the legacy
+  // fallback inside getPaymentIntent could surface a different intent under
+  // migration edge cases. Reject if the client's declared id disagrees.
   if (body.intentId && intent.intentId !== body.intentId) {
     return NextResponse.json(
       { error: "Intent ID mismatch. Your quote may have changed — please refresh and try again.", code: "INTENT_MISMATCH" },
@@ -236,7 +240,7 @@ export async function POST(req: NextRequest) {
     // Only reached if all writes succeeded.
     await kv.set(usedKey, addr, { ex: USED_TTL });
     kv.del(claimKey).catch(() => {});
-    clearPaymentIntent(addr).catch(() => {});
+    clearPaymentIntent(addr, intent.intentId).catch(() => {});
 
     return NextResponse.json({
       status:    "activated",
