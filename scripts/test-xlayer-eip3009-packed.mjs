@@ -101,7 +101,7 @@ async function main() {
     }
   }
 
-  const amountRaw   = BigInt(Math.round(parseFloat(AMOUNT_USDC) * 10 ** USDC_DECIMALS));
+  const amountRaw   = ethers.parseUnits(AMOUNT_USDC, USDC_DECIMALS);
   const validAfter  = 0n;
   const validBefore = BigInt(Math.floor(Date.now() / 1000) + 600);
   const nonce       = ethers.hexlify(ethers.randomBytes(32));

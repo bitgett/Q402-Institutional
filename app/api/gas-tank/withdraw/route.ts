@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { getGasBalance, addGasDeposit } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { checkAdminSecret } from "@/app/lib/admin-auth";
 
 const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   bnb:    { rpc: "https://bsc-dataseed1.binance.org/",         token: "BNB"  },
@@ -10,12 +11,6 @@ const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   xlayer: { rpc: "https://rpc.xlayer.tech",                    token: "OKB"  },
   stable: { rpc: "https://rpc.stable.xyz",                     token: "USDT0"},
 };
-
-function checkAdminSecret(req: NextRequest): boolean {
-  const secret = req.headers.get("x-admin-secret");
-  const expected = process.env.ADMIN_SECRET;
-  return !!expected && secret === expected;
-}
 
 /**
  * POST /api/gas-tank/withdraw

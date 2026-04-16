@@ -134,6 +134,15 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  // avax/bnb/eth also require `nonce` — it's part of the signed witness, so a
+  // server-synthesized fallback would never match the caller's signature. Fail
+  // fast with a clear 400 instead of letting the onchain verify path reject it.
+  if (!isXLayer && !isStable && !nonce) {
+    return NextResponse.json(
+      { error: "nonce is required for avax/bnb/eth (uint256 string, must match the signed witness)" },
+      { status: 400 }
+    );
+  }
 
   // ── 2a. EIP-3009 fallback on X Layer is USDC-only ────────────────────────────
   // The USDC_EIP3009_ABI in relayer.ts targets X Layer USDC (9-param v,r,s form).
@@ -250,12 +259,11 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 7. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
-  // SDK sends `nonce` as a uint256 string. Absent → derive from tx context.
-  const paymentNonce: bigint = nonce
-    ? BigInt(nonce)
-    : BigInt(ethers.keccak256(
-        ethers.toUtf8Bytes(`${from}-${to}-${amount}-${deadline}-${Date.now()}`)
-      ));
+  // xlayer/stable carry their own nonce in xlayerNonce/stableNonce and never
+  // consume this value. Section 2 rejects missing `nonce` on avax/bnb/eth with
+  // a 400, so if we get here with a required-nonce chain, `nonce` is present.
+  const paymentNonce: bigint =
+    (!isXLayer && !isStable) ? BigInt(nonce!) : 0n;
 
   const tokenCfg = getTokenConfig(chain, token);
   let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };

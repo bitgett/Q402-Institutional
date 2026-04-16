@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.3.0** · **Docs revision: v1.14** · **Last updated: 2026-04-17**  
+**Version: v1.3.1** · **Docs revision: v1.15** · **Last updated: 2026-04-17**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -106,7 +106,7 @@ User clicks "Pay USDC"
 
 | 항목 | 기술 |
 |------|------|
-| Framework | Next.js 14 App Router (TypeScript) |
+| Framework | Next.js 16 App Router (React 19, TypeScript) |
 | Styling | Tailwind CSS + framer-motion |
 | Blockchain | ethers.js v6 + viem |
 | Wallet | Custom WalletContext (MetaMask + OKX Wallet) |
@@ -243,7 +243,7 @@ Q402-Institutional/
 │   ├── test-eip7702.mjs            # 통합 EIP-7702 E2E 테스트 (--chain avax|bnb|eth|xlayer|stable)
 │   └── agent-example.mjs           # Node.js Agent SDK (5체인 통합 예제 — TransferAuthorization)
 └── public/
-    ├── q402-sdk.js                 # 클라이언트 SDK v1.3.0
+    ├── q402-sdk.js                 # 클라이언트 SDK v1.3.1
     ├── bnb.png / eth.png / avax.png / xlayer.png / stable.jpg
     └── arbitrum.png / scroll.png
 ```

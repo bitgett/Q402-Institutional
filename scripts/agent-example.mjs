@@ -178,6 +178,39 @@ async function signEIP7702Auth({ chain, agentAcc }) {
   });
 }
 
+// Human-readable amount → atomic bigint.
+// Mirrors public/q402-sdk.js::toRawAmount. Accepts a decimal STRING
+// ("5.00", "0.123456") or a finite positive Number for convenience, but the
+// string form is preferred since IEEE-754 Number loses precision on 18-decimal
+// tokens (BNB USDC/USDT, Stable USDT0). Throws a human-readable error on
+// invalid input so callers fail at the edge, not after signing.
+function toAtomicAmount(amount, decimals) {
+  let str;
+  if (typeof amount === "string") {
+    str = amount.trim();
+    if (str === "")      throw new Error('amount must be a non-empty decimal string (e.g. "5.00")');
+    if (!/^\d+(\.\d+)?$/.test(str)) {
+      throw new Error(`invalid amount "${amount}" — use a positive decimal string (no sign, no scientific notation)`);
+    }
+  } else if (typeof amount === "number") {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error(`amount must be a positive finite number (got ${amount})`);
+    }
+    // Clamp to the token's precision so values like 0.1 + 0.2 don't blow up parseUnits.
+    str = amount.toFixed(decimals);
+  } else {
+    throw new Error(`amount must be a decimal string or positive number (got ${typeof amount})`);
+  }
+  let raw;
+  try {
+    raw = ethers.parseUnits(str, decimals);
+  } catch {
+    throw new Error(`amount "${amount}" has more than ${decimals} decimal places for this token`);
+  }
+  if (raw <= 0n) throw new Error(`amount must be greater than zero (got "${amount}")`);
+  return raw;
+}
+
 // ── Core: Submit via Q402 Relay API ───────────────────────────────────────────
 // Body shape MUST match app/api/relay/route.ts:
 //   - `token` is the symbol string ("USDC" | "USDT"), never an address.
@@ -225,7 +258,7 @@ async function sendGaslessPayment({ chain, token = "USDC", recipient, amountUSD 
   const tokenCfg = cfg.tokens[tokenSymbol];
 
   const agentAcc = privateKeyToAccount(AGENT_KEY.startsWith("0x") ? AGENT_KEY : `0x${AGENT_KEY}`);
-  const amount   = BigInt(Math.round(amountUSD * 10 ** tokenCfg.decimals));
+  const amount   = toAtomicAmount(amountUSD, tokenCfg.decimals);
   const nonce    = BigInt(ethers.hexlify(ethers.randomBytes(32)));
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
