@@ -239,49 +239,58 @@ export default function Hero() {
 
                   {/* Code */}
                   <div className="p-5 font-mono text-xs leading-[1.7]">
-                    <div className="text-white/20 mb-3">{"// Initialize Q402 on any EVM chain"}</div>
-                    <div>
-                      <span className="text-purple-400">import</span>
-                      <span className="text-white"> {"{"} Q402 {"}"} </span>
-                      <span className="text-purple-400">from</span>
-                      <span className="text-orange-300"> &quot;@quackai/q402&quot;</span>
-                      <span className="text-white/40">;</span>
+                    <div className="text-white/20 mb-3">{"// Drop the SDK into any page"}</div>
+                    <div className="mb-3">
+                      <span className="text-white/40">&lt;</span>
+                      <span className="text-blue-300">script</span>
+                      <span className="text-green-300"> src</span>
+                      <span className="text-white/40">=</span>
+                      <span className="text-orange-300">&quot;https://q402-institutional.vercel.app/q402-sdk.js&quot;</span>
+                      <span className="text-white/40">&gt;&lt;/</span>
+                      <span className="text-blue-300">script</span>
+                      <span className="text-white/40">&gt;</span>
                     </div>
-                    <div className="mt-3">
+
+                    <div className="text-white/20 mb-1">{"// Initialize once"}</div>
+                    <div>
                       <span className="text-purple-400">const</span>
                       <span className="text-blue-300"> q402 </span>
                       <span className="text-white/40">= </span>
                       <span className="text-yellow">new</span>
-                      <span className="text-blue-300"> Q402</span>
+                      <span className="text-blue-300"> Q402Client</span>
                       <span className="text-white/40">{"({"}</span>
                     </div>
                     <div className="pl-5">
-                      <div><span className="text-green-300">apiKey</span><span className="text-white/40">: </span><span className="text-orange-300">process.env.Q402_KEY</span><span className="text-white/40">,</span></div>
-                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avalanche | eth | xlayer | stable"}</span></div>
+                      <div><span className="text-green-300">apiKey</span><span className="text-white/40">: </span><span className="text-orange-300">&quot;q402_live_...&quot;</span><span className="text-white/40">,</span></div>
+                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avax | eth | xlayer | stable"}</span></div>
                     </div>
                     <div className="text-white/40 mb-4">{"});"}</div>
 
-                    <div className="text-white/20 mb-1">{"// User signs — zero gas"}</div>
+                    <div className="text-white/20 mb-1">{"// User signs — zero gas, one call"}</div>
                     <div className="mb-4">
                       <span className="text-purple-400">const</span>
-                      <span className="text-white"> tx </span>
+                      <span className="text-white"> result </span>
                       <span className="text-white/40">= </span>
                       <span className="text-yellow">await</span>
                       <span className="text-blue-300"> q402</span>
                       <span className="text-white/40">.</span>
-                      <span className="text-blue-300">send</span>
+                      <span className="text-blue-300">pay</span>
                       <span className="text-white/40">{"({ "}</span>
                       <span className="text-green-300">to</span>
-                      <span className="text-white/40">: addr, </span>
+                      <span className="text-white/40">, </span>
                       <span className="text-green-300">amount</span>
                       <span className="text-white/40">: </span>
-                      <span className="text-cyan-300">50</span>
+                      <span className="text-orange-300">&quot;50.00&quot;</span>
+                      <span className="text-white/40">, </span>
+                      <span className="text-green-300">token</span>
+                      <span className="text-white/40">: </span>
+                      <span className="text-orange-300">&quot;USDC&quot;</span>
                       <span className="text-white/40"> {"});"}</span>
                     </div>
 
                     <div className="border-t pt-3 space-y-0.5" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-                      <div><span className="text-white/20">{"// ✓ "}</span><span className="text-green-400">tx.success</span><span className="text-white/30">: true</span></div>
-                      <div><span className="text-white/20">{"// ✓ "}</span><span className="text-green-400">gas by user</span><span className="text-white/30">: </span><span className="text-yellow font-bold">$0.000000</span><span className="cursor" /></div>
+                      <div><span className="text-white/20">{"// ✓ "}</span><span className="text-green-400">result.success</span><span className="text-white/30">: true</span></div>
+                      <div><span className="text-white/20">{"// ✓ "}</span><span className="text-green-400">gas paid by user</span><span className="text-white/30">: </span><span className="text-yellow font-bold">$0.000000</span><span className="cursor" /></div>
                     </div>
                   </div>
 
