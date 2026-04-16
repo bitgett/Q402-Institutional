@@ -398,11 +398,17 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
 ### POST /api/payment/activate
 
 블록체인에서 USDC/USDT 결제 스캔 → 구독 활성화 + API Key 자동 발급.  
-EIP-191 서명(소유권 증명) 필요.
+**사전 조건**: `POST /api/payment/intent` 로 결제 의도 기록 필요.  
+**인증**: 일회용 fresh challenge (`GET /api/auth/challenge`) 서명 필요.
 
 ```json
 // 요청
-{ "address": "0x...", "signature": "0x..." }
+{
+  "address": "0x...",
+  "challenge": "<GET /api/auth/challenge 에서 받은 값>",
+  "signature": "0x...",
+  "txHash": "0x..."   // optional — 제공 시 블록 스캔 대신 단일 TX 직접 검증
+}
 // 응답 (공통)
 {
   "status": "activated",
@@ -414,6 +420,7 @@ EIP-191 서명(소유권 증명) 필요.
 ```
 - 첫 결제: `plan` 설정 + `addedTxs` 추가 + 30일 시작
 - 추가 결제: 기존 `plan` 유지 + `totalTxs` 누적 + 30일 연장
+- challenge는 단 1회만 유효 (consumed 후 재사용 불가 — replay 방지)
 
 ### POST /api/payment/check
 
