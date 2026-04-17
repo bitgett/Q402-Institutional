@@ -275,7 +275,7 @@ Q402-Institutional/
 | 100,000 | $800 | $880 | $1,200 |
 
 결제 수단: **BNB USDC, BNB USDT, ETH USDC, ETH USDT** (구독 결제는 BNB/ETH 체인만, 의도적)  
-결제 주소: `0xfc77ff29178b7286a8ba703d7a70895ca74ff466`
+결제 주소: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION 콜드 지갑 — 매출 전용)
 
 ---
 
@@ -1086,20 +1086,35 @@ git push origin main
 
 ---
 
-## 22. 릴레이어 지갑
+## 22. 운영 지갑 — 3-역할 분리 (v1.16+)
 
-| 항목 | 값 |
-|------|----|
-| 주소 | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` |
-| 역할 | 모든 체인 가스 대납 (Gas Tank) |
-| 프라이빗 키 | `q402-avalanche/.env`의 `DEPLOYER_PRIVATE_KEY` |
+3개 지갑, 3개 역할, 0개 commingling. 단일 키 컴프로마이즈로 매출/유저 예치금이 한 번에 털리지 않도록 분리.
 
-**마스터 계정** (항상 paid 처리):
+| 역할 | 주소 | 키 보관 | 책임 |
+|------|------|---------|------|
+| `SUBSCRIPTION_ADDRESS` | `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` | **콜드** (서버에 키 없음) | 구독 결제 ($29/$49/$149…) 수신만. 정기적으로 콜드 디바이스에서 수동 인출. |
+| `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **콜드** (서버에 키 없음) | 유저 가스 예치금(BNB/ETH/AVAX/OKB/USDT0) 수신. 핫 릴레이어로 cold→hot 수동 충전. |
+| `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **핫** (Vercel `RELAYER_PRIVATE_KEY`) | EIP-7702 TX 서명/제출. 최소 운영 잔고만 유지 (BNB/ETH/AVAX/OKB/USDT0). |
+
+상수는 [`app/lib/wallets.ts`](app/lib/wallets.ts) 단일 모듈에서 export — 모든 라우트/페이지가 여기서만 import.
+
+### 핵심 보안 인바리언트
+
+1. **`RELAYER_ADDRESS`는 유저 자금을 수신하지 않는다.** 가스 예치는 `GASTANK_ADDRESS`로, 구독 결제는 `SUBSCRIPTION_ADDRESS`로. 서버 컴프로마이즈 시 빠지는 건 RELAYER의 운영 가스 float뿐.
+2. **`GASTANK_ADDRESS`의 프라이빗 키는 절대 Vercel env에 올리지 않는다.** Cold 서명만 — 유저 환불(`/api/gas-tank/withdraw`)도 record-only로, 운영자가 콜드 디바이스에서 송금한 뒤 txHash 만 서버에 기록한다.
+3. **온체인 GASTANK 잔고 == sum(KV `gas:` ledger)** (체인별). [`scripts/migrate-split-wallets.mjs`](scripts/migrate-split-wallets.mjs)로 정기 검증.
+
+### 알림
+
+`/api/cron/gas-alert` → `/api/gas-tank?check_alerts=1` (admin secret 필요) 가 RELAYER 핫 잔고를 모니터링하고 운영 임계치 미만이면 텔레그램 경보 발송. 알림이 뜨면 운영자가 콜드(GASTANK) → 핫(RELAYER) 송금.
+
+### 마스터 계정 (항상 paid 처리)
 ```
-0xfc77ff29178b7286a8ba703d7a70895ca74ff466  (릴레이어)
+0xfc77ff29178b7286a8ba703d7a70895ca74ff466  (RELAYER 핫)
 0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28  (오너)
+0x3717d6ed5c2bce558e715cda158023db6705fd47  (오너)
 ```
-`app/lib/access.ts`의 `MASTER_ADDRESSES` 배열에 하드코딩.
+`app/lib/access.ts`의 `MASTER_ADDRESSES` 배열에 하드코딩 — Quote 페이지/대시보드 화이트리스트.
 
 ---
 
@@ -1197,6 +1212,22 @@ v1.15 파이프라인 정비에 이어, 모듈별 전체 감사(결제·API·SDK
 **[P2] 코드 주석 현행화 — `app/lib/relayer.ts`**
 - 헤더 주석 `v1.2` → `v1.3` + 5개 체인 통합(stable 포함) 반영
 - `transferWithAuthorization()` 주석 `v1.2+` → `v1.3`, calldata 인코딩 주석도 동기화
+
+**[P0] 운영 지갑 3-역할 분리 — 신규 `app/lib/wallets.ts` + 6개 라우트/페이지 마이그레이션**
+- 기존: 단일 지갑 `0xfc77ff29...c466`이 (a) 구독 매출 수신, (b) 유저 가스 예치 수신, (c) 핫 릴레이어 서명 — 3 역할 commingle. Vercel env 키 컴프로마이즈 시 매출 + 유저 예치금 + 운영 가스 모두 단일 키 한 방에 노출.
+- 신규 분리 (자세한 내용은 §22):
+  - `SUBSCRIPTION_ADDRESS = 0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (콜드, 매출 전용)
+  - `GASTANK_ADDRESS      = 0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` (콜드, 유저 가스 예치)
+  - `RELAYER_ADDRESS      = 0xfc77ff29...c466` (핫, EIP-7702 서명만)
+- 변경된 파일:
+  - `app/payment/page.tsx` — 구독 결제 표시 주소 → `SUBSCRIPTION_ADDRESS`
+  - `app/lib/blockchain.ts` — 구독 결제 스캐너 타겟 → `SUBSCRIPTION_ADDRESS` (`Transfer(from, SUBSCRIPTION)` 필터)
+  - `app/api/gas-tank/route.ts` — 대시보드는 GASTANK 잔고, 텔레그램 경보는 RELAYER 핫 잔고를 모니터링하도록 분리
+  - `app/api/gas-tank/verify-deposit/route.ts` — 유저 예치 스캐너 타겟 → `GASTANK_ADDRESS`
+  - `app/api/gas-tank/withdraw/route.ts` — **record-only로 재설계**. RELAYER로 자동 서명하던 기존 로직 제거. 운영자가 콜드 디바이스에서 GASTANK→유저 송금 후 txHash를 POST하면, 서버가 on-chain 검증(from=GASTANK, to=user, value>0, status=1) 후 KV ledger 차감. 검증 실패 시 거절, 중복 txHash 409.
+  - `app/dashboard/page.tsx` — Deposit 모달 표시 주소 → `GASTANK_ADDRESS`, 라벨 "Q402 Gas Tank Address"
+- 신규 `scripts/migrate-split-wallets.mjs` — read-only 마이그레이션 플랜. 체인별 (legacy 잔고 - KV 가스 부채 - 운영 reserve) 계산해서 운영자가 콜드 디바이스로 서명할 송금 명세를 출력. 키 보유/브로드캐스트 없음.
+- **인바리언트**: `RELAYER`는 절대 유저 자금을 받지 않는다. 서버가 털려도 빠지는 건 RELAYER의 작은 운영 가스 float뿐 — 매출/예치금은 안전.
 
 **검증**: `pnpm lint && pnpm build && pnpm test` 모두 통과. webhook-validator 회귀 테스트 추가 (10 개 신규 케이스: nip.io, 2-옥텟 IPv4, metadata host, DNS resolve). 기존 138 테스트 전부 통과.
 

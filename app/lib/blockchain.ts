@@ -1,6 +1,8 @@
 import { ethers } from "ethers";
+import { SUBSCRIPTION_ADDRESS } from "./wallets";
 
-const RELAYER = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
+// Subscription payment scanner target — where user pays $29/$49/$149 subscription.
+const RELAYER = SUBSCRIPTION_ADDRESS;
 
 const ERC20_ABI = [
   "event Transfer(address indexed from, address indexed to, uint256 value)",

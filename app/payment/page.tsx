@@ -6,12 +6,13 @@ import { useRouter } from "next/navigation";
 import { useWallet } from "@/app/context/WalletContext";
 import WalletModal from "@/app/components/WalletModal";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "@/app/lib/auth-client";
+import { SUBSCRIPTION_ADDRESS } from "@/app/lib/wallets";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PAYMENT_ADDRESS = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
+const PAYMENT_ADDRESS = SUBSCRIPTION_ADDRESS;
 
 const PAY_TOKENS = [
   { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", chainId: "bnb", token: "USDC", color: "#F0B90B", img: "/bnb.png"  },

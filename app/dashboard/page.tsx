@@ -8,11 +8,14 @@ import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
+import { GASTANK_ADDRESS } from "../lib/wallets";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
 
-const RELAYER_ADDRESS = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
+// User gas deposits (BNB/ETH/AVAX/OKB/USDT0) go to the cold GASTANK wallet.
+// This address is user-facing on the "Top up" modal; never send revenue or relayer hot-key here.
+const DEPOSIT_ADDRESS = GASTANK_ADDRESS;
 
 const PLAN_QUOTA: Record<string, number> = {
   starter:          500,
@@ -71,7 +74,7 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
 
   useEffect(() => { const t = setTimeout(() => setPhase("main"), 1000); return () => clearTimeout(t); }, []);
 
-  function copyAddr() { navigator.clipboard.writeText(RELAYER_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  function copyAddr() { navigator.clipboard.writeText(DEPOSIT_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 2000); }
 
   async function verifyDeposit() {
     setPhase("checking");
@@ -97,9 +100,9 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
           <div className="space-y-4">
             <p className="text-white/40 text-sm">Send <span className="text-yellow font-semibold">{token}</span> to Q402 to top up your gas tank.</p>
             <div>
-              <p className="text-xs text-white/30 mb-2 uppercase tracking-widest">Q402 Relayer Address</p>
+              <p className="text-xs text-white/30 mb-2 uppercase tracking-widest">Q402 Gas Tank Address</p>
               <div className="flex items-center gap-2 bg-white/4 border border-white/10 rounded-xl px-3 py-3">
-                <span className="font-mono text-xs text-white/70 break-all flex-1">{RELAYER_ADDRESS}</span>
+                <span className="font-mono text-xs text-white/70 break-all flex-1">{DEPOSIT_ADDRESS}</span>
                 <button onClick={copyAddr} className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${copied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>{copied ? "Copied!" : "Copy"}</button>
               </div>
             </div>
