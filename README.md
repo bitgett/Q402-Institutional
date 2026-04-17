@@ -132,8 +132,8 @@ npm install
 # 릴레이어 지갑 Private Key — 절대 외부 노출 금지
 RELAYER_PRIVATE_KEY=0x...   # q402-avalanche/.env의 DEPLOYER_PRIVATE_KEY
 
-# 컨트랙트 주소 (v1.3)
-IMPLEMENTATION_CONTRACT=0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c
+# 컨트랙트 주소 (v1.3). AVAX는 historical name `IMPLEMENTATION_CONTRACT`도 허용됨.
+AVAX_IMPLEMENTATION_CONTRACT=0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c
 BNB_IMPLEMENTATION_CONTRACT=0x6cF4aD62C208b6494a55a1494D497713ba013dFa
 ETH_IMPLEMENTATION_CONTRACT=0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD
 XLAYER_IMPLEMENTATION_CONTRACT=0x8D854436ab0426F5BC6Cc70865C90576AD523E73
@@ -851,11 +851,18 @@ const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 
 ### 유저 입금 잔고 (클라이언트별)
 
-유저가 릴레이어 주소로 native token을 입금 → 릴레이 비용으로 차감.
+유저가 **GASTANK** 콜드 주소(`GASTANK_ADDRESS`)로 native token을 입금 → 릴레이 비용으로 차감. 릴레이어 핫 주소는 별개로, GASTANK→RELAYER 이체는 운영자가 수동/스크립트로 수행.
 
-**입금 스캔:** `POST /api/gas-tank/verify-deposit` — `{ address }`
-- 4개 체인에서 배치 RPC 블록 스캔 (BNB/AVAX/XLayer: 200블록, ETH: 50블록)
-- `from=유저, to=릴레이어, value≠0` 필터 → `addGasDeposit()`
+**입금 스캔 (기본):** `POST /api/gas-tank/verify-deposit` — `{ address }`
+- 5개 체인에서 배치 RPC 블록 스캔 (BNB/AVAX/XLayer: 200블록, ETH: 50블록, Stable: 500블록)
+- `from=유저, to=GASTANK, value≠0` 필터 → `addGasDeposit()`
+- 스캔 창 바깥(ETH 기준 ~10분, 그 외 최대 수십분)에서 돌아온 유저는 이 경로로 크레딧되지 않음 → 아래 직접 조회 경로 사용
+
+**입금 직접 조회 (복구 경로):** `POST /api/gas-tank/verify-deposit` — `{ address, txHash, chain }`
+- `chain`: `"bnb" | "eth" | "avax" | "xlayer" | "stable"`
+- `eth_getTransactionByHash`로 단일 TX 직접 검증 (컨펌 완료 + `to=GASTANK` + `from=address` + `value>0`)
+- 블록 창 밖에서도 동작. 중복 txHash는 `addGasDeposit` SADD로 자동 차단 (`alreadyCredited: true`)
+- 대시보드 Deposit 모달의 "not_found" 상태에서 UI 필드 노출
 
 **잔고 조회:** `GET /api/gas-tank/user-balance?address=0x...`
 
