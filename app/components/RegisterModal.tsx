@@ -264,13 +264,13 @@ export default function RegisterModal({ onClose }: Props) {
               </motion.div>
             )}
 
-            {/* STEP 3: Plan + Gasless Pay */}
+            {/* STEP 3: Interested plan + Sandbox activation */}
             {step === 3 && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                <h2 className="text-lg font-bold mb-1">Choose your plan</h2>
+                <h2 className="text-lg font-bold mb-1">Pick your interested plan</h2>
                 <div className="flex items-center gap-2 mb-5">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-                  <p className="text-white/40 text-sm">Payment is <span className="text-green-400 font-medium">gasless</span> — no AVAX, BNB, or ETH needed</p>
+                  <p className="text-white/40 text-sm">We&apos;ll provision a <span className="text-green-400 font-medium">sandbox API key</span> now — production is activated after a brief call.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-5">
@@ -289,7 +289,7 @@ export default function RegisterModal({ onClose }: Props) {
                 </div>
 
                 <div className="bg-white/3 border border-white/8 rounded-xl p-4 mb-5 text-xs text-white/40 leading-relaxed">
-                  <span className="text-yellow font-semibold">Zero-gas payment.</span> Your first subscription fee is paid via Q402 itself — proving our own technology works. No gas required.
+                  <span className="text-yellow font-semibold">Sandbox first, no charge.</span> You&apos;ll get a <span className="text-white/70 font-mono">q402_test_</span> key to integrate and test end-to-end. Production billing is set up separately once you&apos;re ready.
                 </div>
 
                 <button
@@ -303,9 +303,9 @@ export default function RegisterModal({ onClose }: Props) {
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
                         <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                       </svg>
-                      Processing USDC (gasless)…
+                      Provisioning sandbox key…
                     </span>
-                  ) : `Pay $${PLANS.find(p => p.name === selectedPlan)?.price} USDC — Gasless →`}
+                  ) : "Create Sandbox API Key →"}
                 </button>
               </motion.div>
             )}
@@ -321,12 +321,12 @@ export default function RegisterModal({ onClose }: Props) {
                   >
                     ✓
                   </motion.div>
-                  <h2 className="text-xl font-bold mb-1">You&apos;re live on Q402</h2>
-                  <p className="text-white/40 text-sm">{selectedPlan} plan activated for <span className="text-white">{form.service}</span></p>
+                  <h2 className="text-xl font-bold mb-1">Sandbox ready</h2>
+                  <p className="text-white/40 text-sm">Interest noted: <span className="text-white">{selectedPlan}</span> plan for <span className="text-white">{form.service}</span></p>
                 </div>
 
                 <div className="bg-[#060C14] border border-white/8 rounded-xl p-4 mb-5">
-                  <div className="text-xs text-white/30 uppercase tracking-widest mb-2">Your API Key</div>
+                  <div className="text-xs text-white/30 uppercase tracking-widest mb-2">Your Sandbox API Key</div>
                   <div className="font-mono text-sm text-green-400 break-all">
                     {realApiKey ?? "Check your dashboard for your API key"}
                   </div>
@@ -335,7 +335,7 @@ export default function RegisterModal({ onClose }: Props) {
                 <div className="flex items-center gap-2 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3 mb-5">
                   <span className="text-yellow text-sm">⚡</span>
                   <p className="text-xs text-white/50">
-                    Gas you paid: <span className="text-yellow font-bold">$0.000000</span>. Payment processed via Q402 itself.
+                    Test end-to-end with zero gas. We&apos;ll reach out to activate production billing for your selected plan.
                   </p>
                 </div>
 
