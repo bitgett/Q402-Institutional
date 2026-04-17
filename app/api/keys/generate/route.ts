@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSubscription, generateApiKey, setSubscription, deactivateApiKey } from "@/app/lib/db";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { checkAdminSecret } from "@/app/lib/admin-auth";
 
-// Admin-only: Regenerate API key for a given address.
-// Requires x-admin-secret header.
 export async function POST(req: NextRequest) {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "admin-generate", 10, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
   if (!checkAdminSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

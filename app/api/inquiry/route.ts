@@ -37,6 +37,18 @@ export async function POST(req: NextRequest) {
   if (!appName || !email || !category || !targetChain || !expectedVolume) {
     return NextResponse.json({ error: "Required fields missing" }, { status: 400 });
   }
+  const MAX_SHORT = 200;
+  const MAX_LONG  = 2000;
+  if (
+    appName.length > MAX_SHORT || email.length > MAX_SHORT ||
+    category.length > MAX_SHORT || targetChain.length > MAX_SHORT ||
+    expectedVolume.length > MAX_SHORT ||
+    (body.description && body.description.length > MAX_LONG) ||
+    (body.website && body.website.length > MAX_SHORT) ||
+    (body.telegram && body.telegram.length > MAX_SHORT)
+  ) {
+    return NextResponse.json({ error: "Field too long" }, { status: 400 });
+  }
 
   const id = `inq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const inquiry: Inquiry = {

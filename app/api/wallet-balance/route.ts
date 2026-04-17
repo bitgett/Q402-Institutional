@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 const CHAINS = [
   { key: "bnb",    token: "BNB",  rpc: "https://bsc-dataseed1.binance.org/",    cgId: "binancecoin" },
@@ -19,6 +20,11 @@ async function getBalance(rpc: string, address: string): Promise<string> {
 }
 
 export async function GET(req: NextRequest) {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "wallet-balance", 20, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const address = req.nextUrl.searchParams.get("address");
   if (!address) return NextResponse.json({ error: "address required" }, { status: 400 });
 

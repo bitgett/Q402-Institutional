@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSubscription, addQuotaBonus, getPlanQuota } from "@/app/lib/db";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { checkAdminSecret } from "@/app/lib/admin-auth";
 
-// Admin-only: Add quota bonus to a subscription.
-// Requires x-admin-secret header.
 export async function POST(req: NextRequest) {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "admin-topup", 10, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
   if (!checkAdminSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { address, additionalTxs } = await req.json();
-  if (!address || !additionalTxs || typeof additionalTxs !== "number" || additionalTxs <= 0) {
-    return NextResponse.json({ error: "address and additionalTxs (positive number) required" }, { status: 400 });
+  if (
+    !address ||
+    typeof additionalTxs !== "number" ||
+    !Number.isInteger(additionalTxs) ||
+    additionalTxs <= 0 ||
+    additionalTxs > 10_000_000
+  ) {
+    return NextResponse.json({ error: "address and additionalTxs (positive integer, max 10M) required" }, { status: 400 });
   }
 
   const sub = await getSubscription(address);
