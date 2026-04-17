@@ -80,8 +80,8 @@ export default function Hero() {
             className="absolute -top-[20%] -left-[10%] w-[120%] h-[60%] blur-[80px] rotate-[-12deg] pointer-events-none"
             style={{ background: "linear-gradient(90deg, transparent 0%, rgba(255,235,180,0.035) 50%, transparent 100%)" }}
           />
-          {/* Noise-ish grid */}
-          <div className="absolute inset-0 opacity-[0.035]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)", backgroundSize: "60px 60px", maskImage: "radial-gradient(ellipse at center, black 40%, transparent 85%)", WebkitMaskImage: "radial-gradient(ellipse at center, black 40%, transparent 85%)" }} />
+          {/* Grid overlay — covers the whole hero, softly fades at edges */}
+          <div className="absolute inset-0 opacity-[0.09]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)", backgroundSize: "56px 56px", maskImage: "radial-gradient(ellipse at center, black 55%, transparent 100%)", WebkitMaskImage: "radial-gradient(ellipse at center, black 55%, transparent 100%)" }} />
         </div>
 
         <div className="relative z-10 w-full max-w-6xl mx-auto">
@@ -141,7 +141,7 @@ export default function Hero() {
                   <span className="text-shimmer">stablecoin rails.</span>
                 </h1>
                 <p className="text-xl text-white/45 font-light tracking-wide mb-6">
-                  Zero gas. Five EVM chains. Pure stablecoin flow.
+                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Five EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, we cover the rest.
                 </p>
               </motion.div>
 
