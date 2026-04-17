@@ -265,7 +265,6 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>("overview");
   const [keyCopied, setKeyCopied] = useState(false);
   const [depositChain, setDepositChain] = useState<{ chain: string; token: string } | null>(null);
-  const [autoTopup, setAutoTopup] = useState(true);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertEmailInput, setAlertEmailInput] = useState("");
   const [showEmailSetup, setShowEmailSetup] = useState(false);
@@ -860,19 +859,6 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
-            </div>
-
-            <div className="rounded-2xl p-6 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-              <div className="flex items-start justify-between gap-4">
-                <div><div className="font-semibold mb-1">Auto Top-up</div>
-                  <p className="text-white/40 text-sm">Automatically refill each chain&apos;s gas tank when balance drops low.</p></div>
-                <button onClick={() => setAutoTopup(v => !v)}
-                  className="flex-shrink-0 w-12 h-6 rounded-full transition-all relative mt-0.5"
-                  style={{ background: autoTopup ? "#F5C518" : "rgba(255,255,255,0.1)" }}>
-                  <span className="absolute top-0.5 transition-all w-5 h-5 rounded-full bg-white shadow" style={{ left: autoTopup ? "26px" : "2px" }} />
-                </button>
-              </div>
-              {autoTopup && <div className="mt-4 flex items-center gap-2 text-xs text-yellow/80 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3">⚡ Auto top-up active</div>}
             </div>
 
             {/* Real deposit history */}

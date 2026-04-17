@@ -16,6 +16,7 @@ import {
 import { createHmac, randomBytes } from "crypto";
 import { rateLimit, refundRateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { validateWebhookUrl } from "@/app/lib/webhook-validator";
+import { safeWebhookFetch } from "@/app/lib/safe-fetch";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   CHAIN_CONFIG,
@@ -469,30 +470,26 @@ export async function POST(req: NextRequest) {
         let lastError:  string | undefined;
         for (let i = 0; i < DELAYS.length; i++) {
           if (DELAYS[i] > 0) await new Promise(r => setTimeout(r, DELAYS[i]));
-          try {
-            const res = await fetch(webhookUrl, {
-              method:  "POST",
-              headers: {
-                "Content-Type":     "application/json",
-                "X-Q402-Signature": `sha256=${hmac}`,
-                "X-Q402-Event":     "relay.success",
-                ...(i > 0 ? { "X-Q402-Retry": String(i) } : {}),
-              },
-              body:   payload,
-              signal: AbortSignal.timeout(8_000),
-            });
-            lastStatus = res.status;
-            if (res.ok) {
-              recordWebhookDelivery(webhookAddr, {
-                timestamp: new Date().toISOString(), event: "relay.success",
-                ok: true, statusCode: res.status, attempt: i + 1,
-              }).catch(() => {});
-              return;
-            }
-            lastError = `HTTP ${res.status}`;
-          } catch (e) {
-            lastError = e instanceof Error ? e.message : String(e);
+          const res = await safeWebhookFetch(webhookUrl, {
+            method:  "POST",
+            headers: {
+              "Content-Type":     "application/json",
+              "X-Q402-Signature": `sha256=${hmac}`,
+              "X-Q402-Event":     "relay.success",
+              ...(i > 0 ? { "X-Q402-Retry": String(i) } : {}),
+            },
+            body:   payload,
+            timeoutMs: 8_000,
+          });
+          lastStatus = res.status;
+          if (res.ok) {
+            recordWebhookDelivery(webhookAddr, {
+              timestamp: new Date().toISOString(), event: "relay.success",
+              ok: true, statusCode: res.status, attempt: i + 1,
+            }).catch(() => {});
+            return;
           }
+          lastError = res.error;
         }
         // All attempts failed — record for visibility
         recordWebhookDelivery(webhookAddr, {

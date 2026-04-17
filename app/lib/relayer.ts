@@ -10,18 +10,19 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-// ── 체인별 릴레이 방식 (v1.2) ───────────────────────────────────────────────────
-// 모든 체인이 EIP-7702 Type 4 TX를 지원한다.
-// X Layer는 EIP-7702 (primary) + EIP-3009 (fallback) 두 방식을 모두 지원한다.
+// ── 체인별 릴레이 방식 (v1.3) ───────────────────────────────────────────────────
+// 5개 체인(avax / bnb / eth / xlayer / stable) 모두 EIP-7702 Type 4 TX를 기본으로 사용.
+// X Layer는 EIP-7702 (primary) + EIP-3009 (fallback, USDC only) 두 방식 지원.
 //
 // 체인별 릴레이 방식:
-//   avax / bnb / eth : EIP-7702 (Type 4 TX, Q402PaymentImplementation.transferWithAuthorization())
-//   xlayer (primary) : EIP-7702 (Type 4 TX, Q402PaymentImplementationXLayer.transferWithAuthorization())
-//   xlayer (fallback): EIP-3009 (Standard TX, USDC.transferWithAuthorization())
+//   avax / bnb / eth / stable : EIP-7702 (Q402PaymentImplementation.transferWithAuthorization())
+//   xlayer (primary)          : EIP-7702 (Q402PaymentImplementationXLayer.transferWithAuthorization())
+//   xlayer (fallback)         : EIP-3009 (USDC.transferWithAuthorization(), pass eip3009Nonce)
 //
-// 보안 (v1.2): facilitator 주소를 모든 체인에서 명시적으로 전달한다.
-//   - avax/bnb/eth: settlePayment()에서 relayer address를 facilitator로 전달
-//   - xlayer EIP-7702: settlePaymentXLayerEIP7702()에서 relayer address를 facilitator로 전달
+// 보안 (v1.3): facilitator 주소를 모든 체인에서 명시적으로 전달한다.
+//   - settlePayment() / settlePaymentXLayerEIP7702() / settlePaymentStableEIP7702()
+//     모두 relayer address를 facilitator로 전달
+//   - Authorization Guard: chainId + impl 주소를 contracts.manifest.json 기준으로 서버에서 검증
 
 // ── RPC helpers ───────────────────────────────────────────────────────────────
 // Each chain has a primary RPC + fallbacks.  getChainRpc() tries them in order.
@@ -113,7 +114,7 @@ export const CHAIN_CONFIG = {
 export type ChainKey = keyof typeof CHAIN_CONFIG;
 
 // ── Q402PaymentImplementation ABI ─────────────────────────────────────────────
-// transferWithAuthorization() is the EIP-7702 delegated execution entry point (v1.2+).
+// transferWithAuthorization() is the EIP-7702 delegated execution entry point (v1.3).
 // The owner's EOA delegates to the implementation via EIP-7702 authorization,
 // then transferWithAuthorization() is called on the owner's EOA address.
 // msg.sender (facilitator) must match the signed facilitator param.
@@ -442,7 +443,7 @@ export async function settlePayment(params: PayParams): Promise<SettleResult> {
       transport: http(chainCfg.rpc),
     });
 
-    // Encode transferWithAuthorization() calldata (v1.2 contract interface)
+    // Encode transferWithAuthorization() calldata (v1.3 contract interface)
     const callData = encodeFunctionData({
       abi: Q402_IMPL_ABI,
       functionName: "transferWithAuthorization",
