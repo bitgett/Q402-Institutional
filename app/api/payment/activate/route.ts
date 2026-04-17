@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
   //        Only one concurrent request wins; the rest get 409 immediately.
   //
   //   PHASE 2 — Write (idempotent by design):
-  //     a. addCredits guarded by credit_grant:{txHash} SET NX (90-day TTL):
+  //     a. addCredits guarded by credit_grant:{txHash} SET NX (10-year TTL):
   //          NX wins  → call addCredits (INCRBY); if it throws, DEL grant key
   //                     so the next retry can re-attempt cleanly.
   //          NX loses → credits already granted in a prior attempt; skip.
@@ -142,11 +142,14 @@ export async function POST(req: NextRequest) {
   //     b. setSubscription is idempotent (overwrites same data) — always safe.
   //
   //   PHASE 3 — Commit:
-  //     Only on full success: mark used_txhash permanently (90 days).
+  //     Only on full success: mark used_txhash effectively permanently (10 yr).
   //     Release claim + clear intent (best-effort).
+  //     Why 10y not 90d: a 90-day window let the same wallet replay its own
+  //     old payment TX after a lapsed subscription. KV cost is negligible
+  //     (one small key per paid activation ever) — just seal the TX forever.
 
   const { kv } = await import("@vercel/kv");
-  const USED_TTL       = 90 * 24 * 60 * 60;
+  const USED_TTL       = 10 * 365 * 24 * 60 * 60;
   const usedKey        = `used_txhash:${result.txHash}`;
   const claimKey       = `activation_claim:${result.txHash}`;
   const creditGrantKey = `credit_grant:${result.txHash}`;
