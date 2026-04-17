@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 
 /**
  * GET /api/cron/gas-alert
@@ -6,11 +7,17 @@ import { NextResponse } from "next/server";
  * Called by Vercel Cron (vercel.json) every 6 hours.
  * Checks all Gas Tank balances and sends Telegram alert if any are low/empty.
  *
- * Protected by CRON_SECRET env var.
+ * Protected by CRON_SECRET env var. Fail-closed: rejects if unset.
  */
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = req.headers.get("authorization") ?? "";
+  const expected = cronSecret ? `Bearer ${cronSecret}` : "";
+  if (
+    !cronSecret ||
+    authHeader.length !== expected.length ||
+    !timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected))
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

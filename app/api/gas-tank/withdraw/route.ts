@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
       token: chainCfg.token,
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("[withdraw] transaction failed:", e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: "Withdrawal failed — check server logs" }, { status: 500 });
   }
 }
