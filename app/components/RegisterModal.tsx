@@ -4,6 +4,8 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWallet } from "../context/WalletContext";
 import { useRouter } from "next/navigation";
+import WalletModal from "./WalletModal";
+import { getAuthCreds } from "../lib/auth-client";
 
 const PLANS = [
   { name: "Growth", price: 300,  quota: "50,000 txs/mo",  highlight: false },
@@ -17,10 +19,20 @@ const VOLUME_OPTIONS = ["< 1,000 txs/mo", "1K – 10K txs/mo", "10K – 50K txs/
 interface Props { onClose: () => void; }
 
 export default function RegisterModal({ onClose }: Props) {
-  const { address, connect } = useWallet();
+  const { address, signMessage } = useWallet();
   const router = useRouter();
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(address ? 2 : 1);
+  // Read localStorage synchronously so users who already connected on the landing
+  // page skip step 1 on first render — WalletContext populates `address` in an
+  // effect, so it's still null on this initial render.
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(() => {
+    if (address) return 2;
+    try {
+      return typeof window !== "undefined" && localStorage.getItem("q402_wallet") ? 2 : 1;
+    } catch {
+      return 1;
+    }
+  });
   const [form, setForm] = useState({
     service: "",
     email: "",
@@ -33,27 +45,43 @@ export default function RegisterModal({ onClose }: Props) {
   });
   const [selectedPlan, setSelectedPlan] = useState("Scale");
   const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   const [realApiKey, setRealApiKey] = useState<string | null>(null);
+  const [showWalletPicker, setShowWalletPicker] = useState(false);
 
-  async function handleConnect() {
-    await connect();
-    setStep(2);
-  }
 
   async function handlePay() {
-    if (!address) return;
+    if (!address) {
+      setPayError("Wallet not connected.");
+      return;
+    }
     setPaying(true);
+    setPayError(null);
     try {
+      const creds = await getAuthCreds(address, signMessage);
+      if (!creds) {
+        setPayError("Signature required to provision your API key. Please try again.");
+        setPaying(false);
+        return;
+      }
       const res = await fetch("/api/keys/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address }),
+        body: JSON.stringify({ address, nonce: creds.nonce, signature: creds.signature }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPayError(data?.error ?? "Provisioning failed. Please try again.");
+        setPaying(false);
+        return;
+      }
       if (data.sandboxApiKey) setRealApiKey(data.sandboxApiKey);
-    } catch { /* fallback: show dashboard */ }
-    setPaying(false);
-    setStep(4);
+      setPaying(false);
+      setStep(4);
+    } catch {
+      setPayError("Network error. Please try again.");
+      setPaying(false);
+    }
   }
 
   function handleDone() {
@@ -113,12 +141,12 @@ export default function RegisterModal({ onClose }: Props) {
                   <p className="text-white/40 text-sm">No password needed. Sign in with your Web3 wallet.</p>
                 </div>
                 <button
-                  onClick={handleConnect}
+                  onClick={() => setShowWalletPicker(true)}
                   className="w-full bg-yellow text-navy font-bold py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.02] shadow-lg shadow-yellow/20"
                 >
-                  Connect Wallet (MetaMask)
+                  Choose Wallet
                 </button>
-                <p className="text-center text-white/25 text-xs mt-3">WalletConnect support coming soon</p>
+                <p className="text-center text-white/25 text-xs mt-3">MetaMask & OKX Wallet supported</p>
               </motion.div>
             )}
 
@@ -307,6 +335,11 @@ export default function RegisterModal({ onClose }: Props) {
                     </span>
                   ) : "Create Sandbox API Key →"}
                 </button>
+                {payError && (
+                  <p role="alert" className="text-red-400 text-xs text-center mt-3 bg-red-400/10 rounded-lg px-3 py-2">
+                    {payError}
+                  </p>
+                )}
               </motion.div>
             )}
 
@@ -350,6 +383,12 @@ export default function RegisterModal({ onClose }: Props) {
           </div>
         </motion.div>
       </motion.div>
+      {showWalletPicker && (
+        <WalletModal
+          onClose={() => setShowWalletPicker(false)}
+          onConnected={() => setStep(2)}
+        />
+      )}
     </AnimatePresence>
   );
 }
