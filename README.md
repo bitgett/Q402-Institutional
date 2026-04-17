@@ -321,7 +321,7 @@ import { sendGaslessPayment } from "./scripts/agent-example.mjs";
 const result = await sendGaslessPayment({
   chain:      "avax",   // "avax" | "bnb" | "eth" | "xlayer" | "stable"
   recipient:  "0x...",
-  amountUSD:  10.0,
+  amount:     "10.0",   // decimal string — Number is rejected (IEEE-754 safety)
 });
 console.log(result.txHash);
 ```
@@ -1121,12 +1121,12 @@ node scripts/agent-example.mjs
 ```javascript
 import { sendGaslessPayment, CHAINS } from "./scripts/agent-example.mjs";
 
-// 단일 결제
-await sendGaslessPayment({ chain: "bnb", recipient: "0x...", amountUSD: 10.0 });
+// 단일 결제 — amount는 반드시 **문자열** (Number는 거부됨, IEEE-754 안전성)
+await sendGaslessPayment({ chain: "bnb", recipient: "0x...", amount: "10.0" });
 
 // 멀티체인 순차 결제
 for (const chain of ["avax", "bnb", "eth"]) {
-  await sendGaslessPayment({ chain, recipient: "0x...", amountUSD: 0.05 });
+  await sendGaslessPayment({ chain, recipient: "0x...", amount: "0.05" });
 }
 ```
 
