@@ -1,12 +1,17 @@
 /**
- * ratelimit.ts — Vercel KV sliding-window rate limiter
+ * ratelimit.ts — Vercel KV fixed-window rate limiter
  *
  * Usage:
  *   const ok = await rateLimit(ip, "relay", 20, 60);   // 20 req/min
  *   if (!ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
  *
- * Degrades gracefully: if KV is unavailable (local dev / misconfigured),
- * all requests are allowed through so dev experience is unaffected.
+ * Windows are fixed buckets (bucket = floor(now / window)) — a caller can
+ * technically burst across a bucket boundary, but Redis sorted-set sliding
+ * windows are not worth the cost at this project's scale.
+ *
+ * Default is fail-CLOSED: if KV is unavailable, the limiter returns false
+ * (request blocked). Safer default for launch. Callers that need graceful
+ * degradation on KV outage can opt in with failOpen=true.
  */
 
 import { kv } from "@vercel/kv";
@@ -25,9 +30,9 @@ export async function rateLimit(
   endpoint: string,
   limit: number,
   windowSec: number,
-  /** failOpen=true: allow when KV is down (safe for read-only or low-risk paths).
-   *  failOpen=false: block when KV is down (required for expensive/critical paths). */
-  failOpen = true
+  /** failOpen=false (default): block when KV is down — safer default.
+   *  failOpen=true: allow when KV is down — opt in only for low-risk read paths. */
+  failOpen = false
 ): Promise<boolean> {
   try {
     // Bucket key changes every `windowSec` seconds — fixed window
@@ -64,11 +69,23 @@ export async function refundRateLimit(
   } catch { /* best-effort — don't throw */ }
 }
 
-/** Extract best-effort client IP from a Next.js request */
+/**
+ * Extract best-effort client IP from a Next.js request.
+ *
+ * Order:
+ *   1. x-real-ip         — set by Vercel edge, unspoofable through the edge.
+ *   2. x-forwarded-for   — first value; clients can prepend values, so only
+ *                          used as a fallback for non-Vercel deployments.
+ *
+ * We deliberately prefer x-real-ip over XFF on Vercel. The edge sets x-real-ip
+ * from the observed TCP peer; a caller prepending its own XFF cannot poison
+ * it. XFF alone was spoofable by sending `x-forwarded-for: 1.2.3.4, …` —
+ * the per-IP rate limit would then bucket against the forged value.
+ */
 export function getClientIP(req: NextRequest): string {
   return (
-    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     req.headers.get("x-real-ip") ??
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     "unknown"
   );
 }

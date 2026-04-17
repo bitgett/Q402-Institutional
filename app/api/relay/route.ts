@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { ethers } from "ethers";
 import {
   getApiKeyRecord,
@@ -201,16 +201,30 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 4b. 일일 burst 상한 (단일 고객이 Gas Tank 독점 소진 방지) ──────────────
-  // 플랜별 일일 최대: starter=50, growth=1000, scale=10000, others=무제한
-  // dailyCapCharged: relay 실패 시 환불(DECR)할 수 있도록 추적
+  // 플랜별 일일 최대. Exhaustive — unknown/typo'd plan names fall through to
+  // UNKNOWN_PLAN_CAP rather than silently skipping the cap (prior behavior let
+  // an unknown plan burn the Gas Tank). All plan names here must match
+  // PLAN_QUOTA in app/lib/db.ts.
   const DAILY_CAP: Record<string, number> = {
-    starter: 50, basic: 100, growth: 1_000, pro: 1_000,
-    scale: 10_000, business: 10_000,
+    starter:           50,
+    basic:            100,
+    growth:         1_000,
+    pro:            1_000,
+    scale:         10_000,
+    business:      10_000,
+    enterprise:   100_000,
+    enterprise_flex: 500_000,
   };
-  const dailyCap          = DAILY_CAP[keyRecord.plan?.toLowerCase()];
-  const dailyCapKey       = `relay:daily:${keyRecord.address}`;
-  let   dailyCapCharged   = false;
-  if (dailyCap !== undefined && !isSandbox) {
+  const UNKNOWN_PLAN_CAP = 1_000;
+  const planKey  = (keyRecord.plan ?? "").toLowerCase();
+  const knownPlan = Object.prototype.hasOwnProperty.call(DAILY_CAP, planKey);
+  const dailyCap  = knownPlan ? DAILY_CAP[planKey] : UNKNOWN_PLAN_CAP;
+  if (!knownPlan) {
+    console.warn(`[relay] unknown plan "${keyRecord.plan}" addr=${keyRecord.address} — applying default cap ${UNKNOWN_PLAN_CAP}/day`);
+  }
+  const dailyCapKey      = `relay:daily:${keyRecord.address}`;
+  let   dailyCapCharged  = false;
+  if (!isSandbox) {
     // failOpen=false — daily cap is the primary abuse guard on paid relays.
     // If KV is down we'd rather return 429 than silently let a single key burn
     // through the Gas Tank. Recovery = retry once KV heals.
@@ -470,7 +484,10 @@ export async function POST(req: NextRequest) {
       const webhookUrl     = webhookCfg.url;
       const webhookAddr    = keyRecord.address;
 
-      // Retry up to 3 times with exponential backoff (fire-and-forget after response).
+      // Retry up to 3 times with exponential backoff.
+      // Scheduled via `after()` so Vercel keeps the function alive past the
+      // response — `setTimeout`/fire-and-forget isn't guaranteed to survive the
+      // serverless shutdown, which was silently dropping retries 2 and 3.
       // Delivery result is recorded in KV for visibility.
       const dispatchWebhook = async () => {
         const DELAYS = [0, 1_000, 3_000];
@@ -505,7 +522,7 @@ export async function POST(req: NextRequest) {
           ok: false, statusCode: lastStatus, error: lastError, attempt: DELAYS.length,
         }).catch(() => {});
       };
-      dispatchWebhook().catch(() => {});
+      after(dispatchWebhook);
     } // end webhookSafe
   }
 

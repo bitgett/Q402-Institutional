@@ -52,7 +52,7 @@ describe("rateLimit", () => {
     expect(mockKv.expire).not.toHaveBeenCalled();
   });
 
-  it("returns true (fail-open) when KV throws", async () => {
+  it("returns true (fail-open) when KV throws and failOpen=true is opt-in", async () => {
     mockKv.incr.mockRejectedValue(new Error("KV down"));
     const ok = await rateLimit("addr", "relay", 10, 60, true);
     expect(ok).toBe(true);
@@ -61,6 +61,12 @@ describe("rateLimit", () => {
   it("returns false (fail-closed) when KV throws and failOpen=false", async () => {
     mockKv.incr.mockRejectedValue(new Error("KV down"));
     const ok = await rateLimit("addr", "relay", 10, 60, false);
+    expect(ok).toBe(false);
+  });
+
+  it("default is fail-closed: KV error → false without explicit failOpen arg", async () => {
+    mockKv.incr.mockRejectedValue(new Error("KV down"));
+    const ok = await rateLimit("addr", "relay", 10, 60);
     expect(ok).toBe(false);
   });
 });
