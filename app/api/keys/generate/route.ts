@@ -12,10 +12,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { address } = await req.json();
-  if (!address) {
-    return NextResponse.json({ error: "address required" }, { status: 400 });
+  let body: { address?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  const rawAddress = body.address;
+  if (typeof rawAddress !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(rawAddress)) {
+    return NextResponse.json({ error: "Valid EVM address required" }, { status: 400 });
+  }
+  const address = rawAddress.toLowerCase();
 
   const sub = await getSubscription(address);
   if (!sub) {

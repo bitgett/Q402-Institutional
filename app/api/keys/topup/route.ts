@@ -12,16 +12,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { address, additionalTxs } = await req.json();
+  let body: { address?: string; additionalTxs?: number };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { address: rawAddress, additionalTxs } = body;
+  if (typeof rawAddress !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(rawAddress)) {
+    return NextResponse.json({ error: "Valid EVM address required" }, { status: 400 });
+  }
   if (
-    !address ||
     typeof additionalTxs !== "number" ||
     !Number.isInteger(additionalTxs) ||
     additionalTxs <= 0 ||
     additionalTxs > 10_000_000
   ) {
-    return NextResponse.json({ error: "address and additionalTxs (positive integer, max 10M) required" }, { status: 400 });
+    return NextResponse.json({ error: "additionalTxs (positive integer, max 10M) required" }, { status: 400 });
   }
+  const address = rawAddress.toLowerCase();
 
   const sub = await getSubscription(address);
   if (!sub) {

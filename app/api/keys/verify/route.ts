@@ -8,8 +8,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ valid: false, error: "Too many requests" }, { status: 429 });
   }
 
-  const { apiKey } = await req.json();
-  if (!apiKey) {
+  let body: { apiKey?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ valid: false, error: "Invalid JSON" }, { status: 400 });
+  }
+  const { apiKey } = body;
+  if (typeof apiKey !== "string" || !apiKey) {
     return NextResponse.json({ valid: false, error: "apiKey required" }, { status: 400 });
   }
 
