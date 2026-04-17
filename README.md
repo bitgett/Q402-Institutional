@@ -1154,6 +1154,8 @@ for (const chain of ["avax", "bnb", "eth"]) {
 
 ### v1.15 (2026-04-17)
 
+> **현재 canonical flow (v1.15):** 5개 체인 모두 `TransferAuthorization` witness + `amount` 파라미터(decimal string only). 아래 changelog에 등장하는 `PaymentWitness`, `paymentId`, `amountUSD` 등은 **과거 버전** 용어이며 현재 코드에는 존재하지 않음.
+
 #### 프로덕션 하드닝 — Next 16 / React 19 / lint 파이프라인 / SDK 금액 정밀도 / 레거시 필드 제거
 
 v1.14 체인 통합 이후 같은 날 진행한 런칭 전 정비. 컴파일/린트 파이프라인을 현 세대에 맞추고,
@@ -1206,6 +1208,8 @@ v1.14 체인 통합 이후 같은 날 진행한 런칭 전 정비. 컴파일/린
 `749aec4` paymentId 거절 → `85c8851` SDK 금액 정밀도. 총 138/138 테스트 통과, webpack build clean.
 
 ### v1.14 (2026-04-17)
+
+> **⚠ 아래는 v1.14 시점의 기록입니다.** `PaymentWitness`, `paymentId` 등은 v1.14에서 제거된 과거 용어이며 현재 코드에 없습니다.
 
 #### 5개 체인 통합 — TransferAuthorization 단일 witness + user-EOA verifyingContract
 
