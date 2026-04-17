@@ -435,7 +435,7 @@ export default function DashboardPage() {
   const pct = Math.min(100, Math.max(0, Math.round((1 - remainingCredits / Math.max(baseCredits, 1)) * 100)));
   const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000) : null;
   const totalUserUSD = Object.entries(userGasBalance).reduce((sum, [c, amt]) => {
-    return sum + amt * (tokenPrices[c === "xlayer" ? "eth" : c] ?? 0);
+    return sum + amt * (tokenPrices[c] ?? 0);
   }, 0);
 
   // Build 14-day chart
@@ -812,7 +812,7 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
               {Object.entries(CHAIN_META).map(([key, meta]) => {
                 const userAmt = userGasBalance[key] ?? 0;
-                const price = tokenPrices[key === "xlayer" ? "eth" : key] ?? 0;
+                const price = tokenPrices[key] ?? 0;
                 const userUSD = userAmt * price;
                 const hasBalance = userAmt > 0;
                 return (
