@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import { getGasBalance, addGasDeposit } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { checkAdminSecret } from "@/app/lib/admin-auth";
+import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
 
 const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   bnb:    { rpc: "https://bsc-dataseed1.binance.org/",         token: "BNB"  },
@@ -13,17 +14,25 @@ const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
 };
 
 /**
- * POST /api/gas-tank/withdraw
+ * POST /api/gas-tank/withdraw — record-only endpoint.
  *
  * INTERNAL / ADMIN ONLY — requires x-admin-secret header.
- * This endpoint is NOT accessible to end users.
  *
- * End-user withdrawal requests are handled manually by Q402 operations.
- * Users should contact hello@quackai.ai for refund requests.
+ * SECURITY MODEL (v1.16+):
+ *   User gas deposits live in GASTANK_ADDRESS, a COLD wallet — its private key
+ *   is NEVER on the server. This endpoint cannot sign withdrawals.
  *
- * Body: { address: string, chain: string }
+ *   Manual withdrawal flow:
+ *     1. Operator broadcasts a transfer GASTANK → user from a cold device.
+ *     2. Operator POSTs { address, chain, txHash } here. We verify the TX
+ *        on-chain and deduct the user's KV ledger balance.
+ *
+ * The KV ledger update is gated on on-chain verification (correct from/to/value),
+ * so a malformed admin call cannot drain a user's recorded balance without a
+ * matching real transfer.
+ *
+ * Body: { address: string, chain: string, txHash: string }
  */
-// Requires x-admin-secret header.
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "admin-withdraw", 5, 60))) {
@@ -33,9 +42,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { address, chain } = await req.json();
-  if (!address || !chain) {
-    return NextResponse.json({ error: "address and chain required" }, { status: 400 });
+  const { address, chain, txHash } = await req.json();
+  if (!address || !chain || !txHash) {
+    return NextResponse.json({ error: "address, chain, and txHash required" }, { status: 400 });
+  }
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) {
+    return NextResponse.json({ error: "invalid address" }, { status: 400 });
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    return NextResponse.json({ error: "invalid txHash" }, { status: 400 });
   }
 
   const chainCfg = CHAIN_RPC[chain];
@@ -43,63 +58,56 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Unsupported chain: ${chain}` }, { status: 400 });
   }
 
-  const balance = await getGasBalance(address);
-  const amount = balance[chain] ?? 0;
-  if (amount < 0.0005) {
-    return NextResponse.json({ error: "Balance too low to withdraw" }, { status: 400 });
-  }
-
-  const pkRaw = process.env.RELAYER_PRIVATE_KEY;
-  if (!pkRaw || pkRaw === "your_private_key_here") {
-    return NextResponse.json({ error: "Relayer not configured" }, { status: 500 });
-  }
-
   try {
-    const pk = pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`;
     const provider = new ethers.JsonRpcProvider(chainCfg.rpc);
-    const wallet = new ethers.Wallet(pk, provider);
-
-    const feeData = await provider.getFeeData();
-    const gasPrice = feeData.gasPrice ?? BigInt(1_000_000_000);
-    const gasLimit = BigInt(21_000);
-    const gasCost = gasLimit * gasPrice;
-
-    const totalWei = ethers.parseEther(amount.toFixed(18));
-    const sendWei = totalWei - gasCost;
-
-    if (sendWei <= BigInt(0)) {
-      return NextResponse.json({ error: "Balance too low to cover gas fee" }, { status: 400 });
+    const tx = await provider.getTransaction(txHash);
+    if (!tx) {
+      return NextResponse.json({ error: "Transaction not found on-chain" }, { status: 404 });
     }
-
-    const tx = await wallet.sendTransaction({
-      to: address,
-      value: sendWei,
-      gasLimit,
-    });
-
-    // Wait for 1 confirmation before recording the deduction.
-    // If the TX is dropped or replaced, this throws — balance stays intact.
-    const receipt = await tx.wait(1);
+    const receipt = await provider.getTransactionReceipt(txHash);
     if (!receipt || receipt.status !== 1) {
-      throw new Error("Transaction reverted on-chain");
+      return NextResponse.json({ error: "Transaction not confirmed or reverted" }, { status: 400 });
+    }
+    if (tx.from.toLowerCase() !== GASTANK_ADDRESS_LC) {
+      return NextResponse.json({ error: "TX sender is not GASTANK_ADDRESS" }, { status: 400 });
+    }
+    if (!tx.to || tx.to.toLowerCase() !== address.toLowerCase()) {
+      return NextResponse.json({ error: "TX recipient does not match user address" }, { status: 400 });
+    }
+    if (tx.value <= BigInt(0)) {
+      return NextResponse.json({ error: "TX value must be positive" }, { status: 400 });
     }
 
-    await addGasDeposit(address, {
+    const sentAmount = parseFloat(ethers.formatEther(tx.value));
+    const balance = await getGasBalance(address);
+    const ledgerAmount = balance[chain] ?? 0;
+    if (ledgerAmount <= 0) {
+      return NextResponse.json({ error: "User has no recorded balance to deduct" }, { status: 400 });
+    }
+    // Deduct exactly what was sent on-chain — capped at ledger balance to keep
+    // the KV ledger non-negative even if the operator over-paid by mistake.
+    const deduction = Math.min(sentAmount, ledgerAmount);
+
+    const recorded = await addGasDeposit(address, {
       chain,
       token: chainCfg.token,
-      amount: -amount,
-      txHash: tx.hash,
+      amount: -deduction,
+      txHash,
       depositedAt: new Date().toISOString(),
     });
+    if (!recorded) {
+      return NextResponse.json({ error: "txHash already recorded (duplicate)" }, { status: 409 });
+    }
 
     return NextResponse.json({
       success: true,
-      txHash: tx.hash,
-      amount: ethers.formatEther(sendWei),
+      txHash,
+      deducted: deduction,
+      sentOnChain: sentAmount,
       token: chainCfg.token,
     });
   } catch (e) {
-    console.error("[withdraw] transaction failed:", e instanceof Error ? e.message : e);
-    return NextResponse.json({ error: "Withdrawal failed — check server logs" }, { status: 500 });
+    console.error("[withdraw] verification failed:", e instanceof Error ? e.message : e);
+    return NextResponse.json({ error: "Withdrawal recording failed — check server logs" }, { status: 500 });
   }
 }

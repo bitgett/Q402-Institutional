@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { addGasDeposit, getGasBalance } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
-
-const RELAYER = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
+import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
 
 const CHAINS = [
   { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",   blockWindow: 200 },
@@ -56,7 +55,7 @@ async function scanNativeDeposits(
         if (!block?.result?.transactions) continue;
         for (const tx of block.result.transactions) {
           if (
-            tx.to?.toLowerCase() === RELAYER.toLowerCase() &&
+            tx.to?.toLowerCase() === GASTANK_ADDRESS_LC &&
             tx.from?.toLowerCase() === fromAddress.toLowerCase() &&
             tx.value !== "0x0"
           ) {
@@ -76,7 +75,7 @@ async function scanNativeDeposits(
 export async function POST(req: NextRequest) {
   // ── Security model: no wallet signature required by design ───────────────
   // This endpoint only records on-chain TXs that ALREADY happened from
-  // `address` → RELAYER, and addGasDeposit dedupes via SADD txHash.
+  // `address` → GASTANK_ADDRESS, and addGasDeposit dedupes via SADD txHash.
   // An attacker calling this for someone else's address just helps that
   // user's balance reflect real deposits — no privilege escalation, no
   // fake-deposit risk. The rate-limit (5 scans/60s/IP, fail-closed) is the

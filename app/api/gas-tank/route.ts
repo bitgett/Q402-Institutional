@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { checkAdminSecret } from "@/app/lib/admin-auth";
-
-const RELAYER = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
+import { GASTANK_ADDRESS, RELAYER_ADDRESS } from "@/app/lib/wallets";
 
 const CHAINS = [
   { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",         cgId: "binancecoin"  },
@@ -22,12 +21,12 @@ const ALERT_THRESHOLD_USD: Record<string, number> = {
   stable: 2,
 };
 
-async function getNativeBalance(rpc: string): Promise<string> {
+async function getNativeBalance(rpc: string, address: string): Promise<string> {
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("timeout")), 5000)
   );
   const provider = new ethers.JsonRpcProvider(rpc);
-  const balance = await Promise.race([provider.getBalance(RELAYER), timeout]);
+  const balance = await Promise.race([provider.getBalance(address), timeout]);
   return ethers.formatEther(balance);
 }
 
@@ -71,17 +70,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Fetch balances + prices in parallel
-  const [prices, ...balances] = await Promise.all([
+  // Fetch prices + GASTANK balances (user-facing) + RELAYER balances (ops-facing) in parallel.
+  // GASTANK holds user deposits (cold); RELAYER is the hot operational wallet that pays gas.
+  const gastankCalls = CHAINS.map(c => getNativeBalance(c.rpc, GASTANK_ADDRESS).catch(() => "0"));
+  const relayerCalls = CHAINS.map(c => getNativeBalance(c.rpc, RELAYER_ADDRESS).catch(() => "0"));
+  const [prices, gastankBals, relayerBals] = await Promise.all([
     getPrices(uniqueCgIds),
-    ...CHAINS.map(c => getNativeBalance(c.rpc).catch(() => "0")),
+    Promise.all(gastankCalls),
+    Promise.all(relayerCalls),
   ]);
 
+  // Dashboard ("Gas Tank" tab) reads user-facing GASTANK balance.
   const tanks = CHAINS.map((chain, i) => {
-    const bal = parseFloat(balances[i] as string);
+    const bal = parseFloat(gastankBals[i]);
     const price = (prices as Record<string, number>)[chain.cgId] ?? 0;
     const usd = bal * price;
-    const threshold = ALERT_THRESHOLD_USD[chain.key] ?? 3;
     return {
       key: chain.key,
       chain: chain.name,
@@ -90,25 +93,39 @@ export async function GET(req: NextRequest) {
       usd: usd >= 0.01 ? `$${usd.toFixed(2)}` : "$0.00",
       usdValue: usd,
       price,
-      low: usd < threshold && usd >= 0,
       empty: bal === 0,
     };
   });
 
-  // Send Telegram alerts for low/empty tanks (only when explicitly requested,
-  // e.g. from a cron job — not on every dashboard load)
+  // Telegram alerts monitor the RELAYER hot wallet — that's what actually needs topping up
+  // (cold → hot transfer from GASTANK when it falls below operational threshold).
   if (checkAlerts) {
-    const lowTanks = tanks.filter(t => t.low || t.empty);
-    if (lowTanks.length > 0) {
-      const lines = lowTanks.map(t =>
-        t.empty
-          ? `🔴 <b>${t.chain}</b> Gas Tank EMPTY — relay will fail`
-          : `🟡 <b>${t.chain}</b> Gas Tank LOW — ${t.balance} ${t.token} (~${t.usd})`
+    const relayerStatus = CHAINS.map((chain, i) => {
+      const bal = parseFloat(relayerBals[i]);
+      const price = (prices as Record<string, number>)[chain.cgId] ?? 0;
+      const usd = bal * price;
+      const threshold = ALERT_THRESHOLD_USD[chain.key] ?? 3;
+      return {
+        chain: chain.name,
+        token: chain.token,
+        balance: bal.toFixed(4),
+        usd: usd >= 0.01 ? `$${usd.toFixed(2)}` : "$0.00",
+        low: usd < threshold && usd >= 0,
+        empty: bal === 0,
+      };
+    });
+    const lowRelayers = relayerStatus.filter(r => r.low || r.empty);
+    if (lowRelayers.length > 0) {
+      const lines = lowRelayers.map(r =>
+        r.empty
+          ? `🔴 <b>${r.chain}</b> Relayer EMPTY — relay will fail`
+          : `🟡 <b>${r.chain}</b> Relayer LOW — ${r.balance} ${r.token} (~${r.usd})`
       );
       await sendTelegramAlert(
-        `⚠️ <b>Q402 Gas Tank Alert</b>\n\n${lines.join("\n")}\n\n` +
-        `Relayer: <code>${RELAYER}</code>\n` +
-        `Top up immediately to prevent relay failures.`
+        `⚠️ <b>Q402 Relayer Gas Alert</b>\n\n${lines.join("\n")}\n\n` +
+        `Hot relayer: <code>${RELAYER_ADDRESS}</code>\n` +
+        `Cold gas tank: <code>${GASTANK_ADDRESS}</code>\n` +
+        `Action: cold → hot top-up to prevent relay failures.`
       );
     }
   }
