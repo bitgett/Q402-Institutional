@@ -26,7 +26,9 @@ export async function GET(req: NextRequest) {
   }
 
   const address = req.nextUrl.searchParams.get("address");
-  if (!address) return NextResponse.json({ error: "address required" }, { status: 400 });
+  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+    return NextResponse.json({ error: "Valid EVM address required" }, { status: 400 });
+  }
 
   const balances = await Promise.all(
     CHAINS.map(c => getBalance(c.rpc, address).catch(() => "0").then(b => ({ key: c.key, balance: b })))
