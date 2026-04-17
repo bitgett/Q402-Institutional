@@ -120,7 +120,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests. Please wait before scanning again." }, { status: 429 });
   }
 
-  const body: { address?: string; txHash?: string; chain?: string } = await req.json();
+  let body: { address?: string; txHash?: string; chain?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const address = body.address;
   if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
     return NextResponse.json({ error: "valid Ethereum address required" }, { status: 400 });

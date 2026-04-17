@@ -408,13 +408,15 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
   "success":      true,
   "txHash":       "0x...",
   "blockNumber":  "54540550",
-  "tokenAmount":  5.0,
+  "tokenAmount":  "5.0",
   "token":        "USDC",
   "chain":        "avax",
   "gasCostNative": 0.00042,
   "method":       "eip7702"
 }
 ```
+> `tokenAmount` 는 **문자열**(`ethers.formatUnits` 출력) — 18-dec 토큰(USDT0) 정밀도 보존 위해 JS `number` 로 좁히지 않음. 파서는 `string` 으로 받아 `BigInt` 로 재변환하거나 사람이 읽는 용도로만 사용.
+
 > method 값: `"eip7702"` / `"eip7702_xlayer"` / `"eip3009"`
 
 ### GET /api/relay/info
@@ -618,7 +620,7 @@ kv.get("inquiries")                      → Inquiry[]
   "chain":         "avax",
   "fromUser":      "0xPayer",
   "toUser":        "0xRecipient",
-  "tokenAmount":   5.0,
+  "tokenAmount":   "5.0",
   "tokenSymbol":   "USDC",
   "gasCostNative": 0.00042,
   "relayTxHash":   "0x...",
