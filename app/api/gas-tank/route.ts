@@ -99,6 +99,8 @@ export async function GET(req: NextRequest) {
 
   // Telegram alerts monitor the RELAYER hot wallet — that's what actually needs topping up
   // (cold → hot transfer from GASTANK when it falls below operational threshold).
+  let flagged = 0;
+  let alertSent = false;
   if (checkAlerts) {
     const relayerStatus = CHAINS.map((chain, i) => {
       const bal = parseFloat(relayerBals[i]);
@@ -115,6 +117,7 @@ export async function GET(req: NextRequest) {
       };
     });
     const lowRelayers = relayerStatus.filter(r => r.low || r.empty);
+    flagged = lowRelayers.length;
     if (lowRelayers.length > 0) {
       const lines = lowRelayers.map(r =>
         r.empty
@@ -127,8 +130,11 @@ export async function GET(req: NextRequest) {
         `Cold gas tank: <code>${GASTANK_ADDRESS}</code>\n` +
         `Action: cold → hot top-up to prevent relay failures.`
       );
+      alertSent = true;
     }
   }
 
-  return NextResponse.json({ tanks });
+  return NextResponse.json(
+    checkAlerts ? { tanks, flagged, alertSent } : { tanks }
+  );
 }
