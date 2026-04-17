@@ -19,7 +19,7 @@ export default function Footer() {
             {[
               { name: "Avalanche", color: "#E84142" },
               { name: "BNB Chain", color: "#F0B90B" },
-              { name: "X Layer",   color: "#7B61FF" },
+              { name: "X Layer",   color: "#CCCCCC" },
               { name: "Ethereum",  color: "#627EEA" },
               { name: "Stable",    color: "#4AE54A" },
             ].map((c) => (

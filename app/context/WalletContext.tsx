@@ -6,7 +6,6 @@ import { connectWallet, getConnectedAccount } from "../lib/wallet";
 interface WalletCtx {
   address: string | null;
   isConnected: boolean;
-  isPaidUser: boolean;
   connect: () => Promise<void>;
   connectWith: (type: "metamask" | "okx") => Promise<string | null>;
   disconnect: () => void;
@@ -17,7 +16,6 @@ interface WalletCtx {
 const WalletContext = createContext<WalletCtx>({
   address: null,
   isConnected: false,
-  isPaidUser: false,
   connect: async () => {},
   connectWith: async () => null,
   disconnect: () => {},
@@ -123,12 +121,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return () => { for (const p of providers) p.removeListener("accountsChanged", handler); };
   }, [disconnect]);
 
-  // isPaidUser is always true — paywall removed
   return (
     <WalletContext.Provider value={{
       address,
       isConnected: mounted && !!address,
-      isPaidUser: true,
       connect,
       connectWith,
       disconnect,

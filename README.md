@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.3.1** · **Docs revision: v1.15** · **Last updated: 2026-04-17**  
+**Version: v1.3.1** · **Docs revision: v1.16** · **Last updated: 2026-04-17**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
 **Contact:** hello@quackai.ai
@@ -1151,6 +1151,54 @@ for (const chain of ["avax", "bnb", "eth"]) {
 ---
 
 ## 25. Changelog
+
+### v1.16 (2026-04-17)
+
+> **현재 canonical flow 유지 (v1.15와 동일):** 5개 체인 + TransferAuthorization witness + decimal-string `amount`. v1.16은 사용자 눈에 보이는 surface (SSRF 방어, 지갑 플로우, UI 정리)에 집중한 런칭 전 하드닝 라운드.
+
+#### 런칭 전 오딧 결과 반영 — SSRF hardening / UX 수정 / dead code 제거
+
+v1.15 파이프라인 정비에 이어, 모듈별 전체 감사(결제·API·SDK·UI·config)를 돌려 런칭 전 모든 잔여 이슈를 정리. 56개 finding → 15개 실 수정.
+
+**[P0] Webhook SSRF 전반 방어 강화 — `app/lib/webhook-validator.ts` + 신규 `app/lib/safe-fetch.ts`**
+- 기존 validator의 여섯 가지 우회 경로를 모두 차단:
+  - 2-옥텟/3-옥텟 단축 IPv4 (`127.1`, `10.0.1`) — 숫자-only 호스트 정규식으로 거절
+  - `nip.io`, `sslip.io`, `xip.io`, `traefik.me`, `localtest.me` 등 DNS wildcard 서비스
+  - DNS resolution 후 실제 IP가 private/loopback이면 거절 (`validateWebhookUrlResolved`)
+  - IPv6 embedded IPv4 (`::ffff:127.0.0.1`) 및 cloud-metadata IPv6 (`fd00:ec2::254`)
+  - AWS/GCP/Alibaba 메타데이터 호스트 추가 (`metadata.google.internal`, `100.100.100.200`)
+- 신규 `safeWebhookFetch()`: 모든 webhook 호출 단일 진입점. `redirect: "manual"`로 redirect 체인 따라가기 차단 + pre-resolve DNS 검증. `/api/webhook/test`와 `/api/relay`(dispatchWebhook)가 공유.
+- `/api/webhook/test`: 실패 시 일반화된 `"Webhook delivery failed"`로 응답 (내부 오류 메시지 노출 제거). 원문은 `console.error`로 서버 로그에만 기록.
+
+**[P0] `RegisterModal` 결제 플로우 수정 — `app/components/RegisterModal.tsx`**
+- Step 1 "Connect Wallet (MetaMask)" → "Choose Wallet"로 교체 + 공유 `WalletModal` 사용 → OKX 지갑 지원
+- "WalletConnect coming soon" 거짓 문구 제거
+- `handlePay()` 재작성: `getAuthCreds()`로 nonce + signature 획득 후 `/api/keys/provision` 호출. 실패 케이스별 (서명 거절, 서버 오류, 네트워크 오류) Step 3에 `role="alert"` 에러 UI 노출
+- `step` state를 `useRef`로 가드한 effect에서 async 연결 완료 시점에 step 2로 동기화 (이전엔 wallet connect 후 유저가 "Next" 다시 눌러야 했음)
+
+**[P1] `WalletModal` 공유 컴포넌트 추출 — 신규 `app/components/WalletModal.tsx`**
+- `WalletButton` + `payment/page.tsx`가 각각 보유하던 duplicated MetaMask-only modal을 단일 컴포넌트로 통합
+- `role="dialog"`, `aria-modal="true"`, `aria-labelledby` a11y 속성 추가
+- ESC 키 close + focus 관리 (useRef/useEffect)
+- OKX 아이콘을 `/okx.jpg` 실제 로고로 통일 (`payment/page.tsx`는 이전에 generic grid SVG 사용 중)
+- `onConnected?: (address: string) => void` 콜백으로 연결 직후 부모가 step 전환 가능
+
+**[P1] Gas Tank "Auto Top-up" 토글 제거 — `app/dashboard/page.tsx`**
+- 로직이 실장된 적 없는 dead UI (토글만 존재, 실제 refill은 수동). 유저에게 "자동 충전됨"이라는 잘못된 인상 줌
+- `autoTopup` state + UI 블록 + 활성화 배지 모두 제거. 실제 구현되면 다시 추가
+
+**[P1] Footer X Layer 브랜드 컬러 통일 — `app/components/Footer.tsx`**
+- `#7B61FF` (퍼플, 브랜드와 무관) → `#CCCCCC` (silver, 실제 X Layer 로고 컬러). Hero / payment / docs와 일관성
+
+**[P1] Dead code 정리 — `app/lib/access.ts` 삭제 + `WalletContext.isPaidUser` 제거**
+- `access.ts`: 과거 페이월 시절 잔재. `isPaid()` 항상 true, `setPaid()` no-op, import 0건
+- `WalletContext.isPaidUser`: 모든 consumer 제거 후 타입에도 미사용 필드로 남아있었음 → 타입/프로바이더 양쪽에서 제거
+
+**[P2] 코드 주석 현행화 — `app/lib/relayer.ts`**
+- 헤더 주석 `v1.2` → `v1.3` + 5개 체인 통합(stable 포함) 반영
+- `transferWithAuthorization()` 주석 `v1.2+` → `v1.3`, calldata 인코딩 주석도 동기화
+
+**검증**: `pnpm lint && pnpm build && pnpm test` 모두 통과. webhook-validator 회귀 테스트 추가 (10 개 신규 케이스: nip.io, 2-옥텟 IPv4, metadata host, DNS resolve). 기존 138 테스트 전부 통과.
 
 ### v1.15 (2026-04-17)
 
