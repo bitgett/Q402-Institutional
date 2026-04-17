@@ -211,7 +211,10 @@ export async function POST(req: NextRequest) {
   const dailyCapKey       = `relay:daily:${keyRecord.address}`;
   let   dailyCapCharged   = false;
   if (dailyCap !== undefined && !isSandbox) {
-    const withinDailyCap = await rateLimit(dailyCapKey, "daily", dailyCap, 86400);
+    // failOpen=false — daily cap is the primary abuse guard on paid relays.
+    // If KV is down we'd rather return 429 than silently let a single key burn
+    // through the Gas Tank. Recovery = retry once KV heals.
+    const withinDailyCap = await rateLimit(dailyCapKey, "daily", dailyCap, 86400, false);
     if (!withinDailyCap) {
       return NextResponse.json({
         error: `Daily relay cap reached (${dailyCap}/day for ${keyRecord.plan} plan). Resets at midnight UTC.`,

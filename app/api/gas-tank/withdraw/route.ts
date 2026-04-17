@@ -42,7 +42,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { address, chain, txHash } = await req.json();
+  let body: { address?: string; chain?: string; txHash?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const { address, chain, txHash } = body;
   if (!address || !chain || !txHash) {
     return NextResponse.json({ error: "address, chain, and txHash required" }, { status: 400 });
   }

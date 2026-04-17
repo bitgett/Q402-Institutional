@@ -31,7 +31,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  const body = await req.json();
+  let body: Record<string, string | undefined>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const { appName, email, category, targetChain, expectedVolume } = body;
 
   if (!appName || !email || !category || !targetChain || !expectedVolume) {
