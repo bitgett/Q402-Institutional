@@ -222,7 +222,7 @@ Q402-Institutional/
 │   │   ├── blockchain.ts           # ERC-20 Transfer 이벤트 스캔
 │   │   ├── relayer.ts              # viem EIP-7702 settle 함수들
 │   │   ├── access.ts               # MASTER_ADDRESSES / isPaid()
-│   │   ├── ratelimit.ts            # KV sliding-window rate limiter
+│   │   ├── ratelimit.ts            # KV fixed-window rate limiter
 │   │   └── wallet.ts               # MetaMask / OKX connectWallet
 │   ├── context/WalletContext.tsx   # 전역 지갑 상태 (localStorage 즉시 복원)
 │   ├── components/
@@ -751,7 +751,7 @@ const gasCostNative = parseFloat(formatEther(receipt.gasUsed * receipt.effective
 
 1. API Key 검증 (`getApiKeyRecord`, `active` 확인)
 2. 구독 만료 + 키 교체 확인 (30일 만료, `sub.apiKey !== apiKey` → 401)
-3. **일일 버스트 한도** 확인 (플랜별 KV sliding window 86400s) — v1.6
+3. **일일 버스트 한도** 확인 (플랜별 KV fixed window 86400s) — v1.6
 4. **TX 크레딧 확인** (`subscription.quotaBonus > 0`, 0 이하 → 429) — v1.9
 5. Gas Tank 잔고 확인 (`getGasBalance[chain] > 0.0001`)
 6. 체인 분기:
@@ -914,7 +914,7 @@ newPaidAt = base.toISOString();
 
 **문제:** Starter 키로 하루 수만 건 트랜잭션 → 공유 릴레이어 독점 가능.
 
-**해결:** KV sliding window (86400s), 플랜별 일일 상한 (§11 참조).
+**해결:** KV fixed window (86400s), 플랜별 일일 상한 (§11 참조).
 
 ### D. 테스트 스크립트
 
@@ -1045,7 +1045,7 @@ function transferWithAuthorization(
 | Owner Binding | `owner != address(this)` → `OwnerMismatch()` revert |
 | Facilitator 검증 | `msg.sender != facilitator` → `UnauthorizedFacilitator()` revert (xlayer) |
 | SSRF 방지 | Webhook URL 등록/발송 시 RFC-1918 + IPv6 내부 + 클라우드 메타데이터 차단 |
-| Rate limiting | KV sliding-window per IP **and per API key** (/api/relay: 30 req/60s per key) |
+| Rate limiting | KV fixed-window per IP **and per API key** (/api/relay: 30 req/60s per key) |
 | 에러 노출 방지 | 내부 에러 서버 로그, 클라이언트엔 generic 메시지 |
 | Sandbox 격리 | KV `isSandbox` 플래그만 신뢰 — key prefix 기반 우회 차단 |
 | TX 재사용 방지 | `used_txhash:{hash}` KV 플래그 (90일 TTL) — 동일 TX 재활성화 불가 |
