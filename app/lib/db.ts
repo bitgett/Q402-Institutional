@@ -56,7 +56,7 @@ export interface RelayedTx {
   chain: string;
   fromUser: string;     // user who sent the payment
   toUser: string;       // recipient
-  tokenAmount: number;  // USDC/USDT amount sent
+  tokenAmount: number | string;  // USDC/USDT amount (string for 18-dec precision)
   tokenSymbol: string;
   gasCostNative: number; // gas used in native token (BNB/ETH/AVAX)
   relayTxHash: string;   // on-chain tx hash

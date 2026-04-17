@@ -4,14 +4,13 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useWallet } from "../context/WalletContext";
 import { useRouter } from "next/navigation";
-import { setPaid } from "../lib/access";
 
 const PLANS = [
   { name: "Growth", price: 300,  quota: "50,000 txs/mo",  highlight: false },
   { name: "Scale",  price: 1000, quota: "300,000 txs/mo", highlight: true  },
 ];
 
-const CHAIN_OPTIONS = ["BNB Chain", "Ethereum", "Avalanche", "X Layer", "Arbitrum", "Multi-chain"];
+const CHAIN_OPTIONS = ["BNB Chain", "Ethereum", "Avalanche", "X Layer", "Stable", "Multi-chain"];
 const CATEGORY_OPTIONS = ["DeFi / DEX", "NFT / Gaming", "Payment App", "Wallet", "DAO / Governance", "Other"];
 const VOLUME_OPTIONS = ["< 1,000 txs/mo", "1K – 10K txs/mo", "10K – 50K txs/mo", "50K – 300K txs/mo", "300K+ txs/mo"];
 
@@ -21,7 +20,7 @@ export default function RegisterModal({ onClose }: Props) {
   const { address, connect } = useWallet();
   const router = useRouter();
 
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(2);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(address ? 2 : 1);
   const [form, setForm] = useState({
     service: "",
     email: "",
@@ -34,7 +33,6 @@ export default function RegisterModal({ onClose }: Props) {
   });
   const [selectedPlan, setSelectedPlan] = useState("Scale");
   const [paying, setPaying] = useState(false);
-  const [, setPaidState] = useState(false);
   const [realApiKey, setRealApiKey] = useState<string | null>(null);
 
   async function handleConnect() {
@@ -43,22 +41,18 @@ export default function RegisterModal({ onClose }: Props) {
   }
 
   async function handlePay() {
+    if (!address) return;
     setPaying(true);
-    await new Promise(r => setTimeout(r, 2800));
-    setPaying(false);
-    setPaidState(true);
-    if (address) setPaid(address);
-    // Fetch real API key from server
     try {
-      const res = await fetch("/api/payment/activate", {
+      const res = await fetch("/api/keys/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address }),
       });
       const data = await res.json();
-      if (data.apiKey) setRealApiKey(data.apiKey);
-    } catch { /* show fallback key from dashboard */ }
-    await new Promise(r => setTimeout(r, 600));
+      if (data.sandboxApiKey) setRealApiKey(data.sandboxApiKey);
+    } catch { /* fallback: show dashboard */ }
+    setPaying(false);
     setStep(4);
   }
 

@@ -3,13 +3,13 @@ const cases = [
     icon: "⬡",
     title: "DeFi Onboarding",
     description:
-      "Let new users interact with your DeFi protocol immediately — no AVAX top-up, no confusing wallet pop-ups.",
+      "Let new users interact with your DeFi protocol immediately — no gas top-up, no confusing wallet pop-ups.",
   },
   {
     icon: "◈",
     title: "NFT Minting",
     description:
-      "Remove the gas barrier for NFT drops. Your users mint without ever touching AVAX.",
+      "Remove the gas barrier for NFT drops. Your users mint without ever touching a gas token.",
   },
   {
     icon: "◎",
@@ -45,7 +45,7 @@ export default function UseCases() {
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Built for every use case</h2>
           <p className="text-white/50 max-w-xl mx-auto">
-            Any product that needs seamless, gasless USDC transfers on EVM.
+            Any product that needs seamless, gasless USDC/USDT transfers on EVM.
           </p>
         </div>
 

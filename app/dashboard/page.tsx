@@ -45,7 +45,7 @@ const STEPS = [
 interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; sandboxApiKey?: string; }
 interface RelayedTx {
   apiKey: string; address: string; chain: string;
-  fromUser: string; toUser: string; tokenAmount: number; tokenSymbol: string;
+  fromUser: string; toUser: string; tokenAmount: number | string; tokenSymbol: string;
   gasCostNative: number; relayTxHash: string; relayedAt: string;
 }
 interface GasDeposit { chain: string; token: string; amount: number; txHash: string; depositedAt: string; }
@@ -1027,7 +1027,7 @@ export default function DashboardPage() {
                           </td>
                           <td className="px-5 py-4 font-mono text-xs text-white/35">{shortAddr(tx.fromUser)} → {shortAddr(tx.toUser)}</td>
                           <td className="px-5 py-4 text-xs font-semibold text-white/70">
-                            {tx.tokenAmount.toFixed(2)} <span className="text-white/30">{tx.tokenSymbol}</span>
+                            {Number(tx.tokenAmount).toFixed(2)} <span className="text-white/30">{tx.tokenSymbol}</span>
                           </td>
                           <td className="px-5 py-4 font-mono text-xs text-white/30">{shortHash(tx.relayTxHash)}</td>
                           <td className="px-5 py-4">
