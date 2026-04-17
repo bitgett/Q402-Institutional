@@ -292,6 +292,13 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 8. 릴레이 실행 (sandbox → mock, live → on-chain) ─────────────────────
+  const pkRaw = process.env.RELAYER_PRIVATE_KEY;
+  if (!isSandbox && (!pkRaw || pkRaw === "your_private_key_here")) {
+    return NextResponse.json({ error: "Relay not configured" }, { status: 503 });
+  }
+  const relayerPk = pkRaw ? ((pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex) : ("0x" as Hex);
+  const relayerAddress = isSandbox ? ("0x" as Address) : privateKeyToAccount(relayerPk).address as Address;
+
   if (isSandbox) {
     // Sandbox: return a mock result without hitting the chain
     await new Promise(r => setTimeout(r, 400)); // simulate latency
@@ -302,13 +309,9 @@ export async function POST(req: NextRequest) {
       gasCostNative:  0.00042,
     };
   } else if (isStableEIP7702) {
-    const pkRaw = process.env.RELAYER_PRIVATE_KEY!;
-    const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
-    const relayerAddress = privateKeyToAccount(pk).address as Address;
-
     const stableParams: PayParams = {
       owner:       from as Address,
-      facilitator: relayerAddress,
+      facilitator: relayerAddress as Address,
       token:       tokenCfg.address as Address,
       amount:      BigInt(amount),
       to:          to as Address,
@@ -328,13 +331,9 @@ export async function POST(req: NextRequest) {
     result = await settlePayment(stableParams);
 
   } else if (isXLayerEIP7702) {
-    const pkRaw = process.env.RELAYER_PRIVATE_KEY!;
-    const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
-    const relayerAddress = privateKeyToAccount(pk).address as Address;
-
     const xlayerParams: XLayerEIP7702PayParams = {
       owner:       from as Address,
-      facilitator: relayerAddress,
+      facilitator: relayerAddress as Address,
       token:       tokenCfg.address as Address,
       recipient:   to as Address,
       amount:      BigInt(amount),
@@ -367,14 +366,9 @@ export async function POST(req: NextRequest) {
     result = await settlePaymentEIP3009(eip3009Params);
 
   } else if (!isSandbox) {
-    // avax / bnb / eth — EIP-7702 via Q402PaymentImplementation.transferWithAuthorization()
-    const pkRaw2 = process.env.RELAYER_PRIVATE_KEY!;
-    const pk2 = (pkRaw2.startsWith("0x") ? pkRaw2 : `0x${pkRaw2}`) as Hex;
-    const relayerAddress2 = privateKeyToAccount(pk2).address as Address;
-
     const payParams: PayParams = {
       owner:       from as Address,
-      facilitator: relayerAddress2,
+      facilitator: relayerAddress as Address,
       token:       tokenCfg.address as Address,
       amount:      BigInt(amount),
       to:          to as Address,
@@ -416,7 +410,7 @@ export async function POST(req: NextRequest) {
   const gasCostNative = result.gasCostNative ?? 0;
 
   // ── 10. TX 기록 (실제 가스비 포함) ───────────────────────────────────────
-  const tokenAmount = parseFloat(ethers.formatUnits(amount, tokenCfg.decimals));
+  const tokenAmount = ethers.formatUnits(amount, tokenCfg.decimals);
 
   const relayedAt = new Date().toISOString();
   // Fire-and-forget — on-chain TX already succeeded; don't block response on KV write

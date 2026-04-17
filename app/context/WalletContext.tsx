@@ -8,7 +8,7 @@ interface WalletCtx {
   isConnected: boolean;
   isPaidUser: boolean;
   connect: () => Promise<void>;
-  connectWith: (type: "metamask" | "okx") => Promise<void>;
+  connectWith: (type: "metamask" | "okx") => Promise<string | null>;
   disconnect: () => void;
   /** Sign an arbitrary message with the connected wallet (personal_sign). */
   signMessage: (message: string) => Promise<string | null>;
@@ -19,7 +19,7 @@ const WalletContext = createContext<WalletCtx>({
   isConnected: false,
   isPaidUser: false,
   connect: async () => {},
-  connectWith: async () => {},
+  connectWith: async () => null,
   disconnect: () => {},
   signMessage: async () => null,
 });
@@ -51,7 +51,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const connectWith = useCallback(async (type: "metamask" | "okx") => {
+  const connectWith = useCallback(async (type: "metamask" | "okx"): Promise<string | null> => {
     const addr = await connectWallet(type);
     if (addr) {
       setAddress(addr);
@@ -59,6 +59,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("q402_wallet", addr);
       localStorage.setItem("q402_wallet_type", type);
     }
+    return addr;
   }, []);
 
   /**
@@ -106,10 +107,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     init();
   }, []);
 
-  // Listen for account changes
+  // Listen for account changes on both providers
   useEffect(() => {
-    const eth = (window as unknown as { ethereum?: { on: (e: string, cb: (accounts: string[]) => void) => void; removeListener: (e: string, cb: (accounts: string[]) => void) => void } }).ethereum;
-    if (!eth) return;
+    type EvProvider = { on: (e: string, cb: (a: string[]) => void) => void; removeListener: (e: string, cb: (a: string[]) => void) => void };
+    const w = window as unknown as { ethereum?: EvProvider; okxwallet?: EvProvider };
     const handler = (accounts: string[]) => {
       if (accounts.length === 0) { disconnect(); }
       else {
@@ -117,8 +118,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("q402_wallet", accounts[0]);
       }
     };
-    eth.on("accountsChanged", handler);
-    return () => eth.removeListener("accountsChanged", handler);
+    const providers = [w.ethereum, w.okxwallet].filter(Boolean) as EvProvider[];
+    for (const p of providers) p.on("accountsChanged", handler);
+    return () => { for (const p of providers) p.removeListener("accountsChanged", handler); };
   }, [disconnect]);
 
   // isPaidUser is always true — paywall removed

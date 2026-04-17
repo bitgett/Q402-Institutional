@@ -14,11 +14,19 @@ function WalletModal({ onClose }: { onClose: () => void }) {
   const { connectWith } = useWallet();
   const [loading, setLoading] = useState<string | null>(null);
 
+  const [error, setError] = useState<string | null>(null);
+
   async function handleConnect(type: "metamask" | "okx") {
+    setError(null);
+    if (!isWalletInstalled(type)) {
+      setError(type === "metamask" ? "MetaMask not detected. Please install it first." : "OKX Wallet not detected. Please install it first.");
+      return;
+    }
     setLoading(type);
-    await connectWith(type);
+    const result = await connectWith(type);
     setLoading(null);
-    onClose();
+    if (result) { onClose(); }
+    else { setError("Connection failed. Please try again."); }
   }
 
   const wallets = [
@@ -107,6 +115,10 @@ function WalletModal({ onClose }: { onClose: () => void }) {
             );
           })}
         </div>
+
+        {error && (
+          <p className="text-red-400 text-xs text-center mt-3 bg-red-400/10 rounded-lg px-3 py-2">{error}</p>
+        )}
 
         <p className="text-white/20 text-xs text-center mt-5">
           By connecting, you agree to Q402&apos;s terms of service.

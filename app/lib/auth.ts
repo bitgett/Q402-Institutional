@@ -16,6 +16,7 @@
 
 import { ethers } from "ethers";
 import { kv } from "@vercel/kv";
+import { timingSafeEqual } from "node:crypto";
 
 // Session nonce lives 1 hour in KV.  Client-side cache is set to 55min.
 const NONCE_TTL_SEC = 60 * 60;
@@ -83,7 +84,11 @@ export async function verifyNonceSignature(
     return { ok: false, code: "NONCE_EXPIRED" };
   }
 
-  if (!storedNonce || storedNonce !== nonce) {
+  if (
+    !storedNonce ||
+    storedNonce.length !== nonce.length ||
+    !timingSafeEqual(Buffer.from(storedNonce), Buffer.from(nonce))
+  ) {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
 
@@ -186,7 +191,11 @@ export async function verifyAndConsumeChallenge(
   } catch {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
-  if (!storedChallenge || storedChallenge !== challenge) {
+  if (
+    !storedChallenge ||
+    storedChallenge.length !== challenge.length ||
+    !timingSafeEqual(Buffer.from(storedChallenge), Buffer.from(challenge))
+  ) {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
 

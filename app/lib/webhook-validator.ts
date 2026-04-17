@@ -34,7 +34,10 @@ export function validateWebhookUrl(url: string): WebhookValidationError | null {
     // Cloud metadata endpoints (GCP / AWS / Azure)
     /^(metadata\.google\.internal|169\.254\.169\.254|fd00:ec2::254)/.test(host) ||
     // Octal/hex encoded IPs (e.g. 0177.0.0.1)
-    /^0[0-7]+\./.test(host);
+    /^0[0-7]+\./.test(host) ||
+    // Single-integer decimal IPs (e.g. 2130706433 = 127.0.0.1) and hex IPs (0x7f000001)
+    /^\d{8,10}$/.test(host) ||
+    /^0x[0-9a-f]+$/i.test(host);
 
   if (blocked) {
     return { error: "Webhook URL must be a public endpoint" };
