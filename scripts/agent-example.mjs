@@ -178,28 +178,19 @@ async function signEIP7702Auth({ chain, agentAcc }) {
   });
 }
 
-// Human-readable amount → atomic bigint.
-// Mirrors public/q402-sdk.js::toRawAmount. Accepts a decimal STRING
-// ("5.00", "0.123456") or a finite positive Number for convenience, but the
-// string form is preferred since IEEE-754 Number loses precision on 18-decimal
-// tokens (BNB USDC/USDT, Stable USDT0). Throws a human-readable error on
-// invalid input so callers fail at the edge, not after signing.
+// Human-readable amount → atomic bigint. String-only by design —
+// matches public/q402-sdk.js::toRawAmount so the two execution paths share one
+// policy. Accepting JS Number here (even with toFixed clamping) would silently
+// preserve IEEE-754-corrupted values on 18-decimal tokens, which is the entire
+// bug the browser SDK rewrite was there to kill. Callers pass "10" / "5.00" /
+// "0.123456" — partners migrating from a numeric field just wrap it in quotes.
 function toAtomicAmount(amount, decimals) {
-  let str;
-  if (typeof amount === "string") {
-    str = amount.trim();
-    if (str === "")      throw new Error('amount must be a non-empty decimal string (e.g. "5.00")');
-    if (!/^\d+(\.\d+)?$/.test(str)) {
-      throw new Error(`invalid amount "${amount}" — use a positive decimal string (no sign, no scientific notation)`);
-    }
-  } else if (typeof amount === "number") {
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new Error(`amount must be a positive finite number (got ${amount})`);
-    }
-    // Clamp to the token's precision so values like 0.1 + 0.2 don't blow up parseUnits.
-    str = amount.toFixed(decimals);
-  } else {
-    throw new Error(`amount must be a decimal string or positive number (got ${typeof amount})`);
+  if (typeof amount !== "string" || amount.trim() === "") {
+    throw new Error('amount must be a non-empty decimal string (e.g. "5.00"); JS Number is rejected to avoid IEEE-754 precision loss');
+  }
+  const str = amount.trim();
+  if (!/^\d+(\.\d+)?$/.test(str)) {
+    throw new Error(`invalid amount "${amount}" — use a positive decimal string (no sign, no scientific notation, no whitespace)`);
   }
   let raw;
   try {
@@ -244,7 +235,7 @@ async function submitToRelay({
 }
 
 // ── High-level: Send gasless payment on any chain ─────────────────────────────
-async function sendGaslessPayment({ chain, token = "USDC", recipient, amountUSD }) {
+async function sendGaslessPayment({ chain, token = "USDC", recipient, amount }) {
   if (!API_KEY)   throw new Error("Q402_API_KEY not set in .env.local");
   if (!AGENT_KEY) throw new Error("TEST_PAYER_KEY not set in .env.local");
 
@@ -257,14 +248,14 @@ async function sendGaslessPayment({ chain, token = "USDC", recipient, amountUSD 
   }
   const tokenCfg = cfg.tokens[tokenSymbol];
 
-  const agentAcc = privateKeyToAccount(AGENT_KEY.startsWith("0x") ? AGENT_KEY : `0x${AGENT_KEY}`);
-  const amount   = toAtomicAmount(amountUSD, tokenCfg.decimals);
-  const nonce    = BigInt(ethers.hexlify(ethers.randomBytes(32)));
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+  const agentAcc  = privateKeyToAccount(AGENT_KEY.startsWith("0x") ? AGENT_KEY : `0x${AGENT_KEY}`);
+  const amountRaw = toAtomicAmount(amount, tokenCfg.decimals);
+  const nonce     = BigInt(ethers.hexlify(ethers.randomBytes(32)));
+  const deadline  = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
-  console.log(`\n[${chain.toUpperCase()}] Sending ${amountUSD} ${tokenSymbol} → ${recipient.slice(0, 10)}...`);
+  console.log(`\n[${chain.toUpperCase()}] Sending ${amount} ${tokenSymbol} → ${recipient.slice(0, 10)}...`);
   console.log(`  Agent:    ${agentAcc.address}`);
-  console.log(`  Amount:   ${amount.toString()} atomic (${tokenCfg.decimals} dec)`);
+  console.log(`  Amount:   ${amountRaw.toString()} atomic (${tokenCfg.decimals} dec)`);
   console.log(`  Nonce fld:${cfg.nonceField}`);
 
   // 1. Get facilitator address (required — part of the signed witness message)
@@ -285,7 +276,7 @@ async function sendGaslessPayment({ chain, token = "USDC", recipient, amountUSD 
   const witnessSig = await signTransferAuthorization({
     chain, agentAcc, facilitator,
     tokenAddress: tokenCfg.address,
-    recipient, amount, nonce, deadline,
+    recipient, amount: amountRaw, nonce, deadline,
   });
   console.log(`  witnessSig: ${witnessSig.slice(0, 20)}...`);
 
@@ -301,7 +292,7 @@ async function sendGaslessPayment({ chain, token = "USDC", recipient, amountUSD 
     tokenSymbol,
     agentAddress: agentAcc.address,
     recipient,
-    amount,
+    amount: amountRaw,
     deadline,
     nonceStr: nonce.toString(),
     witnessSig,
@@ -321,13 +312,13 @@ async function main() {
   console.log(`API Key:  ${API_KEY ? API_KEY.slice(0, 15) + "..." : "NOT SET"}`);
 
   const RECIPIENT = "0xd4e81234567890abcdef1234567890abcdef0a3f"; // replace with your recipient
-  const AMOUNT    = 0.05;
+  const AMOUNT    = "0.05"; // MUST be a decimal string — Number is rejected (IEEE-754).
 
   // Multi-chain sequential payments — add "eth", "xlayer", "stable" as needed.
   const chains = ["avax", "bnb"];
   for (const chain of chains) {
     try {
-      await sendGaslessPayment({ chain, token: "USDC", recipient: RECIPIENT, amountUSD: AMOUNT });
+      await sendGaslessPayment({ chain, token: "USDC", recipient: RECIPIENT, amount: AMOUNT });
     } catch (e) {
       console.error(`  FAILED — ${chain}: ${e.message}`);
     }

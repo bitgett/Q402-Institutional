@@ -118,4 +118,18 @@ describe("agent-example.mjs relay body shape", () => {
     const matches = block.match(new RegExp(usdt0, "g")) ?? [];
     expect(matches.length, "USDT0 address should appear at least twice (USDC + USDT aliases)").toBeGreaterThanOrEqual(2);
   });
+
+  it("toAtomicAmount is string-only — Number path + toFixed clamp fully removed", () => {
+    // Mirrors public/q402-sdk.js::toRawAmount. Accepting JS Number (even via
+    // toFixed(decimals)) would silently preserve IEEE-754 precision loss on
+    // 18-decimal tokens — the exact bug the SDK rewrite closed.
+    expect(agentSource).toMatch(/function\s+toAtomicAmount\s*\(\s*amount\s*,\s*decimals\s*\)/);
+    expect(agentSource).toMatch(/typeof\s+amount\s*!==\s*"string"/);
+    // No lingering Number-accepting branch or toFixed-based clamp.
+    expect(agentSource).not.toMatch(/typeof\s+amount\s*===\s*"number"/);
+    expect(agentSource).not.toMatch(/\.toFixed\s*\(\s*decimals\s*\)/);
+    // And the public entry point must take `amount`, not the old `amountUSD`.
+    expect(agentSource).toMatch(/async\s+function\s+sendGaslessPayment\s*\(\s*\{[^}]*\bamount\s*\}/);
+    expect(agentSource).not.toMatch(/\bamountUSD\b/);
+  });
 });
