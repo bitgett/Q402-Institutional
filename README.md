@@ -1103,6 +1103,15 @@ git push origin main
 1. **`RELAYER_ADDRESS`는 유저 자금을 수신하지 않는다.** 가스 예치는 `GASTANK_ADDRESS`로, 구독 결제는 `SUBSCRIPTION_ADDRESS`로. 서버 컴프로마이즈 시 빠지는 건 RELAYER의 운영 가스 float뿐.
 2. **`GASTANK_ADDRESS`의 프라이빗 키는 절대 Vercel env에 올리지 않는다.** Cold 서명만 — 유저 환불(`/api/gas-tank/withdraw`)도 record-only로, 운영자가 콜드 디바이스에서 송금한 뒤 txHash 만 서버에 기록한다.
 3. **온체인 GASTANK 잔고 == sum(KV `gas:` ledger)** (체인별). [`scripts/migrate-split-wallets.mjs`](scripts/migrate-split-wallets.mjs)로 정기 검증.
+4. **`RELAYER_ADDRESS` 상수 == `RELAYER_PRIVATE_KEY` 파생 주소.** `app/lib/relayer-key.ts`의 `loadRelayerKey()`가 모든 서명 호출 직전에 검증, 불일치 시 503 fail-closed. 회귀 테스트는 [`__tests__/relayer-key.test.ts`](__tests__/relayer-key.test.ts).
+
+### 알려진 한계 — 유저별 가스 custody
+
+이 분리는 **집계 유저 가스 풀**(콜드 GASTANK 안에 보관)을 보호하지만, **유저별 잔고 귀속**은 여전히 KV ledger (`gas:<userAddr>` 키)로 관리한다. KV 손실/오염/무단 쓰기 시:
+- 온체인 GASTANK 총 잔액의 어느 부분이 어느 유저 몫인지 잊을 수 있음
+- 단일 유저의 기록 잔고를 온체인과 무관하게 부풀리거나 깎을 수 있음
+
+**총 부채 vs 온체인 GASTANK 잔액**은 체인 히스토리로 검증 가능 (스크립트). 하지만 **유저별 잔고 재구성**은 모든 deposit/relay 이벤트를 체인 로그에서 다시 스캔해야 함. 현재는 유저별 온체인 subaccount 없음. CREATE2 vault per user 도입은 현 TVL 단계에서는 의도적 non-goal — 비용/이점 분석은 §22 트레이드오프 참조.
 
 ### 알림
 

@@ -16,8 +16,26 @@
  *   3. SUBSCRIPTION receives the remainder (revenue accumulated in the legacy
  *      wallet from past subscription payments + leftover float).
  *
+ * ╔═══════════════════════════════════════════════════════════════════════════╗
+ * ║                       PRODUCTION SAFETY WARNING                            ║
+ * ║                                                                            ║
+ * ║  This script reads KV liability from the LOCAL data/db.json snapshot      ║
+ * ║  which is a DEV FIXTURE. In production, the live ledger lives in Vercel   ║
+ * ║  KV (Upstash Redis) and is NOT mirrored to data/db.json.                  ║
+ * ║                                                                            ║
+ * ║  Before running for a real cold-wallet split, you MUST EITHER:            ║
+ * ║   (a) Pass --kv-snapshot=<path> with a fresh export of `gas:*` keys, OR    ║
+ * ║   (b) Pass --i-accept-empty-ledger to acknowledge that you're running     ║
+ * ║       on a known-empty deployment (e.g., pre-launch).                     ║
+ * ║                                                                            ║
+ * ║  Without either flag, the script REFUSES TO RUN if data/db.json is        ║
+ * ║  missing. Do not bypass this check by `touch data/db.json`.               ║
+ * ╚═══════════════════════════════════════════════════════════════════════════╝
+ *
  * USAGE:
- *   node scripts/migrate-split-wallets.mjs
+ *   node scripts/migrate-split-wallets.mjs                          (dev / local)
+ *   node scripts/migrate-split-wallets.mjs --kv-snapshot=./prod.json (prod)
+ *   node scripts/migrate-split-wallets.mjs --i-accept-empty-ledger   (pre-launch)
  *
  * The script ONLY READS — it never holds a private key and never broadcasts.
  * The operator signs and broadcasts each printed transfer manually from a
@@ -55,18 +73,73 @@ const CHAINS = [
   { key: "stable", name: "Stable",     token: "USDT0", rpc: "https://rpc.stable.xyz"                 },
 ];
 
-/** Read total GASTANK liability per chain from the local KV snapshot at data/db.json.
- *  In production, replace this with a live Vercel KV scan (see comment below). */
-function readKvLiabilities() {
-  const dbPath = resolve(__dirname, "..", "data", "db.json");
+function parseFlags(argv) {
+  const flags = { kvSnapshot: null, acceptEmpty: false };
+  for (const arg of argv) {
+    if (arg.startsWith("--kv-snapshot=")) flags.kvSnapshot = arg.slice("--kv-snapshot=".length);
+    else if (arg === "--i-accept-empty-ledger") flags.acceptEmpty = true;
+    else if (arg === "--help" || arg === "-h") {
+      console.log("Usage: node scripts/migrate-split-wallets.mjs [--kv-snapshot=PATH | --i-accept-empty-ledger]");
+      process.exit(0);
+    }
+  }
+  return flags;
+}
+
+/** Read total GASTANK liability per chain.
+ *
+ *  Resolution order:
+ *    1. --kv-snapshot=<path>  → read user-supplied production export
+ *    2. data/db.json          → local dev fixture (NOT production)
+ *    3. --i-accept-empty-ledger → assume zero (pre-launch / empty deployment)
+ *    4. (none of the above)   → ABORT with explicit error
+ *
+ *  Returns { totals, source } so the caller can label the plan output.
+ */
+function readKvLiabilities(flags) {
+  let dbPath;
+  let source;
+  if (flags.kvSnapshot) {
+    dbPath = resolve(flags.kvSnapshot);
+    source = `KV snapshot (${dbPath})`;
+  } else {
+    dbPath = resolve(__dirname, "..", "data", "db.json");
+    source = `local dev fixture (${dbPath})`;
+  }
+
   let raw;
   try {
     raw = JSON.parse(readFileSync(dbPath, "utf8"));
-  } catch {
-    console.warn("[warn] data/db.json not readable — assuming zero KV liability.");
-    console.warn("[warn] In production, query Vercel KV: SCAN gas:* and sum each user's per-chain balance.");
-    return Object.fromEntries(CHAINS.map(c => [c.key, 0]));
+  } catch (e) {
+    if (flags.acceptEmpty) {
+      console.warn("");
+      console.warn("⚠️  --i-accept-empty-ledger acknowledged. Treating KV liability as ZERO.");
+      console.warn("⚠️  This is ONLY safe if you have verified out-of-band that no users have");
+      console.warn("⚠️  ever deposited gas to the legacy wallet. If unsure, abort and re-run");
+      console.warn("⚠️  with --kv-snapshot=<path> pointing to a fresh `gas:*` KV export.");
+      console.warn("");
+      return { totals: Object.fromEntries(CHAINS.map(c => [c.key, 0])), source: "EMPTY (acknowledged)" };
+    }
+    console.error("");
+    console.error("❌ Cannot read KV liability source:");
+    console.error(`   ${dbPath}`);
+    console.error(`   ${e?.message ?? e}`);
+    console.error("");
+    console.error("This script REFUSES to print a migration plan without a known KV liability.");
+    console.error("Splitting funds based on a wrong (e.g., zero) liability would either:");
+    console.error("   - Under-fund GASTANK → users see their balance vanish");
+    console.error("   - Over-sweep SUBSCRIPTION → revenue commingled with user deposits");
+    console.error("");
+    console.error("To proceed, choose ONE:");
+    console.error("   (a) Export the production KV `gas:*` keys to a JSON file:");
+    console.error("       node scripts/migrate-split-wallets.mjs --kv-snapshot=./prod-kv.json");
+    console.error("");
+    console.error("   (b) If this is a known-empty pre-launch deployment, acknowledge:");
+    console.error("       node scripts/migrate-split-wallets.mjs --i-accept-empty-ledger");
+    console.error("");
+    process.exit(1);
   }
+
   const totals = Object.fromEntries(CHAINS.map(c => [c.key, 0]));
   const gas = raw.gasDeposits ?? raw.gas_deposits ?? {};
   for (const userAddr of Object.keys(gas)) {
@@ -76,7 +149,7 @@ function readKvLiabilities() {
       }
     }
   }
-  return totals;
+  return { totals, source };
 }
 
 async function getNativeBalance(rpc, address) {
@@ -86,10 +159,12 @@ async function getNativeBalance(rpc, address) {
 }
 
 async function main() {
-  const liabilities = readKvLiabilities();
+  const flags = parseFlags(process.argv.slice(2));
+  const { totals: liabilities, source: liabSource } = readKvLiabilities(flags);
   console.log("\n══════════════════════════════════════════════════════════════════");
   console.log(" Q402 v1.16 wallet-split migration plan (READ-ONLY)");
   console.log("══════════════════════════════════════════════════════════════════\n");
+  console.log(`KV liability source:  ${liabSource}`);
   console.log(`Legacy wallet:        ${LEGACY}`);
   console.log(`→ Future RELAYER:     ${LEGACY} (same key, narrower role)`);
   console.log(`→ New GASTANK:        ${GASTANK}`);
