@@ -35,6 +35,19 @@ export async function POST(req: NextRequest) {
   if (!projectName || !email || !category || !targetChain || !requestedCredit || !expectedMonthlyTx || !description || !useCase) {
     return NextResponse.json({ error: "Required fields missing" }, { status: 400 });
   }
+  const MAX_SHORT = 200;
+  const MAX_LONG  = 5000;
+  if (
+    projectName.length > MAX_SHORT || email.length > MAX_SHORT ||
+    category.length > MAX_SHORT || targetChain.length > MAX_SHORT ||
+    requestedCredit.length > MAX_SHORT || expectedMonthlyTx.length > MAX_SHORT ||
+    description.length > MAX_LONG || useCase.length > MAX_LONG ||
+    (body.website && body.website.length > MAX_SHORT) ||
+    (body.telegram && body.telegram.length > MAX_SHORT) ||
+    (body.twitter && body.twitter.length > MAX_SHORT)
+  ) {
+    return NextResponse.json({ error: "Field too long" }, { status: 400 });
+  }
 
   const id = `grant_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
   const application: GrantApplication = {

@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { checkAdminSecret } from "@/app/lib/admin-auth";
 
 const RELAYER = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
 
@@ -55,10 +57,19 @@ async function sendTelegramAlert(message: string) {
   } catch { /* non-critical */ }
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "gas-tank", 20, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const uniqueCgIds = Array.from(new Set(CHAINS.map(c => c.cgId)));
   const { searchParams } = new URL(req.url);
   const checkAlerts = searchParams.get("check_alerts") === "1";
+
+  if (checkAlerts && !checkAdminSecret(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   // Fetch balances + prices in parallel
   const [prices, ...balances] = await Promise.all([

@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
   }
 
   const address = req.nextUrl.searchParams.get("address");
-  if (!address) {
-    return NextResponse.json({ error: "address required" }, { status: 400 });
+  if (!address || !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+    return NextResponse.json({ error: "valid Ethereum address required" }, { status: 400 });
   }
 
   const existing = await getSubscription(address.toLowerCase());

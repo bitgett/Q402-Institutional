@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiKeyRecord, getSubscription } from "@/app/lib/db";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "keys-verify", 20, 60))) {
+    return NextResponse.json({ valid: false, error: "Too many requests" }, { status: 429 });
+  }
+
   const { apiKey } = await req.json();
   if (!apiKey) {
     return NextResponse.json({ valid: false, error: "apiKey required" }, { status: 400 });
