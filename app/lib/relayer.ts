@@ -9,6 +9,7 @@ import {
   type Address,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { loadRelayerKey } from "./relayer-key";
 
 // ── 체인별 릴레이 방식 (v1.3) ───────────────────────────────────────────────────
 // 5개 체인(avax / bnb / eth / xlayer / stable) 모두 EIP-7702 Type 4 TX를 기본으로 사용.
@@ -173,18 +174,17 @@ export interface EIP3009PayParams {
  * Q402PaymentImplementation 컨트랙트 불필요
  */
 export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<SettleResult> {
-  const pkRaw = process.env.RELAYER_PRIVATE_KEY;
-  if (!pkRaw || pkRaw === "your_private_key_here") {
-    return { success: false, error: "RELAYER_PRIVATE_KEY not set" };
+  const key = loadRelayerKey();
+  if (!key.ok) {
+    return { success: false, error: key.reason === "mismatch" ? "Relayer key/address mismatch" : "RELAYER_PRIVATE_KEY not set" };
   }
 
   const chainCfg = CHAIN_CONFIG[params.chainKey];
   const tokenCfg = getTokenConfig(params.chainKey, params.token);
 
   try {
-    const pk = pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`;
     const provider = new ethers.JsonRpcProvider(chainCfg.rpc);
-    const relayer  = new ethers.Wallet(pk, provider);
+    const relayer  = new ethers.Wallet(key.privateKey, provider);
 
     const { v, r, s } = ethers.Signature.from(params.sig);
 
@@ -278,16 +278,15 @@ export interface XLayerEIP7702PayParams {
  * 릴레이어(facilitator)가 Type 4 TX 제출, 유저 EOA에 impl 코드 위임 실행
  */
 export async function settlePaymentXLayerEIP7702(params: XLayerEIP7702PayParams): Promise<SettleResult> {
-  const pkRaw = process.env.RELAYER_PRIVATE_KEY;
-  if (!pkRaw || pkRaw === "your_private_key_here") {
-    return { success: false, error: "RELAYER_PRIVATE_KEY not set" };
+  const key = loadRelayerKey();
+  if (!key.ok) {
+    return { success: false, error: key.reason === "mismatch" ? "Relayer key/address mismatch" : "RELAYER_PRIVATE_KEY not set" };
   }
 
   const chainCfg = CHAIN_CONFIG["xlayer"];
 
   try {
-    const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
-    const account = privateKeyToAccount(pk);
+    const account = privateKeyToAccount(key.privateKey);
 
     const walletClient = createWalletClient({
       account,
@@ -351,12 +350,16 @@ export async function settlePaymentXLayerEIP7702(params: XLayerEIP7702PayParams)
 
 // ── ethers.js relayer wallet (kept for gas estimation / non-EIP7702 ops) ──────
 export function getRelayerWallet(chainKey: ChainKey): ethers.Wallet {
-  const pk = process.env.RELAYER_PRIVATE_KEY;
-  if (!pk || pk === "your_private_key_here") {
-    throw new Error("RELAYER_PRIVATE_KEY not set in .env.local");
+  const key = loadRelayerKey();
+  if (!key.ok) {
+    throw new Error(
+      key.reason === "mismatch"
+        ? `RELAYER_PRIVATE_KEY/address mismatch (${key.detail})`
+        : "RELAYER_PRIVATE_KEY not set in .env.local"
+    );
   }
   const provider = new ethers.JsonRpcProvider(CHAIN_CONFIG[chainKey].rpc);
-  return new ethers.Wallet(pk, provider);
+  return new ethers.Wallet(key.privateKey, provider);
 }
 
 export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT") {
@@ -418,9 +421,9 @@ export interface SettleResult {
  *  2. Calls pay() on the owner's EOA address, which runs the implementation.
  */
 export async function settlePayment(params: PayParams): Promise<SettleResult> {
-  const pkRaw = process.env.RELAYER_PRIVATE_KEY;
-  if (!pkRaw || pkRaw === "your_private_key_here") {
-    return { success: false, error: "RELAYER_PRIVATE_KEY not set" };
+  const key = loadRelayerKey();
+  if (!key.ok) {
+    return { success: false, error: key.reason === "mismatch" ? "Relayer key/address mismatch" : "RELAYER_PRIVATE_KEY not set" };
   }
 
   const chainCfg = CHAIN_CONFIG[params.chainKey];
@@ -429,8 +432,7 @@ export async function settlePayment(params: PayParams): Promise<SettleResult> {
   }
 
   try {
-    const pk = (pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex;
-    const account = privateKeyToAccount(pk);
+    const account = privateKeyToAccount(key.privateKey);
 
     // Use the transport directly without a strongly-typed chain object.
     // This avoids viem chain literal type conflicts when supporting multiple chains.

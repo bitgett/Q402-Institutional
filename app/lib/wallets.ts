@@ -23,6 +23,21 @@
  * GASTANK_ADDRESS; subscription payments go to SUBSCRIPTION_ADDRESS). A
  * compromise of the server (Vercel env) can drain only the operational gas
  * float in RELAYER_ADDRESS — never revenue, never user deposits.
+ *
+ * KNOWN LIMITATION — per-user gas custody.
+ *   This split protects the *aggregate* user gas pool (it lives in a cold
+ *   wallet), but per-user attribution is still tracked by the KV ledger
+ *   (`gas:<userAddr>` keys in Vercel KV). A KV loss / corruption / unauthorized
+ *   write therefore can:
+ *     - Forget which user owns which slice of the on-chain GASTANK balance
+ *     - Inflate or reduce a single user's recorded balance independently of
+ *       on-chain state
+ *   The total liability vs. on-chain GASTANK balance can still be verified
+ *   from chain history (`scripts/migrate-split-wallets.mjs`), but rebuilding
+ *   per-user balances after KV loss requires re-scanning every deposit/relay
+ *   event from chain logs. There is no per-user on-chain subaccount today.
+ *   Per-user on-chain custody (CREATE2 vault per user) is a deliberate
+ *   non-goal at current TVL — see README §22 trade-off discussion.
  */
 
 export const SUBSCRIPTION_ADDRESS = "0x700a873215edb1e1a2a401a2e0cec022f6b5bd71";

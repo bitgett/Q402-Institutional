@@ -17,7 +17,7 @@ import { createHmac, randomBytes } from "crypto";
 import { rateLimit, refundRateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { validateWebhookUrl } from "@/app/lib/webhook-validator";
 import { safeWebhookFetch } from "@/app/lib/safe-fetch";
-import { privateKeyToAccount } from "viem/accounts";
+import { loadRelayerKey } from "@/app/lib/relayer-key";
 import {
   CHAIN_CONFIG,
   getTokenConfig,
@@ -293,12 +293,17 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 8. 릴레이 실행 (sandbox → mock, live → on-chain) ─────────────────────
-  const pkRaw = process.env.RELAYER_PRIVATE_KEY;
-  if (!isSandbox && (!pkRaw || pkRaw === "your_private_key_here")) {
-    return NextResponse.json({ error: "Relay not configured" }, { status: 503 });
+  // Live mode: derive + verify the relayer key matches RELAYER_ADDRESS in
+  // wallets.ts. If env was rotated to a different wallet, fail closed (503)
+  // rather than silently signing from an unmonitored address.
+  let relayerAddress: Address = "0x" as Address;
+  if (!isSandbox) {
+    const key = loadRelayerKey();
+    if (!key.ok) {
+      return NextResponse.json({ error: "Relay not configured" }, { status: 503 });
+    }
+    relayerAddress = key.address as Address;
   }
-  const relayerPk = pkRaw ? ((pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`) as Hex) : ("0x" as Hex);
-  const relayerAddress = isSandbox ? ("0x" as Address) : privateKeyToAccount(relayerPk).address as Address;
 
   if (isSandbox) {
     // Sandbox: return a mock result without hitting the chain
