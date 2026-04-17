@@ -332,13 +332,13 @@ console.log("Paid! TX:", result.txHash);`} />
           {/* ── GAS POOL ── */}
           <Section id="gaspool" title="Gas Pool">
             <p className="text-white/55 text-sm mb-6">
-              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, AVAX…) into a Q402-managed address for your project. Every time a user transaction is relayed, the gas fee is automatically deducted from this pool.
+              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, AVAX, OKB, or USDT0 on Stable) into a Q402-managed Gas Tank address for your project. Every time a user transaction is relayed, the gas fee is automatically deducted from this pool.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-yellow text-xs font-semibold mb-2">Deposit</div>
-                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / AVAX / OKB) to the Q402 relayer address shown in your dashboard. Your balance is tracked per wallet address.</p>
+                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / AVAX / OKB / USDT0) to the Q402 Gas Tank address shown in your dashboard. Your balance is tracked per wallet address. Note: the Gas Tank is a separate cold wallet from the hot relayer — never send funds to the relayer address directly.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-blue-400 text-xs font-semibold mb-2">Auto-deduction</div>

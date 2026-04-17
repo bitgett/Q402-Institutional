@@ -67,8 +67,12 @@ export const CHAIN_CONFIG = {
     rpc: "https://api.avax.network/ext/bc/C/rpc",
     chainId: 43114,
     token: "AVAX",
-    // Q402PaymentImplementation deployed on Avalanche mainnet
-    implContract: process.env.IMPLEMENTATION_CONTRACT ?? "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
+    // Q402PaymentImplementation deployed on Avalanche mainnet.
+    // Historical note: `IMPLEMENTATION_CONTRACT` (unprefixed) was the first
+    // env var added and remains in existing Vercel projects. New deployments
+    // should use `AVAX_IMPLEMENTATION_CONTRACT` (matches BNB/ETH/XLAYER/STABLE
+    // naming and what .env.example documents). Both are read here for compat.
+    implContract: process.env.AVAX_IMPLEMENTATION_CONTRACT ?? process.env.IMPLEMENTATION_CONTRACT ?? "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
     usdc: { address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6, symbol: "USDC" },
     usdt: { address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", decimals: 6, symbol: "USDT" },
   },
