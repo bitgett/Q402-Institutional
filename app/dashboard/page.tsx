@@ -71,6 +71,8 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
   const [phase, setPhase] = useState<"loading"|"main"|"checking"|"deposit_verified"|"not_found">("loading");
   const [copied, setCopied] = useState(false);
   const [verifiedBalances, setVerifiedBalances] = useState<Record<string, number>>({});
+  const [txHashInput, setTxHashInput] = useState("");
+  const [txHashError, setTxHashError] = useState("");
 
   useEffect(() => { const t = setTimeout(() => setPhase("main"), 1000); return () => clearTimeout(t); }, []);
 
@@ -78,12 +80,43 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
 
   async function verifyDeposit() {
     setPhase("checking");
+    setTxHashError("");
     try {
       const res = await fetch("/api/gas-tank/verify-deposit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
       const data = await res.json();
       if (res.ok && data.newDeposits > 0) { setVerifiedBalances(data.balances); setPhase("deposit_verified"); onDepositVerified?.(data.balances); }
       else setPhase("not_found");
     } catch { setPhase("not_found"); }
+  }
+
+  // Direct-lookup rescue path — for deposits that fell outside the block scan window.
+  async function verifyByTxHash() {
+    const trimmed = txHashInput.trim();
+    if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
+      setTxHashError("Paste a full TX hash (0x + 64 hex chars).");
+      return;
+    }
+    setTxHashError("");
+    setPhase("checking");
+    try {
+      const res = await fetch("/api/gas-tank/verify-deposit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, txHash: trimmed, chain: chainKey }),
+      });
+      const data = await res.json();
+      if (res.ok && (data.newDeposits > 0 || data.alreadyCredited)) {
+        setVerifiedBalances(data.balances);
+        setPhase("deposit_verified");
+        onDepositVerified?.(data.balances);
+      } else {
+        setTxHashError(data.error ?? "Could not credit that transaction.");
+        setPhase("not_found");
+      }
+    } catch {
+      setTxHashError("Network error — try again.");
+      setPhase("not_found");
+    }
   }
 
   return createPortal(
@@ -157,10 +190,29 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
 
         {phase === "not_found" && (
           <div className="space-y-4 py-2">
-            <div className="bg-red-400/8 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">No deposit found yet. Transactions may take 1–2 minutes.</div>
+            <div className="bg-red-400/8 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">
+              {txHashError || "No deposit found yet. Transactions may take 1–2 minutes."}
+            </div>
             <div className="flex gap-3">
-              <button onClick={() => setPhase("main")} className="flex-1 py-2.5 rounded-xl text-sm border border-white/10 text-white/50 hover:text-white transition-all">← Back</button>
-              <button onClick={verifyDeposit} className="flex-1 py-2.5 rounded-xl text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all font-semibold">Try Again</button>
+              <button onClick={() => { setTxHashError(""); setPhase("main"); }} className="flex-1 py-2.5 rounded-xl text-sm border border-white/10 text-white/50 hover:text-white transition-all">← Back</button>
+              <button onClick={verifyDeposit} className="flex-1 py-2.5 rounded-xl text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all font-semibold">Rescan</button>
+            </div>
+            <div className="border-t border-white/8 pt-4 space-y-2">
+              <p className="text-xs text-white/40">Deposited earlier? Paste the TX hash to credit it directly.</p>
+              <input
+                type="text"
+                value={txHashInput}
+                onChange={e => setTxHashInput(e.target.value)}
+                placeholder="0x..."
+                className="w-full bg-white/4 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white/80 placeholder:text-white/20 focus:outline-none focus:border-yellow/40"
+              />
+              <button
+                onClick={verifyByTxHash}
+                disabled={!txHashInput.trim()}
+                className="w-full py-2.5 rounded-xl text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold"
+              >
+                Credit by TX Hash
+              </button>
             </div>
           </div>
         )}
