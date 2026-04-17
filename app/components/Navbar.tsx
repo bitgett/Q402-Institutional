@@ -8,20 +8,25 @@ export default function Navbar() {
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-navy/80 backdrop-blur-md border-b border-white/10">
       <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        {/* Logo */}
-        <Link href="/" className="flex items-baseline gap-1.5">
-          <span className="text-yellow font-bold text-lg tracking-tight">Q402</span>
-          <span className="text-white/30 text-xs font-light hidden sm:block">by Quack AI</span>
-        </Link>
+        {/* Left group: logo + nav */}
+        <div className="flex items-center gap-10">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
+              <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
+            </span>
+            <span className="text-yellow font-bold text-lg tracking-tight leading-none">Q402</span>
+            <span className="text-white/30 text-xs font-light hidden sm:block leading-none">by Quack AI</span>
+          </Link>
 
-        {/* Nav links */}
-        <div className="hidden md:flex items-center gap-8 text-sm text-white/50">
-          <Link href="/#how-it-works" className="hover:text-white transition-colors">How it works</Link>
-          <Link href="/#use-cases"    className="hover:text-white transition-colors">Use cases</Link>
-          <Link href="/#pricing"      className="hover:text-white transition-colors">Pricing</Link>
-          <a href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</a>
-          <a href="/grant"         className="hover:text-yellow transition-colors text-yellow/70 font-medium">Grant</a>
-          <a href="/docs"          className="hover:text-white transition-colors">Docs</a>
+          {/* Nav links — left-aligned, close to the logo */}
+          <div className="hidden md:flex items-center gap-7 text-sm text-white/50">
+            <Link href="/#how-it-works" className="hover:text-white transition-colors">How it works</Link>
+            <Link href="/#use-cases"    className="hover:text-white transition-colors">Use cases</Link>
+            <Link href="/#pricing"      className="hover:text-white transition-colors">Pricing</Link>
+            <a href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</a>
+            <a href="/grant"         className="hover:text-yellow transition-colors text-yellow/70 font-medium">Grant</a>
+            <a href="/docs"          className="hover:text-white transition-colors">Docs</a>
+          </div>
         </div>
 
         <WalletButton />
