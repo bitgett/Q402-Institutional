@@ -364,14 +364,25 @@ export default function DashboardPage() {
     return () => clearTimeout(t);
   }, [mounted, isConnected, router]);
 
-  const refreshUserBalance = useCallback((addr: string) => {
-    fetch(`/api/gas-tank/user-balance?address=${addr}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.balances) setUserGasBalance(data.balances);
-        if (data.deposits) setGasDeposits(data.deposits);
-      }).catch(() => {});
-  }, []);
+  const refreshUserBalance = useCallback(async (addr: string) => {
+    // Q402-SEC-003: user-balance now requires nonce+signature auth.
+    // Reuses the cached session nonce (55-min sessionStorage TTL) — no
+    // extra wallet popup on re-renders.
+    const auth = await getAuthCreds(addr, signMessage);
+    if (!auth) return;
+    const { nonce, signature } = auth;
+    const qs = new URLSearchParams({ address: addr, nonce, sig: signature }).toString();
+    try {
+      const res  = await fetch(`/api/gas-tank/user-balance?${qs}`);
+      const data = await res.json();
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") {
+        clearAuthCache(addr);
+        return;
+      }
+      if (data.balances) setUserGasBalance(data.balances);
+      if (data.deposits) setGasDeposits(data.deposits);
+    } catch { /* ignore */ }
+  }, [signMessage]);
 
   useEffect(() => {
     if (!address) return;
