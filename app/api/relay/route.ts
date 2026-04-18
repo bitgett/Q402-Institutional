@@ -200,11 +200,69 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 4b. 일일 burst 상한 (단일 고객이 Gas Tank 독점 소진 방지) ──────────────
+  // ── 5. 체인 지원 확인 ──────────────────────────────────────────────────────
+  // Q402-SEC-001: moved ahead of daily-cap charging so an unsupported-chain
+  // request no longer burns a quota slot.
+  const chainCfg = CHAIN_CONFIG[chain];
+  if (!chainCfg) {
+    return NextResponse.json({
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable.`,
+    }, { status: 400 });
+  }
+
+  // ── 5a. authorization 강제 잠금 — 공식 impl contract + chainId 만 허용 ─────
+  // 클라이언트가 잘못된 delegation 주소나 chainId를 보내면 on-chain revert로
+  // 이어져 결국 환불되지만, "어느 배포 컨트랙트와 계약하는지"는 서버가
+  // 명시적으로 잠가야 기관 관점에서 증빙 가능한 결합이 된다.
+  // contracts.manifest.json의 chains[chain].implContract와 1:1 대응.
+  // Q402-SEC-001: also moved before daily-cap charging.
+  if (authorization) {
+    if (Number(authorization.chainId) !== chainCfg.chainId) {
+      return NextResponse.json({
+        error: `authorization.chainId ${authorization.chainId} does not match ${chain} (expected ${chainCfg.chainId})`,
+      }, { status: 400 });
+    }
+    const expectedImpl = chainCfg.implContract.toLowerCase();
+    const actualImpl   = String(authorization.address ?? "").toLowerCase();
+    if (!ETH_ADDR.test(String(authorization.address ?? "")) || actualImpl !== expectedImpl) {
+      return NextResponse.json({
+        error: `authorization.address must be the official Q402 ${chain} implementation contract`,
+      }, { status: 400 });
+    }
+  }
+
+  // ── 6. Gas Tank 잔고 확인 (sandbox는 스킵) ───────────────────────────────
+  if (!isSandbox) {
+    const gasBalance   = await getGasBalance(keyRecord.address);
+    const chainBalance = gasBalance[chain] ?? 0;
+    if (chainBalance <= 0.0001) {
+      return NextResponse.json({
+        error: `Insufficient gas tank on ${chain}. Deposit native tokens to your gas tank.`,
+      }, { status: 402 });
+    }
+  }
+
+  // ── 6a. Relayer key readiness (live only) ────────────────────────────────
+  // Q402-SEC-001: verify the relay infrastructure is actually usable BEFORE
+  // charging the daily cap or decrementing credits. Previously loadRelayerKey()
+  // ran after both charges, so a misconfigured RELAYER_PRIVATE_KEY would
+  // silently drain every caller's quota on 503 return.
+  let relayerAddress: Address = "0x" as Address;
+  if (!isSandbox) {
+    const key = loadRelayerKey();
+    if (!key.ok) {
+      return NextResponse.json({ error: "Relay not configured" }, { status: 503 });
+    }
+    relayerAddress = key.address as Address;
+  }
+
+  // ── 7. 일일 burst 상한 (단일 고객이 Gas Tank 독점 소진 방지) ──────────────
   // 플랜별 일일 최대. Exhaustive — unknown/typo'd plan names fall through to
   // UNKNOWN_PLAN_CAP rather than silently skipping the cap (prior behavior let
   // an unknown plan burn the Gas Tank). All plan names here must match
   // PLAN_QUOTA in app/lib/db.ts.
+  // Q402-SEC-001: moved down so it only charges once all pre-relay checks
+  // (chain, authorization, gas tank, relayer key) have already passed.
   const DAILY_CAP: Record<string, number> = {
     starter:           50,
     basic:            100,
@@ -237,46 +295,7 @@ export async function POST(req: NextRequest) {
     dailyCapCharged = true;
   }
 
-  // ── 5. 체인 지원 확인 ──────────────────────────────────────────────────────
-  const chainCfg = CHAIN_CONFIG[chain];
-  if (!chainCfg) {
-    return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable.`,
-    }, { status: 400 });
-  }
-
-  // ── 5a. authorization 강제 잠금 — 공식 impl contract + chainId 만 허용 ─────
-  // 클라이언트가 잘못된 delegation 주소나 chainId를 보내면 on-chain revert로
-  // 이어져 결국 환불되지만, "어느 배포 컨트랙트와 계약하는지"는 서버가
-  // 명시적으로 잠가야 기관 관점에서 증빙 가능한 결합이 된다.
-  // contracts.manifest.json의 chains[chain].implContract와 1:1 대응.
-  if (authorization) {
-    if (Number(authorization.chainId) !== chainCfg.chainId) {
-      return NextResponse.json({
-        error: `authorization.chainId ${authorization.chainId} does not match ${chain} (expected ${chainCfg.chainId})`,
-      }, { status: 400 });
-    }
-    const expectedImpl = chainCfg.implContract.toLowerCase();
-    const actualImpl   = String(authorization.address ?? "").toLowerCase();
-    if (!ETH_ADDR.test(String(authorization.address ?? "")) || actualImpl !== expectedImpl) {
-      return NextResponse.json({
-        error: `authorization.address must be the official Q402 ${chain} implementation contract`,
-      }, { status: 400 });
-    }
-  }
-
-  // ── 6. Gas Tank 잔고 확인 (sandbox는 스킵) ───────────────────────────────
-  if (!isSandbox) {
-    const gasBalance   = await getGasBalance(keyRecord.address);
-    const chainBalance = gasBalance[chain] ?? 0;
-    if (chainBalance <= 0.0001) {
-      return NextResponse.json({
-        error: `Insufficient gas tank on ${chain}. Deposit native tokens to your gas tank.`,
-      }, { status: 402 });
-    }
-  }
-
-  // ── 7. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
+  // ── 7b. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
   // xlayer/stable carry their own nonce in xlayerNonce/stableNonce and never
   // consume this value. Section 2 rejects missing `nonce` on avax/bnb/eth with
   // a 400, so if we get here with a required-nonce chain, `nonce` is present.
@@ -286,7 +305,7 @@ export async function POST(req: NextRequest) {
   const tokenCfg = getTokenConfig(chain, token);
   let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };
 
-  // ── 7b. 크레딧 원자 예약 (relay 직전 — 경쟁 안전) ────────────────────────
+  // ── 7c. 크레딧 원자 예약 (relay 직전 — 경쟁 안전) ────────────────────────
   // initQuotaIfNeeded: 첫 릴레이 시 기존 계정을 quota 키로 lazy-migrate (SET NX)
   // decrementCredit:   Redis DECRBY — 결과 < 0이면 즉시 보상 후 차단
   let creditReserved = false;
@@ -310,17 +329,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 8. 릴레이 실행 (sandbox → mock, live → on-chain) ─────────────────────
-  // Live mode: derive + verify the relayer key matches RELAYER_ADDRESS in
-  // wallets.ts. If env was rotated to a different wallet, fail closed (503)
-  // rather than silently signing from an unmonitored address.
-  let relayerAddress: Address = "0x" as Address;
-  if (!isSandbox) {
-    const key = loadRelayerKey();
-    if (!key.ok) {
-      return NextResponse.json({ error: "Relay not configured" }, { status: 503 });
-    }
-    relayerAddress = key.address as Address;
-  }
+  // Relayer address was resolved in section 6a; `relayerAddress` is in scope.
 
   if (isSandbox) {
     // Sandbox: return a mock result without hitting the chain
@@ -459,8 +468,13 @@ export async function POST(req: NextRequest) {
     }).catch(e => console.error("[relay] quotaBonus display sync failed (non-fatal):", e));
   }
 
-  // ── 11. Webhook 발동 (non-blocking, sandbox 포함) ─────────────────────────
-  const webhookCfg = await getWebhookConfig(keyRecord.address);
+  // ── 11. Webhook 발동 (non-blocking, LIVE only) ────────────────────────────
+  // Q402-SEC-002: sandbox relays are simulated — no on-chain TX exists.
+  // Emitting HMAC-signed `relay.success` events for sandbox calls let a
+  // downstream consumer that only validates the signature mistake a
+  // fabricated event for a real settlement. Skip webhook dispatch entirely
+  // for sandbox so sandbox traffic cannot be used to forge trusted events.
+  const webhookCfg = isSandbox ? null : await getWebhookConfig(keyRecord.address);
   if (webhookCfg?.active && webhookCfg.url) {
     // SSRF guard — shared ruleset with /api/webhook save + test paths.
     // Re-check at dispatch time so legacy rows stored under older rules

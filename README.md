@@ -866,7 +866,9 @@ const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 - 블록 창 밖에서도 동작. 중복 txHash는 `addGasDeposit` SADD로 자동 차단 (`alreadyCredited: true`)
 - 대시보드 Deposit 모달의 "not_found" 상태에서 UI 필드 노출
 
-**잔고 조회:** `GET /api/gas-tank/user-balance?address=0x...`
+**잔고 조회:** `GET /api/gas-tank/user-balance?address=0x...&nonce=...&sig=0x...`
+
+> **v1.17+ 인증 필수 (Q402-SEC-003):** 세션 nonce + EIP-191 서명 필요. 익명 `?address=` 단일 파라미터로 타 지갑의 Q402 가스 탱크 포스처(체인별 잔고 + 입금 이력)를 열람하던 경로 차단. nonce는 `GET /api/auth/nonce?address={addr}` 로 발급, 서명은 `/api/transactions` · `/api/webhook`과 동일한 `requireAuth()` 경로.
 
 ```json
 {
@@ -1042,17 +1044,38 @@ function transferWithAuthorization(
 
 | 속성 | 구현 |
 |------|------|
-| API Key 소유권 증명 | EIP-191 personal_sign (provision/rotate/transactions/activate) |
+| API Key 소유권 증명 | EIP-191 personal_sign (provision/rotate/transactions/activate/user-balance) |
 | Replay 방지 | `usedNonces[owner][nonce]` 온체인 mapping |
 | Owner Binding | `owner != address(this)` → `OwnerMismatch()` revert |
 | Facilitator 검증 | `msg.sender != facilitator` → `UnauthorizedFacilitator()` revert (xlayer) |
 | SSRF 방지 | Webhook URL 등록/발송 시 RFC-1918 + IPv6 내부 + 클라우드 메타데이터 차단 |
 | Rate limiting | KV fixed-window per IP **and per API key** (/api/relay: 30 req/60s per key) |
 | 에러 노출 방지 | 내부 에러 서버 로그, 클라이언트엔 generic 메시지 |
-| Sandbox 격리 | KV `isSandbox` 플래그만 신뢰 — key prefix 기반 우회 차단 |
+| Sandbox 격리 | KV `isSandbox` 플래그만 신뢰 — key prefix 기반 우회 차단. 웹훅 디스패치는 live-only(v1.17, Q402-SEC-002) |
 | TX 재사용 방지 | `used_txhash:{hash}` KV 플래그 (90일 TTL) — 동일 TX 재활성화 불가 |
 | Webhook 무결성 | HMAC-SHA256 모든 아웃바운드 페이로드 |
 | ECDSA 강화 | low-s 강제 + zero-address 검증 |
+
+### v1.17 보안 감사 이력 (2026-04-18, 외부 리뷰어)
+
+프로덕션 런칭 전 3rd-party 검토. 3 finding 제기, 전원 수정 + 회귀 테스트 락인 완료.
+
+**[P0] Q402-SEC-001 — 릴레이 수표 순서 실버그 (High)**  
+`decrementCredit()` 이후 `loadRelayerKey()` 실행. `RELAYER_PRIVATE_KEY` 오설정 시 503 복귀되지만 크레딧/일일캡은 이미 차감 → 모든 호출자 할당량 silent drain.
+- 수정: `chain → auth lock → gas tank → loadRelayerKey → dailyCap → decrement → relay` 로 순서 재배치 ([`app/api/relay/route.ts`](app/api/relay/route.ts), 섹션 6a)
+- 회귀: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) 9 landmark assertion
+
+**[P0] Q402-SEC-002 — Sandbox 웹훅 forgery (Medium, Priority High)**  
+Sandbox 릴레이는 txHash/blockNumber fabricate. 그럼에도 HMAC 서명된 `relay.success` 발송 → sandbox 키로 "서명 유효한 settlement" 위조 가능.
+- 수정: `webhookCfg = isSandbox ? null : await getWebhookConfig(...)` ([`app/api/relay/route.ts`](app/api/relay/route.ts))
+- 회귀: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) 후반부 2 assertion
+
+**[P1] Q402-SEC-003 — 익명 gas-tank 포스처 열람 (Low-Medium)**  
+`GET /api/gas-tank/user-balance?address=0x...` 가 unauthenticated. 타 지갑 잔고/입금 이력 trivially 스크래핑.
+- 수정: `requireAuth(address, nonce, sig)` 추가 ([`app/api/gas-tank/user-balance/route.ts`](app/api/gas-tank/user-balance/route.ts)) + 대시보드 caller `getAuthCreds()` 사용 ([`app/dashboard/page.tsx`](app/dashboard/page.tsx))
+- 회귀: [`__tests__/user-balance-auth.test.ts`](__tests__/user-balance-auth.test.ts) 5 assertion
+
+---
 
 ### v1.2 보안 감사 이력 (2026-03-23, Marin)
 
@@ -1184,6 +1207,50 @@ for (const chain of ["avax", "bnb", "eth"]) {
 ---
 
 ## 25. Changelog
+
+### v1.17 (2026-04-18)
+
+> **외부 보안 리뷰 대응 — Q402-SEC-001 / Q402-SEC-002 / Q402-SEC-003.** 친구 리뷰어(2026-04-18)가 올린 3건 finding을 전부 고정. canonical flow (5 체인 + TransferAuthorization witness + decimal-string `amount`) 불변. 변경된 건 수표 순서·sandbox 격리·익명 조회 차단뿐.
+
+#### 프로덕션 런칭 전 3rd-party 보안 감사 반영
+
+**[P0] Q402-SEC-001 — 릴레이 수표 순서 재배치로 silent quota drain 차단 (`app/api/relay/route.ts`)**
+- 기존: `decrementCredit()` 이후에 `loadRelayerKey()` 가 fail → 503 반환되지만 크레딧/일일캡은 이미 차감 → `RELAYER_PRIVATE_KEY` 오설정 시 모든 호출자 할당량이 조용히 소진되던 실버그.
+- 수정: 순서를 `chain 검증 → auth lock → gas tank funding → loadRelayerKey() → daily cap → decrementCredit → relay` 로 재배치. 릴레이 인프라가 실제로 살아 있다는 것을 확인한 후에만 과금.
+- 섹션 6a 신설 (`app/api/relay/route.ts`):
+  ```ts
+  // Q402-SEC-001: verify relay infra is usable BEFORE charging.
+  let relayerAddress: Address = "0x" as Address;
+  if (!isSandbox) {
+    const key = loadRelayerKey();
+    if (!key.ok) return NextResponse.json({ error: "Relay not configured" }, { status: 503 });
+    relayerAddress = key.address as Address;
+  }
+  ```
+- 회귀 테스트: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) — 소스 grep으로 landmark 정렬 (CHAIN_CFG → AUTH_LOCK → GAS_TANK → LOAD_RELAYER_KEY → DAILY_CAP → DECREMENT → RELAY_CALLS) 9개 invariant를 락인. 리팩터 시 순서 역전을 suite가 차단.
+
+**[P0] Q402-SEC-002 — Sandbox 웹훅 디스패치 완전 차단 (`app/api/relay/route.ts`)**
+- 기존: sandbox 릴레이(txHash/blockNumber fabricate)에도 HMAC 서명된 `relay.success` 웹훅 발송 → sandbox 키 보유자가 "서명 유효한 settlement 이벤트"를 위조 가능. 다운스트림 회계가 HMAC만 믿으면 유령 매출 주입 가능.
+- 수정: `getWebhookConfig()` 호출 자체를 `isSandbox ? null : ...` 로 가드 → sandbox는 웹훅 config 조차 읽지 않음. 후속 디스패치 단계에서의 우연한 regression을 원천 차단.
+- 회귀 테스트: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) 후반부 2 assertion — `webhookCfg = isSandbox ? null : await getWebhookConfig` 정확 매칭 + 과거 버전의 `sandbox 포함` 표현 금지.
+
+**[P1] Q402-SEC-003 — `/api/gas-tank/user-balance` 익명 조회 차단 (`app/api/gas-tank/user-balance/route.ts`)**
+- 기존: `?address=0x...` 만으로 타인 지갑의 Q402 가스 탱크 포스처(체인별 잔고 + 입금 txHash 이력)를 무제한 열람 가능. 데이터가 온체인 GASTANK 로그에서 부분적으로 도출 가능하긴 했지만, **address → Q402 customer 매핑**을 30 req/60s 속도로 trivially 스크래핑 가능했음.
+- 수정: `requireAuth(address, nonce, sig)` 를 rate-limit 직후·잔고 read 직전에 배치. `/api/transactions` · `/api/webhook` 과 동일한 nonce+signature 경로 (세션 nonce 1h TTL, `getAuthCreds()` 캐시 사용).
+- 대시보드 call site 업데이트 ([`app/dashboard/page.tsx`](app/dashboard/page.tsx)): `refreshUserBalance()` 를 async로 전환, `getAuthCreds(addr, signMessage)` 로 캐시된 세션 nonce 재사용 → 유저 지갑 팝업은 최초 1회만, 이후 새로고침/폴링에서는 팝업 없음. `NONCE_EXPIRED` 코드 수신 시 캐시 invalidate.
+- 회귀 테스트: [`__tests__/user-balance-auth.test.ts`](__tests__/user-balance-auth.test.ts) — requireAuth import, nonce/sig 쿼리스트링 파싱, `authResult` 가 `getGasBalance()`/`getGasDeposits()` 앞에서 실행, 에러 status propagation, 방어층으로 per-IP 레이트리밋 유지까지 5 assertion.
+
+**검증**: `npx vitest run` — 169/169 통과 (기존 155 + 신규 14). `npm run lint` 청결. `npm run build` ✓ 4.3s. Turbopack 빌드 우회 (webpack 고정)·opengraph Node 런타임 등 v1.15~v1.16 인프라 제약 그대로.
+
+#### 심각도 판단 (README 명시)
+
+| Finding | 리뷰어 | 내부 | 근거 |
+|---------|--------|------|------|
+| Q402-SEC-001 | High | **High** 수용 | 조용한 quota drain → 지불 고객 환불 폭탄·신뢰 붕괴. 발동 조건 낮음 (env 오타). |
+| Q402-SEC-002 | High | **Medium, Priority High** | sandbox 웹훅 수신자에게 회계 오염 리스크. 실제 자금 이동 없음(sandbox는 시뮬). 수정 비용 낮아 즉시 적용. |
+| Q402-SEC-003 | Medium | **Low-Medium** | 데이터가 GASTANK 온체인 로그에서 부분 도출 가능. 그러나 address→customer 매핑 단순화·스크래핑 비용 제로 제거가 가치. `/api/transactions` 와의 일관성도 확보. |
+
+---
 
 ### v1.16 (2026-04-17)
 
