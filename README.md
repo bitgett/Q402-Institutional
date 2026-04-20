@@ -42,83 +42,83 @@
 
 ## 1. Why We Built This
 
-모든 EVM 블록체인은 사용자가 USDC/USDT를 이동하려면 네이티브 가스 토큰(BNB, ETH, AVAX, OKB, USDT0)을 보유해야 한다.
+On every EVM chain, users need to hold a native gas token (BNB, ETH, AVAX, OKB, USDT0) just to move USDC/USDT.
 
-> BNB Chain에서 USDC 100달러를 가진 유저는 **BNB 없이는 아무것도 전송할 수 없다.**  
-> Web3 온보딩은 이 단계에서 무너진다.
+> A user holding $100 of USDC on BNB Chain **cannot transfer anything without BNB.**  
+> Web3 onboarding collapses right here.
 
-**Q402가 존재하는 4가지 이유:**
+**Four reasons Q402 exists:**
 
-1. **Web3 대중화는 가스 UX가 막고 있다.** Stripe, PayPal, Venmo는 수수료를 사용자에게 전가하지 않는다. Web3도 이 기준에 도달해야 한다.
+1. **Gas UX is what's blocking Web3 adoption.** Stripe, PayPal, and Venmo don't push fees onto users. Web3 needs to meet that bar.
 
-2. **AI Agent는 가스리스 결제 레일이 필요하다.** 100개 에이전트가 5개 체인에서 가스를 각자 관리하는 것은 운영 악몽이다. Gas Tank 한 번 충전으로 전체를 처리한다.
+2. **AI agents need a gasless payment rail.** Managing gas for 100 agents across 5 chains individually is an operational nightmare. One Gas Tank top-up covers all of them.
 
-3. **EIP-7702가 올바른 프리미티브다.** ERC-4337(Account Abstraction)과 달리 기존 EOA 그대로 동작 — 지갑 마이그레이션 불필요. MetaMask, OKX Wallet이 즉시 참여 가능.
+3. **EIP-7702 is the right primitive.** Unlike ERC-4337 (Account Abstraction), existing EOAs work as-is — no wallet migration required. MetaMask and OKX Wallet participate out of the box.
 
-4. **멀티체인 Day 1.** 대부분의 가스리스 솔루션은 체인 1개. Q402는 5개 메인넷에 동시 배포.
+4. **Multi-chain on day one.** Most gasless solutions cover a single chain. Q402 ships on 5 mainnets simultaneously.
 
 ---
 
 ## 2. What is Q402
 
-Q402는 **EIP-7702 + EIP-712 기반 가스리스 결제 인프라**다. 개발자가 SDK를 통합하면 Q402 릴레이어가 모든 온체인 가스를 대납한다.
+Q402 is **gasless payment infrastructure built on EIP-7702 + EIP-712**. Integrate the SDK and the Q402 relayer covers every on-chain gas fee on your behalf.
 
-**모든 5개 체인 — 통합 EIP-7702 플로우:**
+**All 5 chains — unified EIP-7702 flow:**
 ```
 User clicks "Pay USDC"
-  → SDK: GET /api/relay/info (facilitator 주소 조회)
+  → SDK: GET /api/relay/info (fetch facilitator address)
     → EIP-712 TransferAuthorization witnessSig (verifyingContract = user EOA)
-    → EIP-7702 authorization 서명 (2 sigs 총 2회)
+    → EIP-7702 authorization signature (2 sigs total)
       → POST /api/relay { witnessSig, authorization }
-        → Q402 relayer: Type 4 TX 제출 (가스 대납)
-          → 위임된 Q402PaymentImplementation.transferWithAuthorization() 실행
+        → Q402 relayer: submit Type 4 TX (pays gas)
+          → delegated Q402PaymentImplementation.transferWithAuthorization() runs
             → USDC/USDT(0): user EOA → recipient
 ```
 
-> 5개 체인 모두 동일한 witness 타입 `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`과
-> 동일한 `verifyingContract = user EOA` 규칙을 사용한다. 체인별 차이는 `domainName`(예: "Q402 Avalanche")과
-> impl 주소뿐.
+> All 5 chains share the same witness type `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`
+> and the same `verifyingContract = user EOA` rule. The only per-chain differences are `domainName` (e.g. "Q402 Avalanche")
+> and the impl address.
 >
-> X Layer는 레거시 EIP-3009 fallback도 지원 — `eip3009Nonce` 전달 시 자동 선택 (**USDC only**).
+> X Layer additionally supports legacy EIP-3009 fallback — selected automatically when `eip3009Nonce` is passed (**USDC only**).
 
 ---
 
 ## 3. Supported Chains
 
-| Chain | ChainID | 릴레이 방식 | 컨트랙트 | 상태 |
-|-------|---------|-----------|---------|------|
+| Chain | ChainID | Relay Method | Contract | Status |
+|-------|---------|--------------|----------|--------|
 | Avalanche C-Chain | 43114 | EIP-7702 | `0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c` | ✅ |
 | BNB Chain | 56 | EIP-7702 | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` | ✅ |
 | Ethereum | 1 | EIP-7702 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | ✅ |
 | X Layer | 196 | EIP-7702 + EIP-3009 USDC fallback | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | ✅ |
 | **Stable** | **988** | **EIP-7702** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | ✅ |
 
-> Stable 특이사항: USDT0가 가스 토큰이자 결제 토큰 (네이티브 코인 = USD 페그).
+> Stable is special: USDT0 is both the gas token and the payment token (native coin = USD-pegged).
 
-> **Single source of truth**: 체인별 컨트랙트 · 도메인 · witness 타입 · 토큰 매핑은
-> [`contracts.manifest.json`](./contracts.manifest.json)에 canonical 형태로 정리돼 있다.
-> 서버(`app/lib/relayer.ts`) · SDK(`public/q402-sdk.js`) · 이 문서 값이 드리프트될 경우
-> 매니페스트가 최종 진실이며, `__tests__/contracts-manifest.test.ts`가 일치성을 검증한다.
+> **Single source of truth**: per-chain contracts, domains, witness types, and token mappings
+> are canonicalized in [`contracts.manifest.json`](./contracts.manifest.json).
+> If server (`app/lib/relayer.ts`), SDK (`public/q402-sdk.js`), or this doc drifts,
+> the manifest is authoritative, and `__tests__/contracts-manifest.test.ts` enforces consistency.
 
 ---
 
 ## 4. Tech Stack
 
-| 항목 | 기술 |
-|------|------|
+| Layer | Technology |
+|-------|------------|
 | Framework | Next.js 16 App Router (React 19, TypeScript) |
 | Styling | Tailwind CSS + framer-motion |
 | Blockchain | ethers.js v6 + viem |
 | Wallet | Custom WalletContext (MetaMask + OKX Wallet) |
 | Database | Vercel KV (Redis) |
-| Deployment | Vercel (git push → 자동 배포) |
+| Deployment | Vercel (git push → auto deploy) |
 | Contract | Solidity 0.8.20, EIP-7702, EIP-712 |
 
 ---
 
 ## 5. Quick Start
 
-### 클론 & 설치
+### Clone & Install
 
 ```bash
 git clone https://github.com/bitgett/Q402-Institutional.git
@@ -126,43 +126,43 @@ cd Q402-Institutional
 npm install
 ```
 
-### 환경변수 설정 (`.env.local`)
+### Environment Variables (`.env.local`)
 
 ```env
-# 릴레이어 지갑 Private Key — 절대 외부 노출 금지
-RELAYER_PRIVATE_KEY=0x...   # q402-avalanche/.env의 DEPLOYER_PRIVATE_KEY
+# Relayer wallet private key — never expose
+RELAYER_PRIVATE_KEY=0x...   # DEPLOYER_PRIVATE_KEY from q402-avalanche/.env
 
-# 컨트랙트 주소 (v1.3). AVAX는 historical name `IMPLEMENTATION_CONTRACT`도 허용됨.
+# Contract addresses (v1.3). AVAX accepts the historical name `IMPLEMENTATION_CONTRACT` as well.
 AVAX_IMPLEMENTATION_CONTRACT=0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c
 BNB_IMPLEMENTATION_CONTRACT=0x6cF4aD62C208b6494a55a1494D497713ba013dFa
 ETH_IMPLEMENTATION_CONTRACT=0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD
 XLAYER_IMPLEMENTATION_CONTRACT=0x8D854436ab0426F5BC6Cc70865C90576AD523E73
 STABLE_IMPLEMENTATION_CONTRACT=0x2fb2B2D110b6c5664e701666B3741240242bf350
 
-# Vercel KV — Vercel 대시보드 → Storage → Q402 KV에서 복사
+# Vercel KV — copy from Vercel dashboard → Storage → Q402 KV
 KV_REST_API_URL=https://...
 KV_REST_API_TOKEN=...
 
-# Admin 엔드포인트 보호
+# Admin endpoint protection
 ADMIN_SECRET=your_admin_secret_here
 
-# 선택사항: Telegram 문의 알림
+# Optional: Telegram inquiry notifications
 TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
 
-# 선택사항: 테스트용
+# Optional: for tests
 TEST_PAYER_KEY=0x...
 ETH_RPC_URL=https://eth.llamarpc.com
 ```
 
-### 개발 서버 실행
+### Run Dev Server
 
 ```bash
 npm run dev
-# → http://localhost:3000 (포트 점유 시 3001~3004 자동 증가)
+# → http://localhost:3000 (falls back to 3001~3004 if the port is taken)
 ```
 
-### 컨트랙트 배포 (새 체인 추가 시)
+### Contract Deployment (when adding a new chain)
 
 ```bash
 cd q402-avalanche/q402-avalanche
@@ -178,72 +178,72 @@ npx hardhat run scripts/deploy-stable.ts --network stable
 
 ## 6. Pages & Project Structure
 
-### 페이지 목록
+### Page Index
 
-| Route | 설명 |
-|-------|------|
-| `/` | 랜딩 — Hero, HowItWorks, Pricing, Contact |
-| `/agents` | AI Agent 플랜 — SVG 네트워크 애니메이션, 실시간 TX 피드, Contact 모달 |
-| `/payment` | 4단계 온체인 결제 → API Key 자동 발급 |
-| `/dashboard` | 개발자 대시보드 (API Key, Gas Tank, Transactions, Webhook) |
-| `/docs` | API Reference & Integration Guide |
+| Route | Description |
+|-------|-------------|
+| `/` | Landing — Hero, HowItWorks, Pricing, Contact |
+| `/agents` | AI Agent plans — SVG network animation, live TX feed, Contact modal |
+| `/payment` | 4-step on-chain payment → automatic API Key issuance |
+| `/dashboard` | Developer dashboard (API Key, Gas Tank, Transactions, Webhook) |
+| `/docs` | API Reference & integration guide |
 
-### 디렉터리 구조
+### Directory Structure
 
 ```
 Q402-Institutional/
 ├── app/
 │   ├── api/
 │   │   ├── payment/
-│   │   │   ├── activate/route.ts   # POST — 온체인 결제 스캔 + API Key 발급
-│   │   │   └── check/route.ts      # POST — 구독 상태 확인
+│   │   │   ├── activate/route.ts   # POST — scan on-chain payment + issue API Key
+│   │   │   └── check/route.ts      # POST — check subscription status
 │   │   ├── keys/
-│   │   │   ├── provision/route.ts  # POST — 구독 수동 생성 (Admin)
-│   │   │   ├── generate/route.ts   # POST — API Key 재발급 (Admin)
-│   │   │   ├── verify/route.ts     # POST — API Key 유효성 검증
-│   │   │   ├── topup/route.ts      # POST — 할당량 보너스 추가 (Admin)
-│   │   │   └── rotate/route.ts     # POST — API Key 교체 (EIP-191 인증)
+│   │   │   ├── provision/route.ts  # POST — manually create subscription (Admin)
+│   │   │   ├── generate/route.ts   # POST — reissue API Key (Admin)
+│   │   │   ├── verify/route.ts     # POST — validate API Key
+│   │   │   ├── topup/route.ts      # POST — add bonus credits (Admin)
+│   │   │   └── rotate/route.ts     # POST — rotate API Key (EIP-191 auth)
 │   │   ├── gas-tank/
-│   │   │   ├── route.ts            # GET  — 릴레이어 온체인 잔고
-│   │   │   ├── verify-deposit/route.ts # POST — 유저 입금 스캔
-│   │   │   ├── user-balance/route.ts   # GET  — 유저 입금 잔고 조회
-│   │   │   └── withdraw/route.ts   # POST — 가스 잔고 출금 (Admin)
+│   │   │   ├── route.ts            # GET  — relayer on-chain balance
+│   │   │   ├── verify-deposit/route.ts # POST — scan user deposits
+│   │   │   ├── user-balance/route.ts   # GET  — user deposit balance
+│   │   │   └── withdraw/route.ts   # POST — withdraw gas balance (Admin)
 │   │   ├── relay/
-│   │   │   ├── route.ts            # POST — EIP-7702 / EIP-3009 릴레이
-│   │   │   └── info/route.ts       # GET  — facilitator 주소 (SDK용)
+│   │   │   ├── route.ts            # POST — EIP-7702 / EIP-3009 relay
+│   │   │   └── info/route.ts       # GET  — facilitator address (for SDK)
 │   │   ├── webhook/
-│   │   │   ├── route.ts            # POST/GET/DELETE — Webhook 관리
-│   │   │   └── test/route.ts       # POST — 테스트 이벤트 발송
-│   │   ├── transactions/route.ts   # GET  — 릴레이 TX 이력
-│   │   ├── wallet-balance/route.ts # GET  — 유저 지갑 잔고 (5체인)
-│   │   └── inquiry/route.ts        # POST/GET — 프로젝트 문의
+│   │   │   ├── route.ts            # POST/GET/DELETE — webhook management
+│   │   │   └── test/route.ts       # POST — send test event
+│   │   ├── transactions/route.ts   # GET  — relay TX history
+│   │   ├── wallet-balance/route.ts # GET  — user wallet balance (5 chains)
+│   │   └── inquiry/route.ts        # POST/GET — project inquiries
 │   ├── lib/
-│   │   ├── db.ts                   # Vercel KV CRUD 헬퍼 (월별 TX 샤딩)
-│   │   ├── blockchain.ts           # ERC-20 Transfer 이벤트 스캔
-│   │   ├── relayer.ts              # viem EIP-7702 settle 함수들
+│   │   ├── db.ts                   # Vercel KV CRUD helpers (monthly TX sharding)
+│   │   ├── blockchain.ts           # ERC-20 Transfer event scan
+│   │   ├── relayer.ts              # viem EIP-7702 settle functions
 │   │   ├── access.ts               # MASTER_ADDRESSES / isPaid()
 │   │   ├── ratelimit.ts            # KV fixed-window rate limiter
 │   │   └── wallet.ts               # MetaMask / OKX connectWallet
-│   ├── context/WalletContext.tsx   # 전역 지갑 상태 (localStorage 즉시 복원)
+│   ├── context/WalletContext.tsx   # global wallet state (instant localStorage restore)
 │   ├── components/
-│   │   ├── Hero.tsx                # 랜딩 히어로 + 터미널 애니메이션
-│   │   ├── HowItWorks.tsx          # 3단계 설명 + 체인 로고 5개
-│   │   ├── Pricing.tsx             # 4단계 요금제
+│   │   ├── Hero.tsx                # landing hero + terminal animation
+│   │   ├── HowItWorks.tsx          # 3-step explainer + 5 chain logos
+│   │   ├── Pricing.tsx             # pricing tiers
 │   │   ├── Contact.tsx             # CTA — "Talk to Us" popup
-│   │   ├── Navbar.tsx              # 네비게이션 + Agents 링크
-│   │   ├── Footer.tsx              # 5+ 체인, Stable 배지
-│   │   ├── WalletButton.tsx        # MetaMask + OKX 지갑 모달
-│   │   └── RegisterModal.tsx       # 프로젝트 문의 팝업
-│   ├── agents/page.tsx             # AI Agent 플랜 페이지
-│   ├── dashboard/page.tsx          # 대시보드 (4개 탭)
-│   ├── payment/page.tsx            # 온체인 결제 Builder
+│   │   ├── Navbar.tsx              # navigation + Agents link
+│   │   ├── Footer.tsx              # 5+ chains, Stable badge
+│   │   ├── WalletButton.tsx        # MetaMask + OKX wallet modal
+│   │   └── RegisterModal.tsx       # project inquiry popup
+│   ├── agents/page.tsx             # AI Agent plan page
+│   ├── dashboard/page.tsx          # dashboard (4 tabs)
+│   ├── payment/page.tsx            # on-chain payment Builder
 │   ├── docs/page.tsx               # API Reference
-│   └── page.tsx                    # 랜딩 메인
+│   └── page.tsx                    # landing
 ├── scripts/
-│   ├── test-eip7702.mjs            # 통합 EIP-7702 E2E 테스트 (--chain avax|bnb|eth|xlayer|stable)
-│   └── agent-example.mjs           # Node.js Agent SDK (5체인 통합 예제 — TransferAuthorization)
+│   ├── test-eip7702.mjs            # unified EIP-7702 E2E test (--chain avax|bnb|eth|xlayer|stable)
+│   └── agent-example.mjs           # Node.js Agent SDK (unified 5-chain example — TransferAuthorization)
 └── public/
-    ├── q402-sdk.js                 # 클라이언트 SDK v1.3.1
+    ├── q402-sdk.js                 # client SDK v1.3.1
     ├── bnb.png / eth.png / avax.png / xlayer.png / stable.jpg
     └── arbitrum.png / scroll.png
 ```
@@ -252,36 +252,36 @@ Q402-Institutional/
 
 ## 7. Payment Flow
 
-`/payment` 페이지는 셀프서브 온체인 결제 → API Key 자동 발급 플로우:
+The `/payment` page drives a self-serve on-chain checkout → automatic API Key issuance flow:
 
-1. **체인 선택** — 어떤 체인에서 릴레이할 것인가? (체인마다 가격 다름)
-2. **TX 수 선택** — 이번에 구매할 가스리스 TX 건수
-3. **지갑 연결** — MetaMask or OKX Wallet
-4. **송금 + 검증** — Q402 주소(`0xfc77...`)로 USDC/USDT 전송 후 "Verify" 클릭 → API Key 자동 발급
+1. **Select chain** — which chain will you relay on? (prices vary per chain)
+2. **Select TX count** — how many gasless transactions to purchase
+3. **Connect wallet** — MetaMask or OKX Wallet
+4. **Send + verify** — transfer USDC/USDT to the Q402 address (`0xfc77...`), click "Verify" → API Key issued automatically
 
-**결제 모델 (v1.9):**
-- **첫 결제** → 플랜 등급 설정 + TX 건수 추가 + 30일 기간 시작
-- **추가 결제** → TX 건수 추가 + 30일 연장 (플랜 등급 유지, 기간 스택됨)
-- TX 크레딧은 릴레이 1건당 1 차감. 만료일 도달 또는 크레딧 소진 시 정지.
+**Billing model (v1.9):**
+- **First purchase** → sets plan tier + grants TX credits + starts 30-day window
+- **Subsequent purchases** → top up credits + extend 30 days (plan tier preserved, access days stack)
+- TX credits decrement by 1 per successful relay. Service stops at expiry or when credits hit zero.
 
-**체인별 가격 (BNB 기준, 체인마다 multiplier 적용):**
-| TX 수 | BNB/XLayer/Stable (1.0×) | AVAX (1.1×) | ETH (1.5×) |
-|-------|--------------------------|-------------|------------|
-| 500   | $30 | $30 | $40 |
-| 1,000 | $50 | $50 | $70 |
-| 5,000 | $90 | $100 | $130 |
-| 10,000 | $150 | $160 | $220 |
-| 50,000 | $450 | $490 | $670 |
-| 100,000 | $800 | $880 | $1,200 |
+**Per-chain pricing (BNB baseline, with per-chain multipliers):**
+| TX count | BNB/XLayer/Stable (1.0×) | AVAX (1.1×) | ETH (1.5×) |
+|----------|--------------------------|-------------|------------|
+| 500      | $30 | $30 | $40 |
+| 1,000    | $50 | $50 | $70 |
+| 5,000    | $90 | $100 | $130 |
+| 10,000   | $150 | $160 | $220 |
+| 50,000   | $450 | $490 | $670 |
+| 100,000  | $800 | $880 | $1,200 |
 
-결제 수단: **BNB USDC, BNB USDT, ETH USDC, ETH USDT** (구독 결제는 BNB/ETH 체인만, 의도적)  
-결제 주소: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION 콜드 지갑 — 매출 전용)
+Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT** (subscription settlement is intentionally limited to BNB/ETH chains).  
+Payment address: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION cold wallet — revenue-only).
 
 ---
 
 ## 8. SDK Usage
 
-### 브라우저
+### Browser
 
 ```html
 <script src="https://q402-institutional.vercel.app/q402-sdk.js"></script>
@@ -294,7 +294,7 @@ const q402 = new Q402Client({ apiKey: "q402_live_xxx", chain: "avax" });
 const result = await q402.pay({ to: "0xRecipient", amount: "5.00", token: "USDC" });
 console.log(result.txHash); // method: "eip7702"
 
-// X Layer — EIP-7702 (facilitator 자동 조회)
+// X Layer — EIP-7702 (facilitator auto-resolved)
 const q402xl = new Q402Client({ apiKey: "q402_live_xxx", chain: "xlayer" });
 const result2 = await q402xl.pay({ to: "0xRecipient", amount: "1.00", token: "USDC" });
 console.log(result2.txHash); // method: "eip7702_xlayer"
@@ -304,16 +304,16 @@ const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
 const result3 = await q402s.pay({ to: "0xRecipient", amount: "10.00", token: "USDT" });
 ```
 
-SDK: **v1.3.1** — 5개 체인 지원 (avax, bnb, eth, xlayer, stable)
+SDK: **v1.3.1** — supports all 5 chains (avax, bnb, eth, xlayer, stable).
 
-> **⚠ `amount` 파라미터 규칙** — 반드시 **human-readable decimal 문자열** ("5.00", "0.123456")로
-> 전달할 것. 내부적으로 `ethers.parseUnits(amount, decimals)`로 정확히 변환되며, 토큰 decimals를
-> 초과하는 정밀도(예: 6-dec USDC에 "5.1234567")나 숫자/지수 표기는 명시적으로 throw한다.
-> JS `Number`를 그대로 넘기면 18-dec 토큰에서 IEEE-754 정밀도 손실이 발생하기 때문.
+> **⚠ `amount` parameter rule** — always pass a **human-readable decimal string** ("5.00", "0.123456").
+> It is converted internally via `ethers.parseUnits(amount, decimals)`. Precision that exceeds the
+> token's decimals (e.g. "5.1234567" for a 6-dec USDC) or numeric/exponential notation is rejected
+> with an explicit throw. Passing a JS `Number` would lose IEEE-754 precision on 18-decimal tokens.
 
 ### Node.js Agent
 
-`scripts/agent-example.mjs`를 모듈로 import:
+Import `scripts/agent-example.mjs` as a module:
 
 ```javascript
 import { sendGaslessPayment } from "./scripts/agent-example.mjs";
@@ -326,22 +326,22 @@ const result = await sendGaslessPayment({
 console.log(result.txHash);
 ```
 
-### SDK 내부 동작
+### SDK Internals
 
-**5개 체인 공통 — EIP-7702 (`method: "eip7702" | "eip7702_xlayer" | "eip7702_stable"`)**
+**All 5 chains — EIP-7702 (`method: "eip7702" | "eip7702_xlayer" | "eip7702_stable"`)**
 ```
-q402.pay() 호출
-  ├─ 0. GET /api/relay/info → facilitator 주소
-  ├─ 1. EIP-712 witnessSig 서명
-  │      domain: { name: "Q402 <Chain>", version: "1", chainId, verifyingContract: 유저 EOA }
+q402.pay() invoked
+  ├─ 0. GET /api/relay/info → facilitator address
+  ├─ 1. EIP-712 witnessSig signature
+  │      domain: { name: "Q402 <Chain>", version: "1", chainId, verifyingContract: user EOA }
   │      types:  TransferAuthorization { owner, facilitator, token, recipient, amount, nonce, deadline }
-  ├─ 2. EIP-7702 authorization 서명
+  ├─ 2. EIP-7702 authorization signature
   │      { address: implContract, nonce: EOA_nonce }
   └─ 3. POST /api/relay { witnessSig, authorization, <chain-specific nonce field> }
          avax/bnb/eth → nonce   |   xlayer → xlayerNonce   |   stable → stableNonce
 ```
 
-**X Layer EIP-3009 fallback (USDC only)** — `eip3009Nonce` 제공 시만 선택됨.
+**X Layer EIP-3009 fallback (USDC only)** — selected only when `eip3009Nonce` is supplied.
 
 ---
 
@@ -349,17 +349,17 @@ q402.pay() 호출
 
 ### POST /api/relay
 
-EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.  
-`apiKey` 필수, 구독 만료 및 키 교체 검증.
+Submit an EIP-712 + EIP-7702 payload → gasless relay.  
+Requires `apiKey`; validates subscription expiry and key rotation state.
 
-**공통 필드** (모든 체인):
-- `token`: **심볼 문자열** `"USDC"` 또는 `"USDT"` — 절대 주소가 아님. 서버가 `CHAIN_CONFIG[chain][token]`으로 주소를 조회함.
-- `amount`: atomic uint256 문자열 (예: 0.05 USDC @ 6dp → `"50000"`)
-- `witnessSig`: EIP-712 TransferAuthorization 서명
-- `authorization`: EIP-7702 위임 증명 `{ chainId, address, nonce, yParity, r, s }`
-- **nonce 필드명은 체인별로 다름** (아래 참조)
+**Common fields** (all chains):
+- `token`: **symbol string** `"USDC"` or `"USDT"` — never an address. The server resolves the address via `CHAIN_CONFIG[chain][token]`.
+- `amount`: atomic uint256 string (e.g. 0.05 USDC at 6 decimals → `"50000"`)
+- `witnessSig`: EIP-712 TransferAuthorization signature
+- `authorization`: EIP-7702 delegation proof `{ chainId, address, nonce, yParity, r, s }`
+- **The nonce field name differs per chain** (see below).
 
-**avax / bnb / eth 요청** (nonce 필드: `nonce`):
+**avax / bnb / eth request** (nonce field: `nonce`):
 ```json
 {
   "apiKey":        "q402_live_xxx",
@@ -375,7 +375,7 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
 }
 ```
 
-**xlayer EIP-7702 요청** (nonce 필드: `xlayerNonce`):
+**xlayer EIP-7702 request** (nonce field: `xlayerNonce`):
 ```json
 {
   "apiKey": "q402_live_xxx", "chain": "xlayer", "token": "USDC",
@@ -386,7 +386,7 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
 }
 ```
 
-**stable EIP-7702 요청** (nonce 필드: `stableNonce`, token은 "USDC"/"USDT" 모두 USDT0로 라우팅):
+**stable EIP-7702 request** (nonce field: `stableNonce`; both "USDC" and "USDT" token symbols route to USDT0):
 ```json
 {
   "apiKey": "q402_live_xxx", "chain": "stable", "token": "USDC",
@@ -397,12 +397,13 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
 }
 ```
 
-**xlayer EIP-3009 fallback:** `authorization`/`xlayerNonce` 대신 `eip3009Nonce` (bytes32 hex). **USDC only** — USDT는 EIP-7702 경로를 사용해야 함.
+**xlayer EIP-3009 fallback:** send `eip3009Nonce` (bytes32 hex) instead of `authorization`/`xlayerNonce`. **USDC only** — USDT must use the EIP-7702 path.
 
-> **Authorization 잠금 (v1.3+)**: 서버는 `authorization.chainId`와 `authorization.address`가
-> `contracts.manifest.json`의 해당 체인 공식 impl contract와 정확히 일치하지 않으면 400을 반환한다.
+> **Authorization lock (v1.3+)**: the server returns 400 unless `authorization.chainId` and
+> `authorization.address` exactly match the official impl contract for that chain as declared
+> in `contracts.manifest.json`.
 
-**응답:**
+**Response:**
 ```json
 {
   "success":      true,
@@ -415,32 +416,32 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
   "method":       "eip7702"
 }
 ```
-> `tokenAmount` 는 **문자열**(`ethers.formatUnits` 출력) — 18-dec 토큰(USDT0) 정밀도 보존 위해 JS `number` 로 좁히지 않음. 파서는 `string` 으로 받아 `BigInt` 로 재변환하거나 사람이 읽는 용도로만 사용.
+> `tokenAmount` is a **string** (`ethers.formatUnits` output) — not narrowed to a JS `number` so that precision is preserved for 18-decimal tokens (USDT0). Parse as a `string` and re-convert via `BigInt`, or treat as human-readable only.
 
-> method 값: `"eip7702"` / `"eip7702_xlayer"` / `"eip3009"`
+> method values: `"eip7702"` / `"eip7702_xlayer"` / `"eip3009"`
 
 ### GET /api/relay/info
 
-릴레이어(facilitator) 지갑 주소 반환. XLayer EIP-7702 서명에 필요.
+Returns the relayer (facilitator) wallet address. Required when signing X Layer EIP-7702 payloads.
 ```json
 { "facilitator": "0xfc77ff29178b7286a8ba703d7a70895ca74ff466" }
 ```
 
 ### POST /api/payment/activate
 
-블록체인에서 USDC/USDT 결제 스캔 → 구독 활성화 + API Key 자동 발급.  
-**사전 조건**: `POST /api/payment/intent` 로 결제 의도 기록 필요.  
-**인증**: 일회용 fresh challenge (`GET /api/auth/challenge`) 서명 필요.
+Scans the chain for an incoming USDC/USDT payment → activates subscription + issues API Key.  
+**Prerequisite**: payment intent must be recorded via `POST /api/payment/intent`.  
+**Auth**: requires a signed one-time fresh challenge (`GET /api/auth/challenge`).
 
 ```json
-// 요청
+// request
 {
   "address": "0x...",
-  "challenge": "<GET /api/auth/challenge 에서 받은 값>",
+  "challenge": "<value from GET /api/auth/challenge>",
   "signature": "0x...",
-  "txHash": "0x..."   // optional — 제공 시 블록 스캔 대신 단일 TX 직접 검증
+  "txHash": "0x..."   // optional — when provided, verifies a single TX directly instead of scanning blocks
 }
-// 응답 (공통)
+// response (shared shape)
 {
   "status": "activated",
   "plan": "starter",
@@ -449,17 +450,17 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
   "expiresAt": "2026-05-13T00:00:00.000Z"
 }
 ```
-- 첫 결제: `plan` 설정 + `addedTxs` 추가 + 30일 시작
-- 추가 결제: 기존 `plan` 유지 + `totalTxs` 누적 + 30일 연장
-- challenge는 단 1회만 유효 (consumed 후 재사용 불가 — replay 방지)
+- First purchase: sets `plan` + grants `addedTxs` + starts the 30-day window
+- Subsequent purchases: preserve existing `plan` + accumulate `totalTxs` + extend by 30 days
+- The challenge is single-use (consumed after one call — prevents replay)
 
 ### POST /api/payment/check
 
-구독 상태 확인.
+Check subscription status.
 
 ### POST /api/inquiry
 
-프로젝트 문의 제출 → Vercel KV 저장 + Telegram 알림.
+Submit a project inquiry → stored in Vercel KV + Telegram notification.
 
 ```json
 {
@@ -471,83 +472,83 @@ EIP-712 + EIP-7702 페이로드 제출 → 가스리스 릴레이.
 
 ### POST /api/keys/verify
 
-API Key 유효성 검증 + 만료/교체 확인.
+Validate API Key, check expiry/rotation state.
 ```json
 { "valid": true, "address": "0x...", "plan": "growth", "expired": false, "expiresAt": "..." }
 ```
 
 ### POST /api/keys/rotate
 
-현재 라이브 키 폐기 + 새 키 발급. EIP-191 서명 필요.
+Revoke the current live key and issue a new one. Requires an EIP-191 signature.
 
-### Admin 전용 (헤더: `x-admin-secret`)
+### Admin-only (header: `x-admin-secret`)
 
-| Endpoint | Method | 설명 |
-|----------|--------|------|
-| `/api/keys/provision` | POST | 구독 수동 생성 + API Key 발급 |
-| `/api/keys/generate` | POST | API Key 재발급 |
-| `/api/keys/topup` | POST | 할당량 보너스 추가 |
-| `/api/gas-tank/withdraw` | POST | 가스 잔고 출금 |
-| `/api/inquiry` | GET | 문의 목록 조회 |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/keys/provision` | POST | Manually create subscription + issue API Key |
+| `/api/keys/generate` | POST | Reissue API Key |
+| `/api/keys/topup` | POST | Add bonus credits |
+| `/api/gas-tank/withdraw` | POST | Withdraw gas balance |
+| `/api/inquiry` | GET | List inquiries |
 
 ---
 
 ## 10. Authentication Model
 
-**하이브리드 EIP-191 personal_sign** — 세션 nonce (1h TTL) + 고위험 액션 fresh challenge:
+**Hybrid EIP-191 personal_sign** — session nonce (1h TTL) + fresh challenge for high-risk actions:
 
 ```
-서명 메시지: "Q402 Auth\nAddress: {address_lowercase}\nNonce: {nonce}"
+Signed message: "Q402 Auth\nAddress: {address_lowercase}\nNonce: {nonce}"
 nonce: GET /api/auth/nonce?address=0x...  → { nonce, expiresIn: 3600 }
 ```
 
-**플로우:**
-1. `GET /api/auth/nonce?address=0x...` → 서버가 KV에 nonce 저장 (1시간 TTL — `app/lib/auth.ts` `NONCE_TTL_SEC`)
-2. 클라이언트가 서명 → `sessionStorage["q402_auth_0xaddr"]`에 `{nonce, signature}` 캐시 (55분 TTL, 서버보다 5분 일찍 만료시켜 race 방지 — `app/lib/auth-client.ts` `CLIENT_NONCE_TTL_MS`)
-3. 모든 보호 요청에 `{address, nonce, signature}` 전달
-4. 서버: `verifyNonceSignature(addr, nonce, sig)` — nonce KV 검증 + ECDSA 검증
-5. 401 `NONCE_EXPIRED` 수신 시: 클라이언트 캐시 삭제 → 다음 요청에서 재서명
+**Flow:**
+1. `GET /api/auth/nonce?address=0x...` → server persists nonce in KV (1h TTL — `app/lib/auth.ts` `NONCE_TTL_SEC`).
+2. Client signs → cached in `sessionStorage["q402_auth_0xaddr"]` as `{nonce, signature}` (55-minute TTL, 5 minutes shorter than the server TTL to avoid race — `app/lib/auth-client.ts` `CLIENT_NONCE_TTL_MS`).
+3. Every protected request carries `{address, nonce, signature}`.
+4. Server: `verifyNonceSignature(addr, nonce, sig)` — KV nonce check + ECDSA verify.
+5. On 401 `NONCE_EXPIRED`: client clears the cache → the next request re-signs.
 
-**키 로테이션 후** `invalidateNonce(addr)` 호출 → 다음 민감한 요청에서 강제 재서명.
+**After key rotation**, call `invalidateNonce(addr)` → the next sensitive request is forced to re-sign.
 
-**적용 엔드포인트:**
+**Protected endpoints:**
 - `POST`: `/api/keys/provision`, `/api/keys/rotate`, `/api/payment/activate`, `/api/payment/intent`
-- `POST`: `/api/webhook` (등록/수정/삭제), `/api/webhook/test`
-- `GET` (쿼리파라미터): `/api/transactions?address=&nonce=&sig=`, `/api/webhook?address=&nonce=&sig=`
+- `POST`: `/api/webhook` (create/update/delete), `/api/webhook/test`
+- `GET` (query string): `/api/transactions?address=&nonce=&sig=`, `/api/webhook?address=&nonce=&sig=`
 
 ---
 
 ## 11. Subscription Plans & Rate Limits
 
-### TX 크레딧 모델 (v1.9)
+### TX Credit Model (v1.9)
 
-구독은 **플랜 등급 + TX 크레딧 잔여량 + 만료일** 3가지로 관리됨.
+A subscription is managed by three values: **plan tier + remaining TX credits + expiration date**.
 
-- **플랜 등급**: 첫 결제 시 결제 금액 기준으로 설정. 이후 변경 불가.
-  - 플랜은 일일 버스트 한도(Gas Tank 독점 방지)에만 영향.
-- **TX 크레딧**: 매 결제마다 추가. 릴레이 1건 성공 시 1 차감. 0 이하면 429.
-- **만료일**: 매 결제마다 +30일 연장 (기간 중 결제 시 현재 만료일 기준으로 누적).
+- **Plan tier**: set based on the amount of your first purchase; cannot change after that.
+  - Plan only affects the daily burst cap (Gas Tank fairness).
+- **TX credits**: added with every purchase. Each successful relay consumes 1. Returns 429 at 0.
+- **Expiration**: extended by +30 days per purchase (days stack if you renew before expiry).
 
-| Plan (첫 결제 금액 기준) | TX 크레딧 | 일일 버스트 한도 |
-|--------------------------|----------|----------------|
+| Plan (based on first payment) | TX Credits | Daily Burst Cap |
+|-------------------------------|------------|-----------------|
 | Starter ($30~) | 500 | 50/day |
 | Basic ($50~) | 1,000 | 100/day |
 | Growth ($90~) | 5,000 | 1,000/day |
 | Pro ($150~) | 10,000 | 1,000/day |
 | Scale ($450~) | 50,000 | 10,000/day |
 | Business ($800~) | 100,000 | 10,000/day |
-| Enterprise Flex ($2,000~) | 500,000 | 무제한 |
-| **Agent** | **무제한** | **무제한** | Gas Tank 선불, `/agents` 참조 |
+| Enterprise Flex ($2,000~) | 500,000 | Unlimited |
+| **Agent** | **Unlimited** | **Unlimited** | Gas Tank prepaid, see `/agents` |
 
-일일 한도 초과 시: `HTTP 429 Daily relay cap reached for plan {plan}` (86400s window)  
-TX 크레딧 소진 시: `HTTP 429 No TX credits remaining`  
-Sandbox 키는 한도/크레딧 적용 안 함.
+Daily cap exceeded: `HTTP 429 Daily relay cap reached for plan {plan}` (86400s window).  
+TX credits exhausted: `HTTP 429 No TX credits remaining`.  
+Sandbox keys are exempt from caps and credits.
 
 ### API Rate Limits
 
-| Endpoint | IP 기준 | API Key 기준 |
-|----------|---------|------------|
-| /api/relay | 60 req/60s | **30 req/60s** (v1.8 추가) |
+| Endpoint | Per IP | Per API Key |
+|----------|--------|-------------|
+| /api/relay | 60 req/60s | **30 req/60s** (added in v1.8) |
 | /api/keys/provision | 10 req/60s |
 | /api/keys/rotate | 5 req/60s |
 | /api/payment/activate | 5 req/60s |
@@ -555,51 +556,51 @@ Sandbox 키는 한도/크레딧 적용 안 함.
 | /api/transactions | 30 req/60s |
 | /api/webhook | 10 req/60s |
 | /api/inquiry | 3 req/600s |
-| /api/inquiry (GET admin) | **5 req/60s** (v1.9 추가) |
-| /api/grant (GET admin) | **5 req/60s** (v1.9 추가) |
-| /api/gas-tank/withdraw | **5 req/60s** (v1.9 추가) |
-| /api/gas-tank/user-balance | 30 req/60s (v1.9 추가) |
+| /api/inquiry (GET admin) | **5 req/60s** (added in v1.9) |
+| /api/grant (GET admin) | **5 req/60s** (added in v1.9) |
+| /api/gas-tank/withdraw | **5 req/60s** (added in v1.9) |
+| /api/gas-tank/user-balance | 30 req/60s (added in v1.9) |
 
 ---
 
-## 12. KV 데이터 모델
+## 12. KV Data Model
 
 **Vercel KV (Redis)** — `app/lib/db.ts`
 
-### 키 스키마
+### Key Schema
 
 ```
 kv.get("sub:{address}")                  → Subscription
 kv.get("apikey:{apiKey}")                → ApiKeyRecord
 kv.get("gasdep:{address}")               → GasDeposit[]
-kv.get("relaytx:{address}:{YYYY-MM}")    → RelayedTx[]   ← 월별 분산 (v1.6)
-kv.get("gasused:{address}")              → Record<chain, number>  ← 누적 합계 (v1.6)
+kv.get("relaytx:{address}:{YYYY-MM}")    → RelayedTx[]   ← monthly shard (v1.6)
+kv.get("gasused:{address}")              → Record<chain, number>  ← running totals (v1.6)
 kv.get("webhook:{address}")              → WebhookConfig
 kv.get("inquiries")                      → Inquiry[]
 ```
 
-**KV 용량 전략 (v1.6):**
-- TX 이력: 월별 키 `relaytx:{addr}:{YYYY-MM}` — 월 10,000건 상한 (초과 시 중단, 릴레이 지속)
-- 가스 소비: `gasused:{addr}` 별도 누적 — TX 배열 전체 스캔 불필요
-- **크레딧 체크 (v1.9):** `subscription.quotaBonus > 0` 단일 조건 (월별 카운트 불필요)
-- 잔고 계산: `getGasBalance()` → 입금배열 + 누적합계 2 read만 필요
+**KV capacity strategy (v1.6):**
+- TX history: sharded by month under `relaytx:{addr}:{YYYY-MM}` — capped at 10,000 per month (relay continues, recording stops if exceeded).
+- Gas usage: `gasused:{addr}` kept as a running total — no need to scan the full TX array.
+- **Credit check (v1.9):** single predicate `subscription.quotaBonus > 0` (no monthly count required).
+- Balance computation: `getGasBalance()` → 2 reads (deposit array + running totals).
 
-### 데이터 구조
+### Data Structures
 
 **Subscription**
 ```json
 {
-  "paidAt":        "2026-04-09T00:00:00.000Z",  // 만료 기산점 (결제마다 갱신)
+  "paidAt":        "2026-04-09T00:00:00.000Z",  // anchor for expiry (refreshed per purchase)
   "apiKey":        "q402_live_xxx",
   "sandboxApiKey": "q402_test_xxx",
-  "plan":          "growth",                     // 첫 결제 시 설정, 이후 변경 없음
-  "txHash":        "0xOnChainPaymentTxHash",     // 최근 결제 TX
+  "plan":          "growth",                     // set on first purchase, immutable afterwards
+  "txHash":        "0xOnChainPaymentTxHash",     // most recent payment TX
   "amountUSD":     150,
-  "quotaBonus":    9850                          // 남은 TX 크레딧 (릴레이마다 -1)
+  "quotaBonus":    9850                          // remaining TX credits (-1 per relay)
 }
 ```
-> `paidAt` + 30일 = 만료일. 결제 시마다 현재 만료일 기준 +30일 연장.  
-> `quotaBonus` = 릴레이 가능 잔여 TX 수. 0 이하면 relay 429 반환.
+> `paidAt` + 30 days = expiry. Each purchase extends the current expiry by 30 days.  
+> `quotaBonus` = remaining relayable TX count. Relay returns 429 at 0 or below.
 
 **ApiKeyRecord**
 ```json
@@ -628,53 +629,53 @@ kv.get("inquiries")                      → Inquiry[]
 }
 ```
 
-### DB 헬퍼 함수
+### DB Helper Functions
 
-| 함수 | 역할 |
-|------|------|
-| `getSubscription(address)` | 구독 조회 |
-| `setSubscription(address, data)` | 구독 저장/갱신 |
-| `getApiKeyRecord(apiKey)` | API Key → 레코드 |
-| `generateApiKey(address, plan)` | 새 라이브 키 생성 |
-| `generateSandboxKey(address, plan)` | 새 샌드박스 키 생성 |
-| `deactivateApiKey(apiKey)` | 키 비활성화 |
-| `rotateApiKey(address)` | 기존 키 폐기 + 새 키 발급 + sub 업데이트 |
-| `getGasDeposits(address)` | 입금 내역 목록 |
-| `addGasDeposit(address, deposit)` | 입금 추가 (txHash 중복 방지) |
-| `getGasBalance(address)` | 입금합계 − 소비합계 = 현재 잔고 |
-| `getRelayedTxs(address, months?)` | TX 이력 (기본: 현재+이전 월) |
-| `getThisMonthTxCount(address)` | 이번 달 TX 수 (O(1) 할당량 체크) |
-| `getGasUsedTotals(address)` | 체인별 누적 가스 소비 합계 |
-| `recordRelayedTx(address, tx)` | TX 기록 (월별 배열 + 누적합계 동시 갱신) |
-| `getWebhookConfig(address)` | Webhook 설정 조회 |
-| `setWebhookConfig(address, config)` | Webhook 저장 |
-| `addQuotaBonus(address, n)` | 할당량 보너스 추가 |
-| `isSubscriptionActive(address)` | 구독 유효 여부 |
-| `getPlanQuota(plan)` | 플랜별 월간 할당량 |
+| Function | Role |
+|----------|------|
+| `getSubscription(address)` | Fetch subscription |
+| `setSubscription(address, data)` | Save/update subscription |
+| `getApiKeyRecord(apiKey)` | API Key → record |
+| `generateApiKey(address, plan)` | Issue new live key |
+| `generateSandboxKey(address, plan)` | Issue new sandbox key |
+| `deactivateApiKey(apiKey)` | Deactivate key |
+| `rotateApiKey(address)` | Revoke existing key + issue new + update sub |
+| `getGasDeposits(address)` | List deposit events |
+| `addGasDeposit(address, deposit)` | Record deposit (txHash dedup) |
+| `getGasBalance(address)` | Sum deposits − sum usage = current balance |
+| `getRelayedTxs(address, months?)` | Relay history (default: current + previous month) |
+| `getThisMonthTxCount(address)` | Current-month TX count (O(1) quota check) |
+| `getGasUsedTotals(address)` | Per-chain cumulative gas usage |
+| `recordRelayedTx(address, tx)` | Record TX (update monthly shard + running total atomically) |
+| `getWebhookConfig(address)` | Fetch webhook config |
+| `setWebhookConfig(address, config)` | Save webhook config |
+| `addQuotaBonus(address, n)` | Add bonus credits |
+| `isSubscriptionActive(address)` | Subscription validity check |
+| `getPlanQuota(plan)` | Per-plan monthly quota |
 
 ---
 
-## 13. Relay 내부 동작
+## 13. Relay Internals
 
-### 13-A. EIP-7702 (공통, 5개 체인 동일)
+### 13-A. EIP-7702 (shared across all 5 chains)
 
 ```
-유저 EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
-                                         .transferWithAuthorization() 실행 시
-                                         _domainSeparator()의 address(this)가
-                                         유저 EOA로 resolve됨 (그래서 verifyingContract = EOA)
+User EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
+                                         When .transferWithAuthorization() runs,
+                                         address(this) inside _domainSeparator()
+                                         resolves to the user's EOA (hence verifyingContract = EOA)
 ```
 
-**EIP-712 서명 도메인 (5개 체인 공통 규칙):**
+**EIP-712 domain (uniform rule across all 5 chains):**
 ```javascript
 {
-  name:              "Q402 Avalanche",   // 체인별: Avalanche | BNB Chain | Ethereum | X Layer | Stable
+  name:              "Q402 Avalanche",   // per chain: Avalanche | BNB Chain | Ethereum | X Layer | Stable
   version:           "1",
-  chainId:           43114,              // 체인별
-  verifyingContract: userEOA,            // ⭐ 모든 체인 동일 — 절대 impl 주소 아님
+  chainId:           43114,              // per chain
+  verifyingContract: userEOA,            // ⭐ same for every chain — NEVER the impl address
 }
 
-// types — 5개 체인 모두 동일
+// types — identical across all 5 chains
 TransferAuthorization: [
   { name: "owner",       type: "address" },
   { name: "facilitator", type: "address" },
@@ -686,56 +687,56 @@ TransferAuthorization: [
 ]
 ```
 
-**컨트랙트 측 불변식:**
-- `owner == address(this)` 검증 (Owner Binding, P0 감사 대응)
-- `msg.sender == facilitator` 검증 (Unauthorized Facilitator 방어, P1 감사 대응)
-- `usedNonces[owner][nonce]` 매핑으로 replay 방지
-- `_domainSeparator()` 가 `address(this)`를 사용 → EIP-7702 위임 컨텍스트에서 유저 EOA로 resolve
+**Contract-side invariants:**
+- `owner == address(this)` check (Owner Binding, addresses P0 audit finding)
+- `msg.sender == facilitator` check (Unauthorized Facilitator defense, addresses P1 audit finding)
+- `usedNonces[owner][nonce]` mapping prevents replay
+- `_domainSeparator()` uses `address(this)` → resolves to user EOA under EIP-7702 delegation
 
-**viem Type 4 TX 전송 (`app/lib/relayer.ts`):**
+**viem Type 4 TX submission (`app/lib/relayer.ts`):**
 ```typescript
 const txHash = await walletClient.sendTransaction({
   chain: null,
-  to:   params.owner,                    // 유저 EOA
+  to:   params.owner,                    // user EOA
   data: callData,                        // transferWithAuthorization() calldata
   gas:  BigInt(300000),
   authorizationList: [{ ...params.authorization }],
 });
 ```
 
-**가스 비용 계산:**
+**Gas cost calculation:**
 ```typescript
 const gasCostNative = parseFloat(formatEther(receipt.gasUsed * receipt.effectiveGasPrice));
 ```
 
-### 13-B. 체인별 차이점 요약
+### 13-B. Per-chain Differences
 
-| 항목 | avax / bnb / eth | xlayer | stable |
+| Item | avax / bnb / eth | xlayer | stable |
 |------|------------------|--------|--------|
-| 컨트랙트 클래스 | `Q402PaymentImplementation` | `Q402PaymentImplementationXLayer` | `Q402PaymentImplementationStable` |
-| 진입 함수 | `transferWithAuthorization()` | `transferWithAuthorization()` | `transferWithAuthorization()` |
-| witness 타입 | TransferAuthorization | TransferAuthorization | TransferAuthorization |
-| `verifyingContract` | 유저 EOA | 유저 EOA | 유저 EOA |
-| 도메인 이름 | "Q402 Avalanche" / "Q402 BNB Chain" / "Q402 Ethereum" | "Q402 X Layer" | "Q402 Stable" |
-| EIP-3009 fallback | ✗ | ✓ (USDC only, 레거시) | ✗ |
-| 릴레이 API `method` | `"eip7702"` | `"eip7702_xlayer"` / `"eip3009"` | `"eip7702_stable"` |
+| Contract class | `Q402PaymentImplementation` | `Q402PaymentImplementationXLayer` | `Q402PaymentImplementationStable` |
+| Entry function | `transferWithAuthorization()` | `transferWithAuthorization()` | `transferWithAuthorization()` |
+| Witness type | TransferAuthorization | TransferAuthorization | TransferAuthorization |
+| `verifyingContract` | User EOA | User EOA | User EOA |
+| Domain name | "Q402 Avalanche" / "Q402 BNB Chain" / "Q402 Ethereum" | "Q402 X Layer" | "Q402 Stable" |
+| EIP-3009 fallback | ✗ | ✓ (USDC only, legacy) | ✗ |
+| Relay API `method` | `"eip7702"` | `"eip7702_xlayer"` / `"eip3009"` | `"eip7702_stable"` |
 
-> 역사적 메모: v1.3.0 이전에는 avax/bnb/eth가 `PaymentWitness`라는 별개 witness 타입을 썼다고 문서화돼 있었지만,
-> 실제 배포된 컨트랙트는 5개 체인 모두 `TransferAuthorization` + `_domainSeparator(address(this))` 단일 스킴이다.
-> v1.14 문서 리비전에서 SDK/manifest/tests/docs가 모두 이 배포 현실에 맞춰졌다.
+> Historical note: prior to v1.3.0 the docs claimed avax/bnb/eth used a separate `PaymentWitness` type,
+> but the actually deployed contracts all use the unified `TransferAuthorization` + `_domainSeparator(address(this))`
+> scheme. The v1.14 docs revision aligned the SDK, manifest, tests, and docs with that deployment reality.
 
-**검증된 XLayer EIP-7702 테스트 결과 (2026-03-12):**
+**Verified X Layer EIP-7702 test result (2026-03-12):**
 
-| 항목 | 값 |
-|------|---|
+| Item | Value |
+|------|-------|
 | TX Hash | `0xd121c23c6313e2f73751b3735f5a9c934386930ef1ca0ba04578de1bfddfd9a0` |
 | Block | 54540550 |
 | Payer OKB | 0 OKB ✅ |
-| USDC 이동 | 0.05 USDC ✅ |
+| USDC transferred | 0.05 USDC ✅ |
 
 ### 13-C. EIP-3009 (xlayer fallback)
 
-`eip3009Nonce`(bytes32) 전달 시 자동 선택. SDK v1.1.x 이하 하위호환.
+Selected automatically when `eip3009Nonce` (bytes32) is provided. Backwards-compatible with SDK v1.1.x.
 
 ```json
 {
@@ -745,40 +746,40 @@ const gasCostNative = parseFloat(formatEther(receipt.gasUsed * receipt.effective
 }
 ```
 
-**검증된 EIP-3009 테스트 결과 (2026-03-12):**
+**Verified EIP-3009 test result (2026-03-12):**
 - TX: `0xb21a10be318e7893d9246ae49a141c18152040b1ceb68eb3e799b62c953fbc3c`
-- Block: 54523313 / USDC 이동: 0.05 ✅
+- Block: 54523313 / USDC transferred: 0.05 ✅
 
-### 13-D. 처리 단계 (공통)
+### 13-D. Processing Steps (shared)
 
-1. API Key 검증 (`getApiKeyRecord`, `active` 확인)
-2. 구독 만료 + 키 교체 확인 (30일 만료, `sub.apiKey !== apiKey` → 401)
-3. **일일 버스트 한도** 확인 (플랜별 KV fixed window 86400s) — v1.6
-4. **TX 크레딧 확인** (`subscription.quotaBonus > 0`, 0 이하 → 429) — v1.9
-5. Gas Tank 잔고 확인 (`getGasBalance[chain] > 0.0001`)
-6. 체인 분기:
+1. Validate API Key (`getApiKeyRecord`, `active` flag).
+2. Check subscription expiry + key rotation state (30-day expiry, `sub.apiKey !== apiKey` → 401).
+3. **Daily burst cap** check (per-plan KV fixed window, 86400s) — v1.6.
+4. **TX credit check** (`subscription.quotaBonus > 0`, else 429) — v1.9.
+5. Gas Tank balance check (`getGasBalance[chain] > 0.0001`).
+6. Chain dispatch:
    - xlayer + `authorization+xlayerNonce` → `settlePaymentXLayerEIP7702()`
    - xlayer + `eip3009Nonce` → `settlePaymentEIP3009()`
-   - 기타 → `settlePayment()`
-7. TX 기록 (`recordRelayedTx` — 월별 배열 + 누적합계) + **크레딧 1 차감** (fire-and-forget)
-8. Webhook 발송 (등록된 경우)
+   - other → `settlePayment()`
+7. Record TX (`recordRelayedTx` — monthly shard + running total) + **decrement credit by 1** (fire-and-forget).
+8. Dispatch webhook (if registered).
 
 ---
 
 ## 14. Webhook System
 
-성공적인 릴레이 TX마다 등록된 엔드포인트로 HMAC-SHA256 서명된 이벤트 전송.
+Every successful relay TX dispatches an HMAC-SHA256 signed event to the registered endpoint.
 
-### 엔드포인트
+### Endpoints
 
-| Method | Path | 설명 |
-|--------|------|------|
-| POST | `/api/webhook` | URL 등록 (최초에만 secret 반환) |
-| GET | `/api/webhook?address=0x&sig=0x` | 현재 설정 조회 (secret 미포함) |
-| DELETE | `/api/webhook` | 설정 삭제 |
-| POST | `/api/webhook/test` | 테스트 이벤트 발송 |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/webhook` | Register URL (secret is returned only on first registration) |
+| GET | `/api/webhook?address=0x&sig=0x` | Read current config (secret not included) |
+| DELETE | `/api/webhook` | Remove config |
+| POST | `/api/webhook/test` | Send a test event |
 
-### 페이로드
+### Payload
 
 ```json
 {
@@ -795,7 +796,7 @@ const gasCostNative = parseFloat(formatEther(receipt.gasUsed * receipt.effective
 }
 ```
 
-### 서명 검증 (Node.js)
+### Signature Verification (Node.js)
 
 ```javascript
 const hmac = crypto.createHmac('sha256', process.env.Q402_WEBHOOK_SECRET);
@@ -803,42 +804,42 @@ hmac.update(rawBody);
 const valid = 'sha256=' + hmac.digest('hex') === req.headers['x-q402-signature'];
 ```
 
-### SSRF 방어
+### SSRF Defense
 
-등록/테스트/발송 시 모두 검증 (v1.8 강화):
+Validated on registration, test, and dispatch (hardened in v1.8):
 ```
-RFC-1918:    10.x, 172.16-31.x, 192.168.x, 127.x, localhost, 0.0.0.0
-IPv6 내부:  ::1, ::ffff:, fe80:, fc00:, fd__:
-클라우드:   metadata.google.internal, 169.254.169.254, fd00:ec2::254
-Octal IP:   0177.0.0.1 형식 차단
-Production: HTTP(비HTTPS) 차단
+RFC-1918:       10.x, 172.16-31.x, 192.168.x, 127.x, localhost, 0.0.0.0
+IPv6 internal:  ::1, ::ffff:, fe80:, fc00:, fd__:
+Cloud metadata: metadata.google.internal, 169.254.169.254, fd00:ec2::254
+Octal IP:       rejects forms like 0177.0.0.1
+Production:     non-HTTPS (HTTP) blocked
 ```
 
 ---
 
 ## 15. Sandbox Mode
 
-`q402_test_` 접두사 API Key → 온체인 TX 없이 mock 응답 반환.
+API Keys prefixed with `q402_test_` return mock responses without submitting any on-chain TX.
 
 ```javascript
 const q402 = new Q402Client({ apiKey: "q402_test_xxx", chain: "avax" });
 const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 // result.success = true, result.txHash = random mock hash
-// 가스 소비 없음, 온체인 TX 없음
+// No gas consumption, no on-chain TX
 ```
 
-- `/api/keys/provision` 호출 시 live key와 함께 sandbox key 자동 발급
-- Relay에서 `isSandbox` 감지: 400ms 지연 후 mock 반환
-- DB에 `sandbox: true` 플래그 포함 저장
-- Sandbox 키는 일일 한도 적용 안 함
+- `/api/keys/provision` issues a sandbox key alongside the live key automatically.
+- Relay detects `isSandbox`: returns a mock response after a 400 ms delay.
+- DB record includes `sandbox: true`.
+- Sandbox keys are exempt from daily caps.
 
 ---
 
 ## 16. Gas Tank
 
-### 릴레이어 전체 잔고 (플랫폼 공유)
+### Platform-wide Relayer Balance (shared)
 
-`GET /api/gas-tank` — 릴레이어 지갑의 온체인 잔고 실시간 조회.
+`GET /api/gas-tank` — live on-chain balance of the relayer wallets.
 
 ```json
 {
@@ -851,24 +852,24 @@ const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 }
 ```
 
-### 유저 입금 잔고 (클라이언트별)
+### Per-User Deposit Balance
 
-유저가 **GASTANK** 콜드 주소(`GASTANK_ADDRESS`)로 native token을 입금 → 릴레이 비용으로 차감. 릴레이어 핫 주소는 별개로, GASTANK→RELAYER 이체는 운영자가 수동/스크립트로 수행.
+Users deposit native tokens to the **GASTANK** cold address (`GASTANK_ADDRESS`) → consumed against relay costs. The relayer hot wallet is a separate address; GASTANK→RELAYER transfers are performed manually or via an operator script.
 
-**입금 스캔 (기본):** `POST /api/gas-tank/verify-deposit` — `{ address }`
-- 5개 체인에서 배치 RPC 블록 스캔 (BNB/AVAX/XLayer: 200블록, ETH: 50블록, Stable: 500블록)
-- `from=유저, to=GASTANK, value≠0` 필터 → `addGasDeposit()`
-- 스캔 창 바깥(ETH 기준 ~10분, 그 외 최대 수십분)에서 돌아온 유저는 이 경로로 크레딧되지 않음 → 아래 직접 조회 경로 사용
+**Deposit scan (default):** `POST /api/gas-tank/verify-deposit` — `{ address }`
+- Batch RPC block scan across all 5 chains (BNB/AVAX/XLayer: 200 blocks, ETH: 50 blocks, Stable: 500 blocks).
+- Filter `from=user, to=GASTANK, value≠0` → `addGasDeposit()`.
+- Users who come back outside the scan window (~10 minutes on ETH, up to tens of minutes elsewhere) are not credited by this path — use the direct-lookup path below.
 
-**입금 직접 조회 (복구 경로):** `POST /api/gas-tank/verify-deposit` — `{ address, txHash, chain }`
-- `chain`: `"bnb" | "eth" | "avax" | "xlayer" | "stable"`
-- `eth_getTransactionByHash`로 단일 TX 직접 검증 (컨펌 완료 + `to=GASTANK` + `from=address` + `value>0`)
-- 블록 창 밖에서도 동작. 중복 txHash는 `addGasDeposit` SADD로 자동 차단 (`alreadyCredited: true`)
-- 대시보드 Deposit 모달의 "not_found" 상태에서 UI 필드 노출
+**Deposit direct lookup (recovery path):** `POST /api/gas-tank/verify-deposit` — `{ address, txHash, chain }`
+- `chain`: `"bnb" | "eth" | "avax" | "xlayer" | "stable"`.
+- Validates a single TX via `eth_getTransactionByHash` (confirmed + `to=GASTANK` + `from=address` + `value>0`).
+- Works outside the block window. Duplicate txHashes are rejected automatically by `addGasDeposit`'s SADD guard (`alreadyCredited: true`).
+- Surfaced in the dashboard Deposit modal's "not_found" state.
 
-**잔고 조회:** `GET /api/gas-tank/user-balance?address=0x...&nonce=...&sig=0x...`
+**Balance read:** `GET /api/gas-tank/user-balance?address=0x...&nonce=...&sig=0x...`
 
-> **v1.17+ 인증 필수 (Q402-SEC-003):** 세션 nonce + EIP-191 서명 필요. 익명 `?address=` 단일 파라미터로 타 지갑의 Q402 가스 탱크 포스처(체인별 잔고 + 입금 이력)를 열람하던 경로 차단. nonce는 `GET /api/auth/nonce?address={addr}` 로 발급, 서명은 `/api/transactions` · `/api/webhook`과 동일한 `requireAuth()` 경로.
+> **Auth required since v1.17 (Q402-SEC-003):** requires a session nonce + EIP-191 signature. Closes the prior anonymous `?address=` path that let anyone read another wallet's Q402 gas-tank posture (per-chain balance + deposit history). Obtain a nonce via `GET /api/auth/nonce?address={addr}`; signature verification follows the same `requireAuth()` path as `/api/transactions` and `/api/webhook`.
 
 ```json
 {
@@ -877,332 +878,332 @@ const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 }
 ```
 
-**잔고 계산:**
+**Balance computation:**
 ```
 getGasBalance(address) = Σ(deposits.amount) − Σ(gasused running total)
 ```
 
-> v1.6: `gasused:{addr}` 별도 누적 키로 배열 스캔 없이 O(1) 계산.
+> v1.6: the separate `gasused:{addr}` running-total key enables O(1) computation without scanning the array.
 
-**Stable 체인 특이사항:** USDT0가 가스 토큰이자 결제 토큰. Gas Tank도 USDT0로 충전 (네이티브 코인 없음).
+**Stable-chain note:** USDT0 is both the gas token and the payment token. Gas Tank top-ups on Stable must be in USDT0 (no native coin).
 
 ---
 
-## 17. v1.6 신규 기능
+## 17. v1.6 New Features
 
-### A. KV TX 이력 월별 분산 저장
+### A. Monthly Sharding of KV TX History
 
-**문제:** `relayedtxs:{address}` 단일 배열 → 고트래픽 고객 수천 건 후 KV 1MB 초과 write 실패.
+**Problem:** a single `relayedtxs:{address}` array would exceed KV's 1 MB write limit once a high-traffic customer accumulated thousands of rows.
 
-**해결:**
-- `relaytx:{addr}:{YYYY-MM}` — 월마다 새 키
-- 월 10,000건 상한 (초과 시 기록 중단, 릴레이 동작 지속)
-- `gasused:{addr}` 별도 누적 키 → O(1) 가스 잔고 계산
+**Solution:**
+- `relaytx:{addr}:{YYYY-MM}` — one key per month.
+- Cap at 10,000 records per month (recording stops beyond the cap; relay continues).
+- Separate `gasused:{addr}` running-total key → O(1) gas balance computation.
 
-### B. 구독 갱신 시 API Key 보존
+### B. Preserve API Key on Renewal
 
-**문제:** 갱신 시 항상 새 Key 발급 → 기존 통합 즉시 깨짐.
+**Problem:** renewals always issued a new key → instantly broke existing integrations.
 
-**해결:**
-- 갱신 시 기존 키 유지 (`active=false`인 경우에만 새 키 발급)
-- 만료일: 현재 만료일 기준 +30일 연장 (기간 중 갱신 시 누적)
+**Solution:**
+- Keep the existing key on renewal (issue a new one only when `active=false`).
+- Expiry: extend by +30 days from the current expiry (days stack when renewed before expiry).
 
 ```typescript
-// 만료 전 갱신 → 현재 만료일 + 30일
+// Renewal before expiry → current expiry + 30 days
 const currentExpiry = new Date(new Date(existing.paidAt).getTime() + 30*24*60*60*1000);
 const base = currentExpiry > new Date() ? currentExpiry : new Date();
 newPaidAt = base.toISOString();
 ```
 
-### C. 플랜별 일일 릴레이 버스트 한도
+### C. Per-Plan Daily Relay Burst Cap
 
-**문제:** Starter 키로 하루 수만 건 트랜잭션 → 공유 릴레이어 독점 가능.
+**Problem:** a Starter key could submit tens of thousands of TXs per day → monopolizes the shared relayer.
 
-**해결:** KV fixed window (86400s), 플랜별 일일 상한 (§11 참조).
+**Solution:** KV fixed window (86400s) with per-plan daily caps (see §11).
 
-### D. 테스트 스크립트
+### D. Test Scripts
 
-| 파일 | 내용 |
-|------|------|
-| `scripts/test-eip7702.mjs` | 통합 EIP-7702 E2E 테스트 — `--chain avax\|bnb\|eth\|xlayer\|stable` |
-| `scripts/agent-example.mjs` | Node.js Agent SDK — 5체인 통합 예제 (TransferAuthorization + 모듈 export) |
+| File | Description |
+|------|-------------|
+| `scripts/test-eip7702.mjs` | Unified EIP-7702 E2E test — `--chain avax\|bnb\|eth\|xlayer\|stable` |
+| `scripts/agent-example.mjs` | Node.js Agent SDK — unified 5-chain example (TransferAuthorization + module export) |
 
 ---
 
-## 18. Stable Chain 통합
+## 18. Stable Chain Integration
 
-### 왜 Q402 on Stable인가
+### Why Q402 on Stable
 
-Stable은 USDT0가 네이티브 가스 토큰인 Layer 1. AI 에이전트 생태계에서:
-- 에이전트마다 USDT0 잔고를 따로 관리해야 하는 운영 부담 해소
-- 단일 Gas Tank로 수백 에이전트 통합 가스 관리
-- USD 페그 가스 → 릴레이어 운영비 예측 가능 (변동성 없음)
+Stable is a Layer 1 where USDT0 is the native gas token. In an AI agent ecosystem this means:
+- No per-agent USDT0 balance bookkeeping overhead.
+- A single Gas Tank can cover hundreds of agents.
+- USD-pegged gas → predictable relayer operating cost (no volatility).
 
-### 네트워크 정보
+### Network Info
 
-| 항목 | Mainnet (사용) | Testnet |
-|------|---------|---------|
+| Item | Mainnet (used) | Testnet |
+|------|----------------|---------|
 | Chain ID | `988` | `2201` |
 | RPC | `https://rpc.stable.xyz` | `https://rpc.testnet.stable.xyz` |
 | Explorer | `https://stablescan.org` | `https://testnet.stablescan.xyz` |
-| 가스 토큰 | USDT0 (18 dec) | USDT0 |
-| USDT0 주소 | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | `0x78Cf24370174180738C5B8E352B6D14c83a6c9A9` |
+| Gas token | USDT0 (18 dec) | USDT0 |
+| USDT0 address | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | `0x78Cf24370174180738C5B8E352B6D14c83a6c9A9` |
 
-### 배포된 컨트랙트
+### Deployed Contracts
 
 | Network | Address |
 |---------|---------|
 | Stable Mainnet (988) | `0x2fb2B2D110b6c5664e701666B3741240242bf350` |
 | Stable Testnet (2201) | `0x2fb2B2D110b6c5664e701666B3741240242bf350` |
 
-> 같은 주소 — deployer 주소/nonce 동일, deterministic 배포.
+> Identical address — same deployer address + nonce, deterministic deployment.
 
-### EIP-712 도메인
+### EIP-712 Domain
 
 ```javascript
 {
   name:              "Q402 Stable",
   version:           "1",
   chainId:           988,
-  verifyingContract: userEOA,   // 5개 체인 공통 — _domainSeparator가 address(this) 사용
+  verifyingContract: userEOA,   // shared across all 5 chains — _domainSeparator uses address(this)
 }
 ```
 
 ### Partnership
 
-- 파트너: Stable 팀 (Eunice, @eunicecyl)
-- 발표: 2026-04-04 Twitter 공동 포스팅 ✅
-- 메인넷 배포 완료: 2026-04-04 ✅
-- 컨트랙트 검증: ✅ stablescan.xyz 검증 완료 (2026-04-13)
+- Partner: Stable team (Eunice, @eunicecyl)
+- Announcement: joint Twitter post on 2026-04-04 ✅
+- Mainnet deployment complete: 2026-04-04 ✅
+- Contract verification: ✅ verified on stablescan.xyz (2026-04-13)
 
 ---
 
-## 19. 컨트랙트 & 토큰 주소
+## 19. Contracts & Token Addresses
 
-### 릴레이 컨트랙트
+### Relay Contracts
 
-| 체인 | ChainID | 주소 | EIP-712 NAME | 검증 |
-|------|---------|------|-------------|------|
+| Chain | ChainID | Address | EIP-712 NAME | Verified |
+|-------|---------|---------|--------------|----------|
 | Avalanche | 43114 | `0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c` | Q402 Avalanche | ✅ Routescan |
 | BNB Chain | 56 | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` | Q402 BNB Chain | ✅ Sourcify |
 | Ethereum | 1 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | Q402 Ethereum | ✅ Sourcify |
 | X Layer | 196 | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | Q402 X Layer | ✅ OKLink |
 | **Stable** | **988** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Q402 Stable | ✅ Stablescan |
 
-### 토큰 주소
+### Token Addresses
 
 #### Avalanche
-| 토큰 | 주소 | Dec |
-|------|------|-----|
+| Token | Address | Dec |
+|-------|---------|-----|
 | USDC | `0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E` | 6 |
 | USDT | `0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7` | 6 |
 
 #### BNB Chain
-| 토큰 | 주소 | Dec | 비고 |
-|------|------|-----|------|
-| USDC | `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d` | 18 | Binance 래핑, EIP-2612 미지원 |
+| Token | Address | Dec | Notes |
+|-------|---------|-----|-------|
+| USDC | `0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d` | 18 | Binance-peg, no EIP-2612 |
 | USDT | `0x55d398326f99059fF775485246999027B3197955` | 18 | |
 
 #### Ethereum
-| 토큰 | 주소 | Dec |
-|------|------|-----|
+| Token | Address | Dec |
+|-------|---------|-----|
 | USDC | `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48` | 6 |
 | USDT | `0xdAC17F958D2ee523a2206206994597C13D831ec7` | 6 |
 
 #### X Layer
-| 토큰 | 주소 | Dec | 비고 |
-|------|------|-----|------|
-| USDC | `0x74b7F16337b8972027F6196A17a631aC6dE26d22` | 6 | EIP-2612 + EIP-3009 지원 |
+| Token | Address | Dec | Notes |
+|-------|---------|-----|-------|
+| USDC | `0x74b7F16337b8972027F6196A17a631aC6dE26d22` | 6 | Supports EIP-2612 + EIP-3009 |
 | USDT | `0x1E4a5963aBFD975d8c9021ce480b42188849D41D` | 6 | |
 
 #### Stable
-| 토큰 | 주소 | Dec | 비고 |
-|------|------|-----|------|
-| USDT0 | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | 18 | API의 `USDC`/`USDT` 키 모두 이 주소로 resolve |
+| Token | Address | Dec | Notes |
+|-------|---------|-----|-------|
+| USDT0 | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | 18 | Both `USDC` and `USDT` API keys resolve to this address |
 
-### 컨트랙트 ABI 요약 (5개 체인 공통)
+### Contract ABI Summary (shared across all 5 chains)
 
 ```solidity
-// EIP-7702로 위임된 EOA에서 실행 — msg.sender = facilitator(릴레이어), address(this) = owner(유저 EOA)
+// Executed from an EIP-7702-delegated EOA — msg.sender = facilitator (relayer), address(this) = owner (user EOA)
 function transferWithAuthorization(
-  address owner,            // 결제자 EOA (address(this)와 일치해야 함)
-  address facilitator,      // 릴레이어 주소 (msg.sender와 일치해야 함)
-  address token,            // USDC/USDT(Stable은 USDT0) 토큰 주소
-  address recipient,        // 수신자
-  uint256 amount,           // atomic (체인별 decimals)
-  uint256 nonce,            // 랜덤 uint256 (usedNonces 매핑으로 replay 방지)
-  uint256 deadline,         // 만료 타임스탬프
-  bytes calldata witnessSignature  // EIP-712 TransferAuthorization 서명
+  address owner,            // payer EOA (must equal address(this))
+  address facilitator,      // relayer address (must equal msg.sender)
+  address token,            // USDC/USDT (USDT0 on Stable) address
+  address recipient,        // recipient
+  uint256 amount,           // atomic (per-chain decimals)
+  uint256 nonce,            // random uint256 (usedNonces mapping guards replay)
+  uint256 deadline,         // expiration timestamp
+  bytes calldata witnessSignature  // EIP-712 TransferAuthorization signature
 ) external;
 ```
 
 ---
 
-## 20. 보안
+## 20. Security
 
-### 보안 속성
+### Security Properties
 
-| 속성 | 구현 |
-|------|------|
-| API Key 소유권 증명 | EIP-191 personal_sign (provision/rotate/transactions/activate/user-balance) |
-| Replay 방지 | `usedNonces[owner][nonce]` 온체인 mapping |
+| Property | Implementation |
+|----------|----------------|
+| API Key ownership proof | EIP-191 personal_sign (provision/rotate/transactions/activate/user-balance) |
+| Replay prevention | `usedNonces[owner][nonce]` on-chain mapping |
 | Owner Binding | `owner != address(this)` → `OwnerMismatch()` revert |
-| Facilitator 검증 | `msg.sender != facilitator` → `UnauthorizedFacilitator()` revert (xlayer) |
-| SSRF 방지 | Webhook URL 등록/발송 시 RFC-1918 + IPv6 내부 + 클라우드 메타데이터 차단 |
+| Facilitator check | `msg.sender != facilitator` → `UnauthorizedFacilitator()` revert (xlayer) |
+| SSRF defense | Webhook URL registration/dispatch blocks RFC-1918 + IPv6 internal + cloud metadata |
 | Rate limiting | KV fixed-window per IP **and per API key** (/api/relay: 30 req/60s per key) |
-| 에러 노출 방지 | 내부 에러 서버 로그, 클라이언트엔 generic 메시지 |
-| Sandbox 격리 | KV `isSandbox` 플래그만 신뢰 — key prefix 기반 우회 차단. 웹훅 디스패치는 live-only(v1.17, Q402-SEC-002) |
-| TX 재사용 방지 | `used_txhash:{hash}` KV 플래그 (90일 TTL) — 동일 TX 재활성화 불가 |
-| Webhook 무결성 | HMAC-SHA256 모든 아웃바운드 페이로드 |
-| ECDSA 강화 | low-s 강제 + zero-address 검증 |
+| Error surface | Internal errors stay in server logs; clients receive generic messages |
+| Sandbox isolation | Trust only the KV `isSandbox` flag — key-prefix bypass blocked. Webhook dispatch is live-only (v1.17, Q402-SEC-002) |
+| TX reuse prevention | `used_txhash:{hash}` KV flag (90-day TTL) — the same TX cannot reactivate twice |
+| Webhook integrity | HMAC-SHA256 on every outbound payload |
+| ECDSA hardening | Enforced low-s + zero-address check |
 
-### v1.17 보안 감사 이력 (2026-04-18, 외부 리뷰어)
+### v1.17 Security Audit Record (2026-04-18, external reviewer)
 
-프로덕션 런칭 전 3rd-party 검토. 3 finding 제기, 전원 수정 + 회귀 테스트 락인 완료.
+Pre-launch 3rd-party review. 3 findings raised; all fixed with regression tests landed.
 
-**[P0] Q402-SEC-001 — 릴레이 수표 순서 실버그 (High)**  
-`decrementCredit()` 이후 `loadRelayerKey()` 실행. `RELAYER_PRIVATE_KEY` 오설정 시 503 복귀되지만 크레딧/일일캡은 이미 차감 → 모든 호출자 할당량 silent drain.
-- 수정: `chain → auth lock → gas tank → loadRelayerKey → dailyCap → decrement → relay` 로 순서 재배치 ([`app/api/relay/route.ts`](app/api/relay/route.ts), 섹션 6a)
-- 회귀: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) 9 landmark assertion
+**[P0] Q402-SEC-001 — Relay check-ordering bug (High)**  
+`loadRelayerKey()` ran after `decrementCredit()`. A misconfigured `RELAYER_PRIVATE_KEY` would return 503 while credits/daily-cap had already been decremented → silent quota drain for every caller.
+- Fix: reorder as `chain → auth lock → gas tank → loadRelayerKey → dailyCap → decrement → relay` ([`app/api/relay/route.ts`](app/api/relay/route.ts), section 6a).
+- Regression: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) with 9 landmark assertions.
 
-**[P0] Q402-SEC-002 — Sandbox 웹훅 forgery (Medium, Priority High)**  
-Sandbox 릴레이는 txHash/blockNumber fabricate. 그럼에도 HMAC 서명된 `relay.success` 발송 → sandbox 키로 "서명 유효한 settlement" 위조 가능.
-- 수정: `webhookCfg = isSandbox ? null : await getWebhookConfig(...)` ([`app/api/relay/route.ts`](app/api/relay/route.ts))
-- 회귀: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) 후반부 2 assertion
+**[P0] Q402-SEC-002 — Sandbox webhook forgery (Medium, Priority High)**  
+Sandbox relays fabricate txHash/blockNumber yet still emitted HMAC-signed `relay.success` webhooks → a sandbox key could be used to forge signature-valid "settlement" events.
+- Fix: `webhookCfg = isSandbox ? null : await getWebhookConfig(...)` ([`app/api/relay/route.ts`](app/api/relay/route.ts)).
+- Regression: final 2 assertions in [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts).
 
-**[P1] Q402-SEC-003 — 익명 gas-tank 포스처 열람 (Low-Medium)**  
-`GET /api/gas-tank/user-balance?address=0x...` 가 unauthenticated. 타 지갑 잔고/입금 이력 trivially 스크래핑.
-- 수정: `requireAuth(address, nonce, sig)` 추가 ([`app/api/gas-tank/user-balance/route.ts`](app/api/gas-tank/user-balance/route.ts)) + 대시보드 caller `getAuthCreds()` 사용 ([`app/dashboard/page.tsx`](app/dashboard/page.tsx))
-- 회귀: [`__tests__/user-balance-auth.test.ts`](__tests__/user-balance-auth.test.ts) 5 assertion
+**[P1] Q402-SEC-003 — Anonymous gas-tank posture read (Low-Medium)**  
+`GET /api/gas-tank/user-balance?address=0x...` was unauthenticated; anyone could trivially scrape another wallet's balance + deposit history.
+- Fix: added `requireAuth(address, nonce, sig)` ([`app/api/gas-tank/user-balance/route.ts`](app/api/gas-tank/user-balance/route.ts)) + dashboard caller uses `getAuthCreds()` ([`app/dashboard/page.tsx`](app/dashboard/page.tsx)).
+- Regression: [`__tests__/user-balance-auth.test.ts`](__tests__/user-balance-auth.test.ts) with 5 assertions.
 
 ---
 
-### v1.2 보안 감사 이력 (2026-03-23, Marin)
+### v1.2 Security Audit Record (2026-03-23, Marin)
 
-**[P0] Owner Binding 누락 — 치명**  
-`transferWithAuthorization`에서 `owner != address(this)` 검증 없음 → 타 주소 자산 무단 이전 가능.
+**[P0] Missing Owner Binding — Critical**  
+`transferWithAuthorization` did not check `owner != address(this)` → arbitrary third-party assets could be moved.
 ```solidity
 if (owner == address(0)) revert InvalidOwner();
 if (owner != address(this)) revert OwnerMismatch();
 ```
 
-**[P1] Facilitator 미검증 — 높음**  
-`msg.sender == facilitator` 체크 없음 → 인터셉트된 페이로드 제3자 실행 가능.
+**[P1] Facilitator Not Verified — High**  
+No `msg.sender == facilitator` check → an intercepted payload could be executed by a third party.
 ```solidity
 if (msg.sender != facilitator) revert UnauthorizedFacilitator();
 ```
 
-**[P2-A] ECDSA 강화 — 중간**  
-`ecrecover` zero-address 검증 + low-s malleability 방어 추가.
+**[P2-A] ECDSA Hardening — Medium**  
+Added zero-address check after `ecrecover` + low-s malleability defense.
 
-**[P2-B] EIP-7702 context 주의사항 문서화**  
-`domainSeparator()`/`hashTransferAuthorization()`이 위임 실행 컨텍스트에서 `address(this)` 달라짐 → `@dev WARNING` 주석 추가.
+**[P2-B] EIP-7702 Context Caveat Documented**  
+`address(this)` differs inside `domainSeparator()`/`hashTransferAuthorization()` when executed under delegation → added `@dev WARNING` comments.
 
-**v1.2 재배포:** 4개 체인 전체 재배포, Sourcify/Routescan/OKLink 검증 완료.
+**v1.2 redeploy:** all 4 chains redeployed; verified on Sourcify / Routescan / OKLink.
 
 ---
 
-## 21. Vercel 배포
+## 21. Vercel Deployment
 
 ```bash
 npm install -g vercel
 cd Q402-Institutional
 vercel link --project q402-institutional --scope bitgett-7677s-projects --yes
 
-# 환경변수 추가 예시
-echo "0x주소" | vercel env add STABLE_IMPLEMENTATION_CONTRACT production
+# Example: add an env var
+echo "0xAddress" | vercel env add STABLE_IMPLEMENTATION_CONTRACT production
 
-# 배포는 git push로 자동
+# Deploys happen automatically on git push
 git push origin main
 ```
 
 ---
 
-## 22. 운영 지갑 — 3-역할 분리 (v1.16+)
+## 22. Operational Wallets — 3-Role Separation (v1.16+)
 
-3개 지갑, 3개 역할, 0개 commingling. 단일 키 컴프로마이즈로 매출/유저 예치금이 한 번에 털리지 않도록 분리.
+Three wallets, three roles, zero commingling. The split ensures a single key compromise cannot drain revenue and user deposits at once.
 
-| 역할 | 주소 | 키 보관 | 책임 |
-|------|------|---------|------|
-| `SUBSCRIPTION_ADDRESS` | `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` | **콜드** (서버에 키 없음) | 구독 결제 ($29/$49/$149…) 수신만. 정기적으로 콜드 디바이스에서 수동 인출. |
-| `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **콜드** (서버에 키 없음) | 유저 가스 예치금(BNB/ETH/AVAX/OKB/USDT0) 수신. 핫 릴레이어로 cold→hot 수동 충전. |
-| `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **핫** (Vercel `RELAYER_PRIVATE_KEY`) | EIP-7702 TX 서명/제출. 최소 운영 잔고만 유지 (BNB/ETH/AVAX/OKB/USDT0). |
+| Role | Address | Key Storage | Responsibility |
+|------|---------|-------------|----------------|
+| `SUBSCRIPTION_ADDRESS` | `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` | **Cold** (no key on server) | Receives subscription payments ($29/$49/$149…). Periodically swept manually from a cold device. |
+| `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **Cold** (no key on server) | Receives user gas deposits (BNB/ETH/AVAX/OKB/USDT0). Cold→hot top-ups to the relayer are done manually. |
+| `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **Hot** (Vercel `RELAYER_PRIVATE_KEY`) | Signs/submits EIP-7702 TXs. Holds only a minimal operational float (BNB/ETH/AVAX/OKB/USDT0). |
 
-상수는 [`app/lib/wallets.ts`](app/lib/wallets.ts) 단일 모듈에서 export — 모든 라우트/페이지가 여기서만 import.
+The constants are exported from a single module ([`app/lib/wallets.ts`](app/lib/wallets.ts)) — every route/page imports only from there.
 
-### 핵심 보안 인바리언트
+### Core Security Invariants
 
-1. **`RELAYER_ADDRESS`는 유저 자금을 수신하지 않는다.** 가스 예치는 `GASTANK_ADDRESS`로, 구독 결제는 `SUBSCRIPTION_ADDRESS`로. 서버 컴프로마이즈 시 빠지는 건 RELAYER의 운영 가스 float뿐.
-2. **`GASTANK_ADDRESS`의 프라이빗 키는 절대 Vercel env에 올리지 않는다.** Cold 서명만 — 유저 환불(`/api/gas-tank/withdraw`)도 record-only로, 운영자가 콜드 디바이스에서 송금한 뒤 txHash 만 서버에 기록한다.
-3. **온체인 GASTANK 잔고 == sum(KV `gas:` ledger)** (체인별). [`scripts/migrate-split-wallets.mjs`](scripts/migrate-split-wallets.mjs)로 정기 검증.
-4. **`RELAYER_ADDRESS` 상수 == `RELAYER_PRIVATE_KEY` 파생 주소.** `app/lib/relayer-key.ts`의 `loadRelayerKey()`가 모든 서명 호출 직전에 검증, 불일치 시 503 fail-closed. 회귀 테스트는 [`__tests__/relayer-key.test.ts`](__tests__/relayer-key.test.ts).
+1. **`RELAYER_ADDRESS` never receives user funds.** Gas deposits go to `GASTANK_ADDRESS`, subscription payments go to `SUBSCRIPTION_ADDRESS`. A server compromise only exposes the RELAYER's operational gas float.
+2. **`GASTANK_ADDRESS`'s private key is never placed in Vercel env.** Cold signing only — user withdrawals (`/api/gas-tank/withdraw`) are record-only: the operator signs from a cold device and records the txHash on the server.
+3. **On-chain GASTANK balance == sum(KV `gas:` ledger)** per chain. Verified periodically via [`scripts/migrate-split-wallets.mjs`](scripts/migrate-split-wallets.mjs).
+4. **`RELAYER_ADDRESS` constant == address derived from `RELAYER_PRIVATE_KEY`.** `loadRelayerKey()` in `app/lib/relayer-key.ts` verifies this immediately before every signing call; fail-closed with 503 on mismatch. Regression: [`__tests__/relayer-key.test.ts`](__tests__/relayer-key.test.ts).
 
-### 알려진 한계 — 유저별 가스 custody
+### Known Limitation — Per-User Gas Custody
 
-이 분리는 **집계 유저 가스 풀**(콜드 GASTANK 안에 보관)을 보호하지만, **유저별 잔고 귀속**은 여전히 KV ledger (`gas:<userAddr>` 키)로 관리한다. KV 손실/오염/무단 쓰기 시:
-- 온체인 GASTANK 총 잔액의 어느 부분이 어느 유저 몫인지 잊을 수 있음
-- 단일 유저의 기록 잔고를 온체인과 무관하게 부풀리거나 깎을 수 있음
+This split protects the **aggregate user gas pool** (held in the cold GASTANK), but **per-user balance attribution** is still managed via the KV ledger (`gas:<userAddr>` keys). If KV is lost / corrupted / written without authorization:
+- It may become impossible to tell which portion of the on-chain GASTANK balance belongs to which user.
+- An individual user's recorded balance could be inflated or deflated independently of on-chain reality.
 
-**총 부채 vs 온체인 GASTANK 잔액**은 체인 히스토리로 검증 가능 (스크립트). 하지만 **유저별 잔고 재구성**은 모든 deposit/relay 이벤트를 체인 로그에서 다시 스캔해야 함. 현재는 유저별 온체인 subaccount 없음. CREATE2 vault per user 도입은 현 TVL 단계에서는 의도적 non-goal — 비용/이점 분석은 §22 트레이드오프 참조.
+**Total liability vs on-chain GASTANK balance** can be verified from chain history (via script). But **per-user balance reconstruction** requires re-scanning every deposit/relay event from chain logs. There are no per-user on-chain subaccounts today. Introducing a CREATE2 vault per user is an intentional non-goal at the current TVL — see §22 tradeoffs for the cost/benefit analysis.
 
-### 알림
+### Alerts
 
-`/api/cron/gas-alert` → `/api/gas-tank?check_alerts=1` (admin secret 필요) 가 RELAYER 핫 잔고를 모니터링하고 운영 임계치 미만이면 텔레그램 경보 발송. 알림이 뜨면 운영자가 콜드(GASTANK) → 핫(RELAYER) 송금.
+`/api/cron/gas-alert` → `/api/gas-tank?check_alerts=1` (requires admin secret) monitors the RELAYER hot balance and fires a Telegram alert below the operational threshold. When alerted, the operator tops up cold (GASTANK) → hot (RELAYER).
 
-### 마스터 계정 (항상 paid 처리)
+### Master Accounts (always treated as paid)
 ```
-0xfc77ff29178b7286a8ba703d7a70895ca74ff466  (RELAYER 핫)
-0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28  (오너)
-0x3717d6ed5c2bce558e715cda158023db6705fd47  (오너)
+0xfc77ff29178b7286a8ba703d7a70895ca74ff466  (RELAYER hot)
+0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28  (Owner)
+0x3717d6ed5c2bce558e715cda158023db6705fd47  (Owner)
 ```
-`app/lib/access.ts`의 `MASTER_ADDRESSES` 배열에 하드코딩 — Quote 페이지/대시보드 화이트리스트.
+Hardcoded in the `MASTER_ADDRESSES` array of `app/lib/access.ts` — Quote page / dashboard whitelist.
 
 ---
 
-## 23. 테스트 스크립트 & Agent SDK
+## 23. Test Scripts & Agent SDK
 
 ```bash
-# 통합 EIP-7702 E2E 테스트 — 체인 지정
+# Unified EIP-7702 E2E test — pick a chain
 node scripts/test-eip7702.mjs --chain avax   [--amount 0.05] [--to 0x...]
 node scripts/test-eip7702.mjs --chain bnb
 node scripts/test-eip7702.mjs --chain eth
 node scripts/test-eip7702.mjs --chain xlayer
 node scripts/test-eip7702.mjs --chain stable
 
-# 5체인 Agent SDK 예제 (TransferAuthorization 통합 플로우)
+# 5-chain Agent SDK example (unified TransferAuthorization flow)
 node scripts/agent-example.mjs
 ```
 
-`agent-example.mjs`는 모듈로 import 가능:
+`agent-example.mjs` can be imported as a module:
 ```javascript
 import { sendGaslessPayment, CHAINS } from "./scripts/agent-example.mjs";
 
-// 단일 결제 — amount는 반드시 **문자열** (Number는 거부됨, IEEE-754 안전성)
+// Single payment — amount MUST be a **string** (Number is rejected, IEEE-754 safety)
 await sendGaslessPayment({ chain: "bnb", recipient: "0x...", amount: "10.0" });
 
-// 멀티체인 순차 결제
+// Multi-chain sequential payments
 for (const chain of ["avax", "bnb", "eth"]) {
   await sendGaslessPayment({ chain, recipient: "0x...", amount: "0.05" });
 }
 ```
 
-환경변수: `.env.local`에 `Q402_API_KEY`, `TEST_PAYER_KEY` 필요.
+Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 
 ---
 
-## 24. 남은 작업 / 로드맵
+## 24. Remaining Work / Roadmap
 
-| 항목 | 현황 | 우선순위 |
-|------|------|---------|
-| Stable 컨트랙트 검증 | ✅ stablescan.xyz 완료 (2026-04-13) | 완료 |
-| Gas Tank 충전 (전 체인 low) | BNB / ETH / AVAX / XLayer / Stable 저잔고 | 즉시 필요 |
-| quackai.ai/q402 도메인 연결 | 미완료 | 중간 |
-| Webhook retry on failure | fire-and-forget | 중간 |
-| 프로젝트별 별도 릴레이어 주소 | 단일 글로벌 지갑 | 높음 (P1) |
-| SDK npm 패키지 | CDN 파일만 | 낮음 |
-| 자동화 테스트 (Jest/Vitest) | Vitest — `__tests__/` 8 파일 / 122 테스트 (contracts-manifest · relay-body-shape · auth · blockchain · intent · quote · rotate · ratelimit) | 완료 |
-| PostgreSQL 마이그레이션 | Vercel KV로 충분 | 낮음 |
-| Gas Tank 자동 충전 | UI 토글 존재, 로직 미구현 | 중간 |
+| Item | Status | Priority |
+|------|--------|----------|
+| Stable contract verification | ✅ stablescan.xyz complete (2026-04-13) | Done |
+| Gas Tank top-up (all chains low) | BNB / ETH / AVAX / XLayer / Stable running low | Immediate |
+| quackai.ai/q402 domain wiring | Not done | Medium |
+| Webhook retry on failure | fire-and-forget | Medium |
+| Per-project dedicated relayer address | Single global wallet | High (P1) |
+| SDK npm package | CDN file only | Low |
+| Automated tests (Jest/Vitest) | Vitest — `__tests__/` 8 files / 122 tests (contracts-manifest · relay-body-shape · auth · blockchain · intent · quote · rotate · ratelimit) | Done |
+| PostgreSQL migration | Vercel KV is sufficient | Low |
+| Gas Tank auto top-up | UI toggle exists, logic unimplemented | Medium |
 
 ---
 
@@ -1254,396 +1255,378 @@ for (const chain of ["avax", "bnb", "eth"]) {
 
 ### v1.16 (2026-04-17)
 
-> **현재 canonical flow 유지 (v1.15와 동일):** 5개 체인 + TransferAuthorization witness + decimal-string `amount`. v1.16은 사용자 눈에 보이는 surface (SSRF 방어, 지갑 플로우, UI 정리)에 집중한 런칭 전 하드닝 라운드.
+> **Canonical flow unchanged from v1.15:** 5 chains + TransferAuthorization witness + decimal-string `amount`. v1.16 focused on user-visible surface (SSRF defense, wallet flows, UI cleanup) as part of pre-launch hardening.
 
-#### 런칭 전 오딧 결과 반영 — SSRF hardening / UX 수정 / dead code 제거
+#### Pre-launch audit response — SSRF hardening / UX fixes / dead code removal
 
-v1.15 파이프라인 정비에 이어, 모듈별 전체 감사(결제·API·SDK·UI·config)를 돌려 런칭 전 모든 잔여 이슈를 정리. 56개 finding → 15개 실 수정.
+Following the v1.15 pipeline cleanup, a full module-by-module audit (payment, API, SDK, UI, config) was run to resolve every remaining pre-launch issue. 56 findings → 15 actual changes.
 
-**[P0] Webhook SSRF 전반 방어 강화 — `app/lib/webhook-validator.ts` + 신규 `app/lib/safe-fetch.ts`**
-- 기존 validator의 여섯 가지 우회 경로를 모두 차단:
-  - 2-옥텟/3-옥텟 단축 IPv4 (`127.1`, `10.0.1`) — 숫자-only 호스트 정규식으로 거절
-  - `nip.io`, `sslip.io`, `xip.io`, `traefik.me`, `localtest.me` 등 DNS wildcard 서비스
-  - DNS resolution 후 실제 IP가 private/loopback이면 거절 (`validateWebhookUrlResolved`)
-  - IPv6 embedded IPv4 (`::ffff:127.0.0.1`) 및 cloud-metadata IPv6 (`fd00:ec2::254`)
-  - AWS/GCP/Alibaba 메타데이터 호스트 추가 (`metadata.google.internal`, `100.100.100.200`)
-- 신규 `safeWebhookFetch()`: 모든 webhook 호출 단일 진입점. `redirect: "manual"`로 redirect 체인 따라가기 차단 + pre-resolve DNS 검증. `/api/webhook/test`와 `/api/relay`(dispatchWebhook)가 공유.
-- `/api/webhook/test`: 실패 시 일반화된 `"Webhook delivery failed"`로 응답 (내부 오류 메시지 노출 제거). 원문은 `console.error`로 서버 로그에만 기록.
+**[P0] Webhook SSRF defense overhaul — `app/lib/webhook-validator.ts` + new `app/lib/safe-fetch.ts`**
+- Closed six bypass paths the previous validator missed:
+  - 2-/3-octet short-form IPv4 (`127.1`, `10.0.1`) — rejected by a numeric-only host regex.
+  - DNS wildcard services: `nip.io`, `sslip.io`, `xip.io`, `traefik.me`, `localtest.me`.
+  - Post-DNS-resolution re-check: reject if the resolved IP is private/loopback (`validateWebhookUrlResolved`).
+  - IPv6-embedded IPv4 (`::ffff:127.0.0.1`) and cloud-metadata IPv6 (`fd00:ec2::254`).
+  - Added AWS/GCP/Alibaba metadata hosts (`metadata.google.internal`, `100.100.100.200`).
+- New `safeWebhookFetch()`: single entry point for every webhook call. `redirect: "manual"` blocks following the redirect chain, plus pre-resolve DNS validation. Shared by `/api/webhook/test` and `/api/relay` (dispatchWebhook).
+- `/api/webhook/test`: on failure, returns a generalized `"Webhook delivery failed"` (no internal error leakage). Original error is logged via `console.error` server-side only.
 
-**[P0] `RegisterModal` 결제 플로우 수정 — `app/components/RegisterModal.tsx`**
-- Step 1 "Connect Wallet (MetaMask)" → "Choose Wallet"로 교체 + 공유 `WalletModal` 사용 → OKX 지갑 지원
-- "WalletConnect coming soon" 거짓 문구 제거
-- `handlePay()` 재작성: `getAuthCreds()`로 nonce + signature 획득 후 `/api/keys/provision` 호출. 실패 케이스별 (서명 거절, 서버 오류, 네트워크 오류) Step 3에 `role="alert"` 에러 UI 노출
-- `step` state를 `useRef`로 가드한 effect에서 async 연결 완료 시점에 step 2로 동기화 (이전엔 wallet connect 후 유저가 "Next" 다시 눌러야 했음)
+**[P0] `RegisterModal` payment flow fix — `app/components/RegisterModal.tsx`**
+- Step 1 "Connect Wallet (MetaMask)" → "Choose Wallet" using the shared `WalletModal` → OKX wallet support.
+- Removed the false "WalletConnect coming soon" text.
+- Rewrote `handlePay()`: obtains nonce + signature via `getAuthCreds()`, then calls `/api/keys/provision`. Step 3 shows a `role="alert"` error UI per failure case (signature rejected, server error, network error).
+- Guard the `step` state transition with `useRef` so it advances to step 2 when async connection completes (previously users had to click "Next" again after wallet connect).
 
-**[P1] `WalletModal` 공유 컴포넌트 추출 — 신규 `app/components/WalletModal.tsx`**
-- `WalletButton` + `payment/page.tsx`가 각각 보유하던 duplicated MetaMask-only modal을 단일 컴포넌트로 통합
-- `role="dialog"`, `aria-modal="true"`, `aria-labelledby` a11y 속성 추가
-- ESC 키 close + focus 관리 (useRef/useEffect)
-- OKX 아이콘을 `/okx.jpg` 실제 로고로 통일 (`payment/page.tsx`는 이전에 generic grid SVG 사용 중)
-- `onConnected?: (address: string) => void` 콜백으로 연결 직후 부모가 step 전환 가능
+**[P1] Shared `WalletModal` component extracted — new `app/components/WalletModal.tsx`**
+- Unified the duplicated MetaMask-only modals that `WalletButton` and `payment/page.tsx` each maintained.
+- Added a11y attributes: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`.
+- ESC-key close + focus management (useRef/useEffect).
+- OKX icon unified to the real `/okx.jpg` logo (`payment/page.tsx` had been using a generic grid SVG).
+- `onConnected?: (address: string) => void` callback so the parent can advance steps immediately after connection.
 
-**[P1] Gas Tank "Auto Top-up" 토글 제거 — `app/dashboard/page.tsx`**
-- 로직이 실장된 적 없는 dead UI (토글만 존재, 실제 refill은 수동). 유저에게 "자동 충전됨"이라는 잘못된 인상 줌
-- `autoTopup` state + UI 블록 + 활성화 배지 모두 제거. 실제 구현되면 다시 추가
+**[P1] Removed Gas Tank "Auto Top-up" toggle — `app/dashboard/page.tsx`**
+- Dead UI; the feature was never implemented (toggle only, refills are still manual). Gave users a false impression of "auto-refilled".
+- Removed `autoTopup` state + UI block + active badge. Will re-add once actually implemented.
 
-**[P1] Footer X Layer 브랜드 컬러 통일 — `app/components/Footer.tsx`**
-- `#7B61FF` (퍼플, 브랜드와 무관) → `#CCCCCC` (silver, 실제 X Layer 로고 컬러). Hero / payment / docs와 일관성
+**[P1] Footer X Layer brand color unified — `app/components/Footer.tsx`**
+- `#7B61FF` (purple, unrelated to the brand) → `#CCCCCC` (silver, the actual X Layer logo color). Consistent with Hero / payment / docs.
 
-**[P1] Dead code 정리 — `app/lib/access.ts` 삭제 + `WalletContext.isPaidUser` 제거**
-- `access.ts`: 과거 페이월 시절 잔재. `isPaid()` 항상 true, `setPaid()` no-op, import 0건
-- `WalletContext.isPaidUser`: 모든 consumer 제거 후 타입에도 미사용 필드로 남아있었음 → 타입/프로바이더 양쪽에서 제거
+**[P1] Dead code cleanup — removed `app/lib/access.ts` + `WalletContext.isPaidUser`**
+- `access.ts`: legacy paywall leftover. `isPaid()` always returned true, `setPaid()` was a no-op, 0 imports.
+- `WalletContext.isPaidUser`: all consumers had been removed but the field lingered in the type → removed from both type and provider.
 
-**[P2] 코드 주석 현행화 — `app/lib/relayer.ts`**
-- 헤더 주석 `v1.2` → `v1.3` + 5개 체인 통합(stable 포함) 반영
-- `transferWithAuthorization()` 주석 `v1.2+` → `v1.3`, calldata 인코딩 주석도 동기화
+**[P2] Code-comment currency — `app/lib/relayer.ts`**
+- Header comment `v1.2` → `v1.3` reflecting the 5-chain unification (stable included).
+- `transferWithAuthorization()` comments `v1.2+` → `v1.3`; calldata encoding comments synced.
 
-**[P0] 운영 지갑 3-역할 분리 — 신규 `app/lib/wallets.ts` + 6개 라우트/페이지 마이그레이션**
-- 기존: 단일 지갑 `0xfc77ff29...c466`이 (a) 구독 매출 수신, (b) 유저 가스 예치 수신, (c) 핫 릴레이어 서명 — 3 역할 commingle. Vercel env 키 컴프로마이즈 시 매출 + 유저 예치금 + 운영 가스 모두 단일 키 한 방에 노출.
-- 신규 분리 (자세한 내용은 §22):
-  - `SUBSCRIPTION_ADDRESS = 0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (콜드, 매출 전용)
-  - `GASTANK_ADDRESS      = 0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` (콜드, 유저 가스 예치)
-  - `RELAYER_ADDRESS      = 0xfc77ff29...c466` (핫, EIP-7702 서명만)
-- 변경된 파일:
-  - `app/payment/page.tsx` — 구독 결제 표시 주소 → `SUBSCRIPTION_ADDRESS`
-  - `app/lib/blockchain.ts` — 구독 결제 스캐너 타겟 → `SUBSCRIPTION_ADDRESS` (`Transfer(from, SUBSCRIPTION)` 필터)
-  - `app/api/gas-tank/route.ts` — 대시보드는 GASTANK 잔고, 텔레그램 경보는 RELAYER 핫 잔고를 모니터링하도록 분리
-  - `app/api/gas-tank/verify-deposit/route.ts` — 유저 예치 스캐너 타겟 → `GASTANK_ADDRESS`
-  - `app/api/gas-tank/withdraw/route.ts` — **record-only로 재설계**. RELAYER로 자동 서명하던 기존 로직 제거. 운영자가 콜드 디바이스에서 GASTANK→유저 송금 후 txHash를 POST하면, 서버가 on-chain 검증(from=GASTANK, to=user, value>0, status=1) 후 KV ledger 차감. 검증 실패 시 거절, 중복 txHash 409.
-  - `app/dashboard/page.tsx` — Deposit 모달 표시 주소 → `GASTANK_ADDRESS`, 라벨 "Q402 Gas Tank Address"
-- 신규 `scripts/migrate-split-wallets.mjs` — read-only 마이그레이션 플랜. 체인별 (legacy 잔고 - KV 가스 부채 - 운영 reserve) 계산해서 운영자가 콜드 디바이스로 서명할 송금 명세를 출력. 키 보유/브로드캐스트 없음.
-- **인바리언트**: `RELAYER`는 절대 유저 자금을 받지 않는다. 서버가 털려도 빠지는 건 RELAYER의 작은 운영 가스 float뿐 — 매출/예치금은 안전.
+**[P0] 3-role operational wallet split — new `app/lib/wallets.ts` + 6 routes/pages migrated**
+- Before: a single wallet `0xfc77ff29...c466` handled (a) subscription revenue, (b) user gas deposits, (c) hot relayer signing — three roles commingled. A Vercel env key compromise would expose revenue + deposits + operational gas with a single key.
+- New split (see §22 for details):
+  - `SUBSCRIPTION_ADDRESS = 0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (cold, revenue-only)
+  - `GASTANK_ADDRESS      = 0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` (cold, user gas deposits)
+  - `RELAYER_ADDRESS      = 0xfc77ff29...c466` (hot, EIP-7702 signing only)
+- Files changed:
+  - `app/payment/page.tsx` — display address for subscription payments → `SUBSCRIPTION_ADDRESS`.
+  - `app/lib/blockchain.ts` — subscription-payment scanner target → `SUBSCRIPTION_ADDRESS` (`Transfer(from, SUBSCRIPTION)` filter).
+  - `app/api/gas-tank/route.ts` — dashboard reads GASTANK balance; Telegram alerts monitor the RELAYER hot balance (separated).
+  - `app/api/gas-tank/verify-deposit/route.ts` — user-deposit scanner target → `GASTANK_ADDRESS`.
+  - `app/api/gas-tank/withdraw/route.ts` — **redesigned as record-only**. Removed prior auto-sign-from-RELAYER logic. Operators send GASTANK→user from a cold device, then POST the txHash; the server verifies on-chain (from=GASTANK, to=user, value>0, status=1) before decrementing the KV ledger. Verification failure → rejected; duplicate txHash → 409.
+  - `app/dashboard/page.tsx` — Deposit modal display address → `GASTANK_ADDRESS`, labeled "Q402 Gas Tank Address".
+- New `scripts/migrate-split-wallets.mjs` — read-only migration plan. Computes per-chain (legacy balance − KV gas liability − operating reserve) and prints a transfer spec for the operator to sign from a cold device. Holds no keys, broadcasts nothing.
+- **Invariant**: `RELAYER` never receives user funds. A server compromise only exposes RELAYER's small operational gas float — revenue and deposits remain safe.
 
-**검증**: `pnpm lint && pnpm build && pnpm test` 모두 통과. webhook-validator 회귀 테스트 추가 (10 개 신규 케이스: nip.io, 2-옥텟 IPv4, metadata host, DNS resolve). 기존 138 테스트 전부 통과.
+**Verification**: `pnpm lint && pnpm build && pnpm test` all green. Added 10 new webhook-validator regression cases (nip.io, 2-octet IPv4, metadata host, DNS resolve). Existing 138 tests all pass.
 
 ### v1.15 (2026-04-17)
 
-> **현재 canonical flow (v1.15):** 5개 체인 모두 `TransferAuthorization` witness + `amount` 파라미터(decimal string only). 아래 changelog에 등장하는 `PaymentWitness`, `paymentId`, `amountUSD` 등은 **과거 버전** 용어이며 현재 코드에는 존재하지 않음.
+> **Canonical flow (v1.15):** all 5 chains use the `TransferAuthorization` witness + `amount` parameter (decimal string only). Terms like `PaymentWitness`, `paymentId`, `amountUSD` that appear in older changelog entries below are **legacy** and do not exist in the current code.
 
-#### 프로덕션 하드닝 — Next 16 / React 19 / lint 파이프라인 / SDK 금액 정밀도 / 레거시 필드 제거
+#### Production hardening — Next 16 / React 19 / lint pipeline / SDK amount precision / legacy-field removal
 
-v1.14 체인 통합 이후 같은 날 진행한 런칭 전 정비. 컴파일/린트 파이프라인을 현 세대에 맞추고,
-릴레이 계약에서 더는 쓰이지 않는 레거시 입력을 강제로 거절하고, SDK의 금액 변환에서 부동소수점
-경로를 완전히 제거했다.
+Pre-launch cleanup done the same day as the v1.14 chain unification. Brought the compile/lint pipeline up to current-generation tooling, started rejecting legacy inputs that the relay contract no longer uses, and removed all floating-point paths from SDK amount conversion.
 
-**[P0] SDK 금액 변환 정밀도 복구 — `public/q402-sdk.js` (커밋 `85c8851`)**
-- 기존: `BigInt(Math.round(parseFloat(amount) * 10 ** decimals))` — IEEE-754 double이 유효자릿수 15~17개만
-  보존하므로 18-dec 토큰(BNB USDC/USDT, Stable USDT0)에서 `"1.000000000000000001"` → `1000000000000000000`
-  처럼 dust가 조용히 반올림되던 실버그
-- 수정: `toRawAmount(amount, decimals)` 헬퍼 추출 → `ethers.parseUnits` 기반 정확한 decimal-string 파싱
-- 입력 검증 강화: 빈 문자열 / whitespace / 비-decimal 문자열 / 지수 표기 / 부호 / 0 / 음수 /
-  토큰 decimals 초과 정밀도에 대해 사람이 읽을 수 있는 에러로 throw
-- 동작 변경 (breaking for misuse): 이전에 조용히 반올림되던 과잉 정밀도 입력(예: 6-dec USDC에 `"5.1234567"`)
-  은 이제 명시적 에러. 공개 API 시그니처 (`pay()`, relay payload shape)는 변경 없음
-- `__tests__/sdk-amount.test.ts` 14 케이스로 회귀 방지 (정확도 5 + 검증 9)
+**[P0] SDK amount conversion precision restored — `public/q402-sdk.js` (commit `85c8851`)**
+- Before: `BigInt(Math.round(parseFloat(amount) * 10 ** decimals))` — IEEE-754 double only preserves 15~17 significant digits, so on 18-dec tokens (BNB USDC/USDT, Stable USDT0) dust was silently rounded, e.g. `"1.000000000000000001"` → `1000000000000000000`.
+- Fix: extracted a `toRawAmount(amount, decimals)` helper → precise decimal-string parsing via `ethers.parseUnits`.
+- Stricter input validation: throws a human-readable error for empty / whitespace / non-decimal / exponential / signed / 0 / negative / precision-above-token-decimals inputs.
+- Behavior change (breaking for misuse): precision-overrun inputs that used to be silently rounded (e.g. `"5.1234567"` on 6-dec USDC) now raise an explicit error. Public API (`pay()`, relay payload shape) unchanged.
+- `__tests__/sdk-amount.test.ts` pins 14 cases against regression (5 precision + 9 validation).
 
-**[P1] `/api/relay`에서 레거시 `paymentId` 필드 제거 (커밋 `749aec4`)**
-- v1.3+ SDK는 `nonce` (uint256 string)만 사용 — 수 개월간 활성 호출자 없음
-- 서버의 조용한 `paymentId → keccak-truncate` fallback을 명시적 400 거절로 교체
-  (`"paymentId is deprecated — upgrade SDK (v1.3+) to use nonce"`)
-- `__tests__/relay-body-shape.test.ts`에 2개 assertion 추가로 fallback 부활 차단
+**[P1] Legacy `paymentId` field removed from `/api/relay` (commit `749aec4`)**
+- SDK v1.3+ uses `nonce` (uint256 string) only — no active caller for months.
+- Replaced the server's silent `paymentId → keccak-truncate` fallback with an explicit 400 rejection (`"paymentId is deprecated — upgrade SDK (v1.3+) to use nonce"`).
+- Added 2 assertions in `__tests__/relay-body-shape.test.ts` that block fallback revival.
 
-**[P1] Next.js 14.2 → 16.2 업그레이드 + React 18 → 19 (커밋 `e88880e`, `5c5a7c7`)**
-- `next` 14.2.35 → 16.2.4, `react` / `react-dom` 18 → 19
-- React 19 규칙 대응: `Spinner`를 `DepositModal` 스코프 밖으로 호이스트
-  (`no-component-definition-in-render`), payment flow에서 `useEffect` setState 캐스케이드를 파생 상태로 리팩터
-  (`set-state-in-effect`)
-- 내부 라우트 prefetch를 위한 `<a>` → `next/link` 교체 (dashboard / Navbar / docs / grant)
-- `tsconfig.json` Next 16 자동 rewrite (`jsx: "react-jsx"`, `.next/dev/types/**/*.ts`)
-- 빌드를 `next build --webpack`에 고정 (Turbopack build가 일부 API route에서 `PageNotFoundError`
-  던지는 이슈 — dev는 Turbopack 유지)
-- `opengraph-image.tsx` runtime을 `edge` → `nodejs`로 변경: Next 16 / React 19 번들이 Vercel의
-  Edge Function 1 MB 한도를 초과 (1.06 MB)했고, OG 이미지 생성은 지연 민감도가 없음
+**[P1] Next.js 14.2 → 16.2 upgrade + React 18 → 19 (commits `e88880e`, `5c5a7c7`)**
+- `next` 14.2.35 → 16.2.4, `react` / `react-dom` 18 → 19.
+- React 19 rule compliance: hoisted `Spinner` out of `DepositModal` scope (`no-component-definition-in-render`); refactored `useEffect` setState cascades in the payment flow into derived state (`set-state-in-effect`).
+- Replaced `<a>` with `next/link` for internal route prefetching (dashboard / Navbar / docs / grant).
+- `tsconfig.json` auto-rewrites from Next 16 (`jsx: "react-jsx"`, `.next/dev/types/**/*.ts`).
+- Pinned the build to `next build --webpack` (Turbopack build throws `PageNotFoundError` on some API routes — dev keeps Turbopack).
+- Switched `opengraph-image.tsx` runtime from `edge` → `nodejs`: the Next 16 / React 19 bundle exceeded Vercel's Edge Function 1 MB limit (1.06 MB), and OG image generation is not latency-sensitive.
 
-**[P2] ESLint 파이프라인 복구 + 22개 잠재 위반 정리 (커밋 `103773a`)**
-- Next 16이 `next lint`를 제거 → `lint` 스크립트를 `eslint .`로 전환
-- `.eslintrc.json` (legacy) → `eslint.config.mjs` (flat config, ESLint 9 요구사항) 마이그레이션
-- ESLint 10은 `eslint-plugin-react`가 의존하는 `context.getFilename()`을 제거했기에 ESLint 9에 고정
-  (`eslint-config-next@16`의 peer 범위)
-- `argsIgnorePattern: "^_"` + `varsIgnorePattern: "^_"`로 의도적 미사용 파라미터 관용
-- 22개 latent warning 해소 (미사용 변수, deprecated 패턴) — 린트 출력은 이제 0 issue
-- `npm audit`의 picomatch 취약점도 dev-only로 조정
+**[P2] ESLint pipeline restored + 22 latent warnings cleaned (commit `103773a`)**
+- Next 16 removed `next lint` → the `lint` script now runs `eslint .`.
+- Migrated `.eslintrc.json` (legacy) → `eslint.config.mjs` (flat config, required by ESLint 9).
+- Pinned ESLint to 9 because ESLint 10 removes `context.getFilename()`, which `eslint-plugin-react` relies on (and `eslint-config-next@16`'s peer range).
+- Tolerate intentional unused params with `argsIgnorePattern: "^_"` + `varsIgnorePattern: "^_"`.
+- Cleared 22 latent warnings (unused vars, deprecated patterns) — lint output is now 0 issues.
+- Bumped the picomatch vulnerability flagged by `npm audit` to dev-only.
 
-**[P3] Vercel KV — 유지**
-- `@vercel/kv`의 deprecation 경고는 있으나 현재 플랫폼에서 정상 동작. 프로덕션에서 며칠간
-  운영 중이므로 즉시 마이그레이션 필요성 없음. 로드맵으로만 기록 (아래 "남은 작업" 참조)
+**[P3] Vercel KV — retained**
+- `@vercel/kv` shows a deprecation warning but works correctly on the current platform. It has been in production for several days, so there is no immediate migration pressure. Captured as a roadmap item only (see "Remaining Work" below).
 
-커밋 순서: `e88880e` Next 16 업그레이드 → `5c5a7c7` OG runtime fix → `103773a` lint 복구 →
-`749aec4` paymentId 거절 → `85c8851` SDK 금액 정밀도. 총 138/138 테스트 통과, webpack build clean.
+Commit order: `e88880e` Next 16 upgrade → `5c5a7c7` OG runtime fix → `103773a` lint recovery → `749aec4` paymentId rejection → `85c8851` SDK amount precision. 138/138 tests pass, webpack build clean.
 
 ### v1.14 (2026-04-17)
 
-> **⚠ 아래는 v1.14 시점의 기록입니다.** `PaymentWitness`, `paymentId` 등은 v1.14에서 제거된 과거 용어이며 현재 코드에 없습니다.
+> **⚠ Below is a historical record from v1.14.** Terms like `PaymentWitness` and `paymentId` were removed in v1.14 and do not exist in the current code.
 
-#### 5개 체인 통합 — TransferAuthorization 단일 witness + user-EOA verifyingContract
+#### 5-chain unification — single TransferAuthorization witness + user-EOA verifyingContract
 
-배포된 Q402PaymentImplementation 컨트랙트를 직접 읽어 확인한 결과, avax/bnb/eth/xlayer/stable 5개 체인이
-모두 동일한 witness 타입 `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`과
-동일한 `_domainSeparator() → address(this)` 스킴을 사용한다. EIP-7702 위임 컨텍스트에서 `address(this)`는
-유저의 EOA로 resolve되므로, 모든 체인의 `verifyingContract`는 유저 EOA다.
+By reading the deployed Q402PaymentImplementation bytecode directly, we confirmed that all 5 chains (avax/bnb/eth/xlayer/stable) use the same witness type `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)` and the same `_domainSeparator() → address(this)` scheme. Under EIP-7702 delegation, `address(this)` resolves to the user's EOA, so every chain's `verifyingContract` is the user EOA.
 
-이전 문서/SDK/테스트는 avax/bnb/eth가 별개 `PaymentWitness` 타입에 `verifyingContract = impl`을 쓴다고
-주장했지만 — 그 경로는 배포된 컨트랙트에 존재하지 않는다. v1.14에서 이 배포 현실에 맞춰 전 코드베이스 정렬.
+Earlier docs/SDK/tests claimed avax/bnb/eth used a separate `PaymentWitness` type with `verifyingContract = impl` — that path does not exist in the deployed contracts. v1.14 realigned the entire codebase to this deployment reality.
 
-**[P0] `public/q402-sdk.js` 통합**
-- `Q402_WITNESS_TYPES` / `Q402_XLAYER_TRANSFER_TYPES` / `Q402_STABLE_TRANSFER_TYPES` 세 개 타입 정의 제거
-- 단일 `Q402_TRANSFER_AUTH_TYPES` 로 교체 (5개 체인 공용)
-- 모든 체인의 `verifyingContract`를 `owner` (유저 EOA)로 고정, 체인별 `domainName`만 다르게 적용
-- `_payEIP7702()` / `_payStableEIP7702()` / `_payXLayerEIP7702()` 내부 도메인 + witness 전부 통합
+**[P0] `public/q402-sdk.js` unification**
+- Removed three type definitions: `Q402_WITNESS_TYPES` / `Q402_XLAYER_TRANSFER_TYPES` / `Q402_STABLE_TRANSFER_TYPES`.
+- Replaced with a single `Q402_TRANSFER_AUTH_TYPES` (shared across all 5 chains).
+- Pinned `verifyingContract` to `owner` (user EOA) on every chain; only `domainName` differs per chain.
+- Unified domain + witness across `_payEIP7702()` / `_payStableEIP7702()` / `_payXLayerEIP7702()`.
 
-**[P0] `contracts.manifest.json` 정정**
-- avax/bnb/eth/stable의 `witness.verifyingContractRule`을 `implContract` → `userEOA`로 수정
-- 각 체인에 `domainName` 명시 (`Q402 Avalanche` / `Q402 BNB Chain` / `Q402 Ethereum` / `Q402 X Layer` / `Q402 Stable`)
-- 매니페스트 노트에 "verifyingContract = user's own EOA under EIP-7702 delegation" 명시
+**[P0] `contracts.manifest.json` corrected**
+- Changed `witness.verifyingContractRule` for avax/bnb/eth/stable from `implContract` → `userEOA`.
+- Added explicit `domainName` per chain (`Q402 Avalanche` / `Q402 BNB Chain` / `Q402 Ethereum` / `Q402 X Layer` / `Q402 Stable`).
+- Manifest note states: "verifyingContract = user's own EOA under EIP-7702 delegation".
 
-**[P0] `__tests__/contracts-manifest.test.ts` 강화**
-- 5개 체인 전수에 `witness.type === "TransferAuthorization"` + `verifyingContractRule === "userEOA"` 검증 추가
-- 체인별 `domainName`이 SDK 소스에 embedding 돼 있는지 확인
-- 과거 `PaymentWitness` / `Q402_WITNESS_TYPES` 키워드가 SDK에 남아있으면 실패하는 네거티브 테스트 추가
-- 112/112 테스트 통과 (`tsc --noEmit` clean)
+**[P0] `__tests__/contracts-manifest.test.ts` strengthened**
+- Asserts `witness.type === "TransferAuthorization"` + `verifyingContractRule === "userEOA"` for all 5 chains.
+- Verifies each chain's `domainName` is embedded in the SDK source.
+- Negative test: fails if legacy `PaymentWitness` / `Q402_WITNESS_TYPES` keywords remain anywhere in the SDK.
+- 112/112 tests pass (`tsc --noEmit` clean)
 
-**[P1] `app/docs/page.tsx` EIP-712 섹션 재작성**
-- 체인별 분리 스펙 제거 → 5개 체인 공용 단일 스펙으로 통합
-- 서명 예제의 `verifyingContract`를 `userAddress` 고정
+**[P1] `app/docs/page.tsx` EIP-712 section rewritten**
+- Dropped per-chain split specs → unified into a single spec shared across 5 chains
+- Pinned `verifyingContract` in signing examples to `userAddress`
 
-**[P1] `scripts/` 전면 교체**
-- 삭제: `test-bnb-eip7702.mjs` / `test-eth-eip7702.mjs` / `test-xlayer-eip7702.mjs` / `test-relay.mjs` (모두 구 PaymentWitness + 구 X Layer impl 주소 사용)
-- 신규: `scripts/test-eip7702.mjs` — `--chain <key>` CLI 인자 하나로 5개 체인 모두 커버
-  - 정정된 X Layer impl `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` (구 `0x31E9D105...` 아님)
-  - 정정된 Stable RPC `https://rpc.stable.xyz` + USDT0 토큰 `0x779ded0c9e1022225f8e0630b35a9b54be713736` (18 dec)
-- 재작성: `scripts/agent-example.mjs` — `isXLayer` 분기 제거, 통합 TransferAuthorization 스킴 + 올바른 Stable 주소
+**[P1] `scripts/` fully replaced**
+- Deleted: `test-bnb-eip7702.mjs` / `test-eth-eip7702.mjs` / `test-xlayer-eip7702.mjs` / `test-relay.mjs` (all used the old PaymentWitness + old X Layer impl address)
+- New: `scripts/test-eip7702.mjs` — covers all 5 chains via a single `--chain <key>` CLI arg
+  - Corrected X Layer impl `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` (not the old `0x31E9D105...`)
+  - Corrected Stable RPC `https://rpc.stable.xyz` + USDT0 token `0x779ded0c9e1022225f8e0630b35a9b54be713736` (18 dec)
+- Rewritten: `scripts/agent-example.mjs` — removed `isXLayer` branching, unified TransferAuthorization scheme + correct Stable address
 
-**[P2] `app/lib/relayer.ts` 주석 정정**
-- 런타임 코드는 이미 8-param `transferWithAuthorization` + facilitator/nonce 전달로 올바름 (수정 없음)
-- 과거 PaymentWitness를 가리키던 주석만 TransferAuthorization을 기술하도록 정정
+**[P2] `app/lib/relayer.ts` comments corrected**
+- Runtime code was already correct (8-param `transferWithAuthorization` + facilitator/nonce); no code change
+- Only stale comments referencing PaymentWitness were updated to describe TransferAuthorization
 
-**감사 노트 — "그대로 둠"**
-- `authorizationGuard` (서버가 chainId + impl 주소 일치 검증) — 이미 제대로 작동, 변경 없음
-- X Layer의 `xlayerNonce` 별도 필드 — 레거시 API 호환성을 위해 유지 (서버가 `nonce`와 동일 의미로 처리)
+**Audit note — "left as is"**
+- `authorizationGuard` (server verifies chainId + impl address match) — already working correctly, no change
+- X Layer's separate `xlayerNonce` field — retained for legacy API compatibility (server treats it identically to `nonce`)
 
-커밋: `6cbb406 unify all 5 chains on single TransferAuthorization + user-EOA verifyingContract`
+Commit: `6cbb406 unify all 5 chains on single TransferAuthorization + user-EOA verifyingContract`
 
 ### v1.13 (2026-04-16)
 
-#### 전체 감사 기반 하드닝 — Tier 정합성 + 레이어별 원자성 + 보안 모델 문서화
+#### Full audit hardening — tier consistency + per-layer atomicity + security model documentation
 
-**[P1] Credit Tier UI ↔ 서버 정합성 복구**
-- `app/payment/page.tsx` VOLUMES 수정
+**[P1] Credit tier UI ↔ server consistency restored**
+- `app/payment/page.tsx` VOLUMES updated
   - `{ label: "100K~500K", value: 300_000, basePrice: 1999 }` → `{ label: "500,000", value: 500_000, basePrice: 1999 }`
   - `{ label: "500K+", value: 500_000, basePrice: 0 }` → `{ label: "500K+", value: 1_000_000, basePrice: 0 }`
-  - `calcPrice` 내부 Enterprise 게이트를 `basePrice === 0` 단일 조건으로 단순화
-  - UI 임계값 `>= 500_000` → `>= 1_000_000`로 이동 (서버 `TIER_CREDITS[6] = 500_000` 유지)
-- Why: 서버는 $1999 결제 시 500K 크레딧을 지급하지만 UI는 "100K~500K" 레인지로 표시되어 불일치 — 서버 지급량을 기준으로 UI 정렬
+  - Simplified the Enterprise gate inside `calcPrice` to a single `basePrice === 0` condition
+  - Shifted the UI threshold `>= 500_000` → `>= 1_000_000` (server `TIER_CREDITS[6] = 500_000` unchanged)
+- Why: the server grants 500K credits on a $1999 payment but the UI showed a "100K~500K" range — UI realigned to match the server's grant
 
-**[P2] Relay 일일 캡 환불 — 크레딧 언더플로우 시 원자성 보장**
+**[P2] Relay daily cap refund — atomicity on credit underflow**
 - `app/api/relay/route.ts`
-  - `decrementCredit()`가 실패하면 이미 차감된 `dailyCapCharged` 카운터를 `refundRateLimit(dailyCapKey, "daily", 86400)`로 복구
-  - 잔액 없는 요청이 경쟁 조건으로 하루 캡을 잠식하던 경로 차단
-- Why: 크레딧 경쟁 조건으로 인한 캡 선소진 → 정당한 유저의 요청이 조기에 429
+  - If `decrementCredit()` fails, restore the already-charged `dailyCapCharged` counter via `refundRateLimit(dailyCapKey, "daily", 86400)`
+  - Closes the race where requests with zero credits consumed the daily cap
+- Why: credit race conditions were pre-burning the daily cap, causing legitimate users to hit 429 early
 
-**[P2] Admin Keys Generate — 안전한 로테이션 순서**
+**[P2] Admin keys generate — safe rotation order**
 - `app/api/keys/generate/route.ts`
-  - 기존: 구 키 deactivate → 신 키 발급 → subscription 업데이트 (구 키 실패 시 잠금)
-  - 수정: 신 키 발급 → subscription 업데이트 → 구 키 deactivate (fire-and-forget)
-  - 공개 rotate 엔드포인트(`app/lib/db.ts` `rotateApiKey`)와 동일한 순서로 통일
-- Why: "dangling-active > lockout" — 순서 역전으로 인한 잠금 사고 방지
+  - Before: deactivate old key → issue new key → update subscription (lockout on old-key failure)
+  - Now: issue new key → update subscription → deactivate old key (fire-and-forget)
+  - Matches the public rotate endpoint's order (`app/lib/db.ts` `rotateApiKey`)
+- Why: "dangling-active > lockout" — prevents lockout incidents caused by reversed ordering
 
-**[P2] Grant Applications — RPUSH 기반 레이스 제거**
+**[P2] Grant applications — race removed via RPUSH**
 - `app/api/grant/route.ts`
   - POST: `kv.get + kv.set` read-modify-write → `kv.rpush("grant_applications", application)` (atomic)
-  - GET: `kv.lrange("grant_applications", 0, -1)`로 읽기, 구버전 JSON 배열 데이터 fallback 유지
-  - catch 블록에서 legacy `kv.get/kv.set` 경로 보존 — 무중단 마이그레이션
-- Why: 동시 제출 시 last-write-wins로 신청서 유실되는 경로 차단
+  - GET: reads via `kv.lrange("grant_applications", 0, -1)`, keeps legacy JSON-array fallback
+  - Legacy `kv.get/kv.set` path preserved in the catch block — zero-downtime migration
+- Why: concurrent submissions were being lost to last-write-wins
 
-**[P3] Gas Tank Verify-Deposit — 보안 모델 명시**
+**[P3] Gas tank verify-deposit — security model documented**
 - `app/api/gas-tank/verify-deposit/route.ts`
-  - POST 핸들러 상단에 보안 모델 주석 추가:
-    - 서명 미요구 설계 근거 (addGasDeposit이 SADD txHash로 dedupe, 실제 온체인 TX만 기록)
-    - 공격자가 타 주소로 호출해도 그 유저의 실제 입금만 반영되므로 권한 상승/위조 없음
-    - Rate limit 5/60s fail-closed가 public RPC 남용 방지
+  - Added a security-model comment to the top of the POST handler:
+    - Rationale for not requiring a signature (addGasDeposit SADDs txHash to dedupe; only real on-chain TXs are recorded)
+    - An attacker calling with another address still only reflects that user's real deposits → no privilege escalation or forgery
+    - Rate limit 5/60s fail-closed prevents public-RPC abuse
 
-**[P3] Payment Intent Route 정리**
+**[P3] Payment intent route cleanup**
 - `app/api/payment/intent/route.ts`
-  - `planChain` 주석: "display/reference용" → "plan/credit thresholds 결정; 생략 시 chain으로 fallback"
-  - 에러 메시지 `Unsupported plan chain: ${chain}` → `${planChainResolved}` (실제 검증된 값 반영)
-- Why: planChain 분리 이후에도 남아있던 레거시 문언 정정
+  - `planChain` comment: "for display/reference" → "determines plan/credit thresholds; falls back to chain if omitted"
+  - Error message `Unsupported plan chain: ${chain}` → `${planChainResolved}` (reflects the actually-validated value)
+- Why: clears up legacy wording left behind after the planChain split
 
-**[P3] Payment Security Copy 업데이트**
+**[P3] Payment security copy updated**
 - `app/payment/page.tsx`
   - "Pay in USDC / USDT on BNB or Ethereum" → "Pay in USDC / USDT on BNB Chain or Ethereum — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable)"
-- Why: intent/activate가 planChain과 payment chain을 분리한 새 모델을 유저에게 설명
+- Why: communicates the new model where intent/activate decouple planChain from payment chain
 
-**감사에서 "그대로 둠" 결정**
-- cron `api/cron/gas-alert` 내부 fetch self-call — 실행 비용 무시 가능, 호출자 인증 분리 유지
-- `rateLimit` fail-open 기본값 — KV 장애 시에도 핵심 결제 경로 유지, 관리자/결제 엔드포인트만 fail-closed로 명시
-- `verify-deposit` 서명 미요구 — 위 P3에 근거 명시
+**Items the audit left as is**
+- `api/cron/gas-alert` cron's internal fetch self-call — negligible execution cost, keeps caller-auth separation
+- `rateLimit` fail-open default — keeps the critical payment path up during KV outages; only admin/payment endpoints are explicitly fail-closed
+- `verify-deposit` no-signature design — rationale documented in the P3 above
 
 ### v1.12 (2026-04-15)
 
-#### P0 보안 강화 — Nonce 기반 인증 + Sandbox-Only 프로비저닝 + Payment Intent
+#### P0 security hardening — nonce-based auth + sandbox-only provisioning + payment intent
 
-**[P0] Nonce 기반 EIP-191 인증 시스템 (전 엔드포인트)**
-- `app/lib/auth.ts` 신규 — 서버사이드 nonce 코어
-  - `createOrGetNonce(addr)` — `auth_nonce:{addr}` KV에 1시간 TTL로 저장, 멱등적 (`NONCE_TTL_SEC = 60 * 60`)
-  - `verifyNonceSignature(addr, nonce, sig)` — 서명 메시지: `"Q402 Auth\nAddress: {addr}\nNonce: {nonce}"`
-  - `invalidateNonce(addr)` — 키 로테이션 후 강제 재서명 유도
-  - `requireAuth(address, nonce, signature)` — 모든 보호 라우트에서 공유하는 헬퍼
-- `app/lib/auth-client.ts` 신규 — 클라이언트 nonce 캐시
-  - `getAuthCreds(addr, signFn)` — sessionStorage 55분 캐시 (`CLIENT_NONCE_TTL_MS`), 서버 1h보다 5분 일찍 만료 → race 방지, 지갑 팝업 1회/세션
-  - `clearAuthCache(addr)` — NONCE_EXPIRED 수신 시 호출
-- `app/api/auth/nonce/route.ts` 신규 — `GET /api/auth/nonce?address=0x...`
+**[P0] Nonce-based EIP-191 auth system (all endpoints)**
+- New `app/lib/auth.ts` — server-side nonce core
+  - `createOrGetNonce(addr)` — stored in KV `auth_nonce:{addr}` with a 1-hour TTL, idempotent (`NONCE_TTL_SEC = 60 * 60`)
+  - `verifyNonceSignature(addr, nonce, sig)` — signed message: `"Q402 Auth\nAddress: {addr}\nNonce: {nonce}"`
+  - `invalidateNonce(addr)` — forces a re-sign after key rotation
+  - `requireAuth(address, nonce, signature)` — shared helper used by every protected route
+- New `app/lib/auth-client.ts` — client-side nonce cache
+  - `getAuthCreds(addr, signFn)` — sessionStorage cache for 55 minutes (`CLIENT_NONCE_TTL_MS`), expires 5 minutes before the server's 1h → avoids races, limits wallet popup to once per session
+  - `clearAuthCache(addr)` — called when a NONCE_EXPIRED response is received
+- New `app/api/auth/nonce/route.ts` — `GET /api/auth/nonce?address=0x...`
   - 20 req/60s rate limit, fail-closed
 
-**[P0] 신규 계정 Sandbox Key만 발급 (live key는 결제 후 activate에서만 발급)**
-- `app/api/keys/provision/route.ts` 리팩터
-  - 기존 정적 서명 (`Q402 API Key Request\nAddress: {addr}`) → `requireAuth()` 교체
-  - 신규 계정: `apiKey: null`, `sandboxApiKey: "q402_test_..."`, `hasPaid: false`
-  - 기존 유료 계정: live key 정상 반환
+**[P0] New accounts only get a sandbox key (live key is issued only by activate after payment)**
+- `app/api/keys/provision/route.ts` refactored
+  - Replaced the old static signature (`Q402 API Key Request\nAddress: {addr}`) with `requireAuth()`
+  - New accounts: `apiKey: null`, `sandboxApiKey: "q402_test_..."`, `hasPaid: false`
+  - Existing paid accounts: live key returned normally
 
-**[P1] Payment Intent — 결제 전 체인+금액 바인딩**
-- `app/api/payment/intent/route.ts` 신규 — `POST /api/payment/intent`
+**[P1] Payment intent — bind chain + amount before payment**
+- New `app/api/payment/intent/route.ts` — `POST /api/payment/intent`
   - body: `{address, nonce, signature, chain, expectedUSD}`
-  - KV에 2시간 TTL로 intent 저장 (`payment_intent:{addr}`)
-- `app/api/payment/activate/route.ts` 업데이트
-  - intent 없으면 402 (`NO_INTENT` 코드)
-  - 발견된 TX의 체인이 intent와 다르면 402 (`CHAIN_MISMATCH`)
-  - 결제 금액이 intent의 95% 미만이면 402 (`AMOUNT_LOW`)
-  - `clearPaymentIntent(addr)` — 활성화 성공 후 intent 삭제 (재사용 방지)
-- `app/lib/blockchain.ts` — `checkPaymentOnChain(from, intentChain?)` optional chain filter 추가
+  - Intent stored in KV with a 2-hour TTL (`payment_intent:{addr}`)
+- `app/api/payment/activate/route.ts` updated
+  - Missing intent → 402 (`NO_INTENT` code)
+  - Detected TX's chain differs from intent → 402 (`CHAIN_MISMATCH`)
+  - Paid amount < 95% of intent → 402 (`AMOUNT_LOW`)
+  - `clearPaymentIntent(addr)` — intent is deleted on successful activation (replay protection)
+- `app/lib/blockchain.ts` — `checkPaymentOnChain(from, intentChain?)` gains an optional chain filter
 
-**나머지 서버 라우트 nonce 인증 마이그레이션:**
-- `app/api/keys/rotate/route.ts` — `requireAuth()` + 로테이션 후 `invalidateNonce(addr)`
-- `app/api/transactions/route.ts` — GET 파라미터에 `nonce` 추가
-- `app/api/webhook/route.ts` (GET/POST/DELETE) — GET은 쿼리파라미터 nonce, POST/DELETE는 body
-- `app/api/webhook/test/route.ts` — `requireAuth()` 교체
+**Remaining server routes migrated to nonce auth:**
+- `app/api/keys/rotate/route.ts` — `requireAuth()` + `invalidateNonce(addr)` after rotation
+- `app/api/transactions/route.ts` — GET params now include `nonce`
+- `app/api/webhook/route.ts` (GET/POST/DELETE) — GET uses a query-param nonce, POST/DELETE use the body
+- `app/api/webhook/test/route.ts` — swapped to `requireAuth()`
 
-**프론트엔드 (dashboard, payment)**
-- `app/dashboard/page.tsx` — `q402_sig_*` sessionStorage 패턴 → `getAuthCreds()` 전면 교체
-  - provision, transactions, webhook GET, rotateKey, saveWebhook, testWebhook 모두 업데이트
-  - 401 NONCE_EXPIRED 수신 시 `clearAuthCache()` → 다음 로드에서 자동 재서명
-  - `apiKey: null` 응답 처리 (미결제 계정은 live key 표시 안 함)
-- `app/payment/page.tsx` — `getAuthCreds()` 교체 + activate 전 intent POST 추가
+**Frontend (dashboard, payment)**
+- `app/dashboard/page.tsx` — swept away the `q402_sig_*` sessionStorage pattern in favor of `getAuthCreds()`
+  - provision, transactions, webhook GET, rotateKey, saveWebhook, testWebhook all updated
+  - On 401 NONCE_EXPIRED → `clearAuthCache()` triggers an automatic re-sign on the next load
+  - Handles `apiKey: null` responses (unpaid accounts no longer display a live key)
+- `app/payment/page.tsx` — swapped to `getAuthCreds()` + POSTs intent before activate
 
 ### v1.11 (2026-04-15)
 
-#### Codex 2차 감사 수정
-- **Fix [P2]**: `/api/inquiry` KV 저장 방식 변경 — `get→set` array 패턴 → Redis `rpush/lrange` (동시 요청 시 last-write-wins 유실 방지)
-- **Docs [P1]**: `docs/page.tsx` Quick Start 코드 수정
-  - `Q402.sign()` (존재하지 않던 메서드) → `new Q402Client({apiKey, chain}).pay({to, amount, token})`
-  - amount 형식: atomic units `"50000000"` → human-readable `"50.00"`
-  - 2-step flow(sign + backend relay) → SDK가 모두 처리하는 단일 `pay()` 호출로 통일
-- **Docs [P1]**: EIP-712 Witness 타입 체인별 분리 명시
+#### Codex second-audit fixes
+- **Fix [P2]**: `/api/inquiry` KV storage — switched from `get→set` array pattern to Redis `rpush/lrange` (prevents last-write-wins loss on concurrent submissions)
+- **Docs [P1]**: `docs/page.tsx` Quick Start code fixed
+  - `Q402.sign()` (never existed) → `new Q402Client({apiKey, chain}).pay({to, amount, token})`
+  - amount format: atomic units `"50000000"` → human-readable `"50.00"`
+  - 2-step flow (sign + backend relay) → unified into a single `pay()` call the SDK handles end-to-end
+- **Docs [P1]**: EIP-712 witness types clarified per chain
   - avax/bnb/eth: `PaymentWitness` (6 fields: owner, token, amount, to, deadline, paymentId)
   - xlayer/stable: `TransferAuthorization` (7 fields: owner, facilitator, token, recipient, amount, nonce, deadline)
-- **Docs**: 버전 배지 `v1.7.0 → v1.10`, 에러코드 `QUOTA_EXCEEDED` 설명 TX credits 모델로 수정, Gas Pool alert email → Telegram
+- **Docs**: version badge `v1.7.0 → v1.10`, `QUOTA_EXCEEDED` error code updated for the TX-credits model, Gas Pool alert email → Telegram
 
 ### v1.10 (2026-04-15)
 
-#### 보안 감사 수정 (Codex audit 반영)
-- **Security [P0]**: 무료 provision 계정 `paidAt` 빈 문자열로 변경 — `isSubscriptionActive()` 오남용 차단
-  - `relay/route.ts`: 만료 체크를 `amountUSD > 0 && paidAt` 유료 계정에만 적용, sandbox 스킵
-  - `payment/check/route.ts`: 무료 계정을 `not_found` 처리 (결제 페이지 유도)
-  - `db.ts`: `isSubscriptionActive()` / `getSubscriptionExpiry()` 빈 paidAt 방어 추가
-- **Security [P1]**: Rate limit `failOpen` 파라미터 추가 — `/api/relay`, `/api/gas-tank/verify-deposit` fail-closed로 변경 (KV 장애 시 차단)
-- **Fix [P1]**: Gas Tank 출금 `tx.wait(1)` 추가 — receipt 1 confirmation 확인 후 잔고 차감 (dropped TX 방지)
-- **Fix [P2]**: Dashboard `PLAN_QUOTA` starter `1_000 → 500` 수정, 누락 플랜(basic/pro/scale/business/enterprise_flex) 추가
-- **Fix [P3]**: `/api/gas-tank/verify-deposit` `newDeposits` 카운트 수정 — `addGasDeposit()` 반환값으로 중복 TX 제외
+#### Security audit fixes (Codex audit response)
+- **Security [P0]**: Free-provisioned accounts now use an empty `paidAt` string — blocks misuse of `isSubscriptionActive()`
+  - `relay/route.ts`: expiry check only applies to paid accounts with `amountUSD > 0 && paidAt`; sandbox skipped
+  - `payment/check/route.ts`: free accounts return `not_found` (routes them to the payment page)
+  - `db.ts`: defensive handling for empty `paidAt` in `isSubscriptionActive()` / `getSubscriptionExpiry()`
+- **Security [P1]**: Added `failOpen` parameter to rate limit — `/api/relay` and `/api/gas-tank/verify-deposit` are fail-closed (block on KV outage)
+- **Fix [P1]**: Gas Tank withdraw now awaits `tx.wait(1)` — debits balance only after a 1-confirmation receipt (prevents dropped-TX loss)
+- **Fix [P2]**: Dashboard `PLAN_QUOTA` starter `1_000 → 500`, and the missing plans (basic/pro/scale/business/enterprise_flex) were added
+- **Fix [P3]**: `/api/gas-tank/verify-deposit` `newDeposits` count fixed — uses `addGasDeposit()`'s return value to exclude duplicate TXs
 
 ### v1.9 (2026-04-13)
 
-#### 결제 모델 개편
-- **Refactor**: TX 크레딧 모델 도입 — 매 결제마다 +30일 연장 + TX 건수 추가 (플랜 등급 첫 결제 시 고정)
-- **Refactor**: `blockchain.ts` — `txQuotaFromAmount(usd, chain)` 추가, 체인별 가격 임계값 반영
-- **Refactor**: `activate/route.ts` — first/additional 분기 제거, 단일 로직으로 통합
-- **Refactor**: `relay/route.ts` — 월간 quota 체크 → `quotaBonus > 0` 크레딧 체크, 성공 시 크레딧 1 차감
-- **Fix**: Payment 페이지 자동 redirect 제거 — 기존 구독자도 추가 결제 가능
-- **UI**: Payment 페이지 copy 업데이트 — "+30 days · N TXs per payment"
+#### Payment model overhaul
+- **Refactor**: Introduced the TX-credits model — every payment adds +30 days + N TX credits (plan tier is locked at the first payment)
+- **Refactor**: `blockchain.ts` — added `txQuotaFromAmount(usd, chain)` with per-chain price thresholds
+- **Refactor**: `activate/route.ts` — dropped the first/additional branching; unified into a single path
+- **Refactor**: `relay/route.ts` — replaced the monthly quota check with a `quotaBonus > 0` credit check; decrements 1 credit on success
+- **Fix**: Removed the payment page's auto-redirect — existing subscribers can make additional purchases
+- **UI**: Payment page copy updated — "+30 days · N TXs per payment"
 
-#### 체인별 가격 검증 강화
-- **Fix**: `planFromAmount()` / `txQuotaFromAmount()` 에 체인 파라미터 추가
-  - BNB/XLayer/Stable 1.0×, AVAX 1.1×, ETH 1.5× 적용
-  - ETH $30 결제 → BNB 기준($30) 통과했던 버그 수정 (ETH 임계값 $39 적용)
+#### Stricter per-chain price validation
+- **Fix**: Added a chain parameter to `planFromAmount()` / `txQuotaFromAmount()`
+  - BNB / XLayer / Stable 1.0×, AVAX 1.1×, ETH 1.5×
+  - Fixed the bug where a $30 payment on ETH passed under the BNB threshold ($30) — ETH threshold now applied at $39
 
-#### 보안 감사 수정 (2026-04-13)
-- **Security**: `TEST_MODE` 환경변수 완전 제거 — `.env.local` + Vercel production 환경에서 삭제, `planFromAmount()` 우회 코드 제거
-- **Security**: Admin 엔드포인트 Rate Limit 추가 — `GET /api/grant`, `GET /api/inquiry`, `POST /api/gas-tank/withdraw` 모두 IP당 5 req/60s 적용 (admin secret 검증 전)
-- **Fix**: `/api/gas-tank/user-balance` 파라미터 변경 — `?apiKey=` → `?address=` (API 키 URL 노출 차단, Gas Tank $0 버그 수정)
+#### Security audit fixes (2026-04-13)
+- **Security**: `TEST_MODE` env var fully removed — deleted from `.env.local` and Vercel production; removed the `planFromAmount()` bypass
+- **Security**: Added rate limits on admin endpoints — `GET /api/grant`, `GET /api/inquiry`, `POST /api/gas-tank/withdraw` all 5 req/60s per IP (before admin-secret check)
+- **Fix**: `/api/gas-tank/user-balance` parameter changed from `?apiKey=` → `?address=` (stops API key leakage in URL; fixes the Gas Tank $0 bug)
 
 ### v1.8 (2026-04-13)
 
-#### 보안 수정
-- **Security**: `TEST_MODE` 백도어 완전 제거 — `planFromAmount()` 에서 $1 → starter 우회 차단
-- **Security**: Sandbox 키 감지 로직 수정 — key prefix(`q402_test_`) 신뢰 제거, KV `isSandbox` 플래그만 사용
-- **Security**: 결제 TX 재사용 방지 — `used_txhash:{hash}` KV 플래그(90일 TTL)로 동일 TX 재활성화 차단
-- **Security**: Webhook SSRF 강화 — IPv6 loopback(`::1`, `::ffff:`), GCP/AWS/Azure 메타데이터 엔드포인트 차단 추가
-- **Security**: `/api/relay` per-API-key rate limit 추가 — 30 req/60s (기존 IP 기준에 추가)
+#### Security fixes
+- **Security**: Fully removed the `TEST_MODE` backdoor — eliminated the `$1 → starter` bypass in `planFromAmount()`
+- **Security**: Fixed sandbox-key detection — no longer trusts the key prefix (`q402_test_`); relies solely on the KV `isSandbox` flag
+- **Security**: Prevent payment TX reuse — `used_txhash:{hash}` KV flag (90-day TTL) blocks reactivation using the same TX
+- **Security**: Strengthened webhook SSRF defenses — added blocks for IPv6 loopback (`::1`, `::ffff:`) and GCP/AWS/Azure metadata endpoints
+- **Security**: Added per-API-key rate limit on `/api/relay` — 30 req/60s (layered on top of the existing IP limit)
 
-#### UX / 버그 수정
-- **Fix**: 지갑 연결이 페이지 이동 시 끊기는 버그 수정 — `getConnectedAccount()` null 반환 시 localStorage 초기화 제거
-- **Fix**: My Page 페이월 Activate 버튼 — `<a href>` → `router.push()` (Next.js 클라이언트 내비게이션)
-- **Feature**: My Page 구독 만료 경고 배너 — 만료 7일 전 노란 배너, 만료 후 빨간 배너 + Renew 버튼
-- **Fix**: Pricing 페이지 가격 payment page 기준으로 통일 ($30/$150/$800 BNB 기준), Starter "BNB Chain only" → "All 5 EVM chains"
-- **Fix**: Relay TX 기록 fire-and-forget — KV write 실패가 성공 응답 blocking 하던 버그 수정
+#### UX / bug fixes
+- **Fix**: Wallet connection drop on page navigation — removed the localStorage wipe triggered when `getConnectedAccount()` returns null
+- **Fix**: My Page paywall Activate button — `<a href>` → `router.push()` (proper Next.js client-side navigation)
+- **Feature**: Subscription expiry banner on My Page — yellow 7 days before expiry, red after expiry + Renew button
+- **Fix**: Unified Pricing page prices to the payment page baseline ($30/$150/$800 on BNB); Starter "BNB Chain only" → "All 5 EVM chains"
+- **Fix**: Relay TX recording is now fire-and-forget — KV write failures no longer block the success response
 
-#### Grant 프로그램
-- **Feature**: `/grant` 페이지 — Seed/$500, Builder/$2K, Ecosystem 3단계 그랜트 티어
-- **Feature**: Grant 신청 폼 → Vercel KV 저장 + Telegram `@kwanyeonglee` 알림
-- **Feature**: Why build with Q402 섹션 — 01/02/03 넘버링, 기술적 강점 중심 copy
-- **Feature**: Navbar Grant 링크 추가
+#### Grant program
+- **Feature**: `/grant` page — Seed/$500, Builder/$2K, Ecosystem tiered grants
+- **Feature**: Grant application form → stored in Vercel KV + Telegram `@kwanyeonglee` notification
+- **Feature**: "Why build with Q402" section — 01/02/03 numbering, copy focused on technical strengths
+- **Feature**: Grant link added to the navbar
 
 ### v1.7 (2026-04-11)
-- **Feature**: Terms of Service (`/terms`) + Privacy Policy (`/privacy`) 페이지 추가
-- **Feature**: Footer에 Terms / Privacy 링크 추가
-- **Feature**: Gas Tank 저잔고 Telegram 알림 시스템 (`/api/gas-tank?check_alerts=1`)
-- **Feature**: Vercel Cron 매일 09:00 UTC 자동 알림 (`vercel.json`)
-- **Feature**: `TEST_MODE=true` 환경변수 — $1+ 결제를 starter 플랜으로 매핑 (E2E 테스트용) ⚠️ v1.9에서 완전 제거됨
-- **Feature**: `scripts/test-api.mjs` — API Key 유효성, Gas Tank, Sandbox Relay, 보안 체크 자동화
-- **Fix**: `checkPaymentOnChain` BNB RPC fallback 5개 추가 (`bsc.publicnode.com` rate limit 우회)
-- **Fix**: `anyQuerySucceeded` 플래그 — 모든 토큰 쿼리 실패 시 다음 RPC로 fallback
-- **Fix**: BNB blockWindow 2000 → 8000 (~7시간 범위)
-- **Fix**: `TEST_MODE` 값 trailing newline trim (`"true\n"` → `.trim() === "true"`)
-- **Fix**: Sandbox key가 relay route subscription 체크 통과 못하는 버그 수정
-- **Fix**: Gas Tank UI — 5개 체인 그리드 (`xl:grid-cols-5`), `Pool:` 라인 제거, 잔고 0 시 "Deposit" 버튼으로 표시
-- **E2E 검증**: 1 USDT BNB Chain → API Key 발급 → My Page → Sandbox Relay 전체 플로우 성공
+- **Feature**: Terms of Service (`/terms`) + Privacy Policy (`/privacy`) pages added
+- **Feature**: Terms / Privacy links added to the footer
+- **Feature**: Gas Tank low-balance Telegram alert system (`/api/gas-tank?check_alerts=1`)
+- **Feature**: Vercel Cron daily 09:00 UTC auto-alert (`vercel.json`)
+- **Feature**: `TEST_MODE=true` env var — maps $1+ payments to the starter plan (E2E testing) ⚠️ fully removed in v1.9
+- **Feature**: `scripts/test-api.mjs` — automates API-key validity, Gas Tank, sandbox relay, and security checks
+- **Fix**: `checkPaymentOnChain` gained 5 BNB RPC fallbacks (works around `bsc.publicnode.com` rate limiting)
+- **Fix**: `anyQuerySucceeded` flag — falls back to the next RPC when every token query fails
+- **Fix**: BNB blockWindow 2000 → 8000 (~7 hour range)
+- **Fix**: `TEST_MODE` value trailing-newline trim (`"true\n"` → `.trim() === "true"`)
+- **Fix**: Sandbox key was not passing the relay-route subscription check — fixed
+- **Fix**: Gas Tank UI — 5-chain grid (`xl:grid-cols-5`), removed the `Pool:` line, shows a "Deposit" button when balance is 0
+- **E2E validation**: full flow passes — 1 USDT on BNB Chain → API key issuance → My Page → sandbox relay
 
 ### v1.6 (2026-04-09)
-- **Fix**: KV TX 이력 월별 키 샤딩 — 1MB 폭발 방지, 누적 가스 합계 별도 키
-- **Fix**: 구독 갱신 시 기존 API Key 보존 (통합 깨짐 방지)
-- **Fix**: 갱신 만료일 현재 만료일 기준 +30일 연장 (누적 갱신)
-- **Fix**: 플랜별 일일 릴레이 버스트 한도 (86400s window)
-- **Fix**: Gas Tank Stable 체인 USDT0 전용 입금 안내 UI
+- **Fix**: KV TX history sharded by month — avoids 1MB blow-up; cumulative gas totals stored in a separate key
+- **Fix**: Preserves existing API key on subscription renewal (prevents integration breakage)
+- **Fix**: Renewal expiry now extends +30 days from the current expiry (cumulative renewal)
+- **Fix**: Added per-plan daily relay burst limit (86400s window)
+- **Fix**: Gas Tank Stable chain UI clarifies USDT0-only deposits
 - **Scripts**: `test-bnb-eip7702.mjs`, `test-eth-eip7702.mjs`, `agent-example.mjs`
 
 ### v1.5 (2026-04-09)
-- **Page**: `/agents` — SVG 에이전트 네트워크 애니메이션, 실시간 TX 피드, Contact Sales 모달
-- **UX**: Navbar "Agents" 링크 (초록색)
-- **Pricing**: Agent 플랜 카드 → `/agents` 페이지 CTA 스트립으로 교체
+- **Page**: `/agents` — SVG agent-network animation, live TX feed, Contact Sales modal
+- **UX**: Navbar "Agents" link (green)
+- **Pricing**: Replaced the Agent plan card with a CTA strip linking to `/agents`
 
 ### v1.4 (2026-04-08)
-- **Feature**: Sandbox 모드 (`q402_test_` prefix, mock relay)
-- **Feature**: Webhook 시스템 (HMAC-SHA256, SSRF 방어)
-- **Feature**: API Key 교체 (`POST /api/keys/rotate`)
-- **Fix**: `gasCostNative` 실제 receipt에서 계산 (`effectiveGasPrice × gasUsed`)
-- **Fix**: Transactions 탭 인증 방식 → EIP-191 sig
-- **Fix**: Dashboard 구독 만료일 초기화 버그
-- **Docs**: CODEX.md 삭제, README + Q402_IMPLEMENTATION.md에 통합
+- **Feature**: Sandbox mode (`q402_test_` prefix, mock relay)
+- **Feature**: Webhook system (HMAC-SHA256, SSRF defenses)
+- **Feature**: API key rotation (`POST /api/keys/rotate`)
+- **Fix**: `gasCostNative` computed from the actual receipt (`effectiveGasPrice × gasUsed`)
+- **Fix**: Transactions tab auth switched to EIP-191 signature
+- **Fix**: Dashboard subscription-expiry initialization bug
+- **Docs**: Deleted CODEX.md; content merged into README + Q402_IMPLEMENTATION.md
 
 ### v1.3 (2026-04-08)
-- **Feature**: `/payment` 4단계 셀프서브 온체인 결제 플로우
-- **Feature**: API Key 온체인 결제 후 자동 발급
-- **UX**: 지갑 연결 모달 개선, Dashboard "Not yet activated" → "Loading…"
+- **Feature**: `/payment` 4-step self-serve on-chain payment flow
+- **Feature**: API key is auto-issued after on-chain payment
+- **UX**: Improved wallet-connect modal; Dashboard "Not yet activated" → "Loading…"
 
 ### v1.2 (2026-04-07)
-- **Feature**: Stable 체인 (Chain ID 988, USDT0) 릴레이/Gas Tank/SDK 추가
-- **Feature**: Telegram 문의 알림
-- **Security**: 4개 체인 컨트랙트 전체 재배포 (v1.2 감사 수정사항 반영)
+- **Feature**: Stable chain (Chain ID 988, USDT0) added to relay / Gas Tank / SDK
+- **Feature**: Telegram inquiry notifications
+- **Security**: All 4 chains' contracts redeployed with the v1.2 audit fixes
 
 ### v1.1 (2026-03-19)
-- **Security**: API Key 누출 취약점 수정
-- **Security**: Admin 엔드포인트 `x-admin-secret` 보호
-- **Security**: Relay 구독 만료 + 키 교체 검증 강화
-- **DB**: JSON 파일 → Vercel KV 마이그레이션
-- **Feature**: 결제 페이월 제거, Quote Builder + Direct Inquiry 팝업
+- **Security**: Fixed an API-key leakage vulnerability
+- **Security**: Admin endpoints protected by `x-admin-secret`
+- **Security**: Strengthened relay subscription-expiry + key-rotation validation
+- **DB**: Migrated from JSON files to Vercel KV
+- **Feature**: Removed the payment paywall; added Quote Builder + Direct Inquiry popups
 
 ### v1.0 (2026-03-14)
-- 랜딩 페이지, 대시보드, Relay API 초기 배포 (4개 체인)
+- Initial deployment of landing page, dashboard, and Relay API (4 chains)
