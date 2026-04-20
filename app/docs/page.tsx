@@ -307,7 +307,7 @@ const result = await q402.pay({
   amount: "50.00",
   token:  "USDC",
 });
-// result → { success: true, txHash: "0xabc...", tokenAmount: 50, chain: "bnb" }
+// result → { success: true, txHash: "0xabc...", tokenAmount: "50", chain: "bnb" }
 `} />
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · That&apos;s it</h3>
@@ -317,7 +317,7 @@ const result = await q402.pay({
 //   txHash:        "0xdef456...",
 //   chain:         "bnb",
 //   blockNumber:   "38482910",
-//   tokenAmount:   50,
+//   tokenAmount:   "50",
 //   token:         "USDC",
 //   gasCostNative: 0.000021,
 //   method:        "eip7702",
