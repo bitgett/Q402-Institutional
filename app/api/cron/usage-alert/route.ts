@@ -13,7 +13,7 @@ import { sendEmail, renderUsageAlertHtml } from "@/app/lib/email";
 /**
  * GET /api/cron/usage-alert
  *
- * Vercel Cron (vercel.json) fires this hourly. Fan-out iterates
+ * Vercel Cron (vercel.json) fires this daily. Fan-out iterates
  * `usage_alert:_index` — the Set of opted-in wallet addresses — so there's no
  * KV key scan and the cost scales with subscriber count, not KV size.
  *
