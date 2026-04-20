@@ -761,7 +761,7 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            <a href="/payment" className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">Upgrade →</a>
+            <a href="/payment" className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">Top up →</a>
           </div>
         )}
 
