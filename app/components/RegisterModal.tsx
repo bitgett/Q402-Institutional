@@ -7,9 +7,13 @@ import { useRouter } from "next/navigation";
 import WalletModal from "./WalletModal";
 import { getAuthCreds } from "../lib/auth-client";
 
+// Indicative volume tiers shown during sandbox signup (lead-gen).
+// Actual pricing is on /payment and must stay in sync with
+// app/lib/blockchain.ts — do not hardcode prices here.
 const PLANS = [
-  { name: "Growth", price: 300,  quota: "50,000 txs/mo",  highlight: false },
-  { name: "Scale",  price: 1000, quota: "300,000 txs/mo", highlight: true  },
+  { name: "Starter", credits: "500 txs",    highlight: false },
+  { name: "Pro",     credits: "10,000 txs", highlight: true  },
+  { name: "Scale",   credits: "50,000 txs", highlight: false },
 ];
 
 const CHAIN_OPTIONS = ["BNB Chain", "Ethereum", "Avalanche", "X Layer", "Stable", "Multi-chain"];
@@ -295,13 +299,13 @@ export default function RegisterModal({ onClose }: Props) {
             {/* STEP 3: Interested plan + Sandbox activation */}
             {step === 3 && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                <h2 className="text-lg font-bold mb-1">Pick your interested plan</h2>
+                <h2 className="text-lg font-bold mb-1">Pick your expected volume</h2>
                 <div className="flex items-center gap-2 mb-5">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-                  <p className="text-white/40 text-sm">We&apos;ll provision a <span className="text-green-400 font-medium">sandbox API key</span> now — production is activated after a brief call.</p>
+                  <p className="text-white/40 text-sm">We&apos;ll provision a <span className="text-green-400 font-medium">sandbox API key</span> right now. Your live key is issued automatically once you complete on-chain payment on <span className="text-white/70 font-mono">/payment</span>.</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="grid grid-cols-3 gap-3 mb-5">
                   {PLANS.map(plan => (
                     <button
                       key={plan.name}
@@ -310,14 +314,13 @@ export default function RegisterModal({ onClose }: Props) {
                     >
                       {plan.highlight && <div className="text-[10px] text-yellow font-bold uppercase tracking-widest mb-2">Popular</div>}
                       <div className="font-bold">{plan.name}</div>
-                      <div className="text-xl font-extrabold text-yellow">${plan.price}<span className="text-xs text-white/30 font-normal">/mo</span></div>
-                      <div className="text-xs text-white/40 mt-1">{plan.quota}</div>
+                      <div className="text-xs text-white/50 mt-1">{plan.credits}</div>
                     </button>
                   ))}
                 </div>
 
                 <div className="bg-white/3 border border-white/8 rounded-xl p-4 mb-5 text-xs text-white/40 leading-relaxed">
-                  <span className="text-yellow font-semibold">Sandbox first, no charge.</span> You&apos;ll get a <span className="text-white/70 font-mono">q402_test_</span> key to integrate and test end-to-end. Production billing is set up separately once you&apos;re ready.
+                  <span className="text-yellow font-semibold">Sandbox first, no charge.</span> You&apos;ll get a <span className="text-white/70 font-mono">q402_test_</span> key to integrate and test end-to-end. See <a href="/payment" className="text-yellow hover:underline">/payment</a> for exact per-chain pricing — your live key is issued automatically after the on-chain transfer confirms.
                 </div>
 
                 <button
