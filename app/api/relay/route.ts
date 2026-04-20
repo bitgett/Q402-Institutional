@@ -168,6 +168,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ── 2b. Parse nonce-like fields up front (Q402-SEC-001 follow-up) ────────────
+  // BigInt() throws on malformed input. If we let that throw later — after
+  // section 7c's decrementCredit() — a malformed nonce burns a credit slot
+  // without a successful relay. Parse here, return 400 on garbage, so the
+  // entitlement-ordering invariant ("no quota burn before commit") holds for
+  // every required nonce field on every chain.
+  let parsedPaymentNonce: bigint = 0n;
+  let parsedXLayerNonce:  bigint = 0n;
+  let parsedStableNonce:  bigint = 0n;
+  try {
+    if (!isXLayer && !isStable) parsedPaymentNonce = BigInt(nonce!);
+    if (isXLayerEIP7702)        parsedXLayerNonce  = BigInt(xlayerNonce!);
+    if (isStableEIP7702)        parsedStableNonce  = BigInt(stableNonce!);
+  } catch {
+    return NextResponse.json(
+      { error: "nonce/xlayerNonce/stableNonce must be a valid uint256 string (decimal or 0x-hex)" },
+      { status: 400 }
+    );
+  }
+  // EIP-3009 nonce is a bytes32 hex string, not a BigInt — validate shape only.
+  if (isXLayerEIP3009 && !/^0x[0-9a-fA-F]{64}$/.test(eip3009Nonce!)) {
+    return NextResponse.json(
+      { error: "eip3009Nonce must be 0x-prefixed bytes32 hex" },
+      { status: 400 }
+    );
+  }
+
   // ── 3. API Key validation ────────────────────────────────────────────────
   const keyRecord = await getApiKeyRecord(apiKey);
   if (!keyRecord || !keyRecord.active) {
@@ -270,11 +297,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 7b. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
-  // xlayer/stable carry their own nonce in xlayerNonce/stableNonce and never
-  // consume this value. Section 2 rejects missing `nonce` on avax/bnb/eth with
-  // a 400, so if we get here with a required-nonce chain, `nonce` is present.
-  const paymentNonce: bigint =
-    (!isXLayer && !isStable) ? BigInt(nonce!) : 0n;
+  // Parsed up front in section 2b so a malformed value can't escape past the
+  // credit reservation in section 7c.
+  const paymentNonce: bigint = parsedPaymentNonce;
 
   const tokenCfg = getTokenConfig(chain, token);
   let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };
@@ -315,7 +340,7 @@ export async function POST(req: NextRequest) {
       token:       tokenCfg.address as Address,
       amount:      BigInt(amount),
       to:          to as Address,
-      nonce:       BigInt(stableNonce!),
+      nonce:       parsedStableNonce,
       deadline:    BigInt(deadline),
       witnessSig:  witnessSig as Hex,
       authorization: {
@@ -337,7 +362,7 @@ export async function POST(req: NextRequest) {
       token:       tokenCfg.address as Address,
       recipient:   to as Address,
       amount:      BigInt(amount),
-      nonce:       BigInt(xlayerNonce!),
+      nonce:       parsedXLayerNonce,
       deadline:    BigInt(deadline),
       witnessSig:  witnessSig as Hex,
       authorization: {
