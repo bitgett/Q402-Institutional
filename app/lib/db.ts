@@ -16,6 +16,11 @@ interface Subscription {
   amountUSD: number;
   quotaBonus?: number;
   sandboxApiKey?: string;
+  // Cumulative BNB-equivalent USD paid in the current 30-day window.
+  // Reset when the prior expiry (paidAt + 30d) has lapsed before the next
+  // payment arrives. Optional to keep the type backwards compatible — any
+  // undefined value is lazily bootstrapped from amountUSD on read.
+  windowPaidBnbUSD?: number;
 }
 
 interface ApiKeyRecord {
@@ -102,6 +107,17 @@ export async function deactivateApiKey(apiKey: string) {
   if (record) {
     await kv.set(apiKeyRecKey(apiKey), { ...record, active: false });
   }
+}
+
+/**
+ * Update the `plan` field on an existing API key record in place.
+ * Used when a cumulative payment upgrades a subscriber's tier — the api-key
+ * plan is what the relay route reads for per-plan daily caps and features.
+ */
+export async function updateApiKeyPlan(apiKey: string, plan: string): Promise<void> {
+  const rec = await getApiKeyRecord(apiKey);
+  if (!rec) return;
+  await kv.set(apiKeyRecKey(apiKey), { ...rec, plan });
 }
 
 export async function generateApiKey(address: string, plan: string): Promise<string> {
