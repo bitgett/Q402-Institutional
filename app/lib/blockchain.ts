@@ -239,8 +239,8 @@ export async function verifyPaymentTx(txHash: string, fromAddress: string): Prom
 // Thresholds = calcPrice - 1  (floor that any correct payment comfortably exceeds)
 //
 // Tier order: [500tx, 1K, 5K, 10K, 50K, 100K, 300K]
-const TIER_CREDITS = [500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000];
-const TIER_PLANS   = ["starter", "basic", "growth", "pro", "scale", "business", "enterprise_flex"];
+export const TIER_CREDITS = [500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000];
+export const TIER_PLANS   = ["starter", "basic", "growth", "pro", "scale", "business", "enterprise_flex"];
 
 // calcPrice output per chain per tier (pre-computed from payment/page.tsx formula)
 const CHAIN_THRESHOLDS: Record<string, number[]> = {
