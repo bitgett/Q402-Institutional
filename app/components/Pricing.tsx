@@ -110,7 +110,7 @@ export default function Pricing() {
             <span className="text-white/80 font-semibold">How billing works.</span> Each purchase grants a 30-day access window plus the listed transaction credits. Credits accumulate across renewals; access days stack if you renew before expiry.
           </p>
           <p>
-            <span className="text-white/80 font-semibold">Plan level.</span> Your first paid purchase sets your plan. To move to a higher tier, contact <a className="text-yellow hover:underline" href="mailto:davidlee@quackai.ai?subject=Q402 Plan Upgrade">davidlee@quackai.ai</a>.
+            <span className="text-white/80 font-semibold">Plan level upgrades automatically.</span> Your plan is set by cumulative spend within an active window. Top up within 30 days and your tier rises to match the total — no support ticket needed. Plans never downgrade while the window is active.
           </p>
         </div>
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkPaymentOnChain, verifyPaymentTx } from "@/app/lib/blockchain";
-import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits } from "@/app/lib/db";
+import { checkPaymentOnChain, verifyPaymentTx, planFromAmount, toBnbEquivUSD, maxTier } from "@/app/lib/blockchain";
+import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits, updateApiKeyPlan } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -186,8 +186,42 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Payment amount too low for this chain" }, { status: 402 });
   }
 
-  // ── Every payment: +30 days + TX credits, plan set on first payment ───────
-  const plan = existing?.plan ?? (intent.quotedPlan ?? "starter");
+  // ── Cumulative tier computation (v1.18) ──────────────────────────────────
+  // A payment can upgrade the user's plan if cumulative spend in the current
+  // 30-day window crosses a higher tier's BNB-base threshold. We never
+  // downgrade within an active window.
+  //
+  //   windowActive  = prior expiry is still in the future
+  //   priorWindow   = cumulative BNB-equiv USD already paid this window
+  //                   (bootstraps from amountUSD for pre-v1.18 subs that
+  //                    lack windowPaidBnbUSD — conservative, chain-blind)
+  //   thisBnbEquiv  = this payment's BNB-equivalent USD (divides out the
+  //                   chain price multiplier: ETH /1.5, AVAX /1.1, etc.)
+  //   newWindow     = priorWindow + thisBnbEquiv (carried into the sub record)
+  //
+  //   thisTier      = intent.quotedPlan — single-payment tier computed at
+  //                   intent time using the user's selected planChain, so it
+  //                   always matches what the pricing page showed them
+  //   cumTier       = tier reachable from newWindow against BNB-base thresholds
+  //   priorTier     = existing plan if the window is still active
+  //   plan          = max(thisTier, cumTier, priorTier) — strictly monotonic
+  //                   within a window
+  const now           = new Date();
+  const priorExpiry   = existing
+    ? new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000)
+    : new Date(0);
+  const windowActive  = priorExpiry > now;
+  const priorWindow   = windowActive
+    ? (existing?.windowPaidBnbUSD ?? existing?.amountUSD ?? 0)
+    : 0;
+  const thisBnbEquiv  = toBnbEquivUSD(result.amountUSD!, result.chain);
+  const newWindow     = priorWindow + thisBnbEquiv;
+
+  const thisTier      = intent.quotedPlan ?? null;
+  const cumTier       = planFromAmount(newWindow, "BNB Chain");
+  const priorTier     = windowActive ? (existing?.plan ?? null) : null;
+  const plan          = maxTier(maxTier(thisTier, cumTier), priorTier) ?? "starter";
+  const tierUpgraded  = !!existing?.plan && plan !== existing.plan;
 
   // Restore or create live API key
   let apiKey = existing?.apiKey ?? null;
@@ -206,10 +240,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Extend from current expiry if still active, otherwise from now
-  const currentExpiry = existing
-    ? new Date(new Date(existing.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000)
-    : new Date(0);
-  const base = currentExpiry > new Date() ? currentExpiry : new Date();
+  const base = windowActive ? priorExpiry : now;
   const newExpiry = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000);
   // ── Phase 2 — Write (idempotent) ─────────────────────────────────────────
   try {
@@ -230,14 +261,23 @@ export async function POST(req: NextRequest) {
     // setSubscription is idempotent (overwrites same data) — safe on every attempt.
     await setSubscription(addr, {
       ...(existing ?? {}),
-      paidAt:        base.toISOString(),
+      paidAt:           base.toISOString(),
       apiKey,
       sandboxApiKey,
       plan,
-      txHash:        result.txHash!,
-      amountUSD:     result.amountUSD!,
-      quotaBonus:    totalTxs,
+      txHash:           result.txHash!,
+      amountUSD:        result.amountUSD!,
+      quotaBonus:       totalTxs,
+      windowPaidBnbUSD: newWindow,
     });
+
+    // Propagate tier upgrades to the api-key records so the relay route's
+    // per-plan daily cap and feature gates see the new tier immediately.
+    // Best-effort — a transient KV error here doesn't undo the payment.
+    if (tierUpgraded) {
+      if (apiKey)        updateApiKeyPlan(apiKey, plan).catch(() => {});
+      if (sandboxApiKey) updateApiKeyPlan(sandboxApiKey, plan).catch(() => {});
+    }
 
     // ── Phase 3 — Commit ───────────────────────────────────────────────────
     // Only reached if all writes succeeded.
@@ -248,6 +288,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       status:    "activated",
       plan,
+      priorPlan:    existing?.plan ?? null,
+      tierUpgraded,
       addedTxs,
       totalTxs,
       expiresAt: newExpiry.toISOString(),

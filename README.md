@@ -1209,6 +1209,60 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 
 ## 25. Changelog
 
+### v1.18 (2026-04-20)
+
+> **Billing model: sticky-first-payment-tier → cumulative-spend tier.** External reviewer feedback (Marin, 2026-04-20) flagged UX confusion around plan upgrades. The new model tracks cumulative BNB-equivalent USD paid within an active 30-day window; plan tier is `max(thisTier, cumulativeTier, priorTier)` — strictly monotonic within a window, resets on lapse. Cross-chain payments are normalized via the chain's price multiplier so an Ethereum top-up counts fairly toward the BNB-base thresholds.
+
+#### What changed
+
+**Schema — [`app/lib/db.ts`](app/lib/db.ts)**
+- `Subscription` gains optional `windowPaidBnbUSD?: number` — cumulative BNB-equivalent USD paid in the current window. Legacy subs without this field bootstrap from `amountUSD` on first v1.18 payment (conservative, chain-blind).
+- New export `updateApiKeyPlan(apiKey, plan)` — propagates tier upgrades to api-key records so relay route's per-plan daily caps and feature gates see the new tier immediately.
+
+**Helpers — [`app/lib/blockchain.ts`](app/lib/blockchain.ts)**
+- `toBnbEquivUSD(usd, chain)` — divides out `CHAIN_MULTIPLIERS[chain]` (BNB/X/Stable 1.0×, AVAX 1.1×, ETH 1.5×). Undefined chain passes through.
+- `tierRank(plan)` — index into `TIER_PLANS`; unknown/null returns −1.
+- `maxTier(a, b)` — returns the higher-ranked plan, tolerant of null.
+
+**Route — [`app/api/payment/activate/route.ts`](app/api/payment/activate/route.ts)**
+- Replaces `plan = existing?.plan ?? intent.quotedPlan` sticky logic with:
+  ```ts
+  const windowActive = priorExpiry > now;
+  const priorWindow  = windowActive ? (existing?.windowPaidBnbUSD ?? existing?.amountUSD ?? 0) : 0;
+  const thisBnbEquiv = toBnbEquivUSD(result.amountUSD, result.chain);
+  const newWindow    = priorWindow + thisBnbEquiv;
+  const thisTier     = intent.quotedPlan ?? null;
+  const cumTier      = planFromAmount(newWindow, "BNB Chain");
+  const priorTier    = windowActive ? (existing?.plan ?? null) : null;
+  const plan         = maxTier(maxTier(thisTier, cumTier), priorTier) ?? "starter";
+  ```
+- `thisTier` rescues the single-payment case where BNB-equiv rounds below a threshold (e.g. $219 ETH → $146 BNB-equiv < $149 Pro threshold, but the intent was quoted as Pro so Pro is honored).
+- Writes `windowPaidBnbUSD: newWindow` into the sub record for the next payment to read.
+- On tier upgrade, `updateApiKeyPlan` is fired best-effort on both live and sandbox keys.
+- Response body now includes `priorPlan` + `tierUpgraded` for client display.
+
+**Copy updates**
+- Landing Pricing "How billing works" box → cumulative upgrade messaging.
+- Terms §4 → cumulative upgrade + window-lapse reset language.
+- Docs FAQ → new "How does billing work?" entry.
+
+#### Regression coverage
+
+[`__tests__/cumulative-tier.test.ts`](__tests__/cumulative-tier.test.ts) — 21 assertions replicating the activate route's pure decision logic (no KV mocks needed):
+- First-payment tier from `quotedPlan` (incl. $219 ETH rounding rescue)
+- Cumulative upgrade within active window ($29 Starter + $120 BNB → Pro)
+- Never-downgrade invariant
+- Cross-chain normalization ($149 BNB + $219 ETH = $295 BNB-equiv)
+- Window reset after 40-day-expired prior sub
+- Legacy sub bootstrap (missing `windowPaidBnbUSD`)
+- `toBnbEquivUSD` / `tierRank` / `maxTier` unit behavior
+
+Total suite: **190/190 passing** (from 169 prior).
+
+#### Known limitations
+
+- **Concurrent same-address payments.** If a single wallet submits two different TXs near-simultaneously, each activation reads the subscription record independently. The later write's `windowPaidBnbUSD` overwrites the earlier's (last-write-wins, losing one payment's cumulative contribution). The user is not double-charged and still gets credits for both TXs (credit grant is per-TX, guarded separately); only the cumulative total is undercounted. Fixing this cleanly requires a Redis WATCH/MULTI or Lua script. Accepted as a rare edge case; not blocking.
+
 ### v1.17 (2026-04-18)
 
 > **External security review response — Q402-SEC-001 / Q402-SEC-002 / Q402-SEC-003.** All 3 findings from the external reviewer (2026-04-18) pinned down. Canonical flow (5 chains + TransferAuthorization witness + decimal-string `amount`) unchanged. Only the check ordering, sandbox isolation, and anonymous read blocking were modified.
