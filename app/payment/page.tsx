@@ -414,7 +414,7 @@ export default function PaymentPage() {
                       {verifyError}
                       {verifyAttempts > 2 && (
                         <p className="text-xs text-red-400/60 mt-1">
-                          Still not found? Contact <a href="mailto:hello@quackai.ai" className="underline">hello@quackai.ai</a>
+                          Still not found? Contact <a href="mailto:davidlee@quackai.ai" className="underline">davidlee@quackai.ai</a>
                         </p>
                       )}
                     </div>
@@ -555,7 +555,7 @@ export default function PaymentPage() {
                     <p className="text-white/40 text-sm mb-1">This volume requires</p>
                     <p className="text-4xl font-extrabold text-yellow">Enterprise</p>
                     <p className="text-white/25 text-xs mt-2">Contact us for custom pricing</p>
-                    <a href="mailto:hello@quackai.ai?subject=Q402 Enterprise Inquiry"
+                    <a href="mailto:davidlee@quackai.ai?subject=Q402 Enterprise Inquiry"
                       className="block mt-5 w-full text-center bg-yellow text-navy font-bold text-sm py-3.5 rounded-xl hover:bg-yellow-hover transition-all">
                       Contact Sales →
                     </a>

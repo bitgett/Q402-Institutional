@@ -2,7 +2,7 @@ export const metadata = { title: "Privacy Policy — Q402" };
 
 const EFFECTIVE_DATE = "April 9, 2026";
 const COMPANY = "Quack AI";
-const EMAIL = "hello@quackai.ai";
+const EMAIL = "davidlee@quackai.ai";
 
 export default function PrivacyPage() {
   return (
