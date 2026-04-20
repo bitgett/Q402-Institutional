@@ -9,6 +9,7 @@ import {
   clearUsageAlert,
 } from "@/app/lib/db";
 import { sendEmail, renderUsageAlertHtml } from "@/app/lib/email";
+import { pickAlertTier } from "@/app/lib/alert-tier";
 
 /**
  * GET /api/cron/usage-alert
@@ -81,13 +82,11 @@ export async function GET(req: Request) {
     const total = sub?.quotaBonus ?? 0;
     if (total <= 0) continue;  // nothing ever purchased — no denominator
 
-    const pct = (remaining / total) * 100;
-    const lastTier = cfg.lastThresholdAlerted ?? Number.POSITIVE_INFINITY;
-
-    // Pick the deepest tier we've crossed that we haven't alerted at yet.
-    let tier: 20 | 10 | null = null;
-    if (pct <= 10 && lastTier > 10)      tier = 10;
-    else if (pct <= 20 && lastTier > 20) tier = 20;
+    const tier = pickAlertTier({
+      remaining,
+      total,
+      lastThresholdAlerted: cfg.lastThresholdAlerted,
+    });
     if (!tier) continue;
 
     const { subject, html, text } = renderUsageAlertHtml({
