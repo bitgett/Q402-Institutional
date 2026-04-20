@@ -18,7 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://q402-institutional.vercel.app"),
+  metadataBase: new URL("https://q402.quackai.ai"),
   title: "Q402 | Gasless Payments on EVM | Quack AI",
   description:
     "Q402 is a gasless payment protocol for EVM chains. Your users pay zero gas. You sponsor it, invisibly and instantly.",

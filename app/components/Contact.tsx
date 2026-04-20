@@ -5,7 +5,7 @@ import RegisterModal from "./RegisterModal";
 
 const CODE_LINES = [
   { tokens: [{ t: "// ",          c: "text-white/25" }, { t: "Drop-in script, no bundler required", c: "text-white/45" }] },
-  { tokens: [{ t: "<script src=", c: "text-white/40" }, { t: '"https://q402-institutional.vercel.app/q402-sdk.js"', c: "text-orange-300" }, { t: "></script>", c: "text-white/40" }] },
+  { tokens: [{ t: "<script src=", c: "text-white/40" }, { t: '"https://q402.quackai.ai/q402-sdk.js"', c: "text-orange-300" }, { t: "></script>", c: "text-white/40" }] },
   { tokens: [] },
   { tokens: [{ t: "const",        c: "text-purple-400" }, { t: " q402 ",         c: "text-blue-300" }, { t: "= ",   c: "text-white/40" }, { t: "new",        c: "text-yellow" }, { t: " Q402Client", c: "text-blue-300" }, { t: "({", c: "text-white/40" }] },
   { tokens: [{ t: "  apiKey",     c: "text-green-300" }, { t: ": ",              c: "text-white/40" }, { t: '"q402_live_..."', c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
