@@ -21,6 +21,9 @@ const PAY_TOKENS = [
   { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  chainId: "eth", token: "USDT", color: "#627EEA", img: "/eth.png"  },
 ];
 
+// `multiplier` is display-only for the "+X% rate" badge and must mirror
+// CHAIN_MULTIPLIERS in app/lib/blockchain.ts (used for cumulative-tier
+// normalization). Actual per-tier USD prices live in CHAIN_PRICES below.
 const CHAINS = [
   { id: "bnb",      name: "BNB Chain", color: "#F0B90B", img: "/bnb.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "avax",     name: "Avalanche", color: "#E84142", img: "/avax.png",     rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
@@ -36,24 +39,36 @@ const CHAINS = [
 // at checkout, so the UI label must reflect the actual amount.
 // Volumes above 500K go through sales (Contact sales link below the grid).
 const VOLUMES = [
-  { label: "500",       value: 500,     basePrice: 29   },
-  { label: "1,000",     value: 1_000,   basePrice: 49   },
-  { label: "5,000",     value: 5_000,   basePrice: 89   },
-  { label: "10,000",    value: 10_000,  basePrice: 149  },
-  { label: "50,000",    value: 50_000,  basePrice: 449  },
-  { label: "100,000",   value: 100_000, basePrice: 799  },
-  { label: "500,000",   value: 500_000, basePrice: 1999 },
+  { label: "500",     value: 500     },
+  { label: "1,000",   value: 1_000   },
+  { label: "5,000",   value: 5_000   },
+  { label: "10,000",  value: 10_000  },
+  { label: "50,000",  value: 50_000  },
+  { label: "100,000", value: 100_000 },
+  { label: "500,000", value: 500_000 },
 ];
+
+// Per-chain, per-tier USD price. Must mirror CHAIN_THRESHOLDS in
+// app/lib/blockchain.ts — the server resolves plan/credits from this exact
+// value, so the UI and server MUST agree to the dollar.
+// Order: [500, 1K, 5K, 10K, 50K, 100K, 500K]
+const CHAIN_PRICES: Record<string, number[]> = {
+  bnb:    [ 29,  49,  89,  149,  449,   799,  1999 ],
+  xlayer: [ 29,  49,  89,  149,  449,   799,  1999 ],
+  stable: [ 29,  49,  89,  149,  449,   799,  1999 ],
+  avax:   [ 29,  49,  99,  159,  489,   879,  2199 ],
+  eth:    [ 39,  69, 129,  219,  669,  1199,  2999 ],
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 function calcPrice(chainId: string, volume: number) {
-  const chain = CHAINS.find(c => c.id === chainId)!;
-  const vol   = VOLUMES.find(v => v.value === volume)!;
-  const price = Math.round(vol.basePrice * chain.multiplier / 10) * 10;
-  return { price, perTx: price / vol.value };
+  const idx    = VOLUMES.findIndex(v => v.value === volume);
+  const prices = CHAIN_PRICES[chainId] ?? CHAIN_PRICES.bnb;
+  const price  = prices[idx] ?? 0;
+  return { price, perTx: price / volume };
 }
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
