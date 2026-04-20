@@ -245,7 +245,7 @@ export default function Hero() {
                       <span className="text-blue-300">script</span>
                       <span className="text-green-300"> src</span>
                       <span className="text-white/40">=</span>
-                      <span className="text-orange-300">&quot;https://q402-institutional.vercel.app/q402-sdk.js&quot;</span>
+                      <span className="text-orange-300">&quot;https://q402.quackai.ai/q402-sdk.js&quot;</span>
                       <span className="text-white/40">&gt;&lt;/</span>
                       <span className="text-blue-300">script</span>
                       <span className="text-white/40">&gt;</span>

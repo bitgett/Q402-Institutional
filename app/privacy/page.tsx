@@ -17,7 +17,7 @@ export default function PrivacyPage() {
             <h2 className="text-white font-semibold text-base mb-3">1. Who We Are</h2>
             <p>
               {COMPANY} operates the Q402 gasless payment relay protocol at
-              q402-institutional.vercel.app. This policy describes what data we collect, how we use it,
+              q402.quackai.ai. This policy describes what data we collect, how we use it,
               and your rights regarding that data.
             </p>
           </section>

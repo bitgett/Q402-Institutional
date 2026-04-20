@@ -289,7 +289,7 @@ export default function DocsPage() {
             </p>
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Load the SDK</h3>
-            <CodeBlock lang="html" code={`<script src="https://q402-institutional.vercel.app/q402-sdk.js"></script>`} />
+            <CodeBlock lang="html" code={`<script src="https://q402.quackai.ai/q402-sdk.js"></script>`} />
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · One-line gasless payment (client-side)</h3>
             <CodeBlock lang="javascript" code={`// Initialize once with your API key + chain
@@ -375,7 +375,7 @@ console.log("Paid! TX:", result.txHash);`} />
 
           {/* ── API REFERENCE ── */}
           <Section id="api-ref" title="API Reference">
-            <p className="text-white/40 text-xs mb-8 font-mono">Base URL: https://q402-institutional.vercel.app/api</p>
+            <p className="text-white/40 text-xs mb-8 font-mono">Base URL: https://q402.quackai.ai/api</p>
 
             {/* POST /relay */}
             <div className="mb-12">
@@ -522,7 +522,7 @@ const types = {
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">Signing with ethers.js</h3>
             <CodeBlock lang="typescript" code={`// Fetch facilitator address first (required for all chains)
-const { facilitator } = await fetch("https://q402-institutional.vercel.app/api/relay/info").then(r => r.json());
+const { facilitator } = await fetch("https://q402.quackai.ai/api/relay/info").then(r => r.json());
 
 const domain = {
   name:              DOMAIN_NAMES[chain],

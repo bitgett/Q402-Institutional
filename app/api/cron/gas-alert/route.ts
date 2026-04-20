@@ -35,7 +35,7 @@ export async function GET(req: Request) {
     );
   }
 
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? "https://q402-institutional.vercel.app";
+  const base = process.env.NEXT_PUBLIC_BASE_URL ?? "https://q402.quackai.ai";
   const res = await fetch(`${base}/api/gas-tank?check_alerts=1`, {
     headers: { "x-admin-secret": adminSecret },
   });

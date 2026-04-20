@@ -45,7 +45,7 @@ const envVars = Object.fromEntries(
 // ── Configuration ───────────────────────────────────────────────────────────────
 const API_KEY   = envVars.Q402_API_KEY;
 const AGENT_KEY = envVars.TEST_PAYER_KEY;
-const API_BASE  = envVars.Q402_API_BASE ?? "https://q402-institutional.vercel.app";
+const API_BASE  = envVars.Q402_API_BASE ?? "https://q402.quackai.ai";
 
 // Chain configurations — mirrors contracts.manifest.json and app/lib/relayer.ts.
 // Each chain lists both tokens with their on-chain address and decimals; the

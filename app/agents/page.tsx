@@ -557,7 +557,7 @@ const auth = await client.experimental_signAuthorization({
               },
               {
                 n: "3", label: "Relay — Q402 pays all gas",
-                code: `const res = await fetch("https://q402-institutional.vercel.app/api/relay", {
+                code: `const res = await fetch("https://q402.quackai.ai/api/relay", {
   method: "POST",
   body: JSON.stringify({
     apiKey: process.env.Q402_API_KEY,  // shared across all agents

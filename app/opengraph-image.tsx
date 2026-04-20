@@ -126,7 +126,7 @@ export default function Image() {
             fontSize: "18px",
           }}
         >
-          q402-institutional.vercel.app
+          q402.quackai.ai
         </div>
       </div>
     ),

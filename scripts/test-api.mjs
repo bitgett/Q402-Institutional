@@ -8,7 +8,7 @@
  *  3. Gas tank balances
  */
 
-const BASE = process.env.BASE_URL ?? "https://q402-institutional.vercel.app";
+const BASE = process.env.BASE_URL ?? "https://q402.quackai.ai";
 
 if (!process.env.API_KEY) {
   console.error("Error: API_KEY environment variable is required.");
