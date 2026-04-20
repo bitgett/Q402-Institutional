@@ -578,6 +578,8 @@ kv.get("gasdep:{address}")               → GasDeposit[]
 kv.get("relaytx:{address}:{YYYY-MM}")    → RelayedTx[]   ← monthly shard (v1.6)
 kv.get("gasused:{address}")              → Record<chain, number>  ← running totals (v1.6)
 kv.get("webhook:{address}")              → WebhookConfig
+kv.get("usage_alert:{address}")          → UsageAlertConfig              ← v1.19
+kv.smembers("usage_alert:_index")        → string[] (opted-in addrs)    ← v1.19
 kv.get("inquiries")                      → Inquiry[]
 ```
 
@@ -631,6 +633,16 @@ kv.get("inquiries")                      → Inquiry[]
 }
 ```
 
+**UsageAlertConfig** (v1.19)
+```json
+{
+  "email":                "dev@example.com",
+  "createdAt":            "2026-04-21T00:00:00.000Z",
+  "lastThresholdAlerted": 20
+}
+```
+> `lastThresholdAlerted` is the lowest percent-remaining tier we've mailed for in the current credit window (`20`, `10`, or `null`). Reset to `null` on every successful credit top-up (activate route) so the next burn-down re-fires. Membership index `usage_alert:_index` is a Redis Set the cron iterates in O(subscribers) instead of scanning all KV keys.
+
 ### DB Helper Functions
 
 | Function | Role |
@@ -654,6 +666,12 @@ kv.get("inquiries")                      → Inquiry[]
 | `addQuotaBonus(address, n)` | Add bonus credits |
 | `isSubscriptionActive(address)` | Subscription validity check |
 | `getPlanQuota(plan)` | Per-plan monthly quota |
+| `getUsageAlert(address)` | Fetch email alert config (v1.19) |
+| `setUsageAlert(address, email)` | Opt in / update alert email (v1.19) |
+| `clearUsageAlert(address)` | Opt out (v1.19) |
+| `recordAlertSent(address, 20\|10)` | Advance hysteresis after dispatch (v1.19) |
+| `resetUsageAlertState(address)` | Clear hysteresis on top-up (v1.19) |
+| `listUsageAlertAddresses()` | Enumerate subscribers (cron fan-out, v1.19) |
 
 ---
 
@@ -1112,6 +1130,32 @@ echo "0xAddress" | vercel env add STABLE_IMPLEMENTATION_CONTRACT production
 git push origin main
 ```
 
+### Production Environment Variables
+
+| Key | Purpose | Required |
+|-----|---------|----------|
+| `RELAYER_PRIVATE_KEY` | Hot key used by `loadRelayerKey()` — must derive to `RELAYER_ADDRESS` in `wallets.ts`. | Yes |
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` / `KV_URL` / `REDIS_URL` | Vercel KV (Redis) — subscriptions, deposits, relay history, atomic quota, usage-alert index. | Yes |
+| `ADMIN_SECRET` | Gates admin endpoints + internal `check_alerts=1` fan-in on `/api/gas-tank`. | Yes |
+| `CRON_SECRET` | Bearer-token check on both Vercel cron routes. Auto-managed by Vercel when Crons are enabled, but must be present for the routes to authorize. | Yes |
+| `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` | Destination for operator gas-alerts (RELAYER low-balance). | Yes |
+| `RESEND_API_KEY` | Resend HTTP API key. Used by `/api/cron/usage-alert` and any future transactional email. Routes short-circuit without error when unset (local dev). | Yes in prod |
+| `RESEND_FROM_ADDRESS` | RFC-5322 `From` header, e.g. `Q402 <alerts@quackai.ai>`. Domain must be Resend-verified (DKIM/SPF/MX green). | Yes in prod |
+| `STABLE_IMPLEMENTATION_CONTRACT` | Address of the Q402 Stable Chain impl contract (used at authorization-guard time). | Yes |
+| `TEST_MODE` | Gate flag for a few dev-only branches. Leave unset in prod. | No |
+| `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` | Telethon session key — unrelated to the bot token; used by out-of-band tooling. | No |
+
+### Vercel Cron
+
+`vercel.json` defines two crons. Both are Hobby-plan compatible (max one run/day).
+
+| Path | Schedule (UTC) | Auth | Purpose |
+|------|----------------|------|---------|
+| `/api/cron/gas-alert` | `0 9 * * *` | `Bearer ${CRON_SECRET}` | RELAYER hot-balance monitor → Telegram |
+| `/api/cron/usage-alert` | `0 10 * * *` | `Bearer ${CRON_SECRET}` | TX-credit burn-down monitor → Resend email |
+
+Upgrading to Vercel Pro unlocks sub-daily cadences (e.g. `0 */6 * * *`); the usage-alert hysteresis logic is already tier-aware and tolerates any cadence without spamming.
+
 ---
 
 ## 22. Operational Wallets — 3-Role Separation (v1.16+)
@@ -1143,7 +1187,9 @@ This split protects the **aggregate user gas pool** (held in the cold GASTANK), 
 
 ### Alerts
 
-`/api/cron/gas-alert` → `/api/gas-tank?check_alerts=1` (requires admin secret) monitors the RELAYER hot balance and fires a Telegram alert below the operational threshold. When alerted, the operator tops up cold (GASTANK) → hot (RELAYER).
+**Operator alerts (Telegram)** — `/api/cron/gas-alert` → `/api/gas-tank?check_alerts=1` (requires admin secret) monitors the RELAYER hot balance and fires a Telegram alert below the operational threshold. When alerted, the operator tops up cold (GASTANK) → hot (RELAYER). Schedule: `0 9 * * *` UTC daily.
+
+**Customer alerts (email, v1.19)** — `/api/cron/usage-alert` fans out to every wallet opted in via `/api/usage-alert`. For each subscriber, it compares `quota:{addr}` (atomic remaining credits) to `subscription.quotaBonus` (peak at last top-up) and fires a Resend email when the ratio crosses 20 % or 10 %. `lastThresholdAlerted` hysteresis ensures one email per downward tier crossing per window; the activate route resets it on every top-up so repeat customers re-enter the alert loop. Schedule: `0 10 * * *` UTC daily (Hobby plan cap — upgrade to Vercel Pro to restore `0 */6 * * *`). Outer auth: Vercel-issued `Authorization: Bearer ${CRON_SECRET}`, fail-closed when `CRON_SECRET` is unset. Requires env `RESEND_API_KEY` + `RESEND_FROM_ADDRESS` (e.g. `Q402 <alerts@quackai.ai>`) and a Resend-verified sending domain (DKIM/SPF/MX).
 
 ### Master Accounts (always treated as paid)
 ```
@@ -1196,13 +1242,59 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 | Webhook retry on failure | fire-and-forget | Medium |
 | Per-project dedicated relayer address | Single global wallet | High (P1) |
 | SDK npm package | CDN file only | Low |
-| Automated tests (Jest/Vitest) | Vitest — `__tests__/` 8 files / 122 tests (contracts-manifest · relay-body-shape · auth · blockchain · intent · quote · rotate · ratelimit) | Done |
+| Automated tests (Jest/Vitest) | Vitest — `__tests__/` 15 files / 192 tests | Done |
+| Usage-alert email pipeline | KV + Resend HTTP + daily cron (v1.19) | Done |
 | PostgreSQL migration | Vercel KV is sufficient | Low |
 | Gas Tank auto top-up | UI toggle exists, logic unimplemented | Medium |
 
 ---
 
 ## 25. Changelog
+
+### v1.19 (2026-04-21)
+
+> **Usage-alert email backend live.** Pre-v1.19 the dashboard's "email me when credits run low" toggle stored the address in `localStorage` only — no email was ever sent. v1.19 persists the opt-in server-side, wires a Resend-backed dispatcher, and adds a daily cron that fans out to opted-in wallets. First line of actual production email traffic from this project.
+
+#### What changed
+
+**New module — [`app/lib/email.ts`](app/lib/email.ts)**
+- `sendEmail({ to, subject, html, text })` — thin wrapper over Resend HTTPS (`POST /emails`). No SDK dependency; hand-rolled `fetch` keeps the bundle small and the failure surface narrow.
+- `renderUsageAlertHtml({ address, threshold, remainingTxs, totalTxs, dashboardUrl, paymentUrl })` — inline-styled HTML + plain-text multipart for the 20 %/10 % threshold emails.
+- Exits early when `RESEND_API_KEY` is unset so local dev / preview deploys don't blow up.
+
+**New routes**
+- [`app/api/usage-alert/route.ts`](app/api/usage-alert/route.ts) — wallet-scoped `GET/POST/DELETE`. Same nonce + EIP-191 auth used by `/api/webhook` and `/api/gas-tank/user-balance`, so an anonymous caller cannot read or clobber another wallet's email. Server-side email validation (`RFC`-ish regex + 254-char cap) and IP rate limits (`usage-alert-get`: 30/min, `-post`: 10/min, `-delete`: 5/min).
+- [`app/api/cron/usage-alert/route.ts`](app/api/cron/usage-alert/route.ts) — bearer-auth'd Vercel cron. Iterates `usage_alert:_index`, reads `(cfg, sub, remaining)` in parallel per address, computes `pct = remaining / sub.quotaBonus * 100`, picks the deepest un-alerted tier (`10 < 20 < ∞`), dispatches via Resend, then calls `recordAlertSent` to advance hysteresis. Best-effort sends — one failure does not block the batch. Returns counters `{checked, alerted, cleaned, failed}`.
+
+**KV schema — [`app/lib/db.ts`](app/lib/db.ts)**
+- New type `UsageAlertConfig { email, createdAt, lastThresholdAlerted }`.
+- Helpers: `getUsageAlert`, `setUsageAlert`, `clearUsageAlert`, `recordAlertSent`, `resetUsageAlertState`, `listUsageAlertAddresses`.
+- Membership index `usage_alert:_index` (Redis Set) so the cron scales with subscriber count, not KV size.
+
+**Activate route hook — [`app/api/payment/activate/route.ts`](app/api/payment/activate/route.ts)**
+- Successful credit grant now fires `resetUsageAlertState(address)` best-effort so a repeat customer topping up re-enters the alert loop. Without this reset, the cron would permanently skip any wallet that had already received a 10 % email.
+
+**Dashboard wiring — [`app/dashboard/page.tsx`](app/dashboard/page.tsx)**
+- The alert-email toggle now `POST`s / `DELETE`s against `/api/usage-alert`. Initial state is hydrated via the `GET` endpoint (localStorage key deprecated and ignored). Uses the shared `getAuthCreds()` nonce cache so no extra signature prompts.
+
+**Schedule — [`vercel.json`](vercel.json)**
+- Cron `/api/cron/usage-alert` added. Initially scheduled `0 */6 * * *` to match gas-alert's operational rhythm; downgraded to `0 10 * * *` (UTC 10:00 = KST 19:00) after Vercel rejected the sub-daily cadence on the Hobby plan. Hysteresis logic is unchanged — the alert still fires exactly once per downward threshold crossing, just checked once per day.
+
+#### Infrastructure standup (2026-04-21)
+
+- **Sending domain `quackai.ai` verified in Resend.** DKIM (resend._domainkey TXT, 216-char `p=…QIDAQAB` value), SPF (`send` TXT: `v=spf1 include:amazonses.com ~all`), MX (`send`: `feedback-smtp.ap-northeast-1.amazonses.com`, priority 10) all green in GoDaddy DNS. Inbound receiving disabled so the org's existing `davidlee@quackai.ai` secureserver.net MX routing stays intact.
+- **Vercel env** (Production): `RESEND_API_KEY` (Resend), `RESEND_FROM_ADDRESS=Q402 <alerts@quackai.ai>`, `CRON_SECRET` (pre-existing). Preview/Development environments intentionally skipped — the cron only fires in Production.
+- **Smoke test**: authenticated `GET /api/cron/usage-alert` returns `{"checked":0,"alerted":0,"cleaned":0,"failed":0,"timestamp":"…"}` as expected (no subscribers yet).
+
+#### Regression coverage
+
+- Full suite: **192/192 passing** (unchanged from v1.18 — this release adds routes/helpers but no new pure functions that warrant unit coverage; the cron is end-to-end wired and verified via the smoke call above).
+
+#### Known limitations
+
+- **Daily cadence gives up to ~24 h latency** on the 20 % / 10 % crossing. Accepted tradeoff for Hobby plan pricing; upgrading to Pro restores `0 */6 * * *` (≤6 h worst case) with a one-line `vercel.json` change and no code modifications.
+- **Cross-window email replay is possible in theory.** If KV loses the `UsageAlertConfig` for a wallet, `listUsageAlertAddresses()` would still enumerate the stale index entry. The cron handles this gracefully — it detects `!cfg` and fires `clearUsageAlert` to prune the index (counter: `cleaned`). No email is sent in that branch.
+- **Email delivery is best-effort.** A Resend outage during the cron run silently drops that day's alert; no retry queue. The `failed` counter surfaces it in the response body for manual reconciliation.
 
 ### v1.18 (2026-04-20)
 

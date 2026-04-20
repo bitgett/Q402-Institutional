@@ -351,7 +351,7 @@ console.log("Paid! TX:", result.txHash);`} />
             </div>
 
             <Callout type="warn">
-              If your gas pool is empty, transactions will fail. Q402 sends Telegram alerts before depletion. Top up via your dashboard or directly to the gas pool address.
+              If your gas pool is empty, transactions will fail. Monitor the balance in your dashboard — and opt in to TX-credit email alerts (fire at 20 % / 10 % remaining) from the dashboard&apos;s Alerts panel. Top up via the dashboard or send native tokens directly to the Gas Tank address.
             </Callout>
           </Section>
 
