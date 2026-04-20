@@ -204,7 +204,7 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
                 value={txHashInput}
                 onChange={e => setTxHashInput(e.target.value)}
                 placeholder="0x..."
-                className="w-full bg-white/4 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white/80 placeholder:text-white/20 focus:outline-none focus:border-yellow/40"
+                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder:text-white/20 focus:outline-none focus:border-yellow/40"
               />
               <button
                 onClick={verifyByTxHash}

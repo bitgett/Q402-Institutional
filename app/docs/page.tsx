@@ -358,7 +358,7 @@ console.log("Paid! TX:", result.txHash);`} />
           {/* ── AUTHENTICATION ── */}
           <Section id="auth" title="Authentication">
             <p className="text-white/55 text-sm mb-5">
-              All relay requests require your API key in the <span className="font-mono text-white/70">apiKey</span> field of the request body. Your API key is available in your dashboard after connecting your wallet.
+              All relay requests require your API key in the <span className="font-mono text-white/70">apiKey</span> field of the request body. Connect your wallet to get a sandbox key (<span className="font-mono text-white/70">q402_test_*</span>) immediately. Your live key (<span className="font-mono text-white/70">q402_live_*</span>) is issued automatically once your on-chain payment is confirmed on <span className="font-mono text-white/70">/payment</span>.
             </p>
             <CodeBlock lang="json" code={`// POST /api/relay
 {
@@ -398,13 +398,15 @@ console.log("Paid! TX:", result.txHash);`} />
 }
 
 // Response 200
+// All numeric amounts are returned as decimal strings to preserve
+// 18-decimal token precision (IEEE-754 doubles lose precision at that scale).
 {
   "success":        true,
   "txHash":         "0xdef456...",
   "chain":          "avax",
   "blockNumber":    "54540550",
-  "tokenAmount":    50,
-  "gasCostNative":  0.000021,
+  "tokenAmount":    "50",
+  "gasCostNative":  "0.000021",
   "method":         "eip7702"
 }`} />
             </div>
@@ -415,7 +417,7 @@ console.log("Paid! TX:", result.txHash);`} />
                 <Badge color="#627EEA">GET</Badge>
                 <span className="font-mono text-sm text-white/70">/relay/info</span>
               </div>
-              <p className="text-white/50 text-sm mb-4">Returns the relayer (facilitator) wallet address. Required for X Layer EIP-7702 signing — include this address in your EIP-712 payload before submitting.</p>
+              <p className="text-white/50 text-sm mb-4">Returns the relayer (facilitator) wallet address. Call this before constructing any TransferAuthorization — the facilitator field in the EIP-712 payload must match this value on all chains.</p>
               <CodeBlock lang="json" code={`// GET /api/relay/info
 { "facilitator": "0xRelayerAddress..." }`} />
             </div>

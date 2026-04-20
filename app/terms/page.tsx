@@ -62,8 +62,9 @@ export default function TermsPage() {
             <h2 className="text-white font-semibold text-base mb-3">5. Gas Tank</h2>
             <p className="mb-3">
               Some plans require customers to pre-fund a Gas Tank by depositing native tokens (BNB, ETH,
-              AVAX, OKB, or USDT0) to the Q402 relayer address. These deposits are used exclusively to
-              cover on-chain gas costs for your relayed transactions.
+              AVAX, OKB, or USDT0) to the Q402 Gas Tank address displayed per-chain in your Dashboard →
+              Gas Tank tab. Do not send Gas Tank deposits to the relayer (signer) address. These deposits
+              are used exclusively to cover on-chain gas costs for your relayed transactions.
             </p>
             <p className="mb-3">
               Gas Tank balances are non-refundable except by explicit arrangement with Q402 support.
