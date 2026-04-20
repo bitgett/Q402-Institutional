@@ -62,7 +62,7 @@ const Spinner = ({ color = "text-yellow" }: { color?: string }) => (
 );
 
 // Note: Gas Tank withdrawals are currently processed manually by Q402 operations.
-// Contact hello@quackai.ai to request a withdrawal.
+// Contact davidlee@quackai.ai to request a withdrawal.
 function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
   chain: string; token: string; onClose: () => void; address: string;
   onDepositVerified?: (balances: Record<string, number>) => void;
@@ -161,7 +161,7 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
               <p className="text-xs text-white/30 mb-1">Gas Tank withdrawals</p>
               <p className="text-xs text-white/20 leading-relaxed">
                 Withdrawals are processed manually by Q402 operations.
-                Contact <span className="text-white/40">hello@quackai.ai</span> to request a refund.
+                Contact <span className="text-white/40">davidlee@quackai.ai</span> to request a refund.
               </p>
             </div>
           </div>
