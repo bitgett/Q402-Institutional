@@ -605,6 +605,10 @@ const signature = await signer.signTypedData(domain, types, {
                 q: "How do I get an API key?",
                 a: "Connect your wallet on the dashboard — a sandbox API key (q402_test_ prefix) is provisioned for free so you can test the integration. To get a live key, complete an on-chain payment on the /payment page. Your live key is issued automatically after the payment is confirmed."
               },
+              {
+                q: "How does billing work? Can I upgrade my plan?",
+                a: "Each paid purchase grants a 30-day access window plus the transaction credits listed for that tier. Your plan tier is set by cumulative paid amount within the active window, normalized to BNB Chain base pricing (Ethereum and Avalanche are converted at the chain multiplier). Top up within 30 days and your plan upgrades automatically when cumulative spend crosses the next tier. Plans never downgrade while the window is active; if you let the window lapse, cumulative resets."
+              },
             ].map((item, i) => (
               <div key={i} className="mb-4 p-5 rounded-xl border border-white/8">
                 <div className="font-semibold text-sm mb-2">{item.q}</div>

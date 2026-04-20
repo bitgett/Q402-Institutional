@@ -53,7 +53,7 @@ export default function TermsPage() {
               <li>Subscriptions are activated via on-chain USDC/USDT payment to the Q402 payment address.</li>
               <li>All payments are final and non-refundable once on-chain confirmation is received.</li>
               <li>Each paid purchase grants a 30-day access window plus the transaction credits listed for the selected tier. Credits accumulate across renewals; access days stack if you renew before expiry.</li>
-              <li>Your plan level is determined by your first paid purchase. Subsequent purchases top up credits and extend access but do not automatically change tier. To move to a higher tier, contact <a className="text-yellow hover:underline" href="mailto:davidlee@quackai.ai?subject=Q402 Plan Upgrade">davidlee@quackai.ai</a>.</li>
+              <li>Your plan level is determined by cumulative paid amount within an active 30-day window, normalized to BNB Chain base pricing (Ethereum and Avalanche payments are converted at the published chain multiplier). When cumulative spend crosses a higher tier&apos;s threshold, your plan upgrades automatically. Plans never downgrade while the window is active. If the window lapses (no payment for 30 days after the last renewal), cumulative resets and the next payment establishes a new window.</li>
               <li>Transaction credits are enforced as stated on the pricing page at purchase time.</li>
               <li>Q402 reserves the right to change pricing with 14 days&apos; notice via email or dashboard notification.</li>
             </ul>

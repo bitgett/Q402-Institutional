@@ -262,7 +262,8 @@ function getThresholds(chain?: string): number[] {
 /**
  * Returns the plan tier for the given payment.
  * Chain name comes from checkPaymentOnChain().chain (e.g. "Ethereum", "BNB Chain").
- * First payment only — subsequent payments don't change the plan.
+ * Pass "BNB Chain" when the amount has already been normalized to BNB-equivalent
+ * (see toBnbEquivUSD below) for cumulative tier checks across multi-chain payments.
  */
 export function planFromAmount(usd: number, chain?: string): string | null {
   const t = getThresholds(chain);
@@ -282,4 +283,47 @@ export function txQuotaFromAmount(usd: number, chain?: string): number {
     if (usd >= t[i]) return TIER_CREDITS[i];
   }
   return 0;
+}
+
+// ── Cumulative tier helpers (v1.18) ────────────────────────────────────────
+// The activate route uses these to let users reach a higher tier by paying
+// more within an active 30-day window. Payments on non-BNB chains cost more
+// nominal USD (AVAX 1.1×, ETH 1.5×) but represent the same "value"; we
+// normalize to BNB-equivalent so cumulative thresholds are fair.
+
+const CHAIN_MULTIPLIERS: Record<string, number> = {
+  "BNB Chain": 1.0,
+  "X Layer":   1.0,
+  "Stable":    1.0,
+  "Avalanche": 1.1,
+  "Ethereum":  1.5,
+};
+
+/**
+ * Convert a raw payment USD to BNB-equivalent USD by dividing out the chain's
+ * price multiplier. Used to sum cross-chain payments against BNB-base tier
+ * thresholds.
+ */
+export function toBnbEquivUSD(usd: number, chain?: string): number {
+  if (!chain) return usd;
+  const m = CHAIN_MULTIPLIERS[chain] ?? 1.0;
+  return m > 0 ? usd / m : usd;
+}
+
+/**
+ * Rank of a plan tier (higher = better). Unknown / null = -1.
+ */
+export function tierRank(plan: string | null | undefined): number {
+  if (!plan) return -1;
+  return TIER_PLANS.indexOf(plan.toLowerCase());
+}
+
+/**
+ * Return the higher-ranked of two tiers. Null-safe.
+ */
+export function maxTier(a: string | null | undefined, b: string | null | undefined): string | null {
+  const ra = tierRank(a);
+  const rb = tierRank(b);
+  if (ra < 0 && rb < 0) return null;
+  return ra >= rb ? (a ?? null) : (b ?? null);
 }
