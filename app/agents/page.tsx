@@ -613,8 +613,9 @@ const { txHash, gasCostNative } = await res.json();
             <div className="relative">
               <div className="text-green-400 text-xs font-bold uppercase tracking-widest mb-4">Agent Plan</div>
               <div className="flex items-baseline justify-center gap-1 mb-1">
+                <span className="text-white/40 text-lg">from</span>
                 <span className="text-6xl font-extrabold">$500</span>
-                <span className="text-white/40 text-lg">/mo</span>
+                <span className="text-white/40 text-lg">/30-day access</span>
               </div>
               <p className="text-white/35 text-sm mb-8">
                 + Gas Tank deposits (consumed at actual on-chain cost, no markup)

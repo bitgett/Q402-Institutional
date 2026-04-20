@@ -47,7 +47,7 @@ export default function RegisterModal({ onClose }: Props) {
     volume: "",
     description: "",
   });
-  const [selectedPlan, setSelectedPlan] = useState("Scale");
+  const [selectedPlan, setSelectedPlan] = useState("Starter");
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [realApiKey, setRealApiKey] = useState<string | null>(null);
@@ -299,7 +299,7 @@ export default function RegisterModal({ onClose }: Props) {
             {/* STEP 3: Interested plan + Sandbox activation */}
             {step === 3 && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                <h2 className="text-lg font-bold mb-1">Pick your expected volume</h2>
+                <h2 className="text-lg font-bold mb-1">Pick a plan</h2>
                 <div className="flex items-center gap-2 mb-5">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
                   <p className="text-white/40 text-sm">We&apos;ll provision a <span className="text-green-400 font-medium">sandbox API key</span> right now. Your live key is issued automatically once you complete on-chain payment on <span className="text-white/70 font-mono">/payment</span>.</p>
