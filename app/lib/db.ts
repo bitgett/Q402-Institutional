@@ -7,6 +7,7 @@
  *   KV_REST_API_TOKEN — from Vercel KV store
  */
 import { kv } from "@vercel/kv";
+import { TIER_CREDITS, TIER_PLANS } from "@/app/lib/blockchain";
 
 interface Subscription {
   paidAt: string;
@@ -270,22 +271,31 @@ export async function getGasBalance(address: string): Promise<Record<string, num
 /**
  * Returns relayed TXs for the given address across the specified months.
  * Defaults to current + previous month (covers quota checks and dashboard).
+ *
+ * `limitPerMonth` bounds how many of the most recent entries are fetched per
+ * month so a heavy Enterprise account (up to 500K credits / window — see
+ * recordRelayedTx's MAX_TX_HISTORY) does not blow the response payload. Pass
+ * a large value or `Infinity` if you need full history.
+ *
  * New format: Redis List (LRANGE). Fallback: legacy JSON array stored as string.
  */
 export async function getRelayedTxs(
   address: string,
   months?: string[],   // e.g. ["2026-04", "2026-03"]
+  limitPerMonth: number = 10_000,
 ): Promise<RelayedTx[]> {
   const targets = months ?? [ym(), ym(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))];
   const unique = [...new Set(targets)];
+  const start = Number.isFinite(limitPerMonth) ? -Math.max(1, Math.floor(limitPerMonth)) : 0;
   const results = await Promise.all(
     unique.map(async (m) => {
       const key = relayTxMonthKey(address, m);
       try {
-        const list = await kv.lrange<RelayedTx>(key, 0, -1);
+        const list = await kv.lrange<RelayedTx>(key, start, -1);
         if (list.length > 0) return list;
       } catch { /* WRONGTYPE — legacy JSON array key */ }
-      return (await kv.get<RelayedTx[]>(key)) ?? [];
+      const arr = (await kv.get<RelayedTx[]>(key)) ?? [];
+      return Number.isFinite(limitPerMonth) ? arr.slice(-Math.max(1, Math.floor(limitPerMonth))) : arr;
     })
   );
   return results.flat();
@@ -329,14 +339,18 @@ export async function recordRelayedTx(address: string, tx: RelayedTx) {
   const month = ym(new Date(tx.relayedAt));
   const key   = relayTxMonthKey(address, month);
 
+  // Per-month list cap — sized to the largest tier's credit grant so a paying
+  // Enterprise customer (500K credits / 30-day window) never silently loses
+  // history. Billing/quota uses an independent atomic counter (decrementCredit),
+  // so this cap is purely the on-disk display history bound.
+  const MAX_TX_HISTORY = TIER_CREDITS[TIER_CREDITS.length - 1];
   try {
     const len = await kv.rpush(key, tx);
-    // Trim to last 10,000 entries per month (safety valve)
-    if (len > 10_000) kv.ltrim(key, -10_000, -1).catch(() => {});
+    if (len > MAX_TX_HISTORY) kv.ltrim(key, -MAX_TX_HISTORY, -1).catch(() => {});
   } catch {
     // Legacy fallback for existing JSON array keys
     const existing = (await kv.get<RelayedTx[]>(key)) ?? [];
-    if (existing.length < 10_000) await kv.set(key, [...existing, tx]);
+    if (existing.length < MAX_TX_HISTORY) await kv.set(key, [...existing, tx]);
   }
 
   if (tx.gasCostNative > 0) {
@@ -436,19 +450,18 @@ export async function addQuotaBonus(address: string, additionalTxs: number) {
 
 // ── Plan helpers ──────────────────────────────────────────────────────────────
 
-const PLAN_QUOTA: Record<string, number> = {
-  starter:          500,
-  basic:          1_000,
-  growth:        10_000,
-  pro:           10_000,
-  scale:        100_000,
-  business:     100_000,
-  enterprise:   100_000,
-  enterprise_flex: 500_000,
-};
+// Derived from blockchain.ts SOT (TIER_PLANS ↔ TIER_CREDITS) so a tier-table
+// edit on the pricing side automatically propagates here. Previously this
+// was a hand-maintained map and had drifted: growth was 10_000 (should be
+// 5_000), scale was 100_000 (should be 50_000), and a stale "enterprise"
+// alias mapped to 100_000. The bad values surfaced via /api/keys/topup's
+// admin response (`newTotalQuota`) and quietly misreported quotas.
+const PLAN_QUOTA: Record<string, number> = Object.fromEntries(
+  TIER_PLANS.map((p, i) => [p, TIER_CREDITS[i]]),
+);
 
 export function getPlanQuota(plan: string): number {
-  return PLAN_QUOTA[plan?.toLowerCase()] ?? 1_000;
+  return PLAN_QUOTA[plan?.toLowerCase()] ?? TIER_CREDITS[1];
 }
 
 export async function isSubscriptionActive(address: string): Promise<boolean> {

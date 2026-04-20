@@ -34,6 +34,19 @@ import type { Hex, Address } from "viem";
 // Valid Ethereum address pattern
 const ETH_ADDR = /^0x[0-9a-fA-F]{40}$/;
 
+// Minimum gas-tank balance (in native token) required to relay one TX. Calibrated
+// per-chain to roughly $0.05–$0.10 USD-equivalent so the floor is consistent
+// across chains. The previous unified `0.0001` was BNB-shaped: on ETH it gated
+// at ~$0.30 (over-strict, blocked deposits that could pay), on AVAX/X Layer it
+// was effectively $0.003 (too lax — relay could attempt and fail with OOG).
+const MIN_GAS_BALANCE: Record<ChainKey, number> = {
+  bnb:    0.0001,    // ~$0.06 at $600/BNB
+  eth:    0.00003,   // ~$0.10 at $3500/ETH
+  avax:   0.003,     // ~$0.09 at $30/AVAX
+  xlayer: 0.002,     // ~$0.10 at $50/OKB
+  stable: 0.05,      // $0.05 (USDT0 is $1-pegged)
+};
+
 
 export async function POST(req: NextRequest) {
   let body: {
@@ -235,7 +248,7 @@ export async function POST(req: NextRequest) {
   if (!isSandbox) {
     const gasBalance   = await getGasBalance(keyRecord.address);
     const chainBalance = gasBalance[chain] ?? 0;
-    if (chainBalance <= 0.0001) {
+    if (chainBalance <= MIN_GAS_BALANCE[chain]) {
       return NextResponse.json({
         error: `Insufficient gas tank on ${chain}. Deposit native tokens to your gas tank.`,
       }, { status: 402 });
