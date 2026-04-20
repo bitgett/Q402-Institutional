@@ -17,14 +17,15 @@ function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.
 // This address is user-facing on the "Top up" modal; never send revenue or relayer hot-key here.
 const DEPOSIT_ADDRESS = GASTANK_ADDRESS;
 
+// Must mirror TIER_CREDITS / TIER_PLANS in app/lib/blockchain.ts — the server
+// grants these values, so the UI display must match to the tx count.
 const PLAN_QUOTA: Record<string, number> = {
   starter:          500,
   basic:          1_000,
-  growth:        10_000,
+  growth:         5_000,
   pro:           10_000,
-  scale:        100_000,
+  scale:         50_000,
   business:     100_000,
-  enterprise:   100_000,
   enterprise_flex: 500_000,
 };
 
@@ -489,7 +490,9 @@ export default function DashboardPage() {
 
   const API_KEY = subscription?.apiKey ?? "—";
   const plan = subscription?.plan ?? "starter";
-  const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
+  // Internal key "enterprise_flex" is shown to users as just "Enterprise".
+  const planDisplayKey = plan === "enterprise_flex" ? "enterprise" : plan;
+  const planName = planDisplayKey.charAt(0).toUpperCase() + planDisplayKey.slice(1);
   // TX credits remaining — decrements on each successful relay
   const remainingCredits = subscription?.quotaBonus ?? 0;
   // Use plan base quota as reference for the bar (credits start at plan quota per payment)
@@ -601,7 +604,7 @@ export default function DashboardPage() {
               <button
                 onClick={() => router.push("/payment")}
                 className="block w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-full hover:bg-yellow-hover transition-colors">
-                Activate — from $30 / mo
+                Activate — from $29 / 30-day access
               </button>
               <button
                 onClick={() => router.push("/grant")}
