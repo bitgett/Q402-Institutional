@@ -10,32 +10,32 @@
 
 ---
 
-## 목차
+## Table of Contents
 
 1. [Why We Built This](#1-why-we-built-this)
 2. [What is Q402](#2-what-is-q402)
 3. [Supported Chains](#3-supported-chains)
 4. [Tech Stack](#4-tech-stack)
-5. [Quick Start (로컬 개발)](#5-quick-start)
+5. [Quick Start (Local Development)](#5-quick-start)
 6. [Pages & Project Structure](#6-pages--project-structure)
 7. [Payment Flow](#7-payment-flow)
 8. [SDK Usage](#8-sdk-usage)
 9. [API Reference](#9-api-reference)
 10. [Authentication Model](#10-authentication-model)
 11. [Subscription Plans & Rate Limits](#11-subscription-plans--rate-limits)
-12. [KV 데이터 모델](#12-kv-데이터-모델)
-13. [Relay 내부 동작 (EIP-7702 / EIP-3009)](#13-relay-내부-동작)
+12. [KV Data Model](#12-kv-data-model)
+13. [Relay Internals (EIP-7702 / EIP-3009)](#13-relay-internals)
 14. [Webhook System](#14-webhook-system)
 15. [Sandbox Mode](#15-sandbox-mode)
 16. [Gas Tank](#16-gas-tank)
-17. [v1.6 신규 기능](#17-v16-신규-기능)
-18. [Stable Chain 통합](#18-stable-chain-통합)
-19. [컨트랙트 & 토큰 주소](#19-컨트랙트--토큰-주소)
-20. [보안 (v1.2 감사 + 속성)](#20-보안)
-21. [Vercel 배포](#21-vercel-배포)
-22. [릴레이어 지갑](#22-릴레이어-지갑)
-23. [테스트 스크립트 & Agent SDK](#23-테스트-스크립트--agent-sdk)
-24. [남은 작업 / 로드맵](#24-남은-작업--로드맵)
+17. [v1.6 New Features](#17-v16-new-features)
+18. [Stable Chain Integration](#18-stable-chain-integration)
+19. [Contracts & Token Addresses](#19-contracts--token-addresses)
+20. [Security (v1.2 Audit + Properties)](#20-security)
+21. [Vercel Deployment](#21-vercel-deployment)
+22. [Relayer Wallet](#22-relayer-wallet)
+23. [Test Scripts & Agent SDK](#23-test-scripts--agent-sdk)
+24. [Remaining Work / Roadmap](#24-remaining-work--roadmap)
 25. [Changelog](#25-changelog)
 
 ---
@@ -1210,14 +1210,14 @@ for (const chain of ["avax", "bnb", "eth"]) {
 
 ### v1.17 (2026-04-18)
 
-> **외부 보안 리뷰 대응 — Q402-SEC-001 / Q402-SEC-002 / Q402-SEC-003.** 친구 리뷰어(2026-04-18)가 올린 3건 finding을 전부 고정. canonical flow (5 체인 + TransferAuthorization witness + decimal-string `amount`) 불변. 변경된 건 수표 순서·sandbox 격리·익명 조회 차단뿐.
+> **External security review response — Q402-SEC-001 / Q402-SEC-002 / Q402-SEC-003.** All 3 findings from the external reviewer (2026-04-18) pinned down. Canonical flow (5 chains + TransferAuthorization witness + decimal-string `amount`) unchanged. Only the check ordering, sandbox isolation, and anonymous read blocking were modified.
 
-#### 프로덕션 런칭 전 3rd-party 보안 감사 반영
+#### Pre-launch 3rd-party security audit response
 
-**[P0] Q402-SEC-001 — 릴레이 수표 순서 재배치로 silent quota drain 차단 (`app/api/relay/route.ts`)**
-- 기존: `decrementCredit()` 이후에 `loadRelayerKey()` 가 fail → 503 반환되지만 크레딧/일일캡은 이미 차감 → `RELAYER_PRIVATE_KEY` 오설정 시 모든 호출자 할당량이 조용히 소진되던 실버그.
-- 수정: 순서를 `chain 검증 → auth lock → gas tank funding → loadRelayerKey() → daily cap → decrementCredit → relay` 로 재배치. 릴레이 인프라가 실제로 살아 있다는 것을 확인한 후에만 과금.
-- 섹션 6a 신설 (`app/api/relay/route.ts`):
+**[P0] Q402-SEC-001 — Relay check ordering rework blocks silent quota drain (`app/api/relay/route.ts`)**
+- Before: if `loadRelayerKey()` failed after `decrementCredit()`, the handler returned 503 but the credit/daily-cap had already been decremented — meaning a misconfigured `RELAYER_PRIVATE_KEY` would silently drain every caller's quota.
+- Fix: reorder as `chain validation → auth lock → gas tank funding → loadRelayerKey() → daily cap → decrementCredit → relay`. Charging only happens after relay infrastructure is confirmed operational.
+- New section 6a (`app/api/relay/route.ts`):
   ```ts
   // Q402-SEC-001: verify relay infra is usable BEFORE charging.
   let relayerAddress: Address = "0x" as Address;
@@ -1227,28 +1227,28 @@ for (const chain of ["avax", "bnb", "eth"]) {
     relayerAddress = key.address as Address;
   }
   ```
-- 회귀 테스트: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) — 소스 grep으로 landmark 정렬 (CHAIN_CFG → AUTH_LOCK → GAS_TANK → LOAD_RELAYER_KEY → DAILY_CAP → DECREMENT → RELAY_CALLS) 9개 invariant를 락인. 리팩터 시 순서 역전을 suite가 차단.
+- Regression test: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) — 9 invariants via source grep for landmark order (CHAIN_CFG → AUTH_LOCK → GAS_TANK → LOAD_RELAYER_KEY → DAILY_CAP → DECREMENT → RELAY_CALLS). Any future refactor that reorders these will be blocked by the suite.
 
-**[P0] Q402-SEC-002 — Sandbox 웹훅 디스패치 완전 차단 (`app/api/relay/route.ts`)**
-- 기존: sandbox 릴레이(txHash/blockNumber fabricate)에도 HMAC 서명된 `relay.success` 웹훅 발송 → sandbox 키 보유자가 "서명 유효한 settlement 이벤트"를 위조 가능. 다운스트림 회계가 HMAC만 믿으면 유령 매출 주입 가능.
-- 수정: `getWebhookConfig()` 호출 자체를 `isSandbox ? null : ...` 로 가드 → sandbox는 웹훅 config 조차 읽지 않음. 후속 디스패치 단계에서의 우연한 regression을 원천 차단.
-- 회귀 테스트: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) 후반부 2 assertion — `webhookCfg = isSandbox ? null : await getWebhookConfig` 정확 매칭 + 과거 버전의 `sandbox 포함` 표현 금지.
+**[P0] Q402-SEC-002 — Sandbox webhook dispatch fully blocked (`app/api/relay/route.ts`)**
+- Before: sandbox relays (which fabricate txHash/blockNumber) still emitted HMAC-signed `relay.success` webhooks — a sandbox key holder could forge "signature-valid settlement events". Downstream accounting that trusts HMAC alone could be poisoned with phantom revenue.
+- Fix: guard `getWebhookConfig()` itself with `isSandbox ? null : ...` — sandbox never even reads webhook config. Prevents accidental regression at later dispatch steps.
+- Regression test: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) last 2 assertions — exact match on `webhookCfg = isSandbox ? null : await getWebhookConfig` + ban on prior "sandbox included" phrasings.
 
-**[P1] Q402-SEC-003 — `/api/gas-tank/user-balance` 익명 조회 차단 (`app/api/gas-tank/user-balance/route.ts`)**
-- 기존: `?address=0x...` 만으로 타인 지갑의 Q402 가스 탱크 포스처(체인별 잔고 + 입금 txHash 이력)를 무제한 열람 가능. 데이터가 온체인 GASTANK 로그에서 부분적으로 도출 가능하긴 했지만, **address → Q402 customer 매핑**을 30 req/60s 속도로 trivially 스크래핑 가능했음.
-- 수정: `requireAuth(address, nonce, sig)` 를 rate-limit 직후·잔고 read 직전에 배치. `/api/transactions` · `/api/webhook` 과 동일한 nonce+signature 경로 (세션 nonce 1h TTL, `getAuthCreds()` 캐시 사용).
-- 대시보드 call site 업데이트 ([`app/dashboard/page.tsx`](app/dashboard/page.tsx)): `refreshUserBalance()` 를 async로 전환, `getAuthCreds(addr, signMessage)` 로 캐시된 세션 nonce 재사용 → 유저 지갑 팝업은 최초 1회만, 이후 새로고침/폴링에서는 팝업 없음. `NONCE_EXPIRED` 코드 수신 시 캐시 invalidate.
-- 회귀 테스트: [`__tests__/user-balance-auth.test.ts`](__tests__/user-balance-auth.test.ts) — requireAuth import, nonce/sig 쿼리스트링 파싱, `authResult` 가 `getGasBalance()`/`getGasDeposits()` 앞에서 실행, 에러 status propagation, 방어층으로 per-IP 레이트리밋 유지까지 5 assertion.
+**[P1] Q402-SEC-003 — `/api/gas-tank/user-balance` anonymous read blocked (`app/api/gas-tank/user-balance/route.ts`)**
+- Before: anyone with `?address=0x...` could read an arbitrary wallet's Q402 gas-tank posture (per-chain balance + deposit txHash history) without limit. While the underlying data is partly derivable from on-chain GASTANK logs, the **address → Q402 customer** mapping was trivially scrapeable at 30 req/60s.
+- Fix: `requireAuth(address, nonce, sig)` inserted right after rate-limit, before balance reads. Same nonce+signature path as `/api/transactions` and `/api/webhook` (1h session-nonce TTL, `getAuthCreds()` cache).
+- Dashboard call site updated ([`app/dashboard/page.tsx`](app/dashboard/page.tsx)): `refreshUserBalance()` now async, reuses cached session nonce via `getAuthCreds(addr, signMessage)` → wallet popup fires only on first use, subsequent refresh/polling is silent. Cache invalidates on `NONCE_EXPIRED`.
+- Regression test: [`__tests__/user-balance-auth.test.ts`](__tests__/user-balance-auth.test.ts) — 5 assertions covering requireAuth import, nonce/sig query parsing, `authResult` running before `getGasBalance()`/`getGasDeposits()`, error status propagation, and per-IP rate-limit retained as defense-in-depth.
 
-**검증**: `npx vitest run` — 169/169 통과 (기존 155 + 신규 14). `npm run lint` 청결. `npm run build` ✓ 4.3s. Turbopack 빌드 우회 (webpack 고정)·opengraph Node 런타임 등 v1.15~v1.16 인프라 제약 그대로.
+**Verification**: `npx vitest run` — 169/169 pass (155 prior + 14 new). `npm run lint` clean. `npm run build` ✓ 4.3s. Existing v1.15~v1.16 infrastructure constraints preserved (webpack-pinned build, opengraph Node runtime, etc.).
 
-#### 심각도 판단 (README 명시)
+#### Severity calibration (documented)
 
-| Finding | 리뷰어 | 내부 | 근거 |
-|---------|--------|------|------|
-| Q402-SEC-001 | High | **High** 수용 | 조용한 quota drain → 지불 고객 환불 폭탄·신뢰 붕괴. 발동 조건 낮음 (env 오타). |
-| Q402-SEC-002 | High | **Medium, Priority High** | sandbox 웹훅 수신자에게 회계 오염 리스크. 실제 자금 이동 없음(sandbox는 시뮬). 수정 비용 낮아 즉시 적용. |
-| Q402-SEC-003 | Medium | **Low-Medium** | 데이터가 GASTANK 온체인 로그에서 부분 도출 가능. 그러나 address→customer 매핑 단순화·스크래핑 비용 제로 제거가 가치. `/api/transactions` 와의 일관성도 확보. |
+| Finding | Reviewer | Internal | Rationale |
+|---------|----------|----------|-----------|
+| Q402-SEC-001 | High | **High** accepted | Silent quota drain → refund storm + trust collapse. Low trigger bar (env typo). |
+| Q402-SEC-002 | High | **Medium, Priority High** | Accounting-poisoning risk for sandbox webhook consumers. No real fund movement (sandbox is simulated). Fix cost low → applied immediately. |
+| Q402-SEC-003 | Medium | **Low-Medium** | Data is partly derivable from on-chain GASTANK logs, but removing trivial address→customer mapping and zero-cost scraping is still worthwhile. Also aligns with `/api/transactions` auth model. |
 
 ---
 
