@@ -85,17 +85,17 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 1. 공통 필수 필드 검증 ────────────────────────────────────────────────
+  // ── 1. Required field validation (all chains) ────────────────────────────
   if (!apiKey || !chain || !token || !from || !to || !amount || !deadline || !witnessSig) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  // ── 1a. 주소 형식 검증 ────────────────────────────────────────────────────
+  // ── 1a. Address format validation ────────────────────────────────────────
   if (!ETH_ADDR.test(from) || !ETH_ADDR.test(to)) {
     return NextResponse.json({ error: "Invalid address format" }, { status: 400 });
   }
 
-  // ── 1b. amount 검증 (양의 정수 bigint) ────────────────────────────────────
+  // ── 1b. amount validation (positive integer bigint) ──────────────────────
   let amountBigInt: bigint;
   try {
     amountBigInt = BigInt(amount);
@@ -104,13 +104,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "amount must be a positive integer string" }, { status: 400 });
   }
 
-  // ── 1c. deadline 검증 (미래 타임스탬프) ──────────────────────────────────
+  // ── 1c. deadline validation (must be a future timestamp) ─────────────────
   const deadlineSec = Number(deadline);
   if (!Number.isFinite(deadlineSec) || deadlineSec * 1000 <= Date.now()) {
     return NextResponse.json({ error: "deadline has passed or is invalid" }, { status: 400 });
   }
 
-  // ── 2. 체인별 추가 필드 검증 ──────────────────────────────────────────────
+  // ── 2. Chain-specific field validation ────────────────────────────────────
   const isXLayer      = chain === "xlayer";
   const isStable      = chain === "stable";
   const isXLayerEIP7702 = isXLayer && !!authorization && !!xlayerNonce;
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 3. API Key 검증 ───────────────────────────────────────────────────────
+  // ── 3. API Key validation ────────────────────────────────────────────────
   const keyRecord = await getApiKeyRecord(apiKey);
   if (!keyRecord || !keyRecord.active) {
     return NextResponse.json({ error: "Invalid or inactive API key" }, { status: 401 });
@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests for this API key" }, { status: 429 });
   }
 
-  // ── 4. 현재 구독의 키와 일치하는지 + 만료 여부 확인 ────────────────────
+  // ── 4. Key matches current subscription + not expired ────────────────────
   const subscription = await getSubscription(keyRecord.address);
   if (subscription) {
     // Allow both the live key and the sandbox key
@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 4a. TX 크레딧 빠른 사전 체크 (stale OK — 실제 게이트는 원자 차감) ──────
+  // ── 4a. TX credit quick pre-check (stale OK — real gate is atomic decrement) ──
   if (!isSandbox) {
     const quickCredits = await getQuotaCredits(keyRecord.address);
     if (quickCredits <= 0) {
@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 5. 체인 지원 확인 ──────────────────────────────────────────────────────
+  // ── 5. Supported-chain check ──────────────────────────────────────────────
   // Q402-SEC-001: moved ahead of daily-cap charging so an unsupported-chain
   // request no longer burns a quota slot.
   const chainCfg = CHAIN_CONFIG[chain];
@@ -210,11 +210,11 @@ export async function POST(req: NextRequest) {
     }, { status: 400 });
   }
 
-  // ── 5a. authorization 강제 잠금 — 공식 impl contract + chainId 만 허용 ─────
-  // 클라이언트가 잘못된 delegation 주소나 chainId를 보내면 on-chain revert로
-  // 이어져 결국 환불되지만, "어느 배포 컨트랙트와 계약하는지"는 서버가
-  // 명시적으로 잠가야 기관 관점에서 증빙 가능한 결합이 된다.
-  // contracts.manifest.json의 chains[chain].implContract와 1:1 대응.
+  // ── 5a. authorization lock — only official impl contract + chainId allowed ─
+  // If a client sends a wrong delegation address or chainId it would revert
+  // on-chain and refund, but "which deployed contract this request binds to"
+  // has to be explicitly pinned by the server for institutional verifiability.
+  // This mirrors contracts.manifest.json's chains[chain].implContract 1:1.
   // Q402-SEC-001: also moved before daily-cap charging.
   if (authorization) {
     if (Number(authorization.chainId) !== chainCfg.chainId) {
@@ -231,7 +231,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 6. Gas Tank 잔고 확인 (sandbox는 스킵) ───────────────────────────────
+  // ── 6. Gas Tank balance check (sandbox skips this) ───────────────────────
   if (!isSandbox) {
     const gasBalance   = await getGasBalance(keyRecord.address);
     const chainBalance = gasBalance[chain] ?? 0;
@@ -256,8 +256,8 @@ export async function POST(req: NextRequest) {
     relayerAddress = key.address as Address;
   }
 
-  // ── 7. 일일 burst 상한 (단일 고객이 Gas Tank 독점 소진 방지) ──────────────
-  // 플랜별 일일 최대. Exhaustive — unknown/typo'd plan names fall through to
+  // ── 7. Daily burst cap (stops one customer from draining the Gas Tank) ───
+  // Per-plan daily maximum. Exhaustive — unknown/typo'd plan names fall through to
   // UNKNOWN_PLAN_CAP rather than silently skipping the cap (prior behavior let
   // an unknown plan burn the Gas Tank). All plan names here must match
   // PLAN_QUOTA in app/lib/db.ts.
@@ -305,9 +305,9 @@ export async function POST(req: NextRequest) {
   const tokenCfg = getTokenConfig(chain, token);
   let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };
 
-  // ── 7c. 크레딧 원자 예약 (relay 직전 — 경쟁 안전) ────────────────────────
-  // initQuotaIfNeeded: 첫 릴레이 시 기존 계정을 quota 키로 lazy-migrate (SET NX)
-  // decrementCredit:   Redis DECRBY — 결과 < 0이면 즉시 보상 후 차단
+  // ── 7c. Atomic credit reservation (just before relay — race-safe) ────────
+  // initQuotaIfNeeded: lazy-migrates legacy accounts to the quota key on first relay (SET NX)
+  // decrementCredit:   Redis DECRBY — if result < 0, refund immediately and block
   let creditReserved = false;
   let creditRemaining = 0;
   if (!isSandbox) {
@@ -328,7 +328,7 @@ export async function POST(req: NextRequest) {
     creditRemaining = dec.remaining;
   }
 
-  // ── 8. 릴레이 실행 (sandbox → mock, live → on-chain) ─────────────────────
+  // ── 8. Execute relay (sandbox → mock, live → on-chain) ───────────────────
   // Relayer address was resolved in section 6a; `relayerAddress` is in scope.
 
   if (isSandbox) {
@@ -438,10 +438,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Relay failed. Check your signature and parameters." }, { status: 400 });
   }
 
-  // ── 9. 가스비 — relayer.ts가 receipt에서 직접 계산해서 반환 ───────────────
+  // ── 9. Gas cost — computed directly from the receipt by relayer.ts ───────
   const gasCostNative = result.gasCostNative ?? 0;
 
-  // ── 10. TX 기록 (실제 가스비 포함) ───────────────────────────────────────
+  // ── 10. Record the TX (including actual gas cost) ────────────────────────
   const tokenAmount = ethers.formatUnits(amount, tokenCfg.decimals);
 
   const relayedAt = new Date().toISOString();
@@ -468,7 +468,7 @@ export async function POST(req: NextRequest) {
     }).catch(e => console.error("[relay] quotaBonus display sync failed (non-fatal):", e));
   }
 
-  // ── 11. Webhook 발동 (non-blocking, LIVE only) ────────────────────────────
+  // ── 11. Webhook dispatch (non-blocking, LIVE only) ───────────────────────
   // Q402-SEC-002: sandbox relays are simulated — no on-chain TX exists.
   // Emitting HMAC-signed `relay.success` events for sandbox calls let a
   // downstream consumer that only validates the signature mistake a

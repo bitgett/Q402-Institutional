@@ -83,10 +83,10 @@ describe("Q402-SEC-002 — webhook dispatch is live-only", () => {
   });
 
   it("does not short-circuit sandbox into the webhook dispatch branch", () => {
-    // Defense-in-depth: the `sandbox 포함` phrasing from the previous version
+    // Defense-in-depth: any phrasing hinting that sandbox calls emit webhooks
     // must be gone. A reviewer scanning the route shouldn't see a comment
     // suggesting sandbox webhook delivery is intended.
-    expect(routeSource).not.toMatch(/sandbox 포함/);
+    expect(routeSource).not.toMatch(/sandbox\s+included|includes?\s+sandbox/i);
     expect(routeSource).toMatch(/LIVE only|live[- ]only|Q402-SEC-002/i);
   });
 });

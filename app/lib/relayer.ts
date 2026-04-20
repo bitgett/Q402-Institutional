@@ -11,19 +11,20 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { loadRelayerKey } from "./relayer-key";
 
-// ── 체인별 릴레이 방식 (v1.3) ───────────────────────────────────────────────────
-// 5개 체인(avax / bnb / eth / xlayer / stable) 모두 EIP-7702 Type 4 TX를 기본으로 사용.
-// X Layer는 EIP-7702 (primary) + EIP-3009 (fallback, USDC only) 두 방식 지원.
+// ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
+// All 5 chains (avax / bnb / eth / xlayer / stable) default to EIP-7702 Type 4 TXs.
+// X Layer additionally supports EIP-3009 as a USDC-only fallback.
 //
-// 체인별 릴레이 방식:
+// Chain → relay method:
 //   avax / bnb / eth / stable : EIP-7702 (Q402PaymentImplementation.transferWithAuthorization())
 //   xlayer (primary)          : EIP-7702 (Q402PaymentImplementationXLayer.transferWithAuthorization())
 //   xlayer (fallback)         : EIP-3009 (USDC.transferWithAuthorization(), pass eip3009Nonce)
 //
-// 보안 (v1.3): facilitator 주소를 모든 체인에서 명시적으로 전달한다.
+// Security (v1.3): the facilitator address is passed explicitly on every chain.
 //   - settlePayment() / settlePaymentXLayerEIP7702() / settlePaymentStableEIP7702()
-//     모두 relayer address를 facilitator로 전달
-//   - Authorization Guard: chainId + impl 주소를 contracts.manifest.json 기준으로 서버에서 검증
+//     all forward the relayer address as facilitator
+//   - Authorization Guard: chainId + impl address are pinned server-side against
+//     contracts.manifest.json
 
 // ── RPC helpers ───────────────────────────────────────────────────────────────
 // Each chain has a primary RPC + fallbacks.  getChainRpc() tries them in order.
@@ -143,39 +144,39 @@ export const Q402_IMPL_ABI = [
 ] as const;
 
 // ── X Layer USDC EIP-3009 ABI ─────────────────────────────────────────────────
-// X Layer USDC는 v,r,s 분리 방식(9-param)을 사용한다.
-// 확인된 USDC 주소: 0x74b7F16337b8972027F6196A17a631aC6dE26d22 (chainId 196)
+// X Layer USDC takes v,r,s as separate args (9-param form).
+// Confirmed USDC address: 0x74b7F16337b8972027F6196A17a631aC6dE26d22 (chainId 196)
 const USDC_EIP3009_ABI = [
   "function transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s) external",
 ];
 
 export interface EIP3009PayParams {
-  /** 토큰 보유자 (서명자) */
+  /** Token holder (signer) */
   from: string;
-  /** 수신자 */
+  /** Recipient */
   to: string;
-  /** atomic 단위 금액 */
+  /** Amount in atomic units */
   amount: bigint;
-  /** 유효 시작 (보통 0) */
+  /** Valid-after (typically 0) */
   validAfter: bigint;
-  /** 유효 만료 (unix timestamp) */
+  /** Valid-before (unix timestamp) */
   validBefore: bigint;
   /** EIP-3009 bytes32 nonce (random) */
   nonce: string;
-  /** EIP-3009 서명 (65-byte packed: r+s+v) */
+  /** EIP-3009 signature (65-byte packed: r+s+v) */
   sig: string;
-  /** 체인 키 — 현재 xlayer만 사용 */
+  /** Chain key — currently xlayer only */
   chainKey: ChainKey;
-  /** 토큰 심볼 */
+  /** Token symbol */
   token: "USDC" | "USDT";
 }
 
 /**
- * X Layer: USDC EIP-3009 transferWithAuthorization 직접 호출
+ * X Layer: direct USDC EIP-3009 transferWithAuthorization call.
  *
- * 유저가 USDC의 TransferWithAuthorization 타입으로 서명 →
- * 릴레이어가 USDC.transferWithAuthorization()을 호출해서 가스 대납
- * Q402PaymentImplementation 컨트랙트 불필요
+ * User signs USDC's TransferWithAuthorization type →
+ * relayer invokes USDC.transferWithAuthorization() and pays the gas.
+ * The Q402PaymentImplementation contract is not involved in this path.
  */
 export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<SettleResult> {
   const key = loadRelayerKey();
@@ -276,10 +277,11 @@ export interface XLayerEIP7702PayParams {
 }
 
 /**
- * X Layer: EIP-7702 transferWithAuthorization via Q402PaymentImplementationXLayer
+ * X Layer: EIP-7702 transferWithAuthorization via Q402PaymentImplementationXLayer.
  *
- * 유저가 TransferAuthorization 타입으로 서명 + EIP-7702 authorization 서명 →
- * 릴레이어(facilitator)가 Type 4 TX 제출, 유저 EOA에 impl 코드 위임 실행
+ * User signs the TransferAuthorization witness + an EIP-7702 authorization →
+ * the relayer (facilitator) submits the Type 4 TX, delegating impl code to the
+ * user EOA for execution.
  */
 export async function settlePaymentXLayerEIP7702(params: XLayerEIP7702PayParams): Promise<SettleResult> {
   const key = loadRelayerKey();

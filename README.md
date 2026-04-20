@@ -259,20 +259,23 @@ The `/payment` page drives a self-serve on-chain checkout → automatic API Key 
 3. **Connect wallet** — MetaMask or OKX Wallet
 4. **Send + verify** — transfer USDC/USDT to the Q402 address (`0xfc77...`), click "Verify" → API Key issued automatically
 
-**Billing model (v1.9):**
-- **First purchase** → sets plan tier + grants TX credits + starts 30-day window
-- **Subsequent purchases** → top up credits + extend 30 days (plan tier preserved, access days stack)
+**Billing model (v1.18):**
+- **Each purchase** → grants TX credits for the tier + adds a 30-day access window
+- **Plan tier** → set by cumulative BNB-equivalent spend within the active window; upgrades automatically when cumulative crosses a higher threshold, never downgrades while the window is active
+- **Window reset** → if no payment for 30 days after the last renewal, cumulative resets and the next purchase establishes a new window
+- **Cross-chain normalization** → ETH and AVAX payments are divided by their chain multiplier (÷1.5, ÷1.1) before summing against BNB-base thresholds
 - TX credits decrement by 1 per successful relay. Service stops at expiry or when credits hit zero.
 
 **Per-chain pricing (BNB baseline, with per-chain multipliers):**
-| TX count | BNB/XLayer/Stable (1.0×) | AVAX (1.1×) | ETH (1.5×) |
-|----------|--------------------------|-------------|------------|
-| 500      | $30 | $30 | $40 |
-| 1,000    | $50 | $50 | $70 |
-| 5,000    | $90 | $100 | $130 |
-| 10,000   | $150 | $160 | $220 |
-| 50,000   | $450 | $490 | $670 |
-| 100,000  | $800 | $880 | $1,200 |
+| Tier        | TX count | BNB/XLayer/Stable (1.0×) | AVAX (1.1×) | ETH (1.5×) |
+|-------------|----------|--------------------------|-------------|------------|
+| Starter     | 500      | $29    | $29    | $39    |
+| Basic       | 1,000    | $49    | $49    | $69    |
+| Growth      | 5,000    | $89    | $99    | $129   |
+| Pro         | 10,000   | $149   | $159   | $219   |
+| Scale       | 50,000   | $449   | $489   | $669   |
+| Business    | 100,000  | $799   | $879   | $1,199 |
+| Enterprise  | 500,000  | $1,999 | $2,199 | $2,999 |
 
 Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT** (subscription settlement is intentionally limited to BNB/ETH chains).  
 Payment address: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION cold wallet — revenue-only).
@@ -522,23 +525,23 @@ nonce: GET /api/auth/nonce?address=0x...  → { nonce, expiresIn: 3600 }
 
 ### TX Credit Model (v1.9)
 
-A subscription is managed by three values: **plan tier + remaining TX credits + expiration date**.
+A subscription is managed by four values: **plan tier + cumulative window spend (BNB-equivalent USD) + remaining TX credits + expiration date**.
 
-- **Plan tier**: set based on the amount of your first purchase; cannot change after that.
-  - Plan only affects the daily burst cap (Gas Tank fairness).
+- **Plan tier**: computed per-activation as `max(quotedPlan, cumulativeTier, priorTier)` against BNB-base thresholds. Upgrades automatically when cumulative spend in the active window crosses a higher tier; never downgrades while the window is active. Resets when the window lapses.
+  - Plan controls the daily burst cap (Gas Tank fairness) and feature gates.
 - **TX credits**: added with every purchase. Each successful relay consumes 1. Returns 429 at 0.
 - **Expiration**: extended by +30 days per purchase (days stack if you renew before expiry).
 
-| Plan (based on first payment) | TX Credits | Daily Burst Cap |
-|-------------------------------|------------|-----------------|
-| Starter ($30~) | 500 | 50/day |
-| Basic ($50~) | 1,000 | 100/day |
-| Growth ($90~) | 5,000 | 1,000/day |
-| Pro ($150~) | 10,000 | 1,000/day |
-| Scale ($450~) | 50,000 | 10,000/day |
-| Business ($800~) | 100,000 | 10,000/day |
-| Enterprise Flex ($2,000~) | 500,000 | Unlimited |
-| **Agent** | **Unlimited** | **Unlimited** | Gas Tank prepaid, see `/agents` |
+| Plan        | TX Credits | Daily Burst Cap | BNB base |
+|-------------|------------|-----------------|----------|
+| Starter     | 500        | 50/day          | $29      |
+| Basic       | 1,000      | 100/day         | $49      |
+| Growth      | 5,000      | 1,000/day       | $89      |
+| Pro         | 10,000     | 1,000/day       | $149     |
+| Scale       | 50,000     | 10,000/day      | $449     |
+| Business    | 100,000    | 10,000/day      | $799     |
+| Enterprise  | 500,000    | Unlimited       | $1,999   |
+| **Agent**   | Unlimited  | Unlimited       | Gas Tank prepaid, see `/agents` |
 
 Daily cap exceeded: `HTTP 429 Daily relay cap reached for plan {plan}` (86400s window).  
 TX credits exhausted: `HTTP 429 No TX credits remaining`.  

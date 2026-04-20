@@ -52,8 +52,8 @@ export default function Pricing() {
     <section id="pricing" className="py-24 px-6">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-3">Pick a plan. Ship today.</h2>
-          <p className="text-white/40 text-sm">No gas. No friction. Plug in the SDK and you&apos;re live.</p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-3">Transaction pricing</h2>
+          <p className="text-white/40 text-sm">Per-transaction cost, paid in stablecoins. Settle in seconds across five EVM chains.</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -104,15 +104,9 @@ export default function Pricing() {
           ))}
         </div>
 
-        {/* How billing actually works */}
-        <div className="mt-8 rounded-2xl border border-white/8 bg-white/[0.02] px-6 py-5 text-sm text-white/55 space-y-2">
-          <p>
-            <span className="text-white/80 font-semibold">How billing works.</span> Each purchase grants a 30-day access window plus the listed transaction credits. Credits accumulate across renewals; access days stack if you renew before expiry.
-          </p>
-          <p>
-            <span className="text-white/80 font-semibold">Plan level upgrades automatically.</span> Your plan is set by cumulative spend within an active window. Top up within 30 days and your tier rises to match the total — no support ticket needed. Plans never downgrade while the window is active.
-          </p>
-        </div>
+        <p className="mt-6 text-center text-xs text-white/30">
+          30-day access window · credits accumulate across renewals · tier upgrades automatically on cumulative spend
+        </p>
 
         {/* Agent CTA */}
         <div className="mt-6 rounded-2xl border border-white/8 px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4" style={{ background: "linear-gradient(135deg, rgba(74,229,74,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}>

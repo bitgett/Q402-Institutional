@@ -371,7 +371,7 @@ export default function RegisterModal({ onClose }: Props) {
                 <div className="flex items-center gap-2 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3 mb-5">
                   <span className="text-yellow text-sm">⚡</span>
                   <p className="text-xs text-white/50">
-                    Test end-to-end with zero gas. We&apos;ll reach out to activate production billing for your selected plan.
+                    Test end-to-end with zero gas. When you&apos;re ready for production, complete payment on <a href="/payment" className="text-yellow hover:underline">/payment</a> — your live key is issued automatically on-chain confirmation.
                   </p>
                 </div>
 
