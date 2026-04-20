@@ -73,7 +73,7 @@ export default function Pricing() {
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-3">Pick a plan. Ship today.</h2>
-          <p className="text-white/40 text-sm">No gas. No friction. Plug in the SDK and you&apos;re live.</p>
+          <p className="text-white/40 text-sm max-w-2xl mx-auto">Each purchase = credits + 30-day access. Top up within the window and your tier upgrades automatically. No gas, no friction — plug in the SDK and you&apos;re live.</p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
