@@ -272,7 +272,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Propagate tier upgrades to the api-key records so the relay route's
-    // per-plan daily cap and feature gates see the new tier immediately.
+    // feature gates see the new tier immediately.
     // Best-effort — a transient KV error here doesn't undo the payment.
     if (tierUpgraded) {
       if (apiKey)        updateApiKeyPlan(apiKey, plan).catch(() => {});

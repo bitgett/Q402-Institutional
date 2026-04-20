@@ -528,24 +528,23 @@ nonce: GET /api/auth/nonce?address=0x...  → { nonce, expiresIn: 3600 }
 A subscription is managed by four values: **plan tier + cumulative window spend (BNB-equivalent USD) + remaining TX credits + expiration date**.
 
 - **Plan tier**: computed per-activation as `max(quotedPlan, cumulativeTier, priorTier)` against BNB-base thresholds. Upgrades automatically when cumulative spend in the active window crosses a higher tier; never downgrades while the window is active. Resets when the window lapses.
-  - Plan controls the daily burst cap (Gas Tank fairness) and feature gates.
+  - Plan controls feature gates.
 - **TX credits**: added with every purchase. Each successful relay consumes 1. Returns 429 at 0.
 - **Expiration**: extended by +30 days per purchase (days stack if you renew before expiry).
 
-| Plan        | TX Credits | Daily Burst Cap | BNB base |
-|-------------|------------|-----------------|----------|
-| Starter     | 500        | 50/day          | $29      |
-| Basic       | 1,000      | 100/day         | $49      |
-| Growth      | 5,000      | 1,000/day       | $89      |
-| Pro         | 10,000     | 1,000/day       | $149     |
-| Scale       | 50,000     | 10,000/day      | $449     |
-| Business    | 100,000    | 10,000/day      | $799     |
-| Enterprise  | 500,000    | Unlimited       | $1,999   |
-| **Agent**   | Unlimited  | Unlimited       | Gas Tank prepaid, see `/agents` |
+| Plan        | TX Credits | BNB base |
+|-------------|------------|----------|
+| Starter     | 500        | $29      |
+| Basic       | 1,000      | $49      |
+| Growth      | 5,000      | $89      |
+| Pro         | 10,000     | $149     |
+| Scale       | 50,000     | $449     |
+| Business    | 100,000    | $799     |
+| Enterprise  | 500,000    | $1,999   |
+| **Agent**   | Unlimited  | Gas Tank prepaid, see `/agents` |
 
-Daily cap exceeded: `HTTP 429 Daily relay cap reached for plan {plan}` (86400s window).  
 TX credits exhausted: `HTTP 429 No TX credits remaining`.  
-Sandbox keys are exempt from caps and credits.
+Sandbox keys are exempt from credit accounting.
 
 ### API Rate Limits
 
@@ -757,15 +756,14 @@ Selected automatically when `eip3009Nonce` (bytes32) is provided. Backwards-comp
 
 1. Validate API Key (`getApiKeyRecord`, `active` flag).
 2. Check subscription expiry + key rotation state (30-day expiry, `sub.apiKey !== apiKey` → 401).
-3. **Daily burst cap** check (per-plan KV fixed window, 86400s) — v1.6.
-4. **TX credit check** (`subscription.quotaBonus > 0`, else 429) — v1.9.
-5. Gas Tank balance check (`getGasBalance[chain] > 0.0001`).
-6. Chain dispatch:
+3. **TX credit check** (`subscription.quotaBonus > 0`, else 429) — v1.9.
+4. Gas Tank balance check (`getGasBalance[chain] > 0.0001`).
+5. Chain dispatch:
    - xlayer + `authorization+xlayerNonce` → `settlePaymentXLayerEIP7702()`
    - xlayer + `eip3009Nonce` → `settlePaymentEIP3009()`
    - other → `settlePayment()`
-7. Record TX (`recordRelayedTx` — monthly shard + running total) + **decrement credit by 1** (fire-and-forget).
-8. Dispatch webhook (if registered).
+6. Record TX (`recordRelayedTx` — monthly shard + running total) + **decrement credit by 1** (fire-and-forget).
+7. Dispatch webhook (if registered).
 
 ---
 
@@ -834,7 +832,7 @@ const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 - `/api/keys/provision` issues a sandbox key alongside the live key automatically.
 - Relay detects `isSandbox`: returns a mock response after a 400 ms delay.
 - DB record includes `sandbox: true`.
-- Sandbox keys are exempt from daily caps.
+- Sandbox keys do not decrement credits.
 
 ---
 
@@ -918,13 +916,7 @@ const base = currentExpiry > new Date() ? currentExpiry : new Date();
 newPaidAt = base.toISOString();
 ```
 
-### C. Per-Plan Daily Relay Burst Cap
-
-**Problem:** a Starter key could submit tens of thousands of TXs per day → monopolizes the shared relayer.
-
-**Solution:** KV fixed window (86400s) with per-plan daily caps (see §11).
-
-### D. Test Scripts
+### C. Test Scripts
 
 | File | Description |
 |------|-------------|
@@ -1065,9 +1057,9 @@ function transferWithAuthorization(
 Pre-launch 3rd-party review. 3 findings raised; all fixed with regression tests landed.
 
 **[P0] Q402-SEC-001 — Relay check-ordering bug (High)**  
-`loadRelayerKey()` ran after `decrementCredit()`. A misconfigured `RELAYER_PRIVATE_KEY` would return 503 while credits/daily-cap had already been decremented → silent quota drain for every caller.
-- Fix: reorder as `chain → auth lock → gas tank → loadRelayerKey → dailyCap → decrement → relay` ([`app/api/relay/route.ts`](app/api/relay/route.ts), section 6a).
-- Regression: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) with 9 landmark assertions.
+`loadRelayerKey()` ran after `decrementCredit()`. A misconfigured `RELAYER_PRIVATE_KEY` would return 503 while credits had already been decremented → silent quota drain for every caller.
+- Fix: reorder as `chain → auth lock → gas tank → loadRelayerKey → decrement → relay` ([`app/api/relay/route.ts`](app/api/relay/route.ts), section 6a).
+- Regression: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) landmark assertions.
 
 **[P0] Q402-SEC-002 — Sandbox webhook forgery (Medium, Priority High)**  
 Sandbox relays fabricate txHash/blockNumber yet still emitted HMAC-signed `relay.success` webhooks → a sandbox key could be used to forge signature-valid "settlement" events.
@@ -1220,7 +1212,7 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 
 **Schema — [`app/lib/db.ts`](app/lib/db.ts)**
 - `Subscription` gains optional `windowPaidBnbUSD?: number` — cumulative BNB-equivalent USD paid in the current window. Legacy subs without this field bootstrap from `amountUSD` on first v1.18 payment (conservative, chain-blind).
-- New export `updateApiKeyPlan(apiKey, plan)` — propagates tier upgrades to api-key records so relay route's per-plan daily caps and feature gates see the new tier immediately.
+- New export `updateApiKeyPlan(apiKey, plan)` — propagates tier upgrades to api-key records so relay route's feature gates see the new tier immediately.
 
 **Helpers — [`app/lib/blockchain.ts`](app/lib/blockchain.ts)**
 - `toBnbEquivUSD(usd, chain)` — divides out `CHAIN_MULTIPLIERS[chain]` (BNB/X/Stable 1.0×, AVAX 1.1×, ETH 1.5×). Undefined chain passes through.
@@ -1273,8 +1265,8 @@ Total suite: **190/190 passing** (from 169 prior).
 #### Pre-launch 3rd-party security audit response
 
 **[P0] Q402-SEC-001 — Relay check ordering rework blocks silent quota drain (`app/api/relay/route.ts`)**
-- Before: if `loadRelayerKey()` failed after `decrementCredit()`, the handler returned 503 but the credit/daily-cap had already been decremented — meaning a misconfigured `RELAYER_PRIVATE_KEY` would silently drain every caller's quota.
-- Fix: reorder as `chain validation → auth lock → gas tank funding → loadRelayerKey() → daily cap → decrementCredit → relay`. Charging only happens after relay infrastructure is confirmed operational.
+- Before: if `loadRelayerKey()` failed after `decrementCredit()`, the handler returned 503 but the credit had already been decremented — meaning a misconfigured `RELAYER_PRIVATE_KEY` would silently drain every caller's quota.
+- Fix: reorder as `chain validation → auth lock → gas tank funding → loadRelayerKey() → decrementCredit → relay`. Charging only happens after relay infrastructure is confirmed operational.
 - New section 6a (`app/api/relay/route.ts`):
   ```ts
   // Q402-SEC-001: verify relay infra is usable BEFORE charging.
@@ -1474,12 +1466,6 @@ Commit: `6cbb406 unify all 5 chains on single TransferAuthorization + user-EOA v
   - Simplified the Enterprise gate inside `calcPrice` to a single `basePrice === 0` condition
   - Shifted the UI threshold `>= 500_000` → `>= 1_000_000` (server `TIER_CREDITS[6] = 500_000` unchanged)
 - Why: the server grants 500K credits on a $1999 payment but the UI showed a "100K~500K" range — UI realigned to match the server's grant
-
-**[P2] Relay daily cap refund — atomicity on credit underflow**
-- `app/api/relay/route.ts`
-  - If `decrementCredit()` fails, restore the already-charged `dailyCapCharged` counter via `refundRateLimit(dailyCapKey, "daily", 86400)`
-  - Closes the race where requests with zero credits consumed the daily cap
-- Why: credit race conditions were pre-burning the daily cap, causing legitimate users to hit 429 early
 
 **[P2] Admin keys generate — safe rotation order**
 - `app/api/keys/generate/route.ts`

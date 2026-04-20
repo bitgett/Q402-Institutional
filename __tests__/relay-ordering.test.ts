@@ -1,9 +1,9 @@
 /**
  * relay-ordering.test.ts — Q402-SEC-001 + Q402-SEC-002 regression guard.
  *
- * Q402-SEC-001: quota and daily-cap must not be charged before we know the
- *   relay is actually possible (supported chain, authorization lock, gas tank
- *   funded, relayer key loadable). Previously `loadRelayerKey()` fired AFTER
+ * Q402-SEC-001: quota must not be decremented before we know the relay is
+ *   actually possible (supported chain, authorization lock, gas tank funded,
+ *   relayer key loadable). Previously `loadRelayerKey()` fired AFTER
  *   `decrementCredit()`, so a misconfigured RELAYER_PRIVATE_KEY silently
  *   drained every caller's quota on 503 return.
  *
@@ -38,36 +38,25 @@ describe("Q402-SEC-001 — relay must not charge before viability is known", () 
   const AUTH_LOCK_GUARD   = /authorization\.address must be the official Q402/;
   const GAS_TANK_GUARD    = /Insufficient gas tank on \$\{chain\}/;
   const LOAD_RELAYER_KEY  = /const key = loadRelayerKey\(\);/;
-  const DAILY_CAP_RL      = /rateLimit\(dailyCapKey, "daily", dailyCap, 86400, false\)/;
   const DECREMENT_CREDIT  = /const dec = await decrementCredit\(keyRecord\.address\);/;
   const RELAY_CALLS       = /await settlePayment\b|await settlePaymentXLayerEIP7702\b|await settlePaymentEIP3009\b/;
 
-  it("validates CHAIN_CONFIG before charging the daily cap", () => {
-    expect(indexOf(CHAIN_CFG_CHECK, "chainCfg")).toBeLessThan(indexOf(DAILY_CAP_RL, "daily cap"));
+  it("validates CHAIN_CONFIG before decrementing credits", () => {
+    expect(indexOf(CHAIN_CFG_CHECK, "chainCfg")).toBeLessThan(indexOf(DECREMENT_CREDIT, "decrement"));
   });
 
-  it("enforces the authorization impl lock before charging the daily cap", () => {
-    expect(indexOf(AUTH_LOCK_GUARD, "auth lock")).toBeLessThan(indexOf(DAILY_CAP_RL, "daily cap"));
+  it("enforces the authorization impl lock before decrementing credits", () => {
+    expect(indexOf(AUTH_LOCK_GUARD, "auth lock")).toBeLessThan(indexOf(DECREMENT_CREDIT, "decrement"));
   });
 
-  it("verifies gas tank funding before charging the daily cap", () => {
-    expect(indexOf(GAS_TANK_GUARD, "gas tank")).toBeLessThan(indexOf(DAILY_CAP_RL, "daily cap"));
-  });
-
-  it("confirms loadRelayerKey() succeeds before charging the daily cap", () => {
-    // This is the heart of Q402-SEC-001: a misconfigured RELAYER_PRIVATE_KEY
-    // used to 503 after the credit decrement, silently burning quota.
-    expect(indexOf(LOAD_RELAYER_KEY, "loadRelayerKey")).toBeLessThan(indexOf(DAILY_CAP_RL, "daily cap"));
+  it("verifies gas tank funding before decrementing credits", () => {
+    expect(indexOf(GAS_TANK_GUARD, "gas tank")).toBeLessThan(indexOf(DECREMENT_CREDIT, "decrement"));
   });
 
   it("confirms loadRelayerKey() succeeds before decrementing credits", () => {
+    // This is the heart of Q402-SEC-001: a misconfigured RELAYER_PRIVATE_KEY
+    // used to 503 after the credit decrement, silently burning quota.
     expect(indexOf(LOAD_RELAYER_KEY, "loadRelayerKey")).toBeLessThan(indexOf(DECREMENT_CREDIT, "decrement"));
-  });
-
-  it("charges the daily cap before the credit decrement (so refund path works)", () => {
-    // Retained invariant: when credit underflow occurs, daily-cap refund is
-    // issued. Requires cap-before-credit ordering.
-    expect(indexOf(DAILY_CAP_RL, "daily cap")).toBeLessThan(indexOf(DECREMENT_CREDIT, "decrement"));
   });
 
   it("reserves credits before calling any settle* relay function", () => {

@@ -112,7 +112,7 @@ export async function deactivateApiKey(apiKey: string) {
 /**
  * Update the `plan` field on an existing API key record in place.
  * Used when a cumulative payment upgrades a subscriber's tier — the api-key
- * plan is what the relay route reads for per-plan daily caps and features.
+ * plan is what the relay route reads for feature gates.
  */
 export async function updateApiKeyPlan(apiKey: string, plan: string): Promise<void> {
   const rec = await getApiKeyRecord(apiKey);
