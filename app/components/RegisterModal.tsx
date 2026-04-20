@@ -18,7 +18,7 @@ const PLANS = [
 
 const CHAIN_OPTIONS = ["BNB Chain", "Ethereum", "Avalanche", "X Layer", "Stable", "Multi-chain"];
 const CATEGORY_OPTIONS = ["DeFi / DEX", "NFT / Gaming", "Payment App", "Wallet", "DAO / Governance", "Other"];
-const VOLUME_OPTIONS = ["< 1,000 txs/mo", "1K – 10K txs/mo", "10K – 50K txs/mo", "50K – 300K txs/mo", "300K+ txs/mo"];
+const VOLUME_OPTIONS = ["< 1,000 txs / 30 days", "1K – 10K txs / 30 days", "10K – 50K txs / 30 days", "50K – 300K txs / 30 days", "300K+ txs / 30 days"];
 
 interface Props { onClose: () => void; }
 
