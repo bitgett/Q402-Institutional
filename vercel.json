@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/gas-alert",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/usage-alert",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

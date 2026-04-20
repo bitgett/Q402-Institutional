@@ -332,7 +332,7 @@ console.log("Paid! TX:", result.txHash);`} />
           {/* ── GAS POOL ── */}
           <Section id="gaspool" title="Gas Pool">
             <p className="text-white/55 text-sm mb-6">
-              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, AVAX, OKB, or USDT0 on Stable) into a Q402-managed Gas Tank address for your project. Every time a user transaction is relayed, the gas fee is automatically deducted from this pool.
+              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, AVAX, OKB, or USDT0 on Stable) into a single Q402-managed Gas Tank address that is shared across all customers — your balance is tracked off-chain, per wallet, in our ledger. Every time a user transaction is relayed, the gas fee is automatically deducted from your per-wallet balance.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
@@ -551,21 +551,28 @@ const signature = await signer.signTypedData(domain, types, {
           </Section>
 
           {/* ── ERRORS ── */}
-          <Section id="errors" title="Error Codes">
-            <p className="text-white/55 text-sm mb-5">All errors return a JSON body with <span className="font-mono text-white/70">code</span> and <span className="font-mono text-white/70">message</span> fields.</p>
+          <Section id="errors" title="Error Responses">
+            <p className="text-white/55 text-sm mb-3">Errors return a JSON body of the form <span className="font-mono text-white/70">{`{ "error": string, "code"?: string }`}</span>. The HTTP status conveys the failure class; <span className="font-mono text-white/70">error</span> is a human-readable message and <span className="font-mono text-white/70">code</span> (when present) is a stable machine-readable tag for programmatic handling.</p>
+            <p className="text-white/40 text-xs mb-5">Most failure modes today return only <span className="font-mono text-white/60">error</span> (no <span className="font-mono text-white/60">code</span>). The codes listed below are the stable tags currently emitted by the server.</p>
             <div className="space-y-2">
               {[
-                { code: "INVALID_SIGNATURE",   http: "400", desc: "EIP-712 signature is malformed or doesn't match the payload." },
-                { code: "EXPIRED_PAYLOAD",      http: "400", desc: "The expiry timestamp has passed. Generate a new payload." },
-                { code: "DEADLINE_EXPIRED",      http: "400", desc: "The deadline timestamp has passed. Generate a new payload with a future deadline." },
-                { code: "INSUFFICIENT_BALANCE", http: "400", desc: "Sender wallet has insufficient USDC for the requested amount." },
-                { code: "GAS_POOL_EMPTY",       http: "402", desc: "Your gas pool is empty. Top up via dashboard to resume transactions." },
-                { code: "QUOTA_EXCEEDED",       http: "429", desc: "Sponsored TX credits exhausted. Purchase additional credits or upgrade your plan." },
-                { code: "CHAIN_NOT_SUPPORTED",  http: "400", desc: "Chain is not currently supported or still deploying." },
-                { code: "UNAUTHORIZED",         http: "401", desc: "Missing or invalid API key." },
-                { code: "INTERNAL_ERROR",       http: "500", desc: "Q402 server error. Retry with exponential backoff." },
-              ].map((err) => (
-                <div key={err.code} className="flex gap-4 p-4 rounded-xl border border-white/8">
+                { code: "(no code)",              http: "400", desc: "Generic validation failure — malformed JSON, missing required field, or chain-specific shape error. The error message describes the offending field." },
+                { code: "(no code)",              http: "401", desc: "Missing or invalid API key, or API key has been rotated." },
+                { code: "NONCE_EXPIRED",          http: "401", desc: "Auth challenge has expired or already been consumed. Fetch a fresh nonce from /api/auth/nonce." },
+                { code: "SIG_MISMATCH",           http: "401", desc: "Auth signature does not match the expected challenge for the given address." },
+                { code: "(no code)",              http: "402", desc: "Insufficient gas tank balance for the selected chain. Top up via dashboard." },
+                { code: "NO_INTENT",              http: "402", desc: "Activate called without a prior /api/payment/intent — call intent first to lock the quote." },
+                { code: "INTENT_MISMATCH",        http: "402", desc: "Activate intentId does not match the stored latest intent for this address." },
+                { code: "SENDER_MISMATCH",        http: "402", desc: "On-chain TX sender does not match the calling wallet address." },
+                { code: "CHAIN_MISMATCH",         http: "402", desc: "On-chain payment was found but on a different chain than the intent specified." },
+                { code: "TOKEN_MISMATCH",         http: "402", desc: "On-chain payment used a different ERC-20 than the intent specified." },
+                { code: "AMOUNT_LOW",             http: "402", desc: "On-chain payment amount is below the intent's expectedUSD threshold." },
+                { code: "(no code)",              http: "403", desc: "Subscription expired. Renew on /payment to continue." },
+                { code: "ACTIVATION_IN_PROGRESS", http: "409", desc: "Another activation request is currently processing this txHash. Retry after a brief pause." },
+                { code: "(no code)",              http: "429", desc: "Rate limit exceeded for the IP or API key, OR no TX credits remaining (purchase additional credits)." },
+                { code: "ACTIVATION_RETRY",       http: "500", desc: "Activation failed during the KV write phase. Retry — the operation is idempotent, so a second attempt will pick up where the first stopped." },
+              ].map((err, i) => (
+                <div key={`${err.http}-${err.code}-${i}`} className="flex gap-4 p-4 rounded-xl border border-white/8">
                   <div className="flex-shrink-0 pt-0.5">
                     <span className="font-mono text-xs bg-red-400/10 px-2 py-0.5 rounded" style={{ color: err.http === "402" ? "#F5C518" : "#f87171" }}>{err.http}</span>
                   </div>
