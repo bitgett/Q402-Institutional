@@ -4,10 +4,10 @@ const tiers = [
   {
     name: "Starter",
     price: "$29",
-    period: "/mo",
+    period: "/30-day access",
     description: "For indie developers and early-stage projects.",
     features: [
-      "500 sponsored transactions/mo",
+      "500 sponsored transactions",
       "All 5 EVM chains",
       "Full API access",
       "Community support",
@@ -20,10 +20,10 @@ const tiers = [
   {
     name: "Pro",
     price: "$149",
-    period: "/mo",
+    period: "/30-day access",
     description: "For growing products with real users.",
     features: [
-      "10,000 sponsored transactions/mo",
+      "10,000 sponsored transactions",
       "All 5 EVM chains",
       "Full API access",
       "Email support",
@@ -36,10 +36,10 @@ const tiers = [
   {
     name: "Scale",
     price: "$449",
-    period: "/mo",
+    period: "/30-day access",
     description: "For high-throughput DeFi applications.",
     features: [
-      "50,000 sponsored transactions/mo",
+      "50,000 sponsored transactions",
       "All 5 EVM chains",
       "API access + webhooks",
       "Priority support",
@@ -52,10 +52,10 @@ const tiers = [
   {
     name: "Enterprise",
     price: "$1,999",
-    period: "/mo",
+    period: "/30-day access",
     description: "For mission-critical apps at any scale.",
     features: [
-      "500,000 sponsored transactions/mo",
+      "500,000 sponsored transactions",
       "All 5 EVM chains",
       "SLA guarantee (99.9% uptime)",
       "Dedicated account manager",
