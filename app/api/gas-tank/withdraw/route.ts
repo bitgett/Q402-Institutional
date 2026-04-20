@@ -4,6 +4,7 @@ import { getGasBalance, addGasDeposit } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { checkAdminSecret } from "@/app/lib/admin-auth";
 import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
+import { computeWithdrawDeduction } from "@/app/lib/gas-ledger";
 
 const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   bnb:    { rpc: "https://bsc-dataseed1.binance.org/",         token: "BNB"  },
@@ -84,20 +85,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "TX value must be positive" }, { status: 400 });
     }
 
-    const sentAmount = parseFloat(ethers.formatEther(tx.value));
     const balance = await getGasBalance(address);
     const ledgerAmount = balance[chain] ?? 0;
     if (ledgerAmount <= 0) {
       return NextResponse.json({ error: "User has no recorded balance to deduct" }, { status: 400 });
     }
-    // Deduct exactly what was sent on-chain — capped at ledger balance to keep
-    // the KV ledger non-negative even if the operator over-paid by mistake.
-    const deduction = Math.min(sentAmount, ledgerAmount);
+    // Deduction is capped at ledger balance so KV never goes negative even if
+    // the operator over-paid on-chain. Compare is wei-precise (BigInt); the
+    // float value is only derived at the end for the legacy ledger shape.
+    const { deductionFloat } = computeWithdrawDeduction(tx.value, ledgerAmount);
 
     const recorded = await addGasDeposit(address, {
       chain,
       token: chainCfg.token,
-      amount: -deduction,
+      amount: -deductionFloat,
       txHash,
       depositedAt: new Date().toISOString(),
     });
@@ -108,8 +109,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       txHash,
-      deducted: deduction,
-      sentOnChain: sentAmount,
+      deducted: deductionFloat,
+      sentOnChain: parseFloat(ethers.formatEther(tx.value)),
       token: chainCfg.token,
     });
   } catch (e) {
