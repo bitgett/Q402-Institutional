@@ -6,7 +6,7 @@
 **Version: v1.3.1** · **Docs revision: v1.16** · **Last updated: 2026-04-17**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402-institutional.vercel.app  
-**Contact:** davidlee@quackai.ai
+**Contact:** business@quackai.ai
 
 ---
 

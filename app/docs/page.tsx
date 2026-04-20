@@ -129,8 +129,8 @@ export default function DocsPage() {
 
           <div className="px-5 py-5 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
             <div className="text-[10px] text-white/20 uppercase tracking-widest mb-3">Support</div>
-            <a href="mailto:davidlee@quackai.ai" className="flex items-center gap-2 text-xs text-yellow/60 hover:text-yellow transition-colors">
-              <span>✉</span> davidlee@quackai.ai
+            <a href="mailto:business@quackai.ai" className="flex items-center gap-2 text-xs text-yellow/60 hover:text-yellow transition-colors">
+              <span>✉</span> business@quackai.ai
             </a>
           </div>
         </aside>
@@ -346,7 +346,7 @@ console.log("Paid! TX:", result.txHash);`} />
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-green-400 text-xs font-semibold mb-2">Withdraw</div>
-                <p className="text-xs text-white/50 leading-relaxed">Withdrawals are processed manually by Q402 operations. Contact davidlee@quackai.ai to request a refund. Funds always remain yours.</p>
+                <p className="text-xs text-white/50 leading-relaxed">Withdrawals are processed manually by Q402 operations. Contact business@quackai.ai to request a refund. Funds always remain yours.</p>
               </div>
             </div>
 
@@ -587,7 +587,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "Who pays the gas fees?",
-                a: "You do — from your gas pool. You deposit native tokens (BNB on BNB Chain, ETH on Ethereum, etc.) to your project's gas pool address. Q402 auto-deducts the exact gas cost per transaction. To withdraw, contact davidlee@quackai.ai — withdrawals are processed manually by Q402 operations."
+                a: "You do — from your gas pool. You deposit native tokens (BNB on BNB Chain, ETH on Ethereum, etc.) to your project's gas pool address. Q402 auto-deducts the exact gas cost per transaction. To withdraw, contact business@quackai.ai — withdrawals are processed manually by Q402 operations."
               },
               {
                 q: "Is Q402 non-custodial?",
@@ -625,7 +625,7 @@ const signature = await signer.signTypedData(domain, types, {
               <a href="/payment" className="bg-yellow text-navy font-bold px-8 py-3 rounded-full hover:bg-yellow-hover transition-colors text-sm">
                 Get API Key →
               </a>
-              <a href="mailto:davidlee@quackai.ai" className="border border-white/20 text-white/70 font-semibold px-8 py-3 rounded-full hover:bg-white/5 transition-colors text-sm">
+              <a href="mailto:business@quackai.ai" className="border border-white/20 text-white/70 font-semibold px-8 py-3 rounded-full hover:bg-white/5 transition-colors text-sm">
                 Talk to us
               </a>
             </div>

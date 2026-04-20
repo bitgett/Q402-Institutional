@@ -2,7 +2,7 @@ export const metadata = { title: "Terms of Service — Q402" };
 
 const EFFECTIVE_DATE = "April 9, 2026";
 const COMPANY = "Quack AI";
-const EMAIL = "davidlee@quackai.ai";
+const EMAIL = "business@quackai.ai";
 export default function TermsPage() {
   return (
     <div className="min-h-screen bg-[#0d1422] text-white/80 py-20 px-6">

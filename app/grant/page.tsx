@@ -320,7 +320,7 @@ export default function GrantPage() {
                 </button>
 
                 <p className="text-white/20 text-xs text-center">
-                  Questions? Reach out at <a href="mailto:davidlee@quackai.ai" className="text-white/40 hover:text-white transition-colors">davidlee@quackai.ai</a>
+                  Questions? Reach out at <a href="mailto:business@quackai.ai" className="text-white/40 hover:text-white transition-colors">business@quackai.ai</a>
                 </p>
               </motion.form>
             )}
