@@ -52,24 +52,6 @@ export async function rateLimit(
 }
 
 /**
- * Refund one unit from a rate-limit counter incremented by rateLimit().
- * Best-effort — floors at 0 to avoid negative counters.
- * Use to roll back a daily cap charge when the operation it guarded failed.
- */
-export async function refundRateLimit(
-  identifier: string,
-  endpoint:   string,
-  windowSec:  number,
-): Promise<void> {
-  try {
-    const bucket = Math.floor(Date.now() / 1000 / windowSec);
-    const key    = `rl:${endpoint}:${identifier}:${bucket}`;
-    const after  = await kv.decr(key);
-    if (after < 0) await kv.set(key, 0);
-  } catch { /* best-effort — don't throw */ }
-}
-
-/**
  * Extract best-effort client IP from a Next.js request.
  *
  * Order:
