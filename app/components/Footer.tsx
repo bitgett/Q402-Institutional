@@ -60,8 +60,8 @@ export default function Footer() {
           <div className="flex items-center gap-4">
             <a href="/terms" className="text-white/25 text-xs hover:text-white/60 transition-colors">Terms</a>
             <a href="/privacy" className="text-white/25 text-xs hover:text-white/60 transition-colors">Privacy</a>
-            <a href="mailto:davidlee@quackai.ai" className="text-white/30 text-xs hover:text-white transition-colors">
-              davidlee@quackai.ai
+            <a href="mailto:business@quackai.ai" className="text-white/30 text-xs hover:text-white transition-colors">
+              business@quackai.ai
             </a>
           </div>
         </div>

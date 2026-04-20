@@ -336,7 +336,7 @@ export default function PaymentPage() {
               <p className="mt-3 text-xs text-white/30 text-right">
                 Need more than 500K?{" "}
                 <a
-                  href="mailto:davidlee@quackai.ai?subject=Q402 Enterprise Inquiry"
+                  href="mailto:business@quackai.ai?subject=Q402 Enterprise Inquiry"
                   className="text-yellow/80 hover:text-yellow transition-colors"
                 >
                   Contact sales →
@@ -436,7 +436,7 @@ export default function PaymentPage() {
                       {verifyError}
                       {verifyAttempts > 2 && (
                         <p className="text-xs text-red-400/60 mt-1">
-                          Still not found? Contact <a href="mailto:davidlee@quackai.ai" className="underline">davidlee@quackai.ai</a>
+                          Still not found? Contact <a href="mailto:business@quackai.ai" className="underline">business@quackai.ai</a>
                         </p>
                       )}
                     </div>
