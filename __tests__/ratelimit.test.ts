@@ -3,14 +3,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // vi.mock is hoisted — use vi.hoisted() so mockKv is available inside the factory
 const mockKv = vi.hoisted(() => ({
   incr:   vi.fn(),
-  decr:   vi.fn(),
   set:    vi.fn(),
   expire: vi.fn(),
 }));
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
 
-import { rateLimit, refundRateLimit } from "@/app/lib/ratelimit";
+import { rateLimit } from "@/app/lib/ratelimit";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,52 +70,3 @@ describe("rateLimit", () => {
   });
 });
 
-// ── refundRateLimit ───────────────────────────────────────────────────────────
-
-describe("refundRateLimit", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("decrements the same key rateLimit would have incremented", async () => {
-    mockKv.decr.mockResolvedValue(2);
-    await refundRateLimit("0xabc", "daily", 86400);
-    expect(mockKv.decr).toHaveBeenCalledWith(expectedKey("daily", "0xabc", 86400));
-  });
-
-  it("floors at 0 when decrement goes negative", async () => {
-    mockKv.decr.mockResolvedValue(-1);
-    await refundRateLimit("0xabc", "daily", 86400);
-    expect(mockKv.set).toHaveBeenCalledWith(expectedKey("daily", "0xabc", 86400), 0);
-  });
-
-  it("does not call set when decrement result is 0 or positive", async () => {
-    mockKv.decr.mockResolvedValue(0);
-    await refundRateLimit("0xabc", "daily", 86400);
-    expect(mockKv.set).not.toHaveBeenCalled();
-
-    vi.clearAllMocks();
-    mockKv.decr.mockResolvedValue(5);
-    await refundRateLimit("0xabc", "daily", 86400);
-    expect(mockKv.set).not.toHaveBeenCalled();
-  });
-
-  it("does not throw when KV is unavailable", async () => {
-    mockKv.decr.mockRejectedValue(new Error("KV down"));
-    await expect(refundRateLimit("0xabc", "daily", 86400)).resolves.toBeUndefined();
-  });
-
-  it("uses the same key structure as rateLimit (refund is always reversible)", async () => {
-    // Simulate: rateLimit increments → refundRateLimit decrements → net = 0
-    let counter = 0;
-    mockKv.incr.mockImplementation(() => Promise.resolve(++counter));
-    mockKv.decr.mockImplementation(() => Promise.resolve(--counter));
-
-    await rateLimit("addr", "daily", 100, 86400);
-    expect(counter).toBe(1);
-
-    await refundRateLimit("addr", "daily", 86400);
-    expect(counter).toBe(0);
-
-    // Verify both called the same key
-    expect(mockKv.incr).toHaveBeenCalledWith(mockKv.decr.mock.calls[0][0]);
-  });
-});

@@ -99,8 +99,8 @@ export default function TermsPage() {
               Each purchase includes a fixed number of transaction credits and per-IP API rate limits.
               Credits are consumed per successful relay and persist until used or the 30-day access
               window expires. Exhausting credits suspends relay until you top up with an additional
-              purchase on the pricing page. Exceeding daily burst limits results in temporary HTTP 429
-              responses. Q402 may adjust limits at any time to protect infrastructure stability.
+              purchase on the pricing page. Q402 may adjust limits at any time to protect
+              infrastructure stability.
             </p>
           </section>
 

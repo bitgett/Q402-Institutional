@@ -14,7 +14,7 @@ import {
   recordWebhookDelivery,
 } from "@/app/lib/db";
 import { createHmac, randomBytes } from "crypto";
-import { rateLimit, refundRateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { validateWebhookUrl } from "@/app/lib/webhook-validator";
 import { safeWebhookFetch } from "@/app/lib/safe-fetch";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 5. Supported-chain check ──────────────────────────────────────────────
-  // Q402-SEC-001: moved ahead of daily-cap charging so an unsupported-chain
+  // Q402-SEC-001: moved ahead of the credit decrement so an unsupported-chain
   // request no longer burns a quota slot.
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
   // on-chain and refund, but "which deployed contract this request binds to"
   // has to be explicitly pinned by the server for institutional verifiability.
   // This mirrors contracts.manifest.json's chains[chain].implContract 1:1.
-  // Q402-SEC-001: also moved before daily-cap charging.
+  // Q402-SEC-001: also moved before the credit decrement.
   if (authorization) {
     if (Number(authorization.chainId) !== chainCfg.chainId) {
       return NextResponse.json({
@@ -244,9 +244,9 @@ export async function POST(req: NextRequest) {
 
   // ── 6a. Relayer key readiness (live only) ────────────────────────────────
   // Q402-SEC-001: verify the relay infrastructure is actually usable BEFORE
-  // charging the daily cap or decrementing credits. Previously loadRelayerKey()
-  // ran after both charges, so a misconfigured RELAYER_PRIVATE_KEY would
-  // silently drain every caller's quota on 503 return.
+  // decrementing credits. Previously loadRelayerKey() ran after decrementCredit(),
+  // so a misconfigured RELAYER_PRIVATE_KEY would silently drain every caller's
+  // quota on 503 return.
   let relayerAddress: Address = "0x" as Address;
   if (!isSandbox) {
     const key = loadRelayerKey();
@@ -254,45 +254,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Relay not configured" }, { status: 503 });
     }
     relayerAddress = key.address as Address;
-  }
-
-  // ── 7. Daily burst cap (stops one customer from draining the Gas Tank) ───
-  // Per-plan daily maximum. Exhaustive — unknown/typo'd plan names fall through to
-  // UNKNOWN_PLAN_CAP rather than silently skipping the cap (prior behavior let
-  // an unknown plan burn the Gas Tank). All plan names here must match
-  // PLAN_QUOTA in app/lib/db.ts.
-  // Q402-SEC-001: moved down so it only charges once all pre-relay checks
-  // (chain, authorization, gas tank, relayer key) have already passed.
-  const DAILY_CAP: Record<string, number> = {
-    starter:           50,
-    basic:            100,
-    growth:         1_000,
-    pro:            1_000,
-    scale:         10_000,
-    business:      10_000,
-    enterprise:   100_000,
-    enterprise_flex: 500_000,
-  };
-  const UNKNOWN_PLAN_CAP = 1_000;
-  const planKey  = (keyRecord.plan ?? "").toLowerCase();
-  const knownPlan = Object.prototype.hasOwnProperty.call(DAILY_CAP, planKey);
-  const dailyCap  = knownPlan ? DAILY_CAP[planKey] : UNKNOWN_PLAN_CAP;
-  if (!knownPlan) {
-    console.warn(`[relay] unknown plan "${keyRecord.plan}" addr=${keyRecord.address} — applying default cap ${UNKNOWN_PLAN_CAP}/day`);
-  }
-  const dailyCapKey      = `relay:daily:${keyRecord.address}`;
-  let   dailyCapCharged  = false;
-  if (!isSandbox) {
-    // failOpen=false — daily cap is the primary abuse guard on paid relays.
-    // If KV is down we'd rather return 429 than silently let a single key burn
-    // through the Gas Tank. Recovery = retry once KV heals.
-    const withinDailyCap = await rateLimit(dailyCapKey, "daily", dailyCap, 86400, false);
-    if (!withinDailyCap) {
-      return NextResponse.json({
-        error: `Daily relay cap reached (${dailyCap}/day for ${keyRecord.plan} plan). Resets at midnight UTC.`,
-      }, { status: 429 });
-    }
-    dailyCapCharged = true;
   }
 
   // ── 7b. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
@@ -314,12 +275,6 @@ export async function POST(req: NextRequest) {
     await initQuotaIfNeeded(keyRecord.address, subscription?.quotaBonus ?? 0);
     const dec = await decrementCredit(keyRecord.address);
     if (!dec.ok) {
-      // Refund daily cap — no relay will happen, so the slot wasn't actually used.
-      if (dailyCapCharged) {
-        refundRateLimit(dailyCapKey, "daily", 86400).catch(e =>
-          console.error("[relay] daily cap refund failed after credit underflow:", e)
-        );
-      }
       return NextResponse.json({
         error: "No TX credits remaining. Purchase additional credits to continue.",
       }, { status: 429 });
@@ -425,12 +380,6 @@ export async function POST(req: NextRequest) {
     if (creditReserved) {
       refundCredit(keyRecord.address).catch(e =>
         console.error("[relay] credit refund failed after relay failure:", e)
-      );
-    }
-    // Refund daily cap — only successful relays should count against the daily limit
-    if (dailyCapCharged) {
-      refundRateLimit(dailyCapKey, "daily", 86400).catch(e =>
-        console.error("[relay] daily cap refund failed after relay failure:", e)
       );
     }
     // Don't leak internal RPC errors or contract revert reasons to callers
