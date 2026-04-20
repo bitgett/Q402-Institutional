@@ -34,6 +34,7 @@ const CHAINS = [
 // value = credits granted at that price tier. Must stay in sync with
 // TIER_CREDITS in app/lib/blockchain.ts — the server grants `value` credits
 // at checkout, so the UI label must reflect the actual amount.
+// Volumes above 500K go through sales (Contact sales link below the grid).
 const VOLUMES = [
   { label: "500",       value: 500,     basePrice: 29   },
   { label: "1,000",     value: 1_000,   basePrice: 49   },
@@ -42,7 +43,6 @@ const VOLUMES = [
   { label: "50,000",    value: 50_000,  basePrice: 449  },
   { label: "100,000",   value: 100_000, basePrice: 799  },
   { label: "500,000",   value: 500_000, basePrice: 1999 },
-  { label: "500K+",     value: 1_000_000, basePrice: 0  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -52,10 +52,8 @@ const VOLUMES = [
 function calcPrice(chainId: string, volume: number) {
   const chain = CHAINS.find(c => c.id === chainId)!;
   const vol   = VOLUMES.find(v => v.value === volume)!;
-  // Enterprise tier: basePrice=0 means "Contact Sales" (no self-serve checkout)
-  if (vol.basePrice === 0) return { price: 0, isEnterprise: true, perTx: 0 };
   const price = Math.round(vol.basePrice * chain.multiplier / 10) * 10;
-  return { price, isEnterprise: false, perTx: price / vol.value };
+  return { price, perTx: price / vol.value };
 }
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
@@ -123,7 +121,7 @@ export default function PaymentPage() {
   const [txHashInput,      setTxHashInput]      = useState("");
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
-  const { price, isEnterprise, perTx } = calcPrice(selectedChain, selectedVolume);
+  const { price, perTx } = calcPrice(selectedChain, selectedVolume);
   const payToken = PAY_TOKENS.find(t => t.id === selectedPayToken)!;
 
   // Derived: once wallet connects, treat idle as ready. Computed at render so
@@ -149,7 +147,7 @@ export default function PaymentPage() {
 
       // Record payment intent (chain + expected USD) before scanning blockchain.
       // activate route validates the found TX against this intent.
-      if (!isEnterprise && price > 0) {
+      if (price > 0) {
         const intentRes = await fetch("/api/payment/intent", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
@@ -320,6 +318,15 @@ export default function PaymentPage() {
                   </button>
                 ))}
               </div>
+              <p className="mt-3 text-xs text-white/30 text-right">
+                Need more than 500K?{" "}
+                <a
+                  href="mailto:davidlee@quackai.ai?subject=Q402 Enterprise Inquiry"
+                  className="text-yellow/80 hover:text-yellow transition-colors"
+                >
+                  Contact sales →
+                </a>
+              </p>
             </div>
 
             {/* ── STEP 3: Connect Wallet ─────────────────────────────────── */}
@@ -525,7 +532,7 @@ export default function PaymentPage() {
                     <img src={chain.img} alt={chain.name} className={`w-8 h-8 flex-shrink-0 ${chain.rounded}`} />
                     <div>
                       <p className="text-sm font-semibold">{chain.name}</p>
-                      <p className="text-white/35 text-xs">{selectedVolume >= 1_000_000 ? "500,000+" : selectedVolume.toLocaleString()} TXs · +30 days</p>
+                      <p className="text-white/35 text-xs">{selectedVolume.toLocaleString()} TXs · +30 days</p>
                     </div>
                   </div>
                 </div>
@@ -550,33 +557,19 @@ export default function PaymentPage() {
                 </div>
 
                 {/* Price */}
-                {isEnterprise ? (
-                  <div className="text-center py-4">
-                    <p className="text-white/40 text-sm mb-1">This volume requires</p>
-                    <p className="text-4xl font-extrabold text-yellow">Enterprise</p>
-                    <p className="text-white/25 text-xs mt-2">Contact us for custom pricing</p>
-                    <a href="mailto:davidlee@quackai.ai?subject=Q402 Enterprise Inquiry"
-                      className="block mt-5 w-full text-center bg-yellow text-navy font-bold text-sm py-3.5 rounded-xl hover:bg-yellow-hover transition-all">
-                      Contact Sales →
-                    </a>
+                <div className="flex items-baseline justify-between mb-1">
+                  <span className="text-white/40 text-sm">+30 days · {selectedVolume.toLocaleString()} TXs</span>
+                  <div>
+                    <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex items-baseline justify-between mb-1">
-                      <span className="text-white/40 text-sm">+30 days · {selectedVolume >= 1_000_000 ? "500K+" : selectedVolume.toLocaleString()} TXs</span>
-                      <div>
-                        <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
-                      </div>
-                    </div>
-                    <p className="text-white/25 text-xs text-right mb-1">
-                      ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
-                    </p>
-                    {chain.multiplier > 1.0 && (
-                      <p className="text-white/20 text-xs text-right">
-                        Includes {chain.name} +{Math.round((chain.multiplier - 1) * 100)}% rate
-                      </p>
-                    )}
-                  </>
+                </div>
+                <p className="text-white/25 text-xs text-right mb-1">
+                  ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
+                </p>
+                {chain.multiplier > 1.0 && (
+                  <p className="text-white/20 text-xs text-right">
+                    Includes {chain.name} +{Math.round((chain.multiplier - 1) * 100)}% rate
+                  </p>
                 )}
 
                 {/* Security note */}

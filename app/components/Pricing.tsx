@@ -1,35 +1,15 @@
 "use client";
 
 // Pricing must mirror the authoritative tiers in app/lib/blockchain.ts.
-// If TIER_CREDITS / CHAIN_THRESHOLDS there change, update this table too —
-// otherwise users see one price on the landing page and a different one at
-// checkout.
+// Landing shows 4 headline tiers; the full 7-tier range (including Basic,
+// Growth, Business) is available on /payment. If TIER_CREDITS /
+// CHAIN_THRESHOLDS change in blockchain.ts, update this table too.
 const tiers = [
   {
     name: "Starter",
     price: "$29",
     credits: "500 sponsored transactions",
     features: ["Sandbox + live keys", "All 5 EVM chains", "Community support"],
-    badge: null,
-    highlight: false,
-    href: "/payment",
-    cta: "Get started",
-  },
-  {
-    name: "Basic",
-    price: "$49",
-    credits: "1,000 sponsored transactions",
-    features: ["Sandbox + live keys", "All 5 EVM chains", "Community support"],
-    badge: null,
-    highlight: false,
-    href: "/payment",
-    cta: "Get started",
-  },
-  {
-    name: "Growth",
-    price: "$89",
-    credits: "5,000 sponsored transactions",
-    features: ["All 5 EVM chains", "Full API + webhooks", "Email support"],
     badge: null,
     highlight: false,
     href: "/payment",
@@ -49,16 +29,6 @@ const tiers = [
     name: "Scale",
     price: "$449",
     credits: "50,000 sponsored transactions",
-    features: ["All 5 EVM chains", "Full API + webhooks", "Priority support"],
-    badge: null,
-    highlight: false,
-    href: "/payment",
-    cta: "Get started",
-  },
-  {
-    name: "Business",
-    price: "$799",
-    credits: "100,000 sponsored transactions",
     features: ["All 5 EVM chains", "Full API + webhooks", "Priority support"],
     badge: null,
     highlight: false,
@@ -159,7 +129,7 @@ export default function Pricing() {
         <div className="mt-6 text-center">
           <p className="text-white/25 text-sm">
             Prices shown are BNB Chain base rates. Ethereum and Avalanche are slightly higher. &nbsp;·&nbsp;
-            <a href="/payment" className="text-white/40 hover:text-white transition-colors">Per-chain quote →</a>
+            <a href="/payment" className="text-white/40 hover:text-white transition-colors">All tiers + per-chain quote →</a>
             &nbsp;·&nbsp;
             <a href="/docs" className="text-white/40 hover:text-white transition-colors">Docs →</a>
           </p>
