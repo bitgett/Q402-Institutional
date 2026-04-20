@@ -52,8 +52,9 @@ export default function TermsPage() {
             <ul className="list-disc list-inside space-y-2">
               <li>Subscriptions are activated via on-chain USDC/USDT payment to the Q402 payment address.</li>
               <li>All payments are final and non-refundable once on-chain confirmation is received.</li>
-              <li>Subscriptions are valid for 30 days from activation. Early renewal extends from the current expiry date.</li>
-              <li>Plan quotas (monthly relay TX limits) are enforced as stated on the pricing page.</li>
+              <li>Each paid purchase grants a 30-day access window plus the transaction credits listed for the selected tier. Credits accumulate across renewals; access days stack if you renew before expiry.</li>
+              <li>Your plan level is determined by your first paid purchase. Subsequent purchases top up credits and extend access but do not automatically change tier. To move to a higher tier, contact <a className="text-yellow hover:underline" href="mailto:davidlee@quackai.ai?subject=Q402 Plan Upgrade">davidlee@quackai.ai</a>.</li>
+              <li>Transaction credits are enforced as stated on the pricing page at purchase time.</li>
               <li>Q402 reserves the right to change pricing with 14 days&apos; notice via email or dashboard notification.</li>
             </ul>
           </section>
@@ -95,10 +96,11 @@ export default function TermsPage() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">7. Rate Limits &amp; Quotas</h2>
             <p>
-              Each plan includes a monthly relay transaction quota and per-IP API rate limits. Exceeding
-              monthly quotas suspends relay until the next billing cycle or quota top-up. Exceeding daily
-              burst limits results in temporary HTTP 429 responses. Q402 may adjust limits at any time to
-              protect infrastructure stability.
+              Each purchase includes a fixed number of transaction credits and per-IP API rate limits.
+              Credits are consumed per successful relay and persist until used or the 30-day access
+              window expires. Exhausting credits suspends relay until you top up with an additional
+              purchase on the pricing page. Exceeding daily burst limits results in temporary HTTP 429
+              responses. Q402 may adjust limits at any time to protect infrastructure stability.
             </p>
           </section>
 

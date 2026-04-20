@@ -1,69 +1,79 @@
 "use client";
 
+// Pricing must mirror the authoritative tiers in app/lib/blockchain.ts.
+// If TIER_CREDITS / CHAIN_THRESHOLDS there change, update this table too —
+// otherwise users see one price on the landing page and a different one at
+// checkout.
 const tiers = [
   {
     name: "Starter",
-    price: "$30",
-    period: "/mo",
-    description: "For indie developers and early-stage projects.",
-    features: [
-      "500 sponsored transactions/mo",
-      "All 5 EVM chains",
-      "Full API access",
-      "Community support",
-    ],
+    price: "$29",
+    credits: "500 sponsored transactions",
+    features: ["Sandbox + live keys", "All 5 EVM chains", "Community support"],
     badge: null,
-    cta: "Get started",
-    href: "/payment",
     highlight: false,
+    href: "/payment",
+    cta: "Get started",
+  },
+  {
+    name: "Basic",
+    price: "$49",
+    credits: "1,000 sponsored transactions",
+    features: ["Sandbox + live keys", "All 5 EVM chains", "Community support"],
+    badge: null,
+    highlight: false,
+    href: "/payment",
+    cta: "Get started",
   },
   {
     name: "Growth",
-    price: "$150",
-    period: "/mo",
-    description: "For growing products with real users.",
-    features: [
-      "10,000 sponsored transactions/mo",
-      "All 5 EVM chains",
-      "Full API access",
-      "Email support",
-    ],
-    badge: "Most popular",
-    cta: "Get started",
+    price: "$89",
+    credits: "5,000 sponsored transactions",
+    features: ["All 5 EVM chains", "Full API + webhooks", "Email support"],
+    badge: null,
+    highlight: false,
     href: "/payment",
+    cta: "Get started",
+  },
+  {
+    name: "Pro",
+    price: "$149",
+    credits: "10,000 sponsored transactions",
+    features: ["All 5 EVM chains", "Full API + webhooks", "Email support"],
+    badge: "Most popular",
     highlight: true,
+    href: "/payment",
+    cta: "Get started",
   },
   {
     name: "Scale",
-    price: "$800",
-    period: "/mo",
-    description: "For high-throughput DeFi applications.",
-    features: [
-      "100,000 sponsored transactions/mo",
-      "All 5 EVM chains",
-      "API access + webhooks",
-      "Priority support",
-    ],
+    price: "$449",
+    credits: "50,000 sponsored transactions",
+    features: ["All 5 EVM chains", "Full API + webhooks", "Priority support"],
     badge: null,
-    cta: "Get started",
-    href: "/payment",
     highlight: false,
+    href: "/payment",
+    cta: "Get started",
+  },
+  {
+    name: "Business",
+    price: "$799",
+    credits: "100,000 sponsored transactions",
+    features: ["All 5 EVM chains", "Full API + webhooks", "Priority support"],
+    badge: null,
+    highlight: false,
+    href: "/payment",
+    cta: "Get started",
   },
   {
     name: "Enterprise",
-    price: "Custom",
-    period: "",
-    description: "For mission-critical apps at any scale.",
-    features: [
-      "500K+ sponsored transactions/mo",
-      "All 5 EVM chains",
-      "SLA guarantee (99.9% uptime)",
-      "Dedicated account manager",
-    ],
+    price: "$1,999",
+    credits: "500,000 sponsored transactions",
+    features: ["All 5 EVM chains", "SLA + dedicated support", "Custom tiers available"],
     badge: null,
-    cta: "Contact Sales",
-    href: "mailto:hello@quackai.ai?subject=Q402 Enterprise Inquiry",
     highlight: false,
+    href: "/payment",
+    cta: "Get started",
   },
 ];
 
@@ -76,7 +86,7 @@ export default function Pricing() {
           <p className="text-white/40 text-sm">No gas. No friction. Plug in the SDK and you&apos;re live.</p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {tiers.map((tier, i) => (
             <div
               key={i}
@@ -94,10 +104,11 @@ export default function Pricing() {
               <div className="mb-4">
                 <div className="text-lg font-semibold mb-1">{tier.name}</div>
                 <div className="flex items-baseline gap-1">
+                  <span className="text-white/40 text-xs">from</span>
                   <span className="text-3xl font-extrabold">{tier.price}</span>
-                  {tier.period && <span className="text-white/40 text-sm">{tier.period}</span>}
+                  <span className="text-white/40 text-sm">/30-day access</span>
                 </div>
-                <p className="text-white/50 text-sm mt-2">{tier.description}</p>
+                <p className="text-white/50 text-sm mt-2">{tier.credits}</p>
               </div>
 
               <ul className="flex-1 space-y-2 mb-6">
@@ -110,7 +121,7 @@ export default function Pricing() {
               </ul>
 
               <a
-                href={tier.href!}
+                href={tier.href}
                 className={`text-center text-sm font-semibold py-3 rounded-full transition-all ${
                   tier.highlight
                     ? "bg-yellow text-navy hover:bg-yellow-hover"
@@ -123,8 +134,18 @@ export default function Pricing() {
           ))}
         </div>
 
+        {/* How billing actually works */}
+        <div className="mt-8 rounded-2xl border border-white/8 bg-white/[0.02] px-6 py-5 text-sm text-white/55 space-y-2">
+          <p>
+            <span className="text-white/80 font-semibold">How billing works.</span> Each purchase grants a 30-day access window plus the listed transaction credits. Credits accumulate across renewals; access days stack if you renew before expiry.
+          </p>
+          <p>
+            <span className="text-white/80 font-semibold">Plan level.</span> Your first paid purchase sets your plan. To move to a higher tier, contact <a className="text-yellow hover:underline" href="mailto:davidlee@quackai.ai?subject=Q402 Plan Upgrade">davidlee@quackai.ai</a>.
+          </p>
+        </div>
+
         {/* Agent CTA */}
-        <div className="mt-8 rounded-2xl border border-white/8 px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4" style={{ background: "linear-gradient(135deg, rgba(74,229,74,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}>
+        <div className="mt-6 rounded-2xl border border-white/8 px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4" style={{ background: "linear-gradient(135deg, rgba(74,229,74,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}>
           <div>
             <p className="text-sm font-semibold text-white/80">Running AI agents at scale?</p>
             <p className="text-xs text-white/35 mt-0.5">Unlimited TX, Gas Tank pre-pay, all 5 chains. Built for autonomous agent pipelines.</p>
@@ -137,8 +158,8 @@ export default function Pricing() {
         {/* Cost context */}
         <div className="mt-6 text-center">
           <p className="text-white/25 text-sm">
-            BNB Chain pricing. Other chains may vary. &nbsp;·&nbsp;
-            <a href="/payment" className="text-white/40 hover:text-white transition-colors">Custom quote →</a>
+            Prices shown are BNB Chain base rates. Ethereum and Avalanche are slightly higher. &nbsp;·&nbsp;
+            <a href="/payment" className="text-white/40 hover:text-white transition-colors">Per-chain quote →</a>
             &nbsp;·&nbsp;
             <a href="/docs" className="text-white/40 hover:text-white transition-colors">Docs →</a>
           </p>
