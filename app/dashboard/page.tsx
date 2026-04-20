@@ -355,10 +355,30 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
-    const saved = localStorage.getItem(`q402_alert_email_${address.toLowerCase()}`);
-    if (saved) { setAlertEmail(saved); setShowEmailSetup(false); }
-    else { setAlertEmail(""); setShowEmailSetup(true); }
-  }, [address]);
+    const addr = address;
+    let cancelled = false;
+    async function load() {
+      const auth = await getAuthCreds(addr, signMessage);
+      if (!auth || cancelled) return;
+      const { nonce, signature } = auth;
+      try {
+        const qs  = new URLSearchParams({ address: addr, nonce, sig: signature }).toString();
+        const res = await fetch(`/api/usage-alert?${qs}`);
+        const d   = await res.json();
+        if (cancelled) return;
+        if (res.status === 401 && d.code === "NONCE_EXPIRED") { clearAuthCache(addr); return; }
+        if (d.configured && d.email) {
+          setAlertEmail(d.email);
+          setShowEmailSetup(false);
+        } else {
+          setAlertEmail("");
+          setShowEmailSetup(true);
+        }
+      } catch { /* network blip — leave banner open */ }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [address, signMessage]);
   useEffect(() => {
     if (!mounted) return;
     const t = setTimeout(() => { if (!isConnected) router.push("/"); }, 600);
@@ -538,6 +558,26 @@ export default function DashboardPage() {
         setRotateConfirm(false);
       }
     } catch { /* ignore */ } finally { setRotatingKey(false); }
+  }
+
+  async function saveAlertEmail() {
+    if (!address || !alertEmailInput) return;
+    const auth = await getAuthCreds(address, signMessage);
+    if (!auth) return;
+    const { nonce, signature } = auth;
+    try {
+      const res = await fetch("/api/usage-alert", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ address, nonce, signature, email: alertEmailInput }),
+      });
+      const data = await res.json();
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
+      if (!res.ok || !data.ok) return;
+      setAlertEmail(alertEmailInput);
+      setEmailSaved(true);
+      setTimeout(() => { setShowEmailSetup(false); setEmailSaved(false); }, 1500);
+    } catch { /* ignore */ }
   }
 
   async function saveWebhook() {
@@ -734,13 +774,7 @@ export default function DashboardPage() {
                 className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-yellow/40 transition-colors"
               />
               <button
-                onClick={() => {
-                  if (!alertEmailInput) return;
-                  localStorage.setItem(`q402_alert_email_${address.toLowerCase()}`, alertEmailInput);
-                  setAlertEmail(alertEmailInput);
-                  setEmailSaved(true);
-                  setTimeout(() => { setShowEmailSetup(false); setEmailSaved(false); }, 1500);
-                }}
+                onClick={saveAlertEmail}
                 className="bg-yellow text-navy font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-yellow-hover transition-all"
               >
                 {emailSaved ? "Saved ✓" : "Save"}

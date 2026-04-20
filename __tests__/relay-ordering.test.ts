@@ -64,6 +64,30 @@ describe("Q402-SEC-001 — relay must not charge before viability is known", () 
   });
 });
 
+describe("Q402-SEC-001 follow-up — nonce parsing must precede credit decrement", () => {
+  // The original Q402-SEC-001 fix moved relayer-key + gas-tank checks ahead of
+  // decrementCredit, but BigInt(xlayerNonce!) / BigInt(stableNonce!) still ran
+  // INSIDE the relay branch — after the decrement. A malformed nonce therefore
+  // threw a SyntaxError that escaped the !result.success refund path, leaving
+  // the credit burned. This guards the prevalidation that fixes that.
+  const NONCE_PARSE_BLOCK = /parsedXLayerNonce\s*=\s*BigInt\(xlayerNonce!\)|parsedStableNonce\s*=\s*BigInt\(stableNonce!\)/;
+  const DECREMENT_CREDIT  = /const dec = await decrementCredit\(keyRecord\.address\);/;
+
+  it("pre-parses xlayer/stable nonces before the credit decrement", () => {
+    const parseIdx = routeSource.search(NONCE_PARSE_BLOCK);
+    const decIdx   = routeSource.search(DECREMENT_CREDIT);
+    expect(parseIdx).toBeGreaterThanOrEqual(0);
+    expect(decIdx).toBeGreaterThanOrEqual(0);
+    expect(parseIdx).toBeLessThan(decIdx);
+  });
+
+  it("returns a 400 (not a thrown 500) on malformed nonce input", () => {
+    // Catch-and-400 must wrap the up-front parse so a garbage nonce never
+    // bubbles up as an unhandled exception that bypasses refund logic.
+    expect(routeSource).toMatch(/} catch \{[\s\S]{0,200}must be a valid uint256[\s\S]{0,80}status: 400/);
+  });
+});
+
 describe("Q402-SEC-002 — webhook dispatch is live-only", () => {
   it("guards getWebhookConfig with !isSandbox so sandbox never reads webhook config", () => {
     // Single source of truth for the sandbox guard: the ternary around

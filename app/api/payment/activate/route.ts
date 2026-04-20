@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkPaymentOnChain, verifyPaymentTx, planFromAmount, toBnbEquivUSD, maxTier } from "@/app/lib/blockchain";
-import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits, updateApiKeyPlan } from "@/app/lib/db";
+import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits, updateApiKeyPlan, resetUsageAlertState } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -284,6 +284,10 @@ export async function POST(req: NextRequest) {
     await kv.set(usedKey, addr, { ex: USED_TTL });
     kv.del(claimKey).catch(() => {});
     clearPaymentIntent(addr, intent.intentId).catch(() => {});
+    // Reset usage-alert hysteresis so the next downward crossing re-fires
+    // both 20% and 10% emails. Best-effort — a KV blip here must not undo
+    // the successful payment activation.
+    resetUsageAlertState(addr).catch(() => {});
 
     return NextResponse.json({
       status:    "activated",

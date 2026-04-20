@@ -476,3 +476,75 @@ export async function getSubscriptionExpiry(address: string): Promise<Date | nul
   if (!sub || !sub.paidAt || (sub.amountUSD ?? 0) === 0) return null;
   return new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
 }
+
+// ── Usage alerts (email) ──────────────────────────────────────────────────────
+// One config per wallet address. lastThresholdAlerted tracks the lowest
+// percent-remaining tier we've already mailed for in the *current* credit
+// window, so the cron never spams. It resets to null after a top-up — the
+// activate route calls resetUsageAlertState() so the next downward crossing
+// fires fresh alerts.
+//
+// Membership index: alertaddrs is a Redis Set of every address that has an
+// active alert config, so the cron iterates without scanning all KV keys.
+
+export interface UsageAlertConfig {
+  email:                  string;
+  createdAt:              string;
+  lastThresholdAlerted:   number | null;   // 20 | 10 | null
+}
+
+const alertKey       = (addr: string) => `usage_alert:${addr.toLowerCase()}`;
+const ALERT_INDEX_SET = "usage_alert:_index";
+
+export async function getUsageAlert(address: string): Promise<UsageAlertConfig | null> {
+  return kv.get<UsageAlertConfig>(alertKey(address));
+}
+
+export async function setUsageAlert(address: string, email: string): Promise<UsageAlertConfig> {
+  const cfg: UsageAlertConfig = {
+    email,
+    createdAt:            new Date().toISOString(),
+    lastThresholdAlerted: null,
+  };
+  await Promise.all([
+    kv.set(alertKey(address), cfg),
+    kv.sadd(ALERT_INDEX_SET, address.toLowerCase()),
+  ]);
+  return cfg;
+}
+
+export async function clearUsageAlert(address: string): Promise<void> {
+  await Promise.all([
+    kv.del(alertKey(address)),
+    kv.srem(ALERT_INDEX_SET, address.toLowerCase()),
+  ]);
+}
+
+/**
+ * Mark `threshold` as the lowest tier we've alerted for. Idempotent — only
+ * advances downward (10 < 20). The cron uses this to avoid re-alerting the
+ * same crossing on every daily run.
+ */
+export async function recordAlertSent(address: string, threshold: number): Promise<void> {
+  const cur = await getUsageAlert(address);
+  if (!cur) return;
+  const prev = cur.lastThresholdAlerted ?? Number.POSITIVE_INFINITY;
+  if (threshold >= prev) return;   // we've already alerted at this or a deeper level
+  await kv.set(alertKey(address), { ...cur, lastThresholdAlerted: threshold });
+}
+
+/**
+ * Reset the alert hysteresis after a top-up so the next downward crossing
+ * fires alerts again. Called from the activate route on successful credit
+ * grant. Best-effort.
+ */
+export async function resetUsageAlertState(address: string): Promise<void> {
+  const cur = await getUsageAlert(address);
+  if (!cur || cur.lastThresholdAlerted == null) return;
+  await kv.set(alertKey(address), { ...cur, lastThresholdAlerted: null });
+}
+
+export async function listUsageAlertAddresses(): Promise<string[]> {
+  const members = await kv.smembers(ALERT_INDEX_SET);
+  return Array.isArray(members) ? members.map(String) : [];
+}

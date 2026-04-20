@@ -97,10 +97,12 @@ export default function TermsPage() {
             <h2 className="text-white font-semibold text-base mb-3">7. Rate Limits &amp; Quotas</h2>
             <p>
               Each purchase includes a fixed number of transaction credits and per-IP API rate limits.
-              Credits are consumed per successful relay and persist until used or the 30-day access
-              window expires. Exhausting credits suspends relay until you top up with an additional
-              purchase on the pricing page. Q402 may adjust limits at any time to protect
-              infrastructure stability.
+              Credits are consumed per successful relay and roll forward across renewals — any
+              unused credits remain on your account and are added to credits granted by your next
+              purchase. Relay access additionally requires an active 30-day access window, which
+              extends with each renewal. Exhausting credits suspends relay until you top up with
+              an additional purchase on the pricing page. Q402 may adjust limits at any time to
+              protect infrastructure stability.
             </p>
           </section>
 
