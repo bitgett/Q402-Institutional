@@ -5,7 +5,7 @@
 
 **Version: v1.3.1** · **Docs revision: v1.16** · **Last updated: 2026-04-17**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
-**Live:** https://q402-institutional.vercel.app  
+**Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
 
 ---
@@ -287,7 +287,7 @@ Payment address: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION cold
 ### Browser
 
 ```html
-<script src="https://q402-institutional.vercel.app/q402-sdk.js"></script>
+<script src="https://q402.quackai.ai/q402-sdk.js"></script>
 <script src="https://cdn.ethers.io/lib/ethers-5.7.2.umd.min.js"></script>
 ```
 
