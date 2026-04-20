@@ -1277,7 +1277,7 @@ Total suite: **190/190 passing** (from 169 prior).
     relayerAddress = key.address as Address;
   }
   ```
-- Regression test: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) — 9 invariants via source grep for landmark order (CHAIN_CFG → AUTH_LOCK → GAS_TANK → LOAD_RELAYER_KEY → DAILY_CAP → DECREMENT → RELAY_CALLS). Any future refactor that reorders these will be blocked by the suite.
+- Regression test: [`__tests__/relay-ordering.test.ts`](__tests__/relay-ordering.test.ts) — source-grep invariants for landmark order (CHAIN_CFG → AUTH_LOCK → GAS_TANK → LOAD_RELAYER_KEY → DECREMENT → RELAY_CALLS). Any future refactor that reorders these will be blocked by the suite.
 
 **[P0] Q402-SEC-002 — Sandbox webhook dispatch fully blocked (`app/api/relay/route.ts`)**
 - Before: sandbox relays (which fabricate txHash/blockNumber) still emitted HMAC-signed `relay.success` webhooks — a sandbox key holder could forge "signature-valid settlement events". Downstream accounting that trusts HMAC alone could be poisoned with phantom revenue.

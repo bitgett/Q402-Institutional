@@ -94,9 +94,9 @@ export async function POST(req: NextRequest) {
   // validate that the on-chain TX came from the right network; it must never
   // influence what plan/credits the user receives.
   //
-  //   Example: user selects "BNB plan" ($150, BNB thresholds), pays with ETH.
-  //     planChain="bnb" → planFromAmount(150, "BNB Chain") → "pro" / 10K ✓
-  //     If we used payChain="eth" → planFromAmount(150, "Ethereum") → "growth" / 5K ✗
+  //   Example: user selects "BNB plan" ($149, BNB thresholds), pays with ETH.
+  //     planChain="bnb" → planFromAmount(149, "BNB Chain") → "pro" / 10K ✓
+  //     If we used payChain="eth" → planFromAmount(149, "Ethereum") → "growth" / 5K ✗
   //
   const planChainResolved = planChain ?? chain;   // default: same as payment chain
   const planChainName     = INTENT_CHAIN_MAP[planChainResolved] ?? INTENT_CHAIN_MAP[chain];
