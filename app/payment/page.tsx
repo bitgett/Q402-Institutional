@@ -502,25 +502,17 @@ export default function PaymentPage() {
                       onChange={e => setTxHashInput(e.target.value)}
                       className="w-full bg-white/[0.03] border border-white/8 rounded-xl px-3 py-2.5 text-xs font-mono text-white/70 placeholder-white/20 focus:outline-none focus:border-yellow/30"
                     />
-                    <p className="text-[10px] text-white/15 mt-1">
-                      If left blank, Q402 will scan the blockchain for your payment automatically.
-                    </p>
                   </div>
 
                   {/* Verify */}
-                  {payStep === "ready" && (
-                    <p className="text-white/25 text-[11px] text-center">
-                      You&apos;ll approve a free wallet signature to confirm ownership — no gas required.
-                    </p>
-                  )}
                   <button
                     onClick={verifyPayment}
                     className="w-full bg-yellow text-navy font-bold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
                   >
                     {verifyError === "__sig_declined__" ? "Approve Signature →" : payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
                   </button>
-                  <p className="text-white/20 text-[10px] text-center mt-2">
-                    Wait up to 20 seconds after sending before verifying — public RPC nodes take a moment to index a fresh transaction.
+                  <p className="text-white/25 text-[11px] text-center mt-2">
+                    Free wallet signature required (no gas) · Wait ~20s after sending for RPC indexing.
                   </p>
                 </div>
               )}
