@@ -1242,7 +1242,7 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 | Webhook retry on failure | fire-and-forget | Medium |
 | Per-project dedicated relayer address | Single global wallet | High (P1) |
 | SDK npm package | CDN file only | Low |
-| Automated tests (Jest/Vitest) | Vitest — `__tests__/` 15 files / 192 tests | Done |
+| Automated tests (Jest/Vitest) | Vitest — `__tests__/` 17 files / 218 tests | Done |
 | Usage-alert email pipeline | KV + Resend HTTP + daily cron (v1.19) | Done |
 | PostgreSQL migration | Vercel KV is sufficient | Low |
 | Gas Tank auto top-up | UI toggle exists, logic unimplemented | Medium |
@@ -1250,6 +1250,46 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 ---
 
 ## 25. Changelog
+
+### v1.20 (2026-04-21)
+
+> **Payment scanner: first-found → best-unused selection.** A real customer incident surfaced a latent scanner bug: the same wallet paying the same tier twice (e.g. refund-and-redo, or a top-up for the same plan) produced two identical-amount `Transfer` events in the scan window, and the pre-patch scanner deterministically returned the chronologically **first** hash — which was already consumed (`used_txhash:{hash}` set). The activate route then 402'd with "This transaction has already been used," leaving the second, perfectly-valid on-chain payment stranded. The customer tried three separate $29 payments over ~3 hours before the pattern became visible in the support thread; only the first was credited. Fix narrows to a single function and is backed by nine new regression cases.
+
+#### What changed
+
+**Helper — [`app/lib/blockchain.ts`](app/lib/blockchain.ts)**
+- New export `ScanCandidate` type: `{ txHash, blockNumber, amountUSD, token, chain, from }`.
+- New export `selectBestUnusedCandidate(candidates, isUsed)` — pure async helper. Iterates candidates, skips those whose `isUsed(hash)` predicate resolves truthy, and picks the remainder by `(amountUSD DESC, blockNumber DESC)`. Newest-block tie-break ensures the most recent payment wins whenever the scanner sees two equal-amount unused events.
+- `scanChainWithRpc` refactored: collects all Transfer events into a `ScanCandidate[]` first, then delegates selection to `selectBestUnusedCandidate` with `async (h) => Boolean(await kv.get(\`used_txhash:${h}\`))` as the predicate. The prior inline `amount > (best.amountUSD ?? 0)` tie-break (first-iterated wins on a tie; no used-skip) is gone.
+
+**What did NOT change (audited)**
+- `verifyPaymentTx` (client-supplied hash path at [activate/route.ts:78](app/api/payment/activate/route.ts#L78)) is inherently bug-free — single hash in, single hash out. No scanner ambiguity possible.
+- `checkPaymentOnChain`'s outer multi-chain loop at [blockchain.ts:115](app/lib/blockchain.ts#L115) looks similar but is safe: each `scanChain` already returns a used-filtered winner, and the activate flow always passes `intent.chain` so only one chain is scanned.
+- Activate route's claim/commit atomic guards at [activate/route.ts:151-175](app/api/payment/activate/route.ts#L151-L175) are unchanged — the scanner change is advisory; the authoritative double-spend guard remains `used_txhash` + `SET NX` on `activation_claim:{hash}`.
+- Top-up / cumulative-tier behavior unchanged (v1.18 logic intact).
+
+**Fail-closed on KV outage**
+If `kv.get` throws inside the helper, the error propagates to `scanChainWithRpc`, is caught by `scanChain`'s RPC loop, all RPCs return `{ found: false }`, and the user sees "No payment found on-chain." No silent-accept path. Activate's own `used_txhash` check at [activate/route.ts:158](app/api/payment/activate/route.ts#L158) remains a second guard even if the scanner ever regressed.
+
+#### Regression coverage
+
+[`__tests__/scan-chain-newest-unused.test.ts`](__tests__/scan-chain-newest-unused.test.ts) — nine assertions on the pure helper (no KV, no RPC mocks needed):
+- Empty candidate list → `null`
+- Single unused → returns it
+- Single already-used → `null`
+- Largest amount wins among all-unused
+- Used candidate ignored even if it would be the largest
+- Tie on amount → newest `blockNumber` wins
+- **Regression: 2× $29 from same wallet** — first hash marked used in a `Set`, second hash wins
+- **Regression: 3× $29 from same wallet** — first two hashes used, newest (third) wins
+- Mixed-token mixed-amount order-insensitive: USDT(used)/USDC/USDT → correct USDT by newest block
+
+Total suite: **218/218 passing** (from 209 prior). ESLint clean. `next build --webpack` green.
+
+#### Operational notes
+
+- No manual backfill for the customer's prior two consumed hashes: the user confirmed the policy ("이미 3번 이나 보냈으니까 … 500 그냥 현재 로직 유지"). She keeps her initial 500 credits from the single successful activation and any future top-ups will now credit correctly.
+- Deploy path: push to `main` → Vercel auto-builds. No env, KV schema, or migration changes.
 
 ### v1.19 (2026-04-21)
 
