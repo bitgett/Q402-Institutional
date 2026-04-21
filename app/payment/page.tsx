@@ -519,6 +519,9 @@ export default function PaymentPage() {
                   >
                     {verifyError === "__sig_declined__" ? "Approve Signature →" : payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
                   </button>
+                  <p className="text-white/20 text-[10px] text-center mt-2">
+                    Wait up to 20 seconds after sending before verifying — public RPC nodes take a moment to index a fresh transaction.
+                  </p>
                 </div>
               )}
 
