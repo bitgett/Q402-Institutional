@@ -136,6 +136,49 @@ async function scanChain(
   return { found: false };
 }
 
+export type ScanCandidate = {
+  txHash:      string;
+  blockNumber: number;
+  amountUSD:   number;
+  token:       string;
+  chain:       string;
+  from:        string;
+};
+
+/**
+ * Pick the best unused candidate from scanned Transfer events.
+ *
+ * "Best" = largest amount; ties broken by newest block. Already-consumed
+ * tx hashes (those whose `used_txhash:{hash}` key is set in KV) are skipped.
+ *
+ * Why the skip matters: a wallet that pays the same tier twice — e.g.
+ * the user's first $29 activation, then a refund-and-redo, or a top-up
+ * for the same plan — produces multiple Transfer events of identical
+ * amount in the scan window. Without the used-skip, the scanner would
+ * deterministically keep returning the FIRST $29 it sees (event order is
+ * chronological), which is the already-consumed one. The activate route's
+ * `used_txhash` guard then rejects it, leaving the new on-chain payment
+ * stuck even though it succeeded. Skipping at scan time makes the second
+ * (and third, etc.) payment route to its own fresh hash.
+ */
+export async function selectBestUnusedCandidate(
+  candidates: ScanCandidate[],
+  isUsed:     (txHash: string) => Promise<boolean>,
+): Promise<ScanCandidate | null> {
+  let best: ScanCandidate | null = null;
+  for (const c of candidates) {
+    if (await isUsed(c.txHash)) continue;
+    if (
+      !best ||
+      c.amountUSD > best.amountUSD ||
+      (c.amountUSD === best.amountUSD && c.blockNumber > best.blockNumber)
+    ) {
+      best = c;
+    }
+  }
+  return best;
+}
+
 async function scanChainWithRpc(
   chain: typeof CHAINS[number],
   rpc: string,
@@ -149,7 +192,7 @@ async function scanChainWithRpc(
   ]);
   const fromBlock = currentBlock - chain.blockWindow;
 
-  let best: PaymentResult = { found: false };
+  const candidates: ScanCandidate[] = [];
   let anyQuerySucceeded = false;
 
   for (const token of chain.tokens) {
@@ -164,16 +207,14 @@ async function scanChainWithRpc(
       for (const ev of events) {
         if (!("args" in ev)) continue;
         const amount = Number(ethers.formatUnits(ev.args.value, token.decimals));
-        if (!best.found || amount > (best.amountUSD ?? 0)) {
-          best = {
-            found: true,
-            txHash: ev.transactionHash,
-            amountUSD: amount,
-            token: token.symbol,
-            chain: chain.name,
-            from: (ev.args.from as string)?.toLowerCase() ?? fromAddress.toLowerCase(),
-          };
-        }
+        candidates.push({
+          txHash:      ev.transactionHash,
+          blockNumber: ev.blockNumber,
+          amountUSD:   amount,
+          token:       token.symbol,
+          chain:       chain.name,
+          from:        (ev.args.from as string)?.toLowerCase() ?? fromAddress.toLowerCase(),
+        });
       }
     } catch {
       // This token query failed on this RPC — continue to next token
@@ -185,7 +226,22 @@ async function scanChainWithRpc(
     throw new Error(`All token queries failed on ${rpc}`);
   }
 
-  return best;
+  if (candidates.length === 0) return { found: false };
+
+  const { kv } = await import("@vercel/kv");
+  const winner = await selectBestUnusedCandidate(candidates, async (h) => {
+    return Boolean(await kv.get(`used_txhash:${h}`));
+  });
+
+  if (!winner) return { found: false };
+  return {
+    found:     true,
+    txHash:    winner.txHash,
+    amountUSD: winner.amountUSD,
+    token:     winner.token,
+    chain:     winner.chain,
+    from:      winner.from,
+  };
 }
 
 /**
