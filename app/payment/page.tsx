@@ -511,9 +511,11 @@ export default function PaymentPage() {
                   >
                     {verifyError === "__sig_declined__" ? "Approve Signature →" : payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
                   </button>
-                  <p className="text-white/25 text-[11px] text-center mt-2">
-                    Free wallet signature required (no gas) · Wait ~20s after sending for RPC indexing.
-                  </p>
+                  {payStep === "ready" && (
+                    <p className="text-yellow/80 text-[11px] text-center mt-2 bg-yellow/5 border border-yellow/15 rounded-lg px-3 py-2">
+                      After sending payment, wait ~30 seconds before verifying.
+                    </p>
+                  )}
                 </div>
               )}
 
