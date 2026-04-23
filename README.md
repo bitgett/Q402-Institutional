@@ -1255,28 +1255,49 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 
 ### v1.22 (2026-04-23)
 
-> **Mantle USDT repointed to USDT0 (LayerZero OFT).** Following research prompted by external audit feedback, we confirmed that Mantle's official 2025-11-27 announcement designates USDT0 (`0x779Ded0c9e1022225f8E0630b35a9b54bE713736`) as the "default USDT implementation of choice" for the ecosystem. The previous canonical-bridged USDT (`0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE`, L2StandardERC20) had its Mantle-bridge deposit support sunset on 2026-02-03; Bybit withdrawals to Mantle now deliver USDT0, and on-chain total supply of USDT0 is ~12.5× the legacy bridged variant (384M vs 30.6M as of this commit). Staying on the legacy address would silently break new Mantle users' USDT payments — their wallets hold USDT0, not the legacy bridged token. Switching now prevents that bug class before any institutional customer encounters it.
+> **Mantle USDT repointed to USDT0 OFT + Codex audit polish + institutional brand pass.** Two parallel threads of work landed in the same release window: (1) repointing Mantle's USDT token to the LayerZero-native USDT0 after Mantle's official ecosystem migration, (2) responding to an external (Codex) audit pass that flagged P2 drift issues and public-copy inconsistencies. Both threads pushed to `feat/mantle-integration`; `main` untouched.
 
-#### What changed
+#### Thread 1 — Mantle USDT → USDT0 (LayerZero OFT)
+
+Mantle's official 2025-11-27 announcement designates USDT0 (`0x779Ded0c9e1022225f8E0630b35a9b54bE713736`) as the ecosystem's "default USDT implementation of choice." Legacy canonical-bridged USDT (`0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE`, L2StandardERC20) had its Mantle-bridge deposit support sunset on 2026-02-03; Bybit withdrawals to Mantle now deliver USDT0, and on-chain total supply of USDT0 is ~12.5× the legacy variant (384M vs 30.6M). Staying on the legacy address would silently break new Mantle users' USDT payments — their wallets hold USDT0, not bridged.
 
 - [`contracts.manifest.json`](contracts.manifest.json) → v1.5.0. `chains.mantle.tokens.USDT.address` → `0x779Ded0c9e1022225f8E0630b35a9b54bE713736`; decimals remain 6 (distinct from Stable's USDT0 at the same OFT address but 18 decimals — LayerZero OFTs allow per-chain decimal configuration).
 - [`app/lib/relayer.ts`](app/lib/relayer.ts) → `CHAIN_CONFIG.mantle.usdt.address` mirrors the manifest. SDK API surface unchanged: callers still pass `token: "USDT"`.
 - [`app/lib/blockchain.ts`](app/lib/blockchain.ts) → `CHAINS[Mantle].tokens[USDT].address` updated so the on-chain payment scanner recognizes new USDT0 Transfer events.
 - [`public/q402-sdk.js`](public/q402-sdk.js) → v1.5.0. `Q402_CHAIN_CONFIG.mantle.usdt.address` updated with inline migration note.
 - [`scripts/test-eip7702.mjs`](scripts/test-eip7702.mjs) / [`scripts/agent-example.mjs`](scripts/agent-example.mjs) → reference USDT0 address.
+- E2E: `node scripts/test-eip7702.mjs --chain mantle --amount 0.05` on Mantle mainnet — `0xc421d1f8b5709052c3f14483344794b9e61eb607a54b20b876b1c527ba6b6b28`, block 94,404,826, gas 49,820. Payer held 0.075347 USDT0 pre-test.
 
-#### Non-changes
+**Non-changes**: EIP-712 witness type, domain rules, signing scheme; USDC on Mantle (address unchanged); other 5 chains; SDK/API surface (`token: "USDT"` still works, only the underlying address flipped).
 
-- EIP-712 witness type, domain rules, signing scheme — unchanged.
-- USDC on Mantle (`0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9`) — unchanged; USDC did not migrate.
-- Other 5 chains — unchanged.
-- SDK/API surface (`token: "USDT"` string) — unchanged, so no breaking change for integrators.
+#### Thread 2 — Codex audit polish (P2s + institutional brand pass)
 
-#### Verification
+External audit surfaced several drift gaps and public-copy inconsistencies after the v1.21 Mantle integration landed. All addressed in the same release:
 
-- Manifest drift test passes — compares addresses via `.toLowerCase()`, decimals exact. The new USDT0 address + 6-decimal assertion threads cleanly through `contracts-manifest.test.ts`.
-- E2E: `node scripts/test-eip7702.mjs --chain mantle --amount 0.05` executed against Mantle mainnet with USDT0 from payer EOA — see transaction hash captured in commit message.
-- Payer wallet USDT0 balance pre-test: 0.075347 USDT0 (sufficient for 0.05 transfer).
+**P2 drift fixes**
+- [`app/lib/db.ts`](app/lib/db.ts) `getGasBalance()` — initial shape now returns a full 6-chain record `{ bnb, eth, mantle, avax, xlayer, stable: 0 }`. Previously the zero-balance response was 5 keys, diverging from the "always 6-chain" contract that gas-tank / user-balance / dashboard rely on.
+- [`scripts/verify-contracts.mjs`](scripts/verify-contracts.mjs) — `RPCS` map now includes `mantle: "https://rpc.mantle.xyz"`. The pre-merge diligence script can actually query the Mantle deployment.
+- Mantle USDT address research concluded (see Thread 1 above).
+
+**Institutional brand pass**
+- [`app/icon.svg`](app/icon.svg) — new Next App Router icon. Yellow rounded square with a navy inner square, matching the navbar logo. Wallet popups and browser tabs now show the Q402 brand mark instead of the fallback black circle served by `app/favicon.ico`.
+- Auth signing messages rebranded. `Q402 Auth\nAddress...` → `Q402 Institutional\nSign in to prove wallet ownership.\n\nAddress...` (challenge variant gets "Authorize sensitive action..." human-readable intent). Client ([`auth-client.ts`](app/lib/auth-client.ts)), server ([`auth.ts`](app/lib/auth.ts)), both auth route JSDoc, and [`__tests__/auth.test.ts`](__tests__/auth.test.ts) exact-string assertions moved in lockstep — signatures verify on first use, no transition window.
+
+**Public-copy consistency**
+- Hero — "users pay in USDC or USDT" (previously USDC only) and feature bullet "USDC / USDT settle in seconds".
+- Agents page — hero stat "5 EVM Chains" → "6 EVM Chains"; hero paragraph "500 agents" → "1,000+ agents" so it matches the footer's "1,000+ agents" copy; pain-point gas list gains MNT; pain-point "500 wallets" → "600 wallets" to reflect 100 agents × 6 chains; feature bullet "1 API key, 5 deposits — done" → "1 API key, one deposit per chain — done" (chain-agnostic, survives future chain additions).
+- Docs — Gas Tank token list gains MNT (`BNB / ETH / MNT / AVAX / OKB / USDT0 on Stable`); USDT0 decimals note clarified to distinguish Mantle (6 dec) from Stable (18 dec) since both use the same OFT address.
+
+#### Verification (both threads combined)
+
+- Manifest drift test passes — addresses via `.toLowerCase()`, decimals exact. New USDT0 address + 6-decimal assertion threads cleanly through `contracts-manifest.test.ts`.
+- 227 / 227 tests pass, including the updated `auth.test.ts` exact-match assertions.
+- `next build --webpack` green, 34 routes.
+- Branch policy held: seven commits (0c51149 / 17c8849 / 77e0329 / d665a48 / d9714a7 / afd6cdd / d93c2d2 + this doc-polish commit) all on `feat/mantle-integration`; `main` at `525a1bb` unchanged. Multi-round audit required before merge.
+
+#### Note on wallet popup URL
+
+Some reviewers saw a long Vercel preview URL (`q402-institutional-git-feat-mantl-…vercel.app`) in the wallet confirmation popup. That string is Vercel's auto-generated per-branch preview domain — not controllable from this codebase. Production deploys at `q402.quackai.ai` show a clean domain. The `app/icon.svg` change in this release is what fixes the generic black-circle icon that previously accompanied that URL.
 
 ### v1.21 (2026-04-22)
 

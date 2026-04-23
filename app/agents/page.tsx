@@ -505,7 +505,7 @@ export default function AgentsPage() {
                 {[
                   "Agents hold zero gas — sign EIP-712 off-chain only",
                   "One Gas Tank per chain funds unlimited agents",
-                  "1 API key, 5 deposits — done",
+                  "1 API key, one deposit per chain — done",
                   "Q402 relayer handles gas estimation & retry",
                   "Same SDK call for all 6 chains",
                 ].map((t, i) => (
