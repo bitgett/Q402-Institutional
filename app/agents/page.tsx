@@ -359,7 +359,7 @@ export default function AgentsPage() {
               </span>
             </h1>
             <p className="text-white/50 text-lg leading-relaxed mb-8">
-              Stop managing gas wallets across 500 agents on 6 chains.
+              Stop managing gas wallets across 1,000+ agents on 6 chains.
               Deposit once — every agent relays freely until the tank runs dry.
             </p>
 
@@ -384,7 +384,7 @@ export default function AgentsPage() {
             {/* Stats */}
             <div className="flex gap-8 mt-10">
               {[
-                { val: "5",   label: "EVM Chains" },
+                { val: "6",   label: "EVM Chains" },
                 { val: "∞",   label: "TX Quota" },
                 { val: "$0",  label: "Gas per agent" },
               ].map((s, i) => (
@@ -479,9 +479,9 @@ export default function AgentsPage() {
               <div className="text-red-400 text-xs font-bold uppercase tracking-widest mb-4">Traditional approach</div>
               <div className="space-y-3">
                 {[
-                  "Each agent holds AVAX + BNB + ETH + OKB + USDT0",
+                  "Each agent holds AVAX + BNB + ETH + OKB + USDT0 + MNT",
                   "Gas spikes drain wallets → agents go silent",
-                  "500 wallets to monitor, refill, rotate keys",
+                  "600 wallets to monitor, refill, rotate keys",
                   "Failed TX when gas runs out mid-execution",
                   "Separate gas logic per chain, per agent",
                 ].map((t, i) => (
