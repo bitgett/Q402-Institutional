@@ -332,13 +332,13 @@ console.log("Paid! TX:", result.txHash);`} />
           {/* ── GAS POOL ── */}
           <Section id="gaspool" title="Gas Pool">
             <p className="text-white/55 text-sm mb-6">
-              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, AVAX, OKB, or USDT0 on Stable) into a single Q402-managed Gas Tank address that is shared across all customers — your balance is tracked off-chain, per wallet, in our ledger. Every time a user transaction is relayed, the gas fee is automatically deducted from your per-wallet balance.
+              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, MNT, AVAX, OKB, or USDT0 on Stable) into a single Q402-managed Gas Tank address that is shared across all customers — your balance is tracked off-chain, per wallet, in our ledger. Every time a user transaction is relayed, the gas fee is automatically deducted from your per-wallet balance.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-yellow text-xs font-semibold mb-2">Deposit</div>
-                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / AVAX / OKB / USDT0) to the Q402 Gas Tank address shown in your dashboard. Your balance is tracked per wallet address. Note: the Gas Tank is a separate cold wallet from the hot relayer — never send funds to the relayer address directly.</p>
+                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / MNT / AVAX / OKB / USDT0 on Stable) to the Q402 Gas Tank address shown in your dashboard. Your balance is tracked per wallet address. Note: the Gas Tank is a separate cold wallet from the hot relayer — never send funds to the relayer address directly.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-blue-400 text-xs font-semibold mb-2">Auto-deduction</div>
@@ -541,7 +541,7 @@ const signature = await signer.signTypedData(domain, types, {
   facilitator,
   token:       tokenAddress,
   recipient:   recipientAddress,
-  amount:      ethers.parseUnits("50", decimals), // 6 decimals for USDC/USDT, 18 for USDT0
+  amount:      ethers.parseUnits("50", decimals), // 6 decimals on most chains; 18 only for Stable chain's USDT0
   nonce,
   deadline:    BigInt(Math.floor(Date.now() / 1000) + 600),
 });`} />
@@ -549,7 +549,7 @@ const signature = await signer.signTypedData(domain, types, {
               <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable, Mantle) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
             </Callout>
             <Callout type="warn">
-              <strong className="text-white/80">Stable chain:</strong> USDT0 has 18 decimals (not 6). Use <code>ethers.parseUnits(amount, 18)</code>. The gas pool must also be funded in USDT0 — there is no separate native gas coin.
+              <strong className="text-white/80">Stable chain:</strong> USDT0 here has 18 decimals (not 6). Use <code>ethers.parseUnits(amount, 18)</code>. The gas pool must also be funded in USDT0 — there is no separate native gas coin. (Note: USDT0 on Mantle uses the same OFT address but 6 decimals, matching the other chains.)
             </Callout>
           </Section>
 
