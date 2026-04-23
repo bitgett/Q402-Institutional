@@ -51,6 +51,11 @@ const CHAIN_RPC_FALLBACKS: Record<string, string[]> = {
   stable: [
     "https://rpc.stable.xyz",
   ],
+  mantle: [
+    "https://rpc.mantle.xyz",
+    "https://mantle-rpc.publicnode.com",
+    "https://rpc.ankr.com/mantle",
+  ],
 };
 
 export function getPrimaryRpc(chain: string): string {
@@ -114,6 +119,16 @@ export const CHAIN_CONFIG = {
     // USDT0 is the native gas token and primary transfer token on Stable
     usdc: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0" },
     usdt: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0" },
+  },
+  mantle: {
+    name: "Mantle",
+    rpc: "https://rpc.mantle.xyz",
+    chainId: 5000,
+    token: "MNT",
+    // Q402PaymentImplementationMantle deployed on Mantle Mainnet (Chain ID: 5000)
+    implContract: process.env.MANTLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6, symbol: "USDC" },
+    usdt: { address: "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", decimals: 6, symbol: "USDT" },
   },
 } as const;
 

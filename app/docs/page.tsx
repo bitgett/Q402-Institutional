@@ -295,7 +295,7 @@ export default function DocsPage() {
             <CodeBlock lang="javascript" code={`// Initialize once with your API key + chain
 const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
-  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable"
+  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle"
 });
 
 // Wallet popup appears — user signs, Q402 relays on-chain
@@ -387,7 +387,7 @@ console.log("Paid! TX:", result.txHash);`} />
               <CodeBlock lang="json" code={`// Request body
 {
   "apiKey":      "q402_live_YOUR_API_KEY",
-  "chain":       "avax",           // avax | bnb | eth | xlayer | stable
+  "chain":       "avax",           // avax | bnb | eth | xlayer | stable | mantle
   "token":       "USDC",           // USDC | USDT
   "from":        "0xUserWallet...",
   "to":          "0xRecipient...",
@@ -444,6 +444,7 @@ console.log("Paid! TX:", result.txHash);`} />
                     { name: "Avalanche",  color: "#E84142", param: "avax",   id: "43114", gasToken: "AVAX",             gas: "~$0.002", stableNote: false },
                     { name: "X Layer",    color: "#CCCCCC", param: "xlayer", id: "196",   gasToken: "OKB",              gas: "~$0.001", stableNote: false },
                     { name: "Stable",     color: "#4AE54A", param: "stable", id: "988",   gasToken: "USDT0 ★",          gas: "~$0.001", stableNote: true  },
+                    { name: "Mantle",     color: "#000000", param: "mantle", id: "5000",  gasToken: "MNT",              gas: "~$0.001", stableNote: false },
                   ].map((chain) => (
                     <tr key={chain.param} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="py-3 pr-6">
@@ -489,6 +490,7 @@ const CONTRACTS = {
   eth:    "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD", // Q402 Ethereum  (chainId: 1)
   xlayer: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 X Layer   (chainId: 196)
   stable: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Stable    (chainId: 988)
+  mantle: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Mantle    (chainId: 5000)
 };
 
 // EIP-712 domain name — must match contract NAME constant exactly
@@ -498,6 +500,7 @@ const DOMAIN_NAMES = {
   eth:    "Q402 Ethereum",
   xlayer: "Q402 X Layer",
   stable: "Q402 Stable",
+  mantle: "Q402 Mantle",
 };
 
 // verifyingContract:
@@ -543,7 +546,7 @@ const signature = await signer.signTypedData(domain, types, {
   deadline:    BigInt(Math.floor(Date.now() / 1000) + 600),
 });`} />
             <Callout type="info">
-              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
+              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable, Mantle) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
             </Callout>
             <Callout type="warn">
               <strong className="text-white/80">Stable chain:</strong> USDT0 has 18 decimals (not 6). Use <code>ethers.parseUnits(amount, 18)</code>. The gas pool must also be funded in USDT0 — there is no separate native gas coin.

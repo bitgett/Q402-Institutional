@@ -45,6 +45,7 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
   avax:   0.003,     // ~$0.09 at $30/AVAX
   xlayer: 0.002,     // ~$0.10 at $50/OKB
   stable: 0.05,      // $0.05 (USDT0 is $1-pegged)
+  mantle: 0.2,       // ~$0.10 at $0.50/MNT (Mantle L2, low gas)
 };
 
 
@@ -246,7 +247,7 @@ export async function POST(req: NextRequest) {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable.`,
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle.`,
     }, { status: 400 });
   }
 
