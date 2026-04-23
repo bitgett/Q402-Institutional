@@ -5,12 +5,12 @@
  *
  * SESSION NONCE (low-risk actions — read, webhook config, provision):
  *   1. Client calls GET /api/auth/nonce?address=0x...  → server stores nonce in KV (1h TTL)
- *   2. Client signs:  "Q402 Auth\nAddress: {addr}\nNonce: {nonce}"
+ *   2. Client signs:  "Q402 Institutional\nSign in to prove wallet ownership.\n\nAddress: {addr}\nNonce: {nonce}"
  *   3. Same nonce+sig reused within 1-hour window (one wallet popup per session).
  *
  * FRESH CHALLENGE (high-risk actions — key rotate, payment activate):
  *   1. Client calls GET /api/auth/challenge?address=0x... → server stores one-time challenge (5m TTL)
- *   2. Client signs:  "Q402 Action\nAddress: {addr}\nChallenge: {challenge}"
+ *   2. Client signs:  "Q402 Institutional\nAuthorize sensitive action (key rotation / payment activation).\n\nAddress: {addr}\nChallenge: {challenge}"
  *   3. Server verifies AND deletes challenge (cannot be replayed).
  */
 
@@ -30,7 +30,7 @@ function nonceKvKey(addr: string) {
 
 /** Message the client must sign.  Must be kept in sync with auth-client.ts. */
 export function buildAuthMessage(addr: string, nonce: string): string {
-  return `Q402 Auth\nAddress: ${addr.toLowerCase()}\nNonce: ${nonce}`;
+  return `Q402 Institutional\nSign in to prove wallet ownership.\n\nAddress: ${addr.toLowerCase()}\nNonce: ${nonce}`;
 }
 
 /**
@@ -123,7 +123,7 @@ function challengeKvKey(addr: string) {
 
 /** Message the client must sign for high-risk actions.  Must stay in sync with auth-client.ts. */
 export function buildChallengeMessage(addr: string, challenge: string): string {
-  return `Q402 Action\nAddress: ${addr.toLowerCase()}\nChallenge: ${challenge}`;
+  return `Q402 Institutional\nAuthorize sensitive action (key rotation / payment activation).\n\nAddress: ${addr.toLowerCase()}\nChallenge: ${challenge}`;
 }
 
 /**

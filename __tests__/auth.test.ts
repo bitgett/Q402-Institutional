@@ -18,7 +18,9 @@ import { buildAuthMessage, buildChallengeMessage } from "@/app/lib/auth";
 describe("buildAuthMessage", () => {
   it("produces the expected format", () => {
     const msg = buildAuthMessage("0xABCDEF", "abc123");
-    expect(msg).toBe("Q402 Auth\nAddress: 0xabcdef\nNonce: abc123");
+    expect(msg).toBe(
+      "Q402 Institutional\nSign in to prove wallet ownership.\n\nAddress: 0xabcdef\nNonce: abc123",
+    );
   });
 
   it("lowercases the address", () => {
@@ -32,8 +34,8 @@ describe("buildAuthMessage", () => {
     expect(msg).toContain(`Nonce: ${nonce}`);
   });
 
-  it("contains the Q402 Auth prefix", () => {
-    expect(buildAuthMessage("0x1", "n")).toMatch(/^Q402 Auth\n/);
+  it("starts with the Q402 Institutional brand", () => {
+    expect(buildAuthMessage("0x1", "n")).toMatch(/^Q402 Institutional\n/);
   });
 });
 
@@ -42,7 +44,9 @@ describe("buildAuthMessage", () => {
 describe("buildChallengeMessage", () => {
   it("produces the expected format", () => {
     const msg = buildChallengeMessage("0xABCDEF", "deadbeef");
-    expect(msg).toBe("Q402 Action\nAddress: 0xabcdef\nChallenge: deadbeef");
+    expect(msg).toBe(
+      "Q402 Institutional\nAuthorize sensitive action (key rotation / payment activation).\n\nAddress: 0xabcdef\nChallenge: deadbeef",
+    );
   });
 
   it("lowercases the address", () => {
@@ -50,8 +54,8 @@ describe("buildChallengeMessage", () => {
     expect(msg).toContain("Address: 0xfc77ff29");
   });
 
-  it("contains the Q402 Action prefix", () => {
-    expect(buildChallengeMessage("0x1", "c")).toMatch(/^Q402 Action\n/);
+  it("starts with the Q402 Institutional brand", () => {
+    expect(buildChallengeMessage("0x1", "c")).toMatch(/^Q402 Institutional\n/);
   });
 
   it("auth and challenge messages are distinct for identical inputs", () => {
@@ -60,7 +64,7 @@ describe("buildChallengeMessage", () => {
     const auth = buildAuthMessage(addr, token);
     const challenge = buildChallengeMessage(addr, token);
     expect(auth).not.toBe(challenge);
-    expect(auth).toContain("Q402 Auth");
-    expect(challenge).toContain("Q402 Action");
+    expect(auth).toContain("prove wallet ownership");
+    expect(challenge).toContain("Authorize sensitive action");
   });
 });
