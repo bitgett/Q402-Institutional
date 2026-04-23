@@ -1,5 +1,7 @@
 /**
  * Q402 Client SDK (browser-compatible)
+ * v1.5.0 — Mantle USDT repointed to USDT0 (LayerZero OFT), reflecting the 2025-11-27
+ *          ecosystem migration. Legacy bridged USDT deposits sunset 2026-02-03.
  * v1.4.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable/mantle) + EIP-3009 (xlayer USDC fallback)
  *          Exact decimal→raw conversion via ethers.parseUnits (no IEEE-754 precision loss).
  *
@@ -98,7 +100,9 @@ const Q402_CHAIN_CONFIG = {
     domainName:   "Q402 Mantle",
     implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
-    usdt: { address: "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", decimals: 6 },
+    // USDT0 (LayerZero OFT) — Mantle ecosystem default since the 2025-11-27 migration.
+    // Legacy bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) sunset 2026-02-03.
+    usdt: { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
   },
 };
 

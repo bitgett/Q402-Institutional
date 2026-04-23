@@ -94,7 +94,8 @@ const CHAINS = [
     blockWindow: 2000,   // ~1.1 hours (2s block)
     tokens: [
       { symbol: "USDC", address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
-      { symbol: "USDT", address: "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", decimals: 6 },
+      // USDT on Mantle = USDT0 OFT (0x779Ded...) per 2025-11 ecosystem migration.
+      { symbol: "USDT", address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
     ],
   },
 ];

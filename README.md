@@ -1253,6 +1253,31 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 
 ## 25. Changelog
 
+### v1.22 (2026-04-23)
+
+> **Mantle USDT repointed to USDT0 (LayerZero OFT).** Following research prompted by external audit feedback, we confirmed that Mantle's official 2025-11-27 announcement designates USDT0 (`0x779Ded0c9e1022225f8E0630b35a9b54bE713736`) as the "default USDT implementation of choice" for the ecosystem. The previous canonical-bridged USDT (`0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE`, L2StandardERC20) had its Mantle-bridge deposit support sunset on 2026-02-03; Bybit withdrawals to Mantle now deliver USDT0, and on-chain total supply of USDT0 is ~12.5× the legacy bridged variant (384M vs 30.6M as of this commit). Staying on the legacy address would silently break new Mantle users' USDT payments — their wallets hold USDT0, not the legacy bridged token. Switching now prevents that bug class before any institutional customer encounters it.
+
+#### What changed
+
+- [`contracts.manifest.json`](contracts.manifest.json) → v1.5.0. `chains.mantle.tokens.USDT.address` → `0x779Ded0c9e1022225f8E0630b35a9b54bE713736`; decimals remain 6 (distinct from Stable's USDT0 at the same OFT address but 18 decimals — LayerZero OFTs allow per-chain decimal configuration).
+- [`app/lib/relayer.ts`](app/lib/relayer.ts) → `CHAIN_CONFIG.mantle.usdt.address` mirrors the manifest. SDK API surface unchanged: callers still pass `token: "USDT"`.
+- [`app/lib/blockchain.ts`](app/lib/blockchain.ts) → `CHAINS[Mantle].tokens[USDT].address` updated so the on-chain payment scanner recognizes new USDT0 Transfer events.
+- [`public/q402-sdk.js`](public/q402-sdk.js) → v1.5.0. `Q402_CHAIN_CONFIG.mantle.usdt.address` updated with inline migration note.
+- [`scripts/test-eip7702.mjs`](scripts/test-eip7702.mjs) / [`scripts/agent-example.mjs`](scripts/agent-example.mjs) → reference USDT0 address.
+
+#### Non-changes
+
+- EIP-712 witness type, domain rules, signing scheme — unchanged.
+- USDC on Mantle (`0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9`) — unchanged; USDC did not migrate.
+- Other 5 chains — unchanged.
+- SDK/API surface (`token: "USDT"` string) — unchanged, so no breaking change for integrators.
+
+#### Verification
+
+- Manifest drift test passes — compares addresses via `.toLowerCase()`, decimals exact. The new USDT0 address + 6-decimal assertion threads cleanly through `contracts-manifest.test.ts`.
+- E2E: `node scripts/test-eip7702.mjs --chain mantle --amount 0.05` executed against Mantle mainnet with USDT0 from payer EOA — see transaction hash captured in commit message.
+- Payer wallet USDT0 balance pre-test: 0.075347 USDT0 (sufficient for 0.05 transfer).
+
 ### v1.21 (2026-04-22)
 
 > **Mantle chain integration (6th supported chain).** Added Mantle (EVM L2, chainId 5000) as a native EIP-7702 chain alongside the existing five. Mantle's Skadi Hard Fork is aligned with Ethereum Prague, so EIP-7702 Type-0x04 transactions work without any new relay mode — `settlePayment()` is reused as-is. Integration followed the drift-guard discipline: `contracts.manifest.json` bumped to v1.4.0 is the single source of truth; `CHAIN_CONFIG` (server) and `Q402_CHAIN_CONFIG` (SDK) mirror it; the existing 39-case manifest test expanded to cover all 6 chains to block silent drift.
@@ -1261,7 +1286,7 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 
 - **Q402PaymentImplementationMantle** deployed to Mantle mainnet at `0x2fb2B2D110b6c5664e701666B3741240242bf350` (tx `0xf5d2317b6ed17609ac27e17f5fff4c1ea1f714a3420a0aba80603620ca6a9606`, block 94,399,904).
 - Same deployer + nonce produced the same address as Stable — expected, deterministic create. Distinguished by chainId + domain name (`"Q402 Mantle"`).
-- Tokens: USDC `0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9` (6 decimals), USDT `0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE` (6 decimals). Both are standard ERC-20, not bridged-fee wrappers.
+- Tokens: USDC `0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9` (6 decimals), USDT `0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE` (6 decimals). Both were standard ERC-20, not bridged-fee wrappers. **Note — v1.22 (2026-04-23) repointed Mantle USDT to USDT0 `0x779Ded0c9e1022225f8E0630b35a9b54bE713736` after the Mantle ecosystem's official migration sunset the legacy bridged USDT on 2026-02-03. USDC address unchanged.**
 - Native gas: MNT. Gas Tank minimum calibrated to 0.2 MNT (~$0.10 at $0.50/MNT).
 
 #### What changed
