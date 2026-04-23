@@ -242,10 +242,10 @@ Q402-Institutional/
 │   ├── docs/page.tsx               # API Reference
 │   └── page.tsx                    # landing
 ├── scripts/
-│   ├── test-eip7702.mjs            # unified EIP-7702 E2E test (--chain avax|bnb|eth|xlayer|stable)
+│   ├── test-eip7702.mjs            # unified EIP-7702 E2E test (--chain avax|bnb|eth|mantle|xlayer|stable)
 │   └── agent-example.mjs           # Node.js Agent SDK (unified 6-chain example — TransferAuthorization)
 └── public/
-    ├── q402-sdk.js                 # client SDK v1.3.1
+    ├── q402-sdk.js                 # client SDK v1.5.0 (6 chains, USDT0 OFT on Mantle)
     ├── bnb.png / eth.png / avax.png / xlayer.png / stable.jpg
     └── arbitrum.png / scroll.png
 ```
@@ -343,7 +343,7 @@ q402.pay() invoked
   ├─ 2. EIP-7702 authorization signature
   │      { address: implContract, nonce: EOA_nonce }
   └─ 3. POST /api/relay { witnessSig, authorization, <chain-specific nonce field> }
-         avax/bnb/eth → nonce   |   xlayer → xlayerNonce   |   stable → stableNonce
+         avax/bnb/eth/mantle → nonce   |   xlayer → xlayerNonce   |   stable → stableNonce
 ```
 
 **X Layer EIP-3009 fallback (USDC only)** — selected only when `eip3009Nonce` is supplied.
@@ -733,13 +733,13 @@ const gasCostNative = parseFloat(formatEther(receipt.gasUsed * receipt.effective
 
 ### 13-B. Per-chain Differences
 
-| Item | avax / bnb / eth | xlayer | stable |
-|------|------------------|--------|--------|
-| Contract class | `Q402PaymentImplementation` | `Q402PaymentImplementationXLayer` | `Q402PaymentImplementationStable` |
+| Item | avax / bnb / eth / mantle | xlayer | stable |
+|------|---------------------------|--------|--------|
+| Contract class | `Q402PaymentImplementation` (Mantle shares the deployed-address bytecode family; distinguished from Stable at signing by chainId + domainName) | `Q402PaymentImplementationXLayer` | `Q402PaymentImplementationStable` |
 | Entry function | `transferWithAuthorization()` | `transferWithAuthorization()` | `transferWithAuthorization()` |
 | Witness type | TransferAuthorization | TransferAuthorization | TransferAuthorization |
 | `verifyingContract` | User EOA | User EOA | User EOA |
-| Domain name | "Q402 Avalanche" / "Q402 BNB Chain" / "Q402 Ethereum" | "Q402 X Layer" | "Q402 Stable" |
+| Domain name | "Q402 Avalanche" / "Q402 BNB Chain" / "Q402 Ethereum" / "Q402 Mantle" | "Q402 X Layer" | "Q402 Stable" |
 | EIP-3009 fallback | ✗ | ✓ (USDC only, legacy) | ✗ |
 | Relay API `method` | `"eip7702"` | `"eip7702_xlayer"` / `"eip3009"` | `"eip7702_stable"` |
 
@@ -940,7 +940,7 @@ newPaidAt = base.toISOString();
 
 | File | Description |
 |------|-------------|
-| `scripts/test-eip7702.mjs` | Unified EIP-7702 E2E test — `--chain avax\|bnb\|eth\|xlayer\|stable` |
+| `scripts/test-eip7702.mjs` | Unified EIP-7702 E2E test — `--chain avax\|bnb\|eth\|mantle\|xlayer\|stable` |
 | `scripts/agent-example.mjs` | Node.js Agent SDK — unified 6-chain example (TransferAuthorization + module export) |
 
 ---
