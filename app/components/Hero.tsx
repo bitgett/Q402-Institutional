@@ -99,6 +99,7 @@ export default function Hero() {
                 {[
                   { img: "/bnb.png",    color: "#F0B90B", label: "BNB"  },
                   { img: "/eth.png",    color: "#627EEA", label: "ETH"  },
+                  { img: "/mantle.png", color: "#FFFFFF", label: "MNT"  },
                   { img: "/avax.png",   color: "#E84142", label: "AVAX" },
                   { img: "/xlayer.png", color: "#CCCCCC", label: "X"    },
                   { img: "/stable.jpg", color: "#4AE54A", label: "STB"  },
@@ -127,7 +128,7 @@ export default function Hero() {
                     />
                   </motion.div>
                 ))}
-                <span className="text-white/20 text-xs ml-1">5 chains live</span>
+                <span className="text-white/20 text-xs ml-1">6 chains live</span>
               </motion.div>
 
               {/* Headline */}
@@ -141,7 +142,7 @@ export default function Hero() {
                   <span className="text-shimmer">stablecoin rails.</span>
                 </h1>
                 <p className="text-xl text-white/45 font-light tracking-wide mb-6">
-                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Five EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, we cover the rest.
+                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Six EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, we cover the rest.
                 </p>
               </motion.div>
 
@@ -208,7 +209,7 @@ export default function Hero() {
                 </div>
                 <div className="w-px h-10 bg-white/8" />
                 <div>
-                  <div className="text-2xl font-bold">5 chains</div>
+                  <div className="text-2xl font-bold">6 chains</div>
                   <div className="text-xs text-white/30 mt-0.5">mainnet live</div>
                 </div>
               </motion.div>
@@ -300,6 +301,7 @@ export default function Hero() {
                       {[
                         { label: "BNB",  img: "/bnb.png",      rounded: "rounded-full" },
                         { label: "ETH",  img: "/eth.png",      rounded: "rounded-full" },
+                        { label: "MNT",  img: "/mantle.png",   rounded: "rounded-full" },
                         { label: "AVAX", img: "/avax.png",     rounded: "rounded-full" },
                         { label: "X",    img: "/xlayer.png",   rounded: "rounded-full" },
                         { label: "STB",  img: "/stable.jpg",   rounded: "rounded-full" },

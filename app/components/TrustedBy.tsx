@@ -1,4 +1,4 @@
-// Chain order: BNB → Ethereum → Avalanche → X Layer → Stable → USDC → USDT → Arbitrum → Scroll
+// Chain order: BNB → Ethereum → Mantle → Avalanche → X Layer → Stable → USDC → USDT → Arbitrum → Scroll
 const chains = [
   {
     name: "BNB Chain",
@@ -23,6 +23,15 @@ const chains = [
         <path d="M16 20L23.5 17L16 13.5Z" fill="#627EEA" opacity="0.2"/>
         <path d="M8.5 17L16 20L16 13.5Z" fill="#627EEA" opacity="0.6"/>
       </svg>
+    ),
+  },
+  {
+    name: "Mantle",
+    color: "#FFFFFF",
+    status: "live",
+    icon: (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/mantle.png" alt="Mantle" className="w-6 h-6 rounded-full" />
     ),
   },
   {
