@@ -42,7 +42,7 @@
 
 ## 1. Why We Built This
 
-On every EVM chain, users need to hold a native gas token (BNB, ETH, AVAX, OKB, USDT0) just to move USDC/USDT.
+On every EVM chain, users need to hold a native gas token (BNB, ETH, MNT, AVAX, OKB, USDT0) just to move USDC/USDT.
 
 > A user holding $100 of USDC on BNB Chain **cannot transfer anything without BNB.**  
 > Web3 onboarding collapses right here.
@@ -279,7 +279,7 @@ The `/payment` page drives a self-serve on-chain checkout → automatic API Key 
 | Business    | 100,000  | $799   | $879   | $1,199 |
 | Enterprise  | 500,000  | $1,999 | $2,199 | $2,999 |
 
-Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT** (subscription settlement is intentionally limited to BNB/ETH chains).  
+Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT**. The Quote Builder UI currently defaults to BNB/ETH USDC/USDT for the simplest checkout flow; the underlying API accepts payment on any of the 6 supported chains for integrators who want to settle elsewhere.  
 Payment address: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION cold wallet — revenue-only).
 
 ---
@@ -309,7 +309,7 @@ const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
 const result3 = await q402s.pay({ to: "0xRecipient", amount: "10.00", token: "USDT" });
 ```
 
-SDK: **v1.4.0** — supports all 6 chains (avax, bnb, eth, xlayer, stable, mantle).
+SDK: **v1.5.0** — supports all 6 chains (avax, bnb, eth, xlayer, stable, mantle). Mantle USDT resolves to USDT0 OFT (`0x779Ded...`) post the 2025-11 Mantle ecosystem migration.
 
 > **⚠ `amount` parameter rule** — always pass a **human-readable decimal string** ("5.00", "0.123456").
 > It is converted internally via `ethers.parseUnits(amount, decimals)`. Precision that exceeds the
@@ -883,7 +883,7 @@ Users deposit native tokens to the **GASTANK** cold address (`GASTANK_ADDRESS`) 
 - Users who come back outside the scan window (~10 minutes on ETH, up to tens of minutes elsewhere) are not credited by this path — use the direct-lookup path below.
 
 **Deposit direct lookup (recovery path):** `POST /api/gas-tank/verify-deposit` — `{ address, txHash, chain }`
-- `chain`: `"bnb" | "eth" | "avax" | "xlayer" | "stable"`.
+- `chain`: `"bnb" | "eth" | "mantle" | "avax" | "xlayer" | "stable"`.
 - Validates a single TX via `eth_getTransactionByHash` (confirmed + `to=GASTANK` + `from=address` + `value>0`).
 - Works outside the block window. Duplicate txHashes are rejected automatically by `addGasDeposit`'s SADD guard (`alreadyCredited: true`).
 - Surfaced in the dashboard Deposit modal's "not_found" state.
@@ -894,7 +894,7 @@ Users deposit native tokens to the **GASTANK** cold address (`GASTANK_ADDRESS`) 
 
 ```json
 {
-  "balances": { "bnb": 0.5, "eth": 0.0, "avax": 2.1, "xlayer": 0.0, "stable": 0.0 },
+  "balances": { "bnb": 0.5, "eth": 0.0, "mantle": 0.0, "avax": 2.1, "xlayer": 0.0, "stable": 0.0 },
   "deposits": [...]
 }
 ```
@@ -1167,8 +1167,8 @@ Three wallets, three roles, zero commingling. The split ensures a single key com
 | Role | Address | Key Storage | Responsibility |
 |------|---------|-------------|----------------|
 | `SUBSCRIPTION_ADDRESS` | `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` | **Cold** (no key on server) | Receives subscription payments ($29/$49/$149…). Periodically swept manually from a cold device. |
-| `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **Cold** (no key on server) | Receives user gas deposits (BNB/ETH/AVAX/OKB/USDT0). Cold→hot top-ups to the relayer are done manually. |
-| `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **Hot** (Vercel `RELAYER_PRIVATE_KEY`) | Signs/submits EIP-7702 TXs. Holds only a minimal operational float (BNB/ETH/AVAX/OKB/USDT0). |
+| `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **Cold** (no key on server) | Receives user gas deposits (BNB/ETH/MNT/AVAX/OKB/USDT0). Cold→hot top-ups to the relayer are done manually. |
+| `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **Hot** (Vercel `RELAYER_PRIVATE_KEY`) | Signs/submits EIP-7702 TXs. Holds only a minimal operational float (BNB/ETH/MNT/AVAX/OKB/USDT0). |
 
 The constants are exported from a single module ([`app/lib/wallets.ts`](app/lib/wallets.ts)) — every route/page imports only from there.
 
