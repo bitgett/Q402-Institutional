@@ -27,7 +27,7 @@ const PAY_TOKENS = [
 const CHAINS = [
   { id: "bnb",      name: "BNB Chain", color: "#F0B90B", img: "/bnb.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "eth",      name: "Ethereum",  color: "#627EEA", img: "/eth.png",      rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
-  { id: "mantle",   name: "Mantle",    color: "#000000", img: "/mantle.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "mantle",   name: "Mantle",    color: "#FFFFFF", img: "/mantle.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "avax",     name: "Avalanche", color: "#E84142", img: "/avax.png",     rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
   { id: "xlayer",   name: "X Layer",   color: "#CCCCCC", img: "/xlayer.png",   rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
   { id: "stable",   name: "Stable",    color: "#4AE54A", img: "/stable.jpg",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
