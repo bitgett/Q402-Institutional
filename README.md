@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.3.1** · **Docs revision: v1.16** · **Last updated: 2026-04-17**  
+**Version: v1.22** · **SDK: v1.5.0** · **Manifest: v1.5.0** · **Last updated: 2026-04-23**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
