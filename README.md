@@ -92,8 +92,10 @@ User clicks "Pay USDC"
 | Ethereum | 1 | EIP-7702 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | ✅ |
 | X Layer | 196 | EIP-7702 + EIP-3009 USDC fallback | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | ✅ |
 | **Stable** | **988** | **EIP-7702** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | ✅ |
+| **Mantle** | **5000** | **EIP-7702** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | ✅ |
 
 > Stable is special: USDT0 is both the gas token and the payment token (native coin = USD-pegged).
+> Mantle is an EVM L2 (Skadi Hard Fork, Prague-aligned) — EIP-7702 natively supported; MNT is the native gas token.
 
 > **Single source of truth**: per-chain contracts, domains, witness types, and token mappings
 > are canonicalized in [`contracts.manifest.json`](./contracts.manifest.json).
@@ -267,7 +269,7 @@ The `/payment` page drives a self-serve on-chain checkout → automatic API Key 
 - TX credits decrement by 1 per successful relay. Service stops at expiry or when credits hit zero.
 
 **Per-chain pricing (BNB baseline, with per-chain multipliers):**
-| Tier        | TX count | BNB/XLayer/Stable (1.0×) | AVAX (1.1×) | ETH (1.5×) |
+| Tier        | TX count | BNB/XLayer/Stable/Mantle (1.0×) | AVAX (1.1×) | ETH (1.5×) |
 |-------------|----------|--------------------------|-------------|------------|
 | Starter     | 500      | $29    | $29    | $39    |
 | Basic       | 1,000    | $49    | $49    | $69    |
@@ -292,7 +294,7 @@ Payment address: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION cold
 ```
 
 ```javascript
-// AVAX / BNB / ETH / Stable — EIP-7702
+// AVAX / BNB / ETH / Stable / Mantle — EIP-7702
 const q402 = new Q402Client({ apiKey: "q402_live_xxx", chain: "avax" });
 const result = await q402.pay({ to: "0xRecipient", amount: "5.00", token: "USDC" });
 console.log(result.txHash); // method: "eip7702"
@@ -307,7 +309,7 @@ const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
 const result3 = await q402s.pay({ to: "0xRecipient", amount: "10.00", token: "USDT" });
 ```
 
-SDK: **v1.3.1** — supports all 5 chains (avax, bnb, eth, xlayer, stable).
+SDK: **v1.4.0** — supports all 6 chains (avax, bnb, eth, xlayer, stable, mantle).
 
 > **⚠ `amount` parameter rule** — always pass a **human-readable decimal string** ("5.00", "0.123456").
 > It is converted internally via `ethers.parseUnits(amount, decimals)`. Precision that exceeds the
@@ -322,7 +324,7 @@ Import `scripts/agent-example.mjs` as a module:
 import { sendGaslessPayment } from "./scripts/agent-example.mjs";
 
 const result = await sendGaslessPayment({
-  chain:      "avax",   // "avax" | "bnb" | "eth" | "xlayer" | "stable"
+  chain:      "avax",   // "avax" | "bnb" | "eth" | "xlayer" | "stable" | "mantle"
   recipient:  "0x...",
   amount:     "10.0",   // decimal string — Number is rejected (IEEE-754 safety)
 });
@@ -1250,6 +1252,40 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 ---
 
 ## 25. Changelog
+
+### v1.21 (2026-04-22)
+
+> **Mantle chain integration (6th supported chain).** Added Mantle (EVM L2, chainId 5000) as a native EIP-7702 chain alongside the existing five. Mantle's Skadi Hard Fork is aligned with Ethereum Prague, so EIP-7702 Type-0x04 transactions work without any new relay mode — `settlePayment()` is reused as-is. Integration followed the drift-guard discipline: `contracts.manifest.json` bumped to v1.4.0 is the single source of truth; `CHAIN_CONFIG` (server) and `Q402_CHAIN_CONFIG` (SDK) mirror it; the existing 39-case manifest test expanded to cover all 6 chains to block silent drift.
+
+#### Deployment
+
+- **Q402PaymentImplementationMantle** deployed to Mantle mainnet at `0x2fb2B2D110b6c5664e701666B3741240242bf350` (tx `0xf5d2317b6ed17609ac27e17f5fff4c1ea1f714a3420a0aba80603620ca6a9606`, block 94,399,904).
+- Same deployer + nonce produced the same address as Stable — expected, deterministic create. Distinguished by chainId + domain name (`"Q402 Mantle"`).
+- Tokens: USDC `0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9` (6 decimals), USDT `0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE` (6 decimals). Both are standard ERC-20, not bridged-fee wrappers.
+- Native gas: MNT. Gas Tank minimum calibrated to 0.2 MNT (~$0.10 at $0.50/MNT).
+
+#### What changed
+
+- [`contracts.manifest.json`](contracts.manifest.json) → v1.4.0. Adds `chains.mantle` with `relayMode: "eip7702"`, `domainName: "Q402 Mantle"`, and both token addresses. `verifyingContractRule: "userEOA"` identical to the other 5 chains.
+- [`app/lib/relayer.ts`](app/lib/relayer.ts) → `CHAIN_CONFIG.mantle` + `CHAIN_RPC_FALLBACKS.mantle` (rpc.mantle.xyz + publicnode + ankr). No new settle function — Mantle routes through the existing `settlePayment()` EIP-7702 path.
+- [`app/api/relay/route.ts`](app/api/relay/route.ts) → `MIN_GAS_BALANCE.mantle` (0.2 MNT) and updated supported-chain error message. Section 2 dispatch logic already defaults to EIP-7702 for any non-xlayer, non-stable chain, so Mantle falls through naturally.
+- [`app/lib/blockchain.ts`](app/lib/blockchain.ts) → `CHAINS` scanner entry (2000-block window ≈ 1.1 hr on 2 s blocks), `INTENT_CHAIN_MAP`, `CHAIN_THRESHOLDS` (BNB parity: $29/$49/$89/$149/$449/$799/$1,999), `CHAIN_MULTIPLIERS` (1.0×).
+- [`public/q402-sdk.js`](public/q402-sdk.js) → v1.4.0. Added `mantle` to `Q402_CHAIN_CONFIG`; the existing `mode: "eip7702"` branch handles it without SDK code changes.
+- [`__tests__/contracts-manifest.test.ts`](__tests__/contracts-manifest.test.ts) → `CHAINS` tuple extended; all existing drift assertions (chainId, implContract, domain name, token addresses/decimals, userEOA rule) now run against Mantle too.
+- [`scripts/test-eip7702.mjs`](scripts/test-eip7702.mjs) → `--chain mantle` added for end-to-end verification against mainnet.
+- UI — [`app/payment/page.tsx`](app/payment/page.tsx), [`app/dashboard/page.tsx`](app/dashboard/page.tsx), [`app/docs/page.tsx`](app/docs/page.tsx): Mantle added to chain selectors, Gas Tank card grid, supported-chains table, and contract-address reference block.
+
+#### What did NOT change
+
+- Relay API surface — no new request fields. Mantle uses the same `authorization + nonce` payload shape as avax/bnb/eth.
+- EIP-712 witness type, domain version, or signing rules. Identical TransferAuthorization scheme; only `chainId` and `domainName` differ per chain.
+- Existing 5 chains. All contract addresses, RPC URLs, and behavior unchanged.
+- Subscription flow — Mantle is a relay-chain option; subscription payments still settle on BNB or Ethereum via the existing scanner.
+
+#### Verification
+
+- Manifest drift test: 39 → 46 cases (7 new per-chain assertions on Mantle), still green.
+- Branch strategy: all work on `feat/mantle-integration`; `main` untouched per explicit user constraint (multi-round audit required before merge).
 
 ### v1.20 (2026-04-21)
 
