@@ -51,11 +51,11 @@ On every EVM chain, users need to hold a native gas token (BNB, ETH, AVAX, OKB, 
 
 1. **Gas UX is what's blocking Web3 adoption.** Stripe, PayPal, and Venmo don't push fees onto users. Web3 needs to meet that bar.
 
-2. **AI agents need a gasless payment rail.** Managing gas for 100 agents across 5 chains individually is an operational nightmare. One Gas Tank top-up covers all of them.
+2. **AI agents need a gasless payment rail.** Managing gas for 100 agents across 6 chains individually is an operational nightmare. One Gas Tank top-up covers all of them.
 
 3. **EIP-7702 is the right primitive.** Unlike ERC-4337 (Account Abstraction), existing EOAs work as-is — no wallet migration required. MetaMask and OKX Wallet participate out of the box.
 
-4. **Multi-chain on day one.** Most gasless solutions cover a single chain. Q402 ships on 5 mainnets simultaneously.
+4. **Multi-chain on day one.** Most gasless solutions cover a single chain. Q402 ships on 6 mainnets simultaneously.
 
 ---
 
@@ -63,7 +63,7 @@ On every EVM chain, users need to hold a native gas token (BNB, ETH, AVAX, OKB, 
 
 Q402 is **gasless payment infrastructure built on EIP-7702 + EIP-712**. Integrate the SDK and the Q402 relayer covers every on-chain gas fee on your behalf.
 
-**All 5 chains — unified EIP-7702 flow:**
+**All 6 chains — unified EIP-7702 flow:**
 ```
 User clicks "Pay USDC"
   → SDK: GET /api/relay/info (fetch facilitator address)
@@ -75,7 +75,7 @@ User clicks "Pay USDC"
             → USDC/USDT(0): user EOA → recipient
 ```
 
-> All 5 chains share the same witness type `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`
+> All 6 chains share the same witness type `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`
 > and the same `verifyingContract = user EOA` rule. The only per-chain differences are `domainName` (e.g. "Q402 Avalanche")
 > and the impl address.
 >
@@ -217,7 +217,7 @@ Q402-Institutional/
 │   │   │   ├── route.ts            # POST/GET/DELETE — webhook management
 │   │   │   └── test/route.ts       # POST — send test event
 │   │   ├── transactions/route.ts   # GET  — relay TX history
-│   │   ├── wallet-balance/route.ts # GET  — user wallet balance (5 chains)
+│   │   ├── wallet-balance/route.ts # GET  — user wallet balance (6 chains)
 │   │   └── inquiry/route.ts        # POST/GET — project inquiries
 │   ├── lib/
 │   │   ├── db.ts                   # Vercel KV CRUD helpers (monthly TX sharding)
@@ -229,7 +229,7 @@ Q402-Institutional/
 │   ├── context/WalletContext.tsx   # global wallet state (instant localStorage restore)
 │   ├── components/
 │   │   ├── Hero.tsx                # landing hero + terminal animation
-│   │   ├── HowItWorks.tsx          # 3-step explainer + 5 chain logos
+│   │   ├── HowItWorks.tsx          # 3-step explainer + 6 chain logos
 │   │   ├── Pricing.tsx             # pricing tiers
 │   │   ├── Contact.tsx             # CTA — "Talk to Us" popup
 │   │   ├── Navbar.tsx              # navigation + Agents link
@@ -243,7 +243,7 @@ Q402-Institutional/
 │   └── page.tsx                    # landing
 ├── scripts/
 │   ├── test-eip7702.mjs            # unified EIP-7702 E2E test (--chain avax|bnb|eth|xlayer|stable)
-│   └── agent-example.mjs           # Node.js Agent SDK (unified 5-chain example — TransferAuthorization)
+│   └── agent-example.mjs           # Node.js Agent SDK (unified 6-chain example — TransferAuthorization)
 └── public/
     ├── q402-sdk.js                 # client SDK v1.3.1
     ├── bnb.png / eth.png / avax.png / xlayer.png / stable.jpg
@@ -333,7 +333,7 @@ console.log(result.txHash);
 
 ### SDK Internals
 
-**All 5 chains — EIP-7702 (`method: "eip7702" | "eip7702_xlayer" | "eip7702_stable"`)**
+**All 6 chains — EIP-7702 (`method: "eip7702" | "eip7702_xlayer" | "eip7702_stable"`)**
 ```
 q402.pay() invoked
   ├─ 0. GET /api/relay/info → facilitator address
@@ -679,7 +679,7 @@ kv.get("inquiries")                      → Inquiry[]
 
 ## 13. Relay Internals
 
-### 13-A. EIP-7702 (shared across all 5 chains)
+### 13-A. EIP-7702 (shared across all 6 chains)
 
 ```
 User EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
@@ -688,7 +688,7 @@ User EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
                                          resolves to the user's EOA (hence verifyingContract = EOA)
 ```
 
-**EIP-712 domain (uniform rule across all 5 chains):**
+**EIP-712 domain (uniform rule across all 6 chains):**
 ```javascript
 {
   name:              "Q402 Avalanche",   // per chain: Avalanche | BNB Chain | Ethereum | X Layer | Stable
@@ -697,7 +697,7 @@ User EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
   verifyingContract: userEOA,            // ⭐ same for every chain — NEVER the impl address
 }
 
-// types — identical across all 5 chains
+// types — identical across all 6 chains
 TransferAuthorization: [
   { name: "owner",       type: "address" },
   { name: "facilitator", type: "address" },
@@ -878,7 +878,7 @@ const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 Users deposit native tokens to the **GASTANK** cold address (`GASTANK_ADDRESS`) → consumed against relay costs. The relayer hot wallet is a separate address; GASTANK→RELAYER transfers are performed manually or via an operator script.
 
 **Deposit scan (default):** `POST /api/gas-tank/verify-deposit` — `{ address }`
-- Batch RPC block scan across all 5 chains (BNB/AVAX/XLayer: 200 blocks, ETH: 50 blocks, Stable: 500 blocks).
+- Batch RPC block scan across all 6 chains (BNB/AVAX/XLayer: 200 blocks, ETH: 50 blocks, Stable/Mantle: 500 blocks).
 - Filter `from=user, to=GASTANK, value≠0` → `addGasDeposit()`.
 - Users who come back outside the scan window (~10 minutes on ETH, up to tens of minutes elsewhere) are not credited by this path — use the direct-lookup path below.
 
@@ -941,7 +941,7 @@ newPaidAt = base.toISOString();
 | File | Description |
 |------|-------------|
 | `scripts/test-eip7702.mjs` | Unified EIP-7702 E2E test — `--chain avax\|bnb\|eth\|xlayer\|stable` |
-| `scripts/agent-example.mjs` | Node.js Agent SDK — unified 5-chain example (TransferAuthorization + module export) |
+| `scripts/agent-example.mjs` | Node.js Agent SDK — unified 6-chain example (TransferAuthorization + module export) |
 
 ---
 
@@ -980,7 +980,7 @@ Stable is a Layer 1 where USDT0 is the native gas token. In an AI agent ecosyste
   name:              "Q402 Stable",
   version:           "1",
   chainId:           988,
-  verifyingContract: userEOA,   // shared across all 5 chains — _domainSeparator uses address(this)
+  verifyingContract: userEOA,   // shared across all 6 chains — _domainSeparator uses address(this)
 }
 ```
 
@@ -1036,7 +1036,7 @@ Stable is a Layer 1 where USDT0 is the native gas token. In an AI agent ecosyste
 |-------|---------|-----|-------|
 | USDT0 | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | 18 | Both `USDC` and `USDT` API keys resolve to this address |
 
-### Contract ABI Summary (shared across all 5 chains)
+### Contract ABI Summary (shared across all 6 chains)
 
 ```solidity
 // Executed from an EIP-7702-delegated EOA — msg.sender = facilitator (relayer), address(this) = owner (user EOA)
@@ -1213,7 +1213,7 @@ node scripts/test-eip7702.mjs --chain eth
 node scripts/test-eip7702.mjs --chain xlayer
 node scripts/test-eip7702.mjs --chain stable
 
-# 5-chain Agent SDK example (unified TransferAuthorization flow)
+# 6-chain Agent SDK example (unified TransferAuthorization flow)
 node scripts/agent-example.mjs
 ```
 
@@ -1275,6 +1275,17 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 - [`scripts/test-eip7702.mjs`](scripts/test-eip7702.mjs) → `--chain mantle` added for end-to-end verification against mainnet.
 - UI — [`app/payment/page.tsx`](app/payment/page.tsx), [`app/dashboard/page.tsx`](app/dashboard/page.tsx), [`app/docs/page.tsx`](app/docs/page.tsx): Mantle added to chain selectors, Gas Tank card grid, supported-chains table, and contract-address reference block.
 
+#### Follow-up audit sweep (same branch, commits 17c8849 / 77e0329 / d665a48 / subsequent)
+
+The initial v1.21 commit (0c51149) landed the core integration — manifest, relayer, SDK, canonical drift tests. Round-2 and Round-3 audits surfaced additional chain-keyed surfaces that still only listed the original five. All fixes pushed to `feat/mantle-integration`:
+
+- **Landing surface** — [`Hero.tsx`](app/components/Hero.tsx), [`TrustedBy.tsx`](app/components/TrustedBy.tsx), [`HowItWorks.tsx`](app/components/HowItWorks.tsx), [`Footer.tsx`](app/components/Footer.tsx), [`Pricing.tsx`](app/components/Pricing.tsx), [`Contact.tsx`](app/components/Contact.tsx), [`/agents`](app/agents/page.tsx), [`/grant`](app/grant/page.tsx): Mantle logo + "5 chains"→"6 chains" copy + BNB→ETH→**MANTLE**→AVAX→X→STB visual order so the dark Mantle chip is not adjacent to the dark-green Stable chip.
+- **Backend API routes** — [`wallet-balance`](app/api/wallet-balance/route.ts), [`gas-tank`](app/api/gas-tank/route.ts), [`gas-tank/withdraw`](app/api/gas-tank/withdraw/route.ts), [`gas-tank/verify-deposit`](app/api/gas-tank/verify-deposit/route.ts), [`payment/intent`](app/api/payment/intent/route.ts): Mantle RPC + CoinGecko `mantle` id + 0.2 MNT alert threshold + `VALID_CHAINS` allowlist. Without this, dashboard wouldn't show "Wallet: X MNT" and the first Mantle intent would be rejected 400.
+- **Reference example** — [`scripts/agent-example.mjs`](scripts/agent-example.mjs): Mantle chain block with `nonceField: "nonce"` (EIP-7702 default path).
+- **Tests** — [`__tests__/intent-quote.test.ts`](__tests__/intent-quote.test.ts) adds 3 Mantle tier cases + `INTENT_CHAIN_MAP.mantle` assertion; [`__tests__/relay-body-shape.test.ts`](__tests__/relay-body-shape.test.ts) adds `mantle → "nonce"` to the nonceField case list.
+- **UX polish** — `CHAIN_META.mantle.color` / `CHAINS.mantle.color` flipped from `#000000` → `#FFFFFF` so the Gas Tank card top accent and Quote Builder chip border are visible against the near-black dashboard.
+- **Comment / JSDoc sweep** — [`app/lib/relayer.ts`](app/lib/relayer.ts), [`app/lib/blockchain.ts`](app/lib/blockchain.ts), [`app/lib/db.ts`](app/lib/db.ts), [`app/api/gas-tank/verify-deposit/route.ts`](app/api/gas-tank/verify-deposit/route.ts) inline comments updated to 6-chain wording. Changelog entries for v1.14–v1.20 intentionally kept their "5 chains" language (historically correct at time of writing).
+
 #### What did NOT change
 
 - Relay API surface — no new request fields. Mantle uses the same `authorization + nonce` payload shape as avax/bnb/eth.
@@ -1284,7 +1295,9 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 
 #### Verification
 
-- Manifest drift test: 39 → 46 cases (7 new per-chain assertions on Mantle), still green.
+- Manifest drift test: 39 → 46 cases (7 new per-chain assertions on Mantle); intent-quote test: +3 Mantle tier cases + `INTENT_CHAIN_MAP.mantle` assertion; relay-body-shape test: +1 nonceField case. Final suite: **227 / 227** passing (up from 224).
+- `next build --webpack` green; all 34 routes build, /payment /docs /dashboard SSG prerender includes Mantle.
+- On-chain E2E (`scripts/test-eip7702.mjs`): Mantle + BNB + X Layer + Stable each executed a real TransferAuthorization against mainnet after the Mantle branch landed — 4 coverage matrix hits across the three settle code paths (`settlePayment`, `settlePaymentXLayerEIP7702`, `settlePaymentStableEIP7702`) with zero regression.
 - Branch strategy: all work on `feat/mantle-integration`; `main` untouched per explicit user constraint (multi-round audit required before merge).
 
 ### v1.20 (2026-04-21)

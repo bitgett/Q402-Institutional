@@ -263,7 +263,7 @@ export default function Hero() {
                     </div>
                     <div className="pl-5">
                       <div><span className="text-green-300">apiKey</span><span className="text-white/40">: </span><span className="text-orange-300">&quot;q402_live_...&quot;</span><span className="text-white/40">,</span></div>
-                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avax | eth | xlayer | stable"}</span></div>
+                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avax | eth | mantle | xlayer | stable"}</span></div>
                     </div>
                     <div className="text-white/40 mb-4">{"});"}</div>
 

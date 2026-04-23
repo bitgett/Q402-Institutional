@@ -113,6 +113,18 @@ const CHAINS = {
     explorerBase: "https://stablescan.org/tx/",
     nonceField: "stableNonce",
   },
+  mantle: {
+    id: 5000, name: "Mantle", domainName: "Q402 Mantle",
+    rpc: envVars.MANTLE_RPC_URL ?? "https://rpc.mantle.xyz",
+    impl: envVars.MANTLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    tokens: {
+      USDC: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
+      USDT: { address: "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", decimals: 6 },
+    },
+    nativeCurrency: { name: "Mantle", symbol: "MNT", decimals: 18 },
+    explorerBase: "https://explorer.mantle.xyz/tx/",
+    nonceField: "nonce",
+  },
 };
 
 const TRANSFER_AUTH_TYPES = {
@@ -314,7 +326,7 @@ async function main() {
   const RECIPIENT = "0xd4e81234567890abcdef1234567890abcdef0a3f"; // replace with your recipient
   const AMOUNT    = "0.05"; // MUST be a decimal string — Number is rejected (IEEE-754).
 
-  // Multi-chain sequential payments — add "eth", "xlayer", "stable" as needed.
+  // Multi-chain sequential payments — add "eth", "xlayer", "stable", "mantle" as needed.
   const chains = ["avax", "bnb"];
   for (const chain of chains) {
     try {
