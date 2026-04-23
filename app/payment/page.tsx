@@ -26,11 +26,11 @@ const PAY_TOKENS = [
 // normalization). Actual per-tier USD prices live in CHAIN_PRICES below.
 const CHAINS = [
   { id: "bnb",      name: "BNB Chain", color: "#F0B90B", img: "/bnb.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "eth",      name: "Ethereum",  color: "#627EEA", img: "/eth.png",      rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
+  { id: "mantle",   name: "Mantle",    color: "#000000", img: "/mantle.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "avax",     name: "Avalanche", color: "#E84142", img: "/avax.png",     rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
   { id: "xlayer",   name: "X Layer",   color: "#CCCCCC", img: "/xlayer.png",   rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
-  { id: "eth",      name: "Ethereum",  color: "#627EEA", img: "/eth.png",      rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
   { id: "stable",   name: "Stable",    color: "#4AE54A", img: "/stable.jpg",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "mantle",   name: "Mantle",    color: "#000000", img: "/mantle.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "arbitrum", name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png", rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
   { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
 ];

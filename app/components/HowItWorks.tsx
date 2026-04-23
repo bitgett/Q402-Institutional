@@ -149,6 +149,7 @@ export default function HowItWorks() {
                 {[
                   { label: "BNB",    img: "/bnb.png",    bg: "#F0B90B" },
                   { label: "ETH",    img: "/eth.png",    bg: "#1A1F36" },
+                  { label: "MANTLE", img: "/mantle.png", bg: "#000000" },
                   { label: "AVAX",   img: "/avax.png",   bg: "#E84142" },
                   { label: "X",      img: "/xlayer.png", bg: "#1A1A1A" },
                   { label: "STABLE", img: "/stable.jpg", bg: "#0F2010" },
