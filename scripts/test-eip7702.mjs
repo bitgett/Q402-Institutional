@@ -91,7 +91,8 @@ const CHAINS = {
     id: 5000, name: "Mantle", domainName: "Q402 Mantle",
     rpc: "https://rpc.mantle.xyz",
     impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
-    token: "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", decimals: 6, symbol: "USDT",
+    // USDT on Mantle = USDT0 OFT (0x779Ded...) as of the 2025-11 ecosystem migration.
+    token: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6, symbol: "USDT",
     explorer: "https://explorer.mantle.xyz/tx/",
   },
 };
