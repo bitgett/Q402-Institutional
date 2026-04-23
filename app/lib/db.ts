@@ -49,8 +49,8 @@ export interface WebhookDelivery {
 }
 
 export interface GasDeposit {
-  chain: string;       // "bnb" | "eth" | "avax" | "xlayer"
-  token: string;       // "BNB" | "ETH" | "AVAX"
+  chain: string;       // "bnb" | "eth" | "avax" | "xlayer" | "stable" | "mantle"
+  token: string;       // "BNB" | "ETH" | "AVAX" | "OKB" | "USDT0" | "MNT"
   amount: number;      // native token amount
   txHash: string;
   depositedAt: string;
