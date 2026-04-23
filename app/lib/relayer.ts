@@ -128,6 +128,9 @@ export const CHAIN_CONFIG = {
     // Q402PaymentImplementationMantle deployed on Mantle Mainnet (Chain ID: 5000)
     implContract: process.env.MANTLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6, symbol: "USDC" },
+    // Mantle-native canonical-bridged USDT (L2StandardERC20). Mantle's own L2 bridge
+    // deployed this address; L1 counterpart is Ethereum USDT (0xdAC17...). Distinct
+    // from the LayerZero USDT0 OFT at 0x779Ded..., which is a separate ecosystem.
     usdt: { address: "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", decimals: 6, symbol: "USDT" },
   },
 } as const;

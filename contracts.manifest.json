@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts.manifest.schema.json",
-  "version": "1.4.0",
-  "updatedAt": "2026-04-22",
+  "version": "1.4.1",
+  "updatedAt": "2026-04-23",
   "notes": [
     "Single source of truth for Q402 deployed contracts and EIP-712 signing conventions.",
     "If values in this file differ from app/lib/relayer.ts, public/q402-sdk.js, or README.md — this file wins.",
@@ -104,8 +104,8 @@
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
-        "USDC": { "address": "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", "decimals": 6 },
-        "USDT": { "address": "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", "decimals": 6 }
+        "USDC": { "address": "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", "decimals": 6, "notes": "Mantle-native canonical-bridged USDC (L2StandardERC20, Mantle L2 bridge 0x4200...0010, L1 counterpart 0xA0b8...eB48)." },
+        "USDT": { "address": "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", "decimals": 6, "notes": "Mantle-native canonical-bridged USDT (L2StandardERC20, Mantle L2 bridge 0x4200...0010, L1 counterpart 0xdAC1...1ec7). Distinct from LayerZero USDT0 OFT (0x779Ded...) — we use Mantle's native bridge path." }
       },
       "explorer": "https://explorer.mantle.xyz",
       "verifyUrl": "https://explorer.mantle.xyz/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
