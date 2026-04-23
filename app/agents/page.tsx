@@ -111,7 +111,7 @@ function AgentNetwork() {
 
 // ─── Live TX Feed ─────────────────────────────────────────────────────────────
 
-const CHAINS_FEED = ["AVAX","BNB","ETH","XLAYER","STABLE"];
+const CHAINS_FEED = ["AVAX","BNB","ETH","MANTLE","XLAYER","STABLE"];
 const TOKENS_FEED = ["USDC","USDT"];
 
 function randomHex(len: number) {
@@ -313,7 +313,7 @@ function ContactModal({ onClose }: { onClose: () => void }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const CHAIN_COLORS: Record<string, string> = {
-  AVAX: "#E84142", BNB: "#F0B90B", ETH: "#627EEA", XLAYER: "#CCCCCC", STABLE: "#4AE54A",
+  AVAX: "#E84142", BNB: "#F0B90B", ETH: "#627EEA", MANTLE: "#FFFFFF", XLAYER: "#CCCCCC", STABLE: "#4AE54A",
 };
 
 export default function AgentsPage() {
