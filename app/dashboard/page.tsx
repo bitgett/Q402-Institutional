@@ -32,7 +32,7 @@ const PLAN_QUOTA: Record<string, number> = {
 const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string; gasNote?: string }> = {
   bnb:    { name: "BNB Chain",  token: "BNB",   color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
   eth:    { name: "Ethereum",   token: "ETH",   color: "#627EEA", img: "/eth.png",    rounded: "rounded-full" },
-  mantle: { name: "Mantle",     token: "MNT",   color: "#000000", img: "/mantle.png", rounded: "rounded-full" },
+  mantle: { name: "Mantle",     token: "MNT",   color: "#FFFFFF", img: "/mantle.png", rounded: "rounded-full" },
   xlayer: { name: "X Layer",    token: "OKB",   color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-full" },
   avax:   { name: "Avalanche",  token: "AVAX",  color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
   // Stable: USDT0 is both the gas token and the payment token — no separate native coin
