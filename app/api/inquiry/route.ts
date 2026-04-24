@@ -91,11 +91,16 @@ export async function POST(req: NextRequest) {
       inquiry.description ? `*Notes:* ${escapeMd(inquiry.description)}`    : null,
     ].filter(Boolean).join("\n");
 
-    fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text: lines, parse_mode: "Markdown" }),
-    }).catch(() => {}); // fire-and-forget, don't block response
+    // IMPORTANT: must await — Vercel serverless tears down the function as soon as
+    // the response is returned, killing any in-flight promises. Fire-and-forget here
+    // was silently dropping every inquiry notification in production.
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: lines, parse_mode: "Markdown" }),
+      });
+    } catch { /* non-critical — KV write already succeeded */ }
   }
 
   return NextResponse.json({ success: true, id });
