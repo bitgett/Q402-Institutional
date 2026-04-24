@@ -71,7 +71,17 @@ export async function POST(req: NextRequest) {
 
   // Use Redis list (rpush) instead of read-modify-write array to prevent
   // concurrent request data loss (last-write-wins race condition).
-  await kv.rpush("inquiries", inquiry);
+  // Legacy fallback: if the "inquiries" key pre-dates the rpush migration
+  // it's stored as a JSON-string array under kv.set, which makes rpush
+  // throw UpstashError WRONGTYPE. Fall back to the legacy read-modify-write
+  // shape so the request still succeeds (and the Telegram alert below
+  // still fires). Same pattern Grant uses.
+  try {
+    await kv.rpush("inquiries", inquiry);
+  } catch {
+    const existing = (await kv.get<Inquiry[]>("inquiries")) ?? [];
+    await kv.set("inquiries", [...existing, inquiry]);
+  }
 
   // Telegram alert
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
@@ -115,6 +125,15 @@ export async function GET(req: NextRequest) {
   if (!checkAdminSecret(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const inquiries = (await kv.lrange<Inquiry>("inquiries", 0, -1)) ?? [];
+  // Prefer list reads; fall back to legacy JSON-array-under-string shape.
+  let inquiries: Inquiry[] = [];
+  try {
+    inquiries = (await kv.lrange<Inquiry>("inquiries", 0, -1)) ?? [];
+  } catch {
+    inquiries = (await kv.get<Inquiry[]>("inquiries")) ?? [];
+  }
+  if (inquiries.length === 0) {
+    inquiries = (await kv.get<Inquiry[]>("inquiries")) ?? [];
+  }
   return NextResponse.json({ inquiries });
 }
