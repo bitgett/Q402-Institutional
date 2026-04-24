@@ -289,6 +289,41 @@ export async function POST(req: NextRequest) {
     // the successful payment activation.
     resetUsageAlertState(addr).catch(() => {});
 
+    // ── Operator alert (Telegram) — new paid activation ────────────────────
+    // Fires only on the success path, AFTER the permanent used_txhash marker
+    // is set. Same await + try/catch pattern as grant/inquiry (fire-and-forget
+    // would be killed by Vercel serverless teardown). Missing env vars, a
+    // Telegram outage, or a malformed payload here must not fail the
+    // activation — KV state is already authoritative at this point.
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId   = process.env.TELEGRAM_CHAT_ID;
+    if (botToken && chatId) {
+      const priorPlan   = existing?.plan ?? null;
+      const priorLabel  = priorPlan ? `was: ${priorPlan}` : "first activation";
+      const tierTag     = tierUpgraded ? "  ⬆ tier upgrade" : "";
+      const amountLabel = result.amountUSD != null ? `$${result.amountUSD}` : "(unknown)";
+      const tokenLabel  = result.token ?? "USDC/USDT";
+      const chainLabel  = result.chain ?? "(unknown chain)";
+      const txHash      = result.txHash ?? "(unknown tx)";
+      const lines = [
+        `💰 *New Paid Activation*`,
+        ``,
+        `*Plan:* ${plan} (${priorLabel})${tierTag}`,
+        `*Amount:* ${amountLabel} ${tokenLabel} on ${chainLabel}`,
+        `*Address:* \`${addr}\``,
+        `*Credits:* +${addedTxs.toLocaleString()} → ${totalTxs.toLocaleString()} total`,
+        `*Expires:* ${newExpiry.toISOString().slice(0, 10)}`,
+        `*TX:* \`${txHash}\``,
+      ].join("\n");
+      try {
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ chat_id: chatId, text: lines, parse_mode: "Markdown" }),
+        });
+      } catch { /* non-critical — activation is already committed */ }
+    }
+
     return NextResponse.json({
       status:    "activated",
       plan,
