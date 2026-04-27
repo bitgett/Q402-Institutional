@@ -7,6 +7,7 @@ import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
 const CHAINS = [
   { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",   blockWindow: 200 },
   { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",       blockWindow: 50  },
+  { key: "mantle", name: "Mantle",    token: "MNT",   rpc: "https://rpc.mantle.xyz",                blockWindow: 500 },
   { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc", blockWindow: 200 },
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",               blockWindow: 200 },
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                blockWindow: 500 },
@@ -139,7 +140,7 @@ export async function POST(req: NextRequest) {
     }
     const chain = CHAINS.find(c => c.key === body.chain);
     if (!chain) {
-      return NextResponse.json({ error: "chain required (bnb|eth|avax|xlayer|stable)" }, { status: 400 });
+      return NextResponse.json({ error: "chain required (bnb|eth|mantle|avax|xlayer|stable)" }, { status: 400 });
     }
 
     const result = await verifyByTxHash(chain, address, body.txHash);
@@ -158,7 +159,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ newDeposits: added ? 1 : 0, balances, alreadyCredited: !added });
   }
 
-  // ── Default path: recent-block scan across all 5 chains ──────────────────
+  // ── Default path: recent-block scan across all 6 chains ──────────────────
   const results = await Promise.allSettled(
     CHAINS.map(chain => scanNativeDeposits(chain, address).then(txs => ({ chain, txs })))
   );

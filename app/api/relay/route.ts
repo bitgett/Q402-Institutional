@@ -45,6 +45,7 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
   avax:   0.003,     // ~$0.09 at $30/AVAX
   xlayer: 0.002,     // ~$0.10 at $50/OKB
   stable: 0.05,      // $0.05 (USDT0 is $1-pegged)
+  mantle: 0.2,       // ~$0.10 at $0.50/MNT (Mantle L2, low gas)
 };
 
 
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
     to:           string;
     amount:       string;
     deadline:     number;
-    nonce?:       string;  // uint256 nonce for avax/bnb/eth (v1.2 contract)
+    nonce?:       string;  // uint256 nonce for avax/bnb/eth/mantle (v1.2 contract)
     witnessSig:   string;
     authorization?: {
       chainId:  number;
@@ -144,16 +145,16 @@ export async function POST(req: NextRequest) {
   }
   if (!isXLayer && !isStable && !authorization) {
     return NextResponse.json(
-      { error: "EIP-7702 chains (avax/bnb/eth) require authorization object" },
+      { error: "EIP-7702 chains (avax/bnb/eth/mantle) require authorization object" },
       { status: 400 }
     );
   }
-  // avax/bnb/eth also require `nonce` — it's part of the signed witness, so a
+  // avax/bnb/eth/mantle also require `nonce` — it's part of the signed witness, so a
   // server-synthesized fallback would never match the caller's signature. Fail
   // fast with a clear 400 instead of letting the onchain verify path reject it.
   if (!isXLayer && !isStable && !nonce) {
     return NextResponse.json(
-      { error: "nonce is required for avax/bnb/eth (uint256 string, must match the signed witness)" },
+      { error: "nonce is required for avax/bnb/eth/mantle (uint256 string, must match the signed witness)" },
       { status: 400 }
     );
   }
@@ -246,7 +247,7 @@ export async function POST(req: NextRequest) {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable.`,
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle.`,
     }, { status: 400 });
   }
 
@@ -296,7 +297,7 @@ export async function POST(req: NextRequest) {
     relayerAddress = key.address as Address;
   }
 
-  // ── 7b. nonce (uint256) for avax/bnb/eth transferWithAuthorization ─────────
+  // ── 7b. nonce (uint256) for avax/bnb/eth/mantle transferWithAuthorization ─────────
   // Parsed up front in section 2b so a malformed value can't escape past the
   // credit reservation in section 7c.
   const paymentNonce: bigint = parsedPaymentNonce;

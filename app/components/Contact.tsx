@@ -41,7 +41,7 @@ const TERMINAL_LINES = [
   { text: "✓ Confirmed  block #38,482,910",                    color: "text-green-400", delay: 4900 },
   { text: "",                                                  color: "",               delay: 5200 },
   { text: "  result.txHash     0xd4e8…a3f1",                   color: "text-white/25",  delay: 5400 },
-  { text: "  result.method     eip7702  ← 5-chain unified",    color: "text-white/25",  delay: 5600 },
+  { text: "  result.method     eip7702  ← 6-chain unified",    color: "text-white/25",  delay: 5600 },
   { text: "  result.success    true   50.00 USDC settled",     color: "text-yellow",    delay: 5800 },
 ];
 
