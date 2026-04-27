@@ -21,6 +21,7 @@ export default function Footer() {
               { name: "BNB Chain", color: "#F0B90B" },
               { name: "X Layer",   color: "#CCCCCC" },
               { name: "Ethereum",  color: "#627EEA" },
+              { name: "Mantle",    color: "#FFFFFF" },
               { name: "Stable",    color: "#4AE54A" },
             ].map((c) => (
               <span
