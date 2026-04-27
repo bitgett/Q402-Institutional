@@ -12,7 +12,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { loadRelayerKey } from "./relayer-key";
 
 // ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
-// All 5 chains (avax / bnb / eth / xlayer / stable) default to EIP-7702 Type 4 TXs.
+// All 6 chains (avax / bnb / eth / xlayer / stable / mantle) default to EIP-7702 Type 4 TXs.
 // X Layer additionally supports EIP-3009 as a USDC-only fallback.
 //
 // Chain → relay method:
@@ -50,6 +50,11 @@ const CHAIN_RPC_FALLBACKS: Record<string, string[]> = {
   ],
   stable: [
     "https://rpc.stable.xyz",
+  ],
+  mantle: [
+    "https://rpc.mantle.xyz",
+    "https://mantle-rpc.publicnode.com",
+    "https://rpc.ankr.com/mantle",
   ],
 };
 
@@ -114,6 +119,22 @@ export const CHAIN_CONFIG = {
     // USDT0 is the native gas token and primary transfer token on Stable
     usdc: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0" },
     usdt: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0" },
+  },
+  mantle: {
+    name: "Mantle",
+    rpc: "https://rpc.mantle.xyz",
+    chainId: 5000,
+    token: "MNT",
+    // Q402PaymentImplementationMantle deployed on Mantle Mainnet (Chain ID: 5000)
+    implContract: process.env.MANTLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6, symbol: "USDC" },
+    // USDT0 (LayerZero OFT) — Mantle's ecosystem default per the 2025-11-27 official
+    // announcement. Legacy canonical-bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE)
+    // deposits sunset 2026-02-03; Bybit withdrawals to Mantle now deliver USDT0, so new
+    // users will hold this address. Same 0x779Ded... as Stable via CREATE3 OFT deployment;
+    // decimals are per-chain (Mantle 6, Stable 18) — symbol exposed as "USDT" to keep the
+    // SDK API surface (`token: "USDT"`) consistent with the other chains.
+    usdt: { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6, symbol: "USDT" },
   },
 } as const;
 
@@ -226,7 +247,7 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
 
 // ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
 // Contract: 0x8D854436ab0426F5BC6Cc70865C90576AD523E73 (X Layer mainnet)
-// Witness type: TransferAuthorization (identical scheme across all 5 chains)
+// Witness type: TransferAuthorization (identical scheme across all 6 chains)
 // Key detail: verifyingContract = user's EOA (address(this) under EIP-7702)
 //             msg.sender must equal facilitator param
 const XLAYER_EIP7702_ABI = [

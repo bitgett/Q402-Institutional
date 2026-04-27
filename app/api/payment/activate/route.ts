@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   // 2. Chain must match (belt-and-suspenders — scan was already filtered by intentChain)
   if (result.chain) {
     const CHAIN_NAME_MAP: Record<string, string> = {
-      bnb: "BNB Chain", eth: "Ethereum", avax: "Avalanche", xlayer: "X Layer", stable: "Stable",
+      bnb: "BNB Chain", eth: "Ethereum", avax: "Avalanche", xlayer: "X Layer", stable: "Stable", mantle: "Mantle",
     };
     const expectedName = CHAIN_NAME_MAP[intent.chain];
     if (expectedName && result.chain !== expectedName) {

@@ -90,7 +90,7 @@ describe("intent quote — ETH plan chain", () => {
 
 // ── Avax / Stable / XLayer plan chains ───────────────────────────────────────
 
-describe("intent quote — Avax / Stable / XLayer plan chains", () => {
+describe("intent quote — Avax / Stable / XLayer / Mantle plan chains", () => {
   it("avax $99 → growth / 5,000 (avax threshold = $99)", () => {
     expect(computeQuote(99, "avax")).toEqual({ quotedPlan: "growth", quotedCredits: 5_000 });
   });
@@ -101,6 +101,18 @@ describe("intent quote — Avax / Stable / XLayer plan chains", () => {
 
   it("xlayer $49 → basic / 1,000", () => {
     expect(computeQuote(49, "xlayer")).toEqual({ quotedPlan: "basic", quotedCredits: 1_000 });
+  });
+
+  it("mantle $89 → growth / 5,000 (mantle = BNB thresholds, 1.0× multiplier)", () => {
+    expect(computeQuote(89, "mantle")).toEqual({ quotedPlan: "growth", quotedCredits: 5_000 });
+  });
+
+  it("mantle $149 → pro / 10,000", () => {
+    expect(computeQuote(149, "mantle")).toEqual({ quotedPlan: "pro", quotedCredits: 10_000 });
+  });
+
+  it("mantle $28 (below minimum) → null / 0 credits", () => {
+    expect(computeQuote(28, "mantle")).toEqual({ quotedPlan: null, quotedCredits: 0 });
   });
 });
 
@@ -113,5 +125,6 @@ describe("INTENT_CHAIN_MAP", () => {
     expect(INTENT_CHAIN_MAP["avax"]).toBe("Avalanche");
     expect(INTENT_CHAIN_MAP["xlayer"]).toBe("X Layer");
     expect(INTENT_CHAIN_MAP["stable"]).toBe("Stable");
+    expect(INTENT_CHAIN_MAP["mantle"]).toBe("Mantle");
   });
 });

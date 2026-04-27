@@ -1,6 +1,6 @@
 /**
  * agent-example.mjs
- * Q402 Node.js Agent SDK — unified example for all 5 Q402 chains.
+ * Q402 Node.js Agent SDK — unified example for all 6 Q402 chains.
  *
  * Signing scheme (identical for every chain):
  *   - Witness type: TransferAuthorization(owner, facilitator, token, recipient,
@@ -112,6 +112,19 @@ const CHAINS = {
     nativeCurrency: { name: "USDT0", symbol: "USDT0", decimals: 18 },
     explorerBase: "https://stablescan.org/tx/",
     nonceField: "stableNonce",
+  },
+  mantle: {
+    id: 5000, name: "Mantle", domainName: "Q402 Mantle",
+    rpc: envVars.MANTLE_RPC_URL ?? "https://rpc.mantle.xyz",
+    impl: envVars.MANTLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    tokens: {
+      USDC: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
+      // USDT on Mantle is served via USDT0 OFT (0x779Ded...) per 2025-11 migration.
+      USDT: { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
+    },
+    nativeCurrency: { name: "Mantle", symbol: "MNT", decimals: 18 },
+    explorerBase: "https://explorer.mantle.xyz/tx/",
+    nonceField: "nonce",
   },
 };
 
@@ -314,7 +327,7 @@ async function main() {
   const RECIPIENT = "0xd4e81234567890abcdef1234567890abcdef0a3f"; // replace with your recipient
   const AMOUNT    = "0.05"; // MUST be a decimal string — Number is rejected (IEEE-754).
 
-  // Multi-chain sequential payments — add "eth", "xlayer", "stable" as needed.
+  // Multi-chain sequential payments — add "eth", "xlayer", "stable", "mantle" as needed.
   const chains = ["avax", "bnb"];
   for (const chain of chains) {
     try {

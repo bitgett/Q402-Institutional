@@ -32,6 +32,7 @@ const PLAN_QUOTA: Record<string, number> = {
 const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string; gasNote?: string }> = {
   bnb:    { name: "BNB Chain",  token: "BNB",   color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
   eth:    { name: "Ethereum",   token: "ETH",   color: "#627EEA", img: "/eth.png",    rounded: "rounded-full" },
+  mantle: { name: "Mantle",     token: "MNT",   color: "#FFFFFF", img: "/mantle.png", rounded: "rounded-full" },
   xlayer: { name: "X Layer",    token: "OKB",   color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-full" },
   avax:   { name: "Avalanche",  token: "AVAX",  color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
   // Stable: USDT0 is both the gas token and the payment token — no separate native coin
@@ -40,7 +41,7 @@ const CHAIN_META: Record<string, { name: string; token: string; color: string; i
 
 const STEPS = [
   { n: "01", title: "Load the SDK (browser)", code: `<script src="https://q402.quackai.ai/q402-sdk.js"></script>\n<!-- or: import { Q402Client } from "q402-sdk" -->` },
-  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable\n});` },
+  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle\n});` },
   { n: "03", title: "One-line gasless payment", code: `const result = await q402.pay({\n  to:     "0xRecipient...",\n  amount: "5.00",\n  token:  "USDC",\n});\nconsole.log(result.txHash);` },
   { n: "04", title: "Settlement confirmed", code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: "5", token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0` },
 ];
@@ -269,6 +270,7 @@ function Playground({ apiKey }: { apiKey: string }) {
               <option value="eth" style={{ background: "#0d1422" }}>Ethereum ✓</option>
               <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
               <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
+              <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
           </div></div>
@@ -334,7 +336,7 @@ export default function DashboardPage() {
   const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
   const [thisMonthCount, setThisMonthCount] = useState(0); // for chart only
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
-  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0 });
+  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0, mantle: 0 });
   const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
