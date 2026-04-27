@@ -99,7 +99,7 @@ export async function getAuthCreds(
   const nonce = await fetchNonce(addr);
   if (!nonce) return null;
 
-  const msg = `Q402 Auth\nAddress: ${addr.toLowerCase()}\nNonce: ${nonce}`;
+  const msg = `Q402 Institutional\nSign in to prove wallet ownership.\n\nAddress: ${addr.toLowerCase()}\nNonce: ${nonce}`;
   const signature = await signMessage(msg);
   if (!signature) return null;
 
@@ -123,7 +123,7 @@ export async function getFreshChallenge(
     const challenge: string = json.challenge;
     if (typeof challenge !== "string") return null;
 
-    const msg = `Q402 Action\nAddress: ${addr.toLowerCase()}\nChallenge: ${challenge}`;
+    const msg = `Q402 Institutional\nAuthorize sensitive action (key rotation / payment activation).\n\nAddress: ${addr.toLowerCase()}\nChallenge: ${challenge}`;
     const signature = await signMessage(msg);
     if (!signature) return null;
 

@@ -20,7 +20,7 @@ import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/b
  *
  * Body: { address, nonce, signature, chain, expectedUSD, token?, planChain? }
  *   chain:      payment chain id — "bnb" | "eth" (where funds actually move)
- *   planChain:  selected relay chain — "bnb" | "avax" | "eth" | "xlayer" | "stable"
+ *   planChain:  selected relay chain — "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle"
  *               (determines plan/credit thresholds; defaults to `chain` if omitted)
  *   token:      "USDC" | "USDT" | "USDT0" (optional — cross-checked in activate)
  *
@@ -31,7 +31,7 @@ import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/b
 
 const INTENT_TTL = 2 * 60 * 60; // 2 hours
 
-const VALID_CHAINS = ["bnb", "avax", "eth", "xlayer", "stable"];
+const VALID_CHAINS = ["bnb", "avax", "eth", "xlayer", "stable", "mantle"];
 const VALID_TOKENS = ["USDC", "USDT", "USDT0"];
 
 

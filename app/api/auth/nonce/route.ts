@@ -7,7 +7,7 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
  *
  * Issues (or returns the existing) session nonce for the given address.
  * The nonce is stored server-side for 1 hour.  Clients sign:
- *   "Q402 Auth\nAddress: {addr}\nNonce: {nonce}"
+ *   "Q402 Institutional\nSign in to prove wallet ownership.\n\nAddress: {addr}\nNonce: {nonce}"
  * and pass { address, nonce, signature } with low-risk protected requests.
  * High-risk actions (key rotation, payment activation) use GET /api/auth/challenge instead.
  *

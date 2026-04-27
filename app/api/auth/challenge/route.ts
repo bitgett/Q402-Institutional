@@ -9,7 +9,7 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
  * Unlike the session nonce, challenges are:
  *  - Single-use: consumed and deleted on first successful verification
  *  - Short-lived: 5-minute TTL
- *  - Signed with a different message prefix ("Q402 Action\nAddress: ...\nChallenge: ...")
+ *  - Signed with a different action-specific prefix ("Q402 Institutional\nAuthorize sensitive action ...")
  *
  * Rate-limited to 10 req / 60 s per IP.
  */

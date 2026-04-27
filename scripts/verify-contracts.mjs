@@ -25,6 +25,7 @@ const RPCS = {
   eth:    "https://ethereum.publicnode.com",
   xlayer: "https://rpc.xlayer.tech",
   stable: "https://rpc.stable.xyz",
+  mantle: "https://rpc.mantle.xyz",
 };
 
 // Human-readable TransferAuthorization typehash (matches local source)

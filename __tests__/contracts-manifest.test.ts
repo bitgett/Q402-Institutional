@@ -46,7 +46,7 @@ const sdkSource = readFileSync(
   "utf8"
 );
 
-const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable"] as const;
+const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable", "mantle"] as const;
 
 describe("contracts.manifest.json ↔ server CHAIN_CONFIG", () => {
   it.each(CHAINS)("%s: chainId + implContract match manifest", (chain) => {
@@ -78,7 +78,7 @@ describe("contracts.manifest.json ↔ public SDK", () => {
     expect(sdkSource).toMatch(new RegExp(`chainId:\\s*${m.chainId}\\b`));
   });
 
-  it("SDK uses the unified TransferAuthorization witness type for all 5 chains", () => {
+  it("SDK uses the unified TransferAuthorization witness type for all 6 chains", () => {
     expect(sdkSource).toContain("Q402_TRANSFER_AUTH_TYPES");
     expect(sdkSource).toContain("TransferAuthorization:");
     expect(sdkSource).not.toContain("PaymentWitness");

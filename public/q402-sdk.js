@@ -1,6 +1,8 @@
 /**
  * Q402 Client SDK (browser-compatible)
- * v1.3.1 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable) + EIP-3009 (xlayer USDC fallback)
+ * v1.5.0 — Mantle USDT repointed to USDT0 (LayerZero OFT), reflecting the 2025-11-27
+ *          ecosystem migration. Legacy bridged USDT deposits sunset 2026-02-03.
+ * v1.4.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable/mantle) + EIP-3009 (xlayer USDC fallback)
  *          Exact decimal→raw conversion via ethers.parseUnits (no IEEE-754 precision loss).
  *
  * The authoritative source for witness type, domain, and contract mapping is
@@ -15,8 +17,9 @@
  *  eth        TransferAuthorization  "Q402 Ethereum"     user's EOA          6
  *  xlayer     TransferAuthorization  "Q402 X Layer"      user's EOA          6
  *  stable     TransferAuthorization  "Q402 Stable"       user's EOA          18  ← USDT0 only
+ *  mantle     TransferAuthorization  "Q402 Mantle"       user's EOA          6
  *
- *  All 5 deployed contracts compute _domainSeparator() with `address(this)`, which
+ *  All 6 deployed contracts compute _domainSeparator() with `address(this)`, which
  *  under EIP-7702 delegation equals the user's EOA — NOT the impl contract.
  *
  *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
@@ -90,9 +93,20 @@ const Q402_CHAIN_CONFIG = {
     usdc: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
     usdt: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
   },
+  mantle: {
+    name:         "Mantle",
+    chainId:      5000,
+    mode:         "eip7702",
+    domainName:   "Q402 Mantle",
+    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
+    // USDT0 (LayerZero OFT) — Mantle ecosystem default since the 2025-11-27 migration.
+    // Legacy bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) sunset 2026-02-03.
+    usdt: { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
+  },
 };
 
-// EIP-7702 witness type — shared by all 5 chains (avax/bnb/eth/xlayer/stable).
+// EIP-7702 witness type — shared by all 6 chains (avax/bnb/eth/xlayer/stable/mantle).
 // All Q402PaymentImplementation* contracts use the identical TransferAuthorization
 // typehash. verifyingContract = address(this), which under EIP-7702 delegation = user EOA.
 const Q402_TRANSFER_AUTH_TYPES = {
@@ -150,7 +164,7 @@ class Q402Client {
   /**
    * @param {object} opts
    * @param {string} opts.apiKey     - Your Q402 API key (q402_live_xxx)
-   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"} opts.chain - Target chain
+   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"} opts.chain - Target chain
    * @param {string} [opts.relayUrl] - Override relay endpoint (default: https://q402.quackai.ai/api/relay)
    */
   constructor({ apiKey, chain = "avax", relayUrl = "https://q402.quackai.ai/api/relay" }) {
@@ -158,7 +172,7 @@ class Q402Client {
     this.chain    = chain;
     this.relayUrl = relayUrl;
     this.chainCfg = Q402_CHAIN_CONFIG[chain];
-    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable`);
+    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle`);
   }
 
   /**
@@ -202,7 +216,7 @@ class Q402Client {
     }
   }
 
-  // ── EIP-7702 결제 (avax / bnb / eth) ─────────────────────────────────────────
+  // ── EIP-7702 결제 (avax / bnb / eth / mantle) ────────────────────────────────
   // Q402PaymentImplementation.transferWithAuthorization() 사용
   // witness type: TransferAuthorization
   // domain name: per-chain (contract NAME 상수와 일치)
@@ -446,7 +460,7 @@ class Q402Client {
   }
 
   /**
-   * EIP-7702 authorization 서명 (avax/bnb/eth 전용)
+   * EIP-7702 authorization 서명 (avax/bnb/eth/xlayer/stable/mantle 공통)
    */
   async _signAuthorization(signer, { chainId, address, nonce }) {
     const domain = { name: "EIP7702Authorization", version: "1", chainId };

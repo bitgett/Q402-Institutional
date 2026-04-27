@@ -1,9 +1,9 @@
 /**
- * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 5 Q402 chains.
+ * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 6 Q402 chains.
  *
- *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable> [--amount 0.05] [--to 0x...]
+ *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle> [--amount 0.05] [--to 0x...]
  *
- * Flow (identical for every chain — all 5 impl contracts share the same
+ * Flow (identical for every chain — all 6 impl contracts share the same
  * TransferAuthorization witness + _domainSeparator(address(this)) scheme):
  *
  *   1. Payer signs TransferAuthorization EIP-712 (verifyingContract = payer EOA,
@@ -28,7 +28,7 @@ const __dir = dirname(fileURLToPath(import.meta.url));
 const envVars = Object.fromEntries(
   readFileSync(resolve(__dir, "../.env.local"), "utf-8")
     .split("\n").filter(l => l.trim() && !l.startsWith("#"))
-    .map(l => { const i = l.indexOf("="); return [l.slice(0, i).trim(), l.slice(i + 1).trim()]; })
+    .map(l => { const i = l.indexOf("="); return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, "")]; })
     .filter(p => p[0])
 );
 
@@ -86,6 +86,14 @@ const CHAINS = {
     // USDT0 is both the gas token and the transfer token on Stable (18 decimals).
     token: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0",
     explorer: "https://stablescan.org/tx/",
+  },
+  mantle: {
+    id: 5000, name: "Mantle", domainName: "Q402 Mantle",
+    rpc: "https://rpc.mantle.xyz",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // USDT on Mantle = USDT0 OFT (0x779Ded...) as of the 2025-11 ecosystem migration.
+    token: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6, symbol: "USDT",
+    explorer: "https://explorer.mantle.xyz/tx/",
   },
 };
 

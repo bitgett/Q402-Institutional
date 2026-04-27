@@ -91,11 +91,12 @@ describe("agent-example.mjs relay body shape", () => {
   });
 
   it("declares the correct nonceField per chain", () => {
-    // avax/bnb/eth → "nonce", xlayer → "xlayerNonce", stable → "stableNonce"
+    // avax/bnb/eth/mantle → "nonce", xlayer → "xlayerNonce", stable → "stableNonce"
     const cases: Array<[string, string]> = [
       ["avax",   '"nonce"'],
       ["bnb",    '"nonce"'],
       ["eth",    '"nonce"'],
+      ["mantle", '"nonce"'],
       ["xlayer", '"xlayerNonce"'],
       ["stable", '"stableNonce"'],
     ];

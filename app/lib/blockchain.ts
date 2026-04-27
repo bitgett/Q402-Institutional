@@ -85,15 +85,29 @@ const CHAINS = [
       { symbol: "USDT0", address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
     ],
   },
+  {
+    name: "Mantle",
+    rpcs: [
+      "https://rpc.mantle.xyz",
+      "https://mantle-rpc.publicnode.com",
+    ],
+    blockWindow: 2000,   // ~1.1 hours (2s block)
+    tokens: [
+      { symbol: "USDC", address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
+      // USDT on Mantle = USDT0 OFT (0x779Ded...) per 2025-11 ecosystem migration.
+      { symbol: "USDT", address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
+    ],
+  },
 ];
 
-/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable") to CHAINS[].name */
+/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle") to CHAINS[].name */
 export const INTENT_CHAIN_MAP: Record<string, string> = {
   bnb:    "BNB Chain",
   eth:    "Ethereum",
   avax:   "Avalanche",
   xlayer: "X Layer",
   stable: "Stable",
+  mantle: "Mantle",
 };
 
 /**
@@ -304,6 +318,7 @@ const CHAIN_THRESHOLDS: Record<string, number[]> = {
   "BNB Chain":  [  29,  49,  89,  149,  449,   799,  1999 ],
   "X Layer":    [  29,  49,  89,  149,  449,   799,  1999 ],
   "Stable":     [  29,  49,  89,  149,  449,   799,  1999 ],
+  "Mantle":     [  29,  49,  89,  149,  449,   799,  1999 ],
   "Avalanche":  [  29,  49,  99,  159,  489,   879,  2199 ],
   "Ethereum":   [  39,  69, 129,  219,  669,  1199,  2999 ],
 };
@@ -351,6 +366,7 @@ const CHAIN_MULTIPLIERS: Record<string, number> = {
   "BNB Chain": 1.0,
   "X Layer":   1.0,
   "Stable":    1.0,
+  "Mantle":    1.0,
   "Avalanche": 1.1,
   "Ethereum":  1.5,
 };

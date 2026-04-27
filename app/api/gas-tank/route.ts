@@ -7,6 +7,7 @@ import { GASTANK_ADDRESS, RELAYER_ADDRESS } from "@/app/lib/wallets";
 const CHAINS = [
   { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",         cgId: "binancecoin"  },
   { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",             cgId: "ethereum"     },
+  { key: "mantle", name: "Mantle",    token: "MNT",   rpc: "https://rpc.mantle.xyz",                      cgId: "mantle"       },
   { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",       cgId: "avalanche-2"  },
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                     cgId: "okb"          },
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                      cgId: "tether"       },
@@ -16,6 +17,7 @@ const CHAINS = [
 const ALERT_THRESHOLD_USD: Record<string, number> = {
   bnb:    5,   // BNB: alert below $5
   eth:    5,   // ETH: alert below $5 (gas is expensive)
+  mantle: 2,
   avax:   3,
   xlayer: 2,
   stable: 2,
