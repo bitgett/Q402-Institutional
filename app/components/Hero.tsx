@@ -97,12 +97,13 @@ export default function Hero() {
                 className="flex items-center gap-5 mb-8"
               >
                 {[
-                  { img: "/bnb.png",    color: "#F0B90B", label: "BNB"  },
-                  { img: "/eth.png",    color: "#627EEA", label: "ETH"  },
-                  { img: "/mantle.png", color: "#FFFFFF", label: "MNT"  },
-                  { img: "/avax.png",   color: "#E84142", label: "AVAX" },
-                  { img: "/xlayer.png", color: "#CCCCCC", label: "X"    },
-                  { img: "/stable.jpg", color: "#4AE54A", label: "STB"  },
+                  { img: "/bnb.png",       color: "#F0B90B", label: "BNB"  },
+                  { img: "/eth.png",       color: "#627EEA", label: "ETH"  },
+                  { img: "/mantle.png",    color: "#FFFFFF", label: "MNT"  },
+                  { img: "/avax.png",      color: "#E84142", label: "AVAX" },
+                  { img: "/injective.png", color: "#0082FA", label: "INJ"  },
+                  { img: "/xlayer.png",    color: "#CCCCCC", label: "X"    },
+                  { img: "/stable.jpg",    color: "#4AE54A", label: "STB"  },
                 ].map((c, i) => (
                   <motion.div
                     key={c.label}
@@ -128,7 +129,7 @@ export default function Hero() {
                     />
                   </motion.div>
                 ))}
-                <span className="text-white/20 text-xs ml-1">6 chains live</span>
+                <span className="text-white/20 text-xs ml-1">7 chains live</span>
               </motion.div>
 
               {/* Headline */}
@@ -142,7 +143,7 @@ export default function Hero() {
                   <span className="text-shimmer">stablecoin rails.</span>
                 </h1>
                 <p className="text-xl text-white/45 font-light tracking-wide mb-6">
-                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Six EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC or USDT, we cover the rest.
+                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC or USDT, we cover the rest.
                 </p>
               </motion.div>
 
@@ -209,7 +210,7 @@ export default function Hero() {
                 </div>
                 <div className="w-px h-10 bg-white/8" />
                 <div>
-                  <div className="text-2xl font-bold">6 chains</div>
+                  <div className="text-2xl font-bold">7 chains</div>
                   <div className="text-xs text-white/30 mt-0.5">mainnet live</div>
                 </div>
               </motion.div>
@@ -231,7 +232,7 @@ export default function Hero() {
                     <span className="w-3 h-3 rounded-full bg-red-500/60" />
                     <span className="w-3 h-3 rounded-full bg-yellow/50" />
                     <span className="w-3 h-3 rounded-full bg-green-400/50" />
-                    <span className="ml-4 text-white/20 text-xs font-mono">q402-sdk · v1.5.0</span>
+                    <span className="ml-4 text-white/20 text-xs font-mono">q402-sdk · v1.6.0</span>
                     <div className="ml-auto flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
                       <span className="text-[10px] text-white/25 font-mono">connected</span>
@@ -263,7 +264,7 @@ export default function Hero() {
                     </div>
                     <div className="pl-5">
                       <div><span className="text-green-300">apiKey</span><span className="text-white/40">: </span><span className="text-orange-300">&quot;q402_live_...&quot;</span><span className="text-white/40">,</span></div>
-                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avax | eth | mantle | xlayer | stable"}</span></div>
+                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avax | eth | mantle | injective | xlayer | stable"}</span></div>
                     </div>
                     <div className="text-white/40 mb-4">{"});"}</div>
 
@@ -299,12 +300,13 @@ export default function Hero() {
                   <div className="px-5 py-2.5 border-t flex items-center justify-between" style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}>
                     <div className="flex items-center gap-4">
                       {[
-                        { label: "BNB",  img: "/bnb.png",      rounded: "rounded-full" },
-                        { label: "ETH",  img: "/eth.png",      rounded: "rounded-full" },
-                        { label: "MNT",  img: "/mantle.png",   rounded: "rounded-full" },
-                        { label: "AVAX", img: "/avax.png",     rounded: "rounded-full" },
-                        { label: "X",    img: "/xlayer.png",   rounded: "rounded-full" },
-                        { label: "STB",  img: "/stable.jpg",   rounded: "rounded-full" },
+                        { label: "BNB",  img: "/bnb.png",       rounded: "rounded-full" },
+                        { label: "ETH",  img: "/eth.png",       rounded: "rounded-full" },
+                        { label: "MNT",  img: "/mantle.png",    rounded: "rounded-full" },
+                        { label: "AVAX", img: "/avax.png",      rounded: "rounded-full" },
+                        { label: "INJ",  img: "/injective.png", rounded: "rounded-full" },
+                        { label: "X",    img: "/xlayer.png",    rounded: "rounded-full" },
+                        { label: "STB",  img: "/stable.jpg",    rounded: "rounded-full" },
                       ].map((c) => (
                         <span key={c.label} className="flex items-center gap-1 text-[10px] font-mono text-white/30">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
