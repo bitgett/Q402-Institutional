@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ newDeposits: added ? 1 : 0, balances, alreadyCredited: !added });
   }
 
-  // ── Default path: recent-block scan across all 6 chains ──────────────────
+  // ── Default path: recent-block scan across all 7 chains ──────────────────
   const results = await Promise.allSettled(
     CHAINS.map(chain => scanNativeDeposits(chain, address).then(txs => ({ chain, txs })))
   );
