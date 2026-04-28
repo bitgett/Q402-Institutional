@@ -297,6 +297,8 @@ const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
   chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective"
 });
+// Note: when chain is "injective", only token: "USDT" is supported.
+// Native USDC via Circle CCTP is announced for Q2 2026.
 
 // Wallet popup appears — user signs, Q402 relays on-chain
 // amount MUST be a human-readable decimal STRING (e.g. "50.00", "0.123456").
@@ -612,7 +614,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "Can I use Q402 with tokens other than USDC?",
-                a: "Currently USDC and USDT are supported on all live chains. Additional ERC-20 token support is on the roadmap."
+                a: "Currently USDC and USDT are supported on every live chain except Injective EVM, which is USDT-only at launch — native USDC via Circle CCTP is announced for Q2 2026 and will be added in the next minor release. Additional ERC-20 token support is on the roadmap."
               },
               {
                 q: "How do I get an API key?",
