@@ -13,7 +13,7 @@ import { GASTANK_ADDRESS } from "../lib/wallets";
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
 
-// User gas deposits (BNB/ETH/AVAX/OKB/USDT0) go to the cold GASTANK wallet.
+// User gas deposits (BNB/ETH/MNT/INJ/AVAX/OKB/USDT0) go to the cold GASTANK wallet.
 // This address is user-facing on the "Top up" modal; never send revenue or relayer hot-key here.
 const DEPOSIT_ADDRESS = GASTANK_ADDRESS;
 

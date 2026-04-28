@@ -7,7 +7,7 @@
  *                         arrive here. No server-side private key. Withdraw
  *                         manually from a cold device.
  *
- *   GASTANK_ADDRESS       user-deposited relay credits (BNB/ETH/AVAX/OKB/USDT0).
+ *   GASTANK_ADDRESS       user-deposited relay credits (BNB/ETH/MNT/INJ/AVAX/OKB/USDT0).
  *                         KV ledger tracks per-user balance; on-chain balance
  *                         MUST equal sum(KV gas balance) at all times. No
  *                         server-side private key — hot relayer is topped up
