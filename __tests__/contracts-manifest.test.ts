@@ -108,4 +108,39 @@ describe("contracts.manifest.json ↔ public SDK", () => {
     expect(m.fallbackRelayMode).toBe("eip3009");
     expect(m.fallbackTokens).toEqual(["USDC"]);
   });
+
+  // ── Injective USDT-only policy (locks the SDK ↔ relay route ↔ manifest invariant) ──
+  // SDK gates `pay({ chain: "injective", token: "USDC" })` at call time. Relay route
+  // mirrors that gate server-side. Manifest declares the policy. If any of the three
+  // drift apart, this triplet of assertions catches it.
+  describe("Injective USDT-only policy", () => {
+    it("manifest declares supportedApiTokens === [\"USDT\"]", () => {
+      const m = manifest.chains.injective as { supportedApiTokens?: string[] };
+      expect(m.supportedApiTokens).toEqual(["USDT"]);
+    });
+
+    it("SDK Q402_CHAIN_CONFIG.injective.supportedTokens === [\"USDT\"]", () => {
+      // Match the config block — injective: { ... supportedTokens: ["USDT"] }
+      const m = sdkSource.match(
+        /injective:\s*\{[\s\S]*?supportedTokens:\s*\[([^\]]+)\][\s\S]*?\}/
+      );
+      expect(m, "SDK should declare supportedTokens for injective").not.toBeNull();
+      const tokens = m![1].split(",").map(s => s.trim().replace(/['"]/g, ""));
+      expect(tokens).toEqual(["USDT"]);
+    });
+
+    it("relay route enforces the allowlist server-side (rejects injective + USDC)", () => {
+      // The relay route should declare a CHAIN_TOKEN_ALLOWLIST that includes
+      // injective: ["USDT"], and short-circuit with TOKEN_NOT_SUPPORTED_ON_CHAIN
+      // when a request violates it. Asserts the source-level invariant so a
+      // future edit that loosens the allowlist trips CI before deploy.
+      const route = readFileSync(
+        resolve(__dirname, "..", "app", "api", "relay", "route.ts"),
+        "utf8",
+      );
+      expect(route).toMatch(/CHAIN_TOKEN_ALLOWLIST/);
+      expect(route).toMatch(/injective:\s*\[\s*["']USDT["']\s*\]/);
+      expect(route).toMatch(/TOKEN_NOT_SUPPORTED_ON_CHAIN/);
+    });
+  });
 });
