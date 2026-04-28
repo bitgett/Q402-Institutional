@@ -111,7 +111,7 @@ function AgentNetwork() {
 
 // ─── Live TX Feed ─────────────────────────────────────────────────────────────
 
-const CHAINS_FEED = ["AVAX","BNB","ETH","MANTLE","XLAYER","STABLE"];
+const CHAINS_FEED = ["AVAX","BNB","ETH","MANTLE","INJECTIVE","XLAYER","STABLE"];
 const TOKENS_FEED = ["USDC","USDT"];
 
 function randomHex(len: number) {
@@ -313,7 +313,7 @@ function ContactModal({ onClose }: { onClose: () => void }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const CHAIN_COLORS: Record<string, string> = {
-  AVAX: "#E84142", BNB: "#F0B90B", ETH: "#627EEA", MANTLE: "#FFFFFF", XLAYER: "#CCCCCC", STABLE: "#4AE54A",
+  AVAX: "#E84142", BNB: "#F0B90B", ETH: "#627EEA", MANTLE: "#FFFFFF", INJECTIVE: "#0082FA", XLAYER: "#CCCCCC", STABLE: "#4AE54A",
 };
 
 export default function AgentsPage() {
@@ -359,7 +359,7 @@ export default function AgentsPage() {
               </span>
             </h1>
             <p className="text-white/50 text-lg leading-relaxed mb-8">
-              Stop managing gas wallets across 1,000+ agents on 6 chains.
+              Stop managing gas wallets across 1,000+ agents on 7 chains.
               Deposit once — every agent relays freely until the tank runs dry.
             </p>
 
@@ -384,7 +384,7 @@ export default function AgentsPage() {
             {/* Stats */}
             <div className="flex gap-8 mt-10">
               {[
-                { val: "6",   label: "EVM Chains" },
+                { val: "7",   label: "EVM Chains" },
                 { val: "∞",   label: "TX Quota" },
                 { val: "$0",  label: "Gas per agent" },
               ].map((s, i) => (
@@ -465,7 +465,7 @@ export default function AgentsPage() {
             className="text-center mb-12"
           >
             <h2 className="text-3xl font-bold mb-3">Gas management at scale is broken</h2>
-            <p className="text-white/40 text-sm">Running 100 agents across 6 chains = 600 funded wallets to maintain</p>
+            <p className="text-white/40 text-sm">Running 100 agents across 7 chains = 700 funded wallets to maintain</p>
           </motion.div>
 
           <div className="grid md:grid-cols-2 gap-6">
@@ -479,9 +479,9 @@ export default function AgentsPage() {
               <div className="text-red-400 text-xs font-bold uppercase tracking-widest mb-4">Traditional approach</div>
               <div className="space-y-3">
                 {[
-                  "Each agent holds AVAX + BNB + ETH + OKB + USDT0 + MNT",
+                  "Each agent holds AVAX + BNB + ETH + OKB + USDT0 + MNT + INJ",
                   "Gas spikes drain wallets → agents go silent",
-                  "600 wallets to monitor, refill, rotate keys",
+                  "700 wallets to monitor, refill, rotate keys",
                   "Failed TX when gas runs out mid-execution",
                   "Separate gas logic per chain, per agent",
                 ].map((t, i) => (
@@ -507,7 +507,7 @@ export default function AgentsPage() {
                   "One Gas Tank per chain funds unlimited agents",
                   "1 API key, one deposit per chain — done",
                   "Q402 relayer handles gas estimation & retry",
-                  "Same SDK call for all 6 chains",
+                  "Same SDK call for all 7 chains",
                 ].map((t, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm text-white/70">
                     <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
@@ -623,7 +623,7 @@ const { txHash, gasCostNative } = await res.json();
               <ul className="text-left space-y-2.5 mb-8 max-w-xs mx-auto">
                 {[
                   "Unlimited TX quota",
-                  "All 6 EVM chains",
+                  "All 7 EVM chains",
                   "Gas Tank pre-pay model",
                   "Webhooks + real-time events",
                   "Sandbox mode for testing",
