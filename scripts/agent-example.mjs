@@ -1,6 +1,6 @@
 /**
  * agent-example.mjs
- * Q402 Node.js Agent SDK — unified example for all 6 Q402 chains.
+ * Q402 Node.js Agent SDK — unified example for all 7 Q402 chains.
  *
  * Signing scheme (identical for every chain):
  *   - Witness type: TransferAuthorization(owner, facilitator, token, recipient,
@@ -124,6 +124,19 @@ const CHAINS = {
     },
     nativeCurrency: { name: "Mantle", symbol: "MNT", decimals: 18 },
     explorerBase: "https://explorer.mantle.xyz/tx/",
+    nonceField: "nonce",
+  },
+  injective: {
+    id: 1776, name: "Injective", domainName: "Q402 Injective",
+    rpc: envVars.INJECTIVE_RPC_URL ?? "https://sentry.evm-rpc.injective.network/",
+    impl: envVars.INJECTIVE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Injective EVM (chainId 1776, launched 2025-11-11). USDT only for now —
+    // native CCTP USDC announced for Q2 2026; Q402 will add USDC then.
+    tokens: {
+      USDT: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
+    },
+    nativeCurrency: { name: "Injective", symbol: "INJ", decimals: 18 },
+    explorerBase: "https://blockscout.injective.network/tx/",
     nonceField: "nonce",
   },
 };
