@@ -1,4 +1,4 @@
-// Chain order: BNB → Ethereum → Mantle → Avalanche → X Layer → Stable → USDC → USDT → Arbitrum → Scroll
+// Chain order: BNB → Ethereum → Mantle → Avalanche → Injective → X Layer → Stable → USDC → USDT → Arbitrum → Scroll
 const chains = [
   {
     name: "BNB Chain",
@@ -41,6 +41,15 @@ const chains = [
     icon: (
       // eslint-disable-next-line @next/next/no-img-element
       <img src="/avax.png" alt="Avalanche" className="w-6 h-6 rounded-full" />
+    ),
+  },
+  {
+    name: "Injective",
+    color: "#0082FA",
+    status: "live",
+    icon: (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/injective.png" alt="Injective" className="w-6 h-6 rounded-full" />
     ),
   },
   {
