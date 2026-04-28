@@ -105,6 +105,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  // ── 1aa. Per-chain token policy (server-side allowlist) ──────────────────
+  // SDK rejects unsupported tokens at pay() time, but a direct API caller
+  // could still try chain="injective" + token="USDC". Mirror the SDK's
+  // supportedTokens guard here so the server is the source of truth and
+  // the asymmetric defense (SDK strict, server tolerant) is closed.
+  // For Injective, native USDC via Circle CCTP is announced for Q2 2026 —
+  // until then USDT is the only token Q402 settles on Injective EVM.
+  const CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT">>> = {
+    injective: ["USDT"],
+  };
+  const allowedTokens = CHAIN_TOKEN_ALLOWLIST[chain];
+  if (allowedTokens && !allowedTokens.includes(token)) {
+    return NextResponse.json(
+      {
+        error:
+          chain === "injective" && token === "USDC"
+            ? "USDC is not yet supported on Injective. Native USDC via Circle CCTP is announced for Q2 2026; until then use USDT on Injective."
+            : `Token "${token}" is not supported on chain "${chain}". Supported: ${allowedTokens.join(", ")}.`,
+        code: "TOKEN_NOT_SUPPORTED_ON_CHAIN",
+      },
+      { status: 400 }
+    );
+  }
+
   // ── 1a. Address format validation ────────────────────────────────────────
   if (!ETH_ADDR.test(from) || !ETH_ADDR.test(to)) {
     return NextResponse.json({ error: "Invalid address format" }, { status: 400 });
