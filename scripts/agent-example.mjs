@@ -340,7 +340,7 @@ async function main() {
   const RECIPIENT = "0xd4e81234567890abcdef1234567890abcdef0a3f"; // replace with your recipient
   const AMOUNT    = "0.05"; // MUST be a decimal string — Number is rejected (IEEE-754).
 
-  // Multi-chain sequential payments — add "eth", "xlayer", "stable", "mantle" as needed.
+  // Multi-chain sequential payments — add "eth", "xlayer", "stable", "mantle", "injective" as needed.
   const chains = ["avax", "bnb"];
   for (const chain of chains) {
     try {

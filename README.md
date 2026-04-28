@@ -281,7 +281,7 @@ The `/payment` page drives a self-serve on-chain checkout → automatic API Key 
 | Business    | 100,000  | $799   | $879   | $1,199 |
 | Enterprise  | 500,000  | $1,999 | $2,199 | $2,999 |
 
-Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT**. The Quote Builder UI currently defaults to BNB/ETH USDC/USDT for the simplest checkout flow; the underlying API accepts payment on any of the 6 supported chains for integrators who want to settle elsewhere.  
+Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT**. The Quote Builder UI currently defaults to BNB/ETH USDC/USDT for the simplest checkout flow; the underlying API accepts payment on any of the 7 supported chains for integrators who want to settle elsewhere.  
 Payment address: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION cold wallet — revenue-only).
 
 ---
@@ -326,7 +326,7 @@ Import `scripts/agent-example.mjs` as a module:
 import { sendGaslessPayment } from "./scripts/agent-example.mjs";
 
 const result = await sendGaslessPayment({
-  chain:      "avax",   // "avax" | "bnb" | "eth" | "xlayer" | "stable" | "mantle"
+  chain:      "avax",   // "avax" | "bnb" | "eth" | "xlayer" | "stable" | "mantle" | "injective"
   recipient:  "0x...",
   amount:     "10.0",   // decimal string — Number is rejected (IEEE-754 safety)
 });
@@ -885,7 +885,7 @@ Users deposit native tokens to the **GASTANK** cold address (`GASTANK_ADDRESS`) 
 - Users who come back outside the scan window (~10 minutes on ETH, up to tens of minutes elsewhere) are not credited by this path — use the direct-lookup path below.
 
 **Deposit direct lookup (recovery path):** `POST /api/gas-tank/verify-deposit` — `{ address, txHash, chain }`
-- `chain`: `"bnb" | "eth" | "mantle" | "avax" | "xlayer" | "stable"`.
+- `chain`: `"bnb" | "eth" | "mantle" | "injective" | "avax" | "xlayer" | "stable"`.
 - Validates a single TX via `eth_getTransactionByHash` (confirmed + `to=GASTANK` + `from=address` + `value>0`).
 - Works outside the block window. Duplicate txHashes are rejected automatically by `addGasDeposit`'s SADD guard (`alreadyCredited: true`).
 - Surfaced in the dashboard Deposit modal's "not_found" state.
@@ -896,7 +896,7 @@ Users deposit native tokens to the **GASTANK** cold address (`GASTANK_ADDRESS`) 
 
 ```json
 {
-  "balances": { "bnb": 0.5, "eth": 0.0, "mantle": 0.0, "avax": 2.1, "xlayer": 0.0, "stable": 0.0 },
+  "balances": { "bnb": 0.5, "eth": 0.0, "mantle": 0.0, "injective": 0.0, "avax": 2.1, "xlayer": 0.0, "stable": 0.0 },
   "deposits": [...]
 }
 ```
