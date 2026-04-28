@@ -30,8 +30,9 @@ const CHAINS = [
   { id: "mantle",   name: "Mantle",    color: "#FFFFFF", img: "/mantle.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "avax",     name: "Avalanche", color: "#E84142", img: "/avax.png",     rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
   { id: "xlayer",   name: "X Layer",   color: "#CCCCCC", img: "/xlayer.png",   rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
-  { id: "stable",   name: "Stable",    color: "#4AE54A", img: "/stable.jpg",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "arbitrum", name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png", rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
+  { id: "stable",   name: "Stable",    color: "#4AE54A", img: "/stable.jpg",     rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "injective", name: "Injective", color: "#0082FA", img: "/injective.png", rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "arbitrum", name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
   { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
 ];
 
@@ -54,12 +55,13 @@ const VOLUMES = [
 // value, so the UI and server MUST agree to the dollar.
 // Order: [500, 1K, 5K, 10K, 50K, 100K, 500K]
 const CHAIN_PRICES: Record<string, number[]> = {
-  bnb:    [ 29,  49,  89,  149,  449,   799,  1999 ],
-  xlayer: [ 29,  49,  89,  149,  449,   799,  1999 ],
-  stable: [ 29,  49,  89,  149,  449,   799,  1999 ],
-  mantle: [ 29,  49,  89,  149,  449,   799,  1999 ],
-  avax:   [ 29,  49,  99,  159,  489,   879,  2199 ],
-  eth:    [ 39,  69, 129,  219,  669,  1199,  2999 ],
+  bnb:       [ 29,  49,  89,  149,  449,   799,  1999 ],
+  xlayer:    [ 29,  49,  89,  149,  449,   799,  1999 ],
+  stable:    [ 29,  49,  89,  149,  449,   799,  1999 ],
+  mantle:    [ 29,  49,  89,  149,  449,   799,  1999 ],
+  injective: [ 29,  49,  89,  149,  449,   799,  1999 ],
+  avax:      [ 29,  49,  99,  159,  489,   879,  2199 ],
+  eth:       [ 39,  69, 129,  219,  669,  1199,  2999 ],
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

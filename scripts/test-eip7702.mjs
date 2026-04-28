@@ -1,7 +1,7 @@
 /**
  * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 6 Q402 chains.
  *
- *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle> [--amount 0.05] [--to 0x...]
+ *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective> [--amount 0.05] [--to 0x...]
  *
  * Flow (identical for every chain — all 6 impl contracts share the same
  * TransferAuthorization witness + _domainSeparator(address(this)) scheme):
@@ -94,6 +94,14 @@ const CHAINS = {
     // USDT on Mantle = USDT0 OFT (0x779Ded...) as of the 2025-11 ecosystem migration.
     token: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6, symbol: "USDT",
     explorer: "https://explorer.mantle.xyz/tx/",
+  },
+  injective: {
+    id: 1776, name: "Injective", domainName: "Q402 Injective",
+    rpc: "https://sentry.evm-rpc.injective.network/",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Injective EVM: USDT only (native CCTP USDC pending Q2 2026 rollout).
+    token: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6, symbol: "USDT",
+    explorer: "https://blockscout.injective.network/tx/",
   },
 };
 

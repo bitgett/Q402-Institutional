@@ -82,7 +82,7 @@ export default function DocsPage() {
               <span className="text-white/50 text-xs font-medium">docs</span>
             </Link>
             <div className="hidden sm:flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-lg px-3 py-1.5">
-              <span className="text-white/25 text-xs font-mono">v1.5.0</span>
+              <span className="text-white/25 text-xs font-mono">v1.6.0</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -140,7 +140,7 @@ export default function DocsPage() {
           {/* Docs hero banner */}
           <div className="px-8 pt-12 pb-10 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, transparent 100%)" }}>
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.5.0</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.6.0</span>
               <span className="text-white/20 text-xs">·</span>
               <span className="text-white/30 text-xs">EIP-712 + EIP-7702</span>
             </div>
@@ -295,7 +295,7 @@ export default function DocsPage() {
             <CodeBlock lang="javascript" code={`// Initialize once with your API key + chain
 const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
-  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle"
+  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective"
 });
 
 // Wallet popup appears — user signs, Q402 relays on-chain
@@ -332,13 +332,13 @@ console.log("Paid! TX:", result.txHash);`} />
           {/* ── GAS POOL ── */}
           <Section id="gaspool" title="Gas Pool">
             <p className="text-white/55 text-sm mb-6">
-              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, MNT, AVAX, OKB, or USDT0 on Stable) into a single Q402-managed Gas Tank address that is shared across all customers — your balance is tracked off-chain, per wallet, in our ledger. Every time a user transaction is relayed, the gas fee is automatically deducted from your per-wallet balance.
+              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, MNT, AVAX, INJ, OKB, or USDT0 on Stable) into a single Q402-managed Gas Tank address that is shared across all customers — your balance is tracked off-chain, per wallet, in our ledger. Every time a user transaction is relayed, the gas fee is automatically deducted from your per-wallet balance.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-yellow text-xs font-semibold mb-2">Deposit</div>
-                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / MNT / AVAX / OKB / USDT0 on Stable) to the Q402 Gas Tank address shown in your dashboard. Your balance is tracked per wallet address. Note: the Gas Tank is a separate cold wallet from the hot relayer — never send funds to the relayer address directly.</p>
+                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / MNT / AVAX / INJ / OKB / USDT0 on Stable) to the Q402 Gas Tank address shown in your dashboard. Your balance is tracked per wallet address. Note: the Gas Tank is a separate cold wallet from the hot relayer — never send funds to the relayer address directly.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-blue-400 text-xs font-semibold mb-2">Auto-deduction</div>
@@ -387,7 +387,7 @@ console.log("Paid! TX:", result.txHash);`} />
               <CodeBlock lang="json" code={`// Request body
 {
   "apiKey":      "q402_live_YOUR_API_KEY",
-  "chain":       "avax",           // avax | bnb | eth | xlayer | stable | mantle
+  "chain":       "avax",           // avax | bnb | eth | xlayer | stable | mantle | injective
   "token":       "USDC",           // USDC | USDT
   "from":        "0xUserWallet...",
   "to":          "0xRecipient...",
@@ -445,6 +445,7 @@ console.log("Paid! TX:", result.txHash);`} />
                     { name: "X Layer",    color: "#CCCCCC", param: "xlayer", id: "196",   gasToken: "OKB",              gas: "~$0.001", stableNote: false },
                     { name: "Stable",     color: "#4AE54A", param: "stable", id: "988",   gasToken: "USDT0 ★",          gas: "~$0.001", stableNote: true  },
                     { name: "Mantle",     color: "#000000", param: "mantle", id: "5000",  gasToken: "MNT",              gas: "~$0.001", stableNote: false },
+                    { name: "Injective",  color: "#0082FA", param: "injective", id: "1776", gasToken: "INJ",            gas: "~$0.10",  stableNote: false },
                   ].map((chain) => (
                     <tr key={chain.param} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="py-3 pr-6">
@@ -491,16 +492,18 @@ const CONTRACTS = {
   xlayer: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 X Layer   (chainId: 196)
   stable: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Stable    (chainId: 988)
   mantle: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Mantle    (chainId: 5000)
+  injective: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Injective (chainId: 1776)
 };
 
 // EIP-712 domain name — must match contract NAME constant exactly
 const DOMAIN_NAMES = {
-  avax:   "Q402 Avalanche",
-  bnb:    "Q402 BNB Chain",
-  eth:    "Q402 Ethereum",
-  xlayer: "Q402 X Layer",
-  stable: "Q402 Stable",
-  mantle: "Q402 Mantle",
+  avax:      "Q402 Avalanche",
+  bnb:       "Q402 BNB Chain",
+  eth:       "Q402 Ethereum",
+  xlayer:    "Q402 X Layer",
+  stable:    "Q402 Stable",
+  mantle:    "Q402 Mantle",
+  injective: "Q402 Injective",
 };
 
 // verifyingContract:
@@ -546,7 +549,7 @@ const signature = await signer.signTypedData(domain, types, {
   deadline:    BigInt(Math.floor(Date.now() / 1000) + 600),
 });`} />
             <Callout type="info">
-              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable, Mantle) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
+              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable, Mantle, Injective) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
             </Callout>
             <Callout type="warn">
               <strong className="text-white/80">Stable chain:</strong> USDT0 here has 18 decimals (not 6). Use <code>ethers.parseUnits(amount, 18)</code>. The gas pool must also be funded in USDT0 — there is no separate native gas coin. (Note: USDT0 on Mantle uses the same OFT address but 6 decimals, matching the other chains.)

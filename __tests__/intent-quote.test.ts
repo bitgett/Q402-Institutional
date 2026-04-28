@@ -114,6 +114,18 @@ describe("intent quote — Avax / Stable / XLayer / Mantle plan chains", () => {
   it("mantle $28 (below minimum) → null / 0 credits", () => {
     expect(computeQuote(28, "mantle")).toEqual({ quotedPlan: null, quotedCredits: 0 });
   });
+
+  it("injective $89 → growth / 5,000 (injective = BNB thresholds, 1.0× multiplier)", () => {
+    expect(computeQuote(89, "injective")).toEqual({ quotedPlan: "growth", quotedCredits: 5_000 });
+  });
+
+  it("injective $149 → pro / 10,000", () => {
+    expect(computeQuote(149, "injective")).toEqual({ quotedPlan: "pro", quotedCredits: 10_000 });
+  });
+
+  it("injective $28 (below minimum) → null / 0 credits", () => {
+    expect(computeQuote(28, "injective")).toEqual({ quotedPlan: null, quotedCredits: 0 });
+  });
 });
 
 // ── INTENT_CHAIN_MAP coverage ─────────────────────────────────────────────────
@@ -126,5 +138,6 @@ describe("INTENT_CHAIN_MAP", () => {
     expect(INTENT_CHAIN_MAP["xlayer"]).toBe("X Layer");
     expect(INTENT_CHAIN_MAP["stable"]).toBe("Stable");
     expect(INTENT_CHAIN_MAP["mantle"]).toBe("Mantle");
+    expect(INTENT_CHAIN_MAP["injective"]).toBe("Injective");
   });
 });

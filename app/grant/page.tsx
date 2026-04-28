@@ -33,7 +33,7 @@ const TIERS = [
 ];
 
 const CATEGORIES = ["DeFi", "GameFi", "NFT / Creator", "AI Agent", "DAO / Governance", "Infrastructure", "Social / Community", "Other"];
-const CHAINS     = ["BNB Chain", "Ethereum", "Avalanche", "X Layer", "Stable", "Multi-chain"];
+const CHAINS     = ["BNB Chain", "Ethereum", "Avalanche", "Mantle", "Injective", "X Layer", "Stable", "Multi-chain"];
 const CREDITS    = ["$500 (Seed)", "$2,000 (Builder)", "$5,000+", "Custom / discuss"];
 const TX_RANGES  = ["< 1,000 / mo", "1,000 – 10,000 / mo", "10,000 – 100,000 / mo", "100,000+ / mo"];
 
@@ -172,8 +172,8 @@ export default function GrantPage() {
             {[
               {
                 num: "01",
-                title: "Six chains. One integration. No migration.",
-                body: "BNB Chain, Ethereum, Mantle, Avalanche, X Layer, Stable — not wrapped, not bridged. Native operations on each, through a single unified API. The multi-chain coverage that used to take months now takes an afternoon. And when the next chain matters, you're already there.",
+                title: "Seven chains. One integration. No migration.",
+                body: "BNB Chain, Ethereum, Mantle, Avalanche, Injective, X Layer, Stable — not wrapped, not bridged. Native operations on each, through a single unified API. The multi-chain coverage that used to take months now takes an afternoon. And when the next chain matters, you're already there.",
               },
               {
                 num: "02",

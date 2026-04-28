@@ -1,8 +1,12 @@
 /**
  * Q402 Client SDK (browser-compatible)
+ * v1.6.0 — Injective EVM (chainId 1776) added as the 7th supported chain.
+ *          USDT only on Injective for now; native USDC via Circle CCTP is
+ *          announced for Q2 2026 and will be added then. The IBC-bridged
+ *          USDC on Injective EVM is intentionally not supported.
  * v1.5.0 — Mantle USDT repointed to USDT0 (LayerZero OFT), reflecting the 2025-11-27
  *          ecosystem migration. Legacy bridged USDT deposits sunset 2026-02-03.
- * v1.4.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable/mantle) + EIP-3009 (xlayer USDC fallback)
+ * v1.4.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable/mantle/injective) + EIP-3009 (xlayer USDC fallback)
  *          Exact decimal→raw conversion via ethers.parseUnits (no IEEE-754 precision loss).
  *
  * The authoritative source for witness type, domain, and contract mapping is
@@ -18,6 +22,7 @@
  *  xlayer     TransferAuthorization  "Q402 X Layer"      user's EOA          6
  *  stable     TransferAuthorization  "Q402 Stable"       user's EOA          18  ← USDT0 only
  *  mantle     TransferAuthorization  "Q402 Mantle"       user's EOA          6
+ *  injective  TransferAuthorization  "Q402 Injective"    user's EOA          6  ← USDT only
  *
  *  All 6 deployed contracts compute _domainSeparator() with `address(this)`, which
  *  under EIP-7702 delegation equals the user's EOA — NOT the impl contract.
@@ -104,9 +109,20 @@ const Q402_CHAIN_CONFIG = {
     // Legacy bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) sunset 2026-02-03.
     usdt: { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
   },
+  injective: {
+    name:         "Injective",
+    chainId:      1776,
+    mode:         "eip7702",
+    domainName:   "Q402 Injective",
+    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // USDT only on Injective. Native CCTP USDC is announced for Q2 2026 — Q402
+    // adds USDC then. SDK rejects token: "USDC" for chain: "injective" explicitly.
+    usdt: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
+    supportedTokens: ["USDT"],
+  },
 };
 
-// EIP-7702 witness type — shared by all 6 chains (avax/bnb/eth/xlayer/stable/mantle).
+// EIP-7702 witness type — shared by all 7 chains (avax/bnb/eth/xlayer/stable/mantle/injective).
 // All Q402PaymentImplementation* contracts use the identical TransferAuthorization
 // typehash. verifyingContract = address(this), which under EIP-7702 delegation = user EOA.
 const Q402_TRANSFER_AUTH_TYPES = {
@@ -164,7 +180,7 @@ class Q402Client {
   /**
    * @param {object} opts
    * @param {string} opts.apiKey     - Your Q402 API key (q402_live_xxx)
-   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"} opts.chain - Target chain
+   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"|"injective"} opts.chain - Target chain
    * @param {string} [opts.relayUrl] - Override relay endpoint (default: https://q402.quackai.ai/api/relay)
    */
   constructor({ apiKey, chain = "avax", relayUrl = "https://q402.quackai.ai/api/relay" }) {
@@ -172,7 +188,7 @@ class Q402Client {
     this.chain    = chain;
     this.relayUrl = relayUrl;
     this.chainCfg = Q402_CHAIN_CONFIG[chain];
-    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle`);
+    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle, injective`);
   }
 
   /**
@@ -191,6 +207,18 @@ class Q402Client {
    *          decimal places than the target token supports.
    */
   async pay({ to, amount, token = "USDC" }) {
+    // Per-chain token gating. Injective only supports USDT until Circle CCTP
+    // native USDC ships (Q2 2026); rejecting "USDC" here surfaces the constraint
+    // immediately instead of routing the call to a non-existent contract.
+    if (this.chainCfg.supportedTokens && !this.chainCfg.supportedTokens.includes(token)) {
+      throw new Error(
+        `Token "${token}" is not supported on chain "${this.chain}". ` +
+        `Supported tokens for ${this.chain}: ${this.chainCfg.supportedTokens.join(", ")}.` +
+        (this.chain === "injective" && token === "USDC"
+          ? " Native USDC via Circle CCTP is announced for Q2 2026; until then, use USDT on Injective."
+          : "")
+      );
+    }
     const ethereum = window.ethereum || window.okxwallet;
     if (!ethereum) throw new Error("No Web3 wallet found. Install MetaMask or OKX Wallet.");
 
@@ -460,7 +488,7 @@ class Q402Client {
   }
 
   /**
-   * EIP-7702 authorization 서명 (avax/bnb/eth/xlayer/stable/mantle 공통)
+   * EIP-7702 authorization 서명 (avax/bnb/eth/xlayer/stable/mantle/injective 공통)
    */
   async _signAuthorization(signer, { chainId, address, nonce }) {
     const domain = { name: "EIP7702Authorization", version: "1", chainId };
