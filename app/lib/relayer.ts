@@ -12,7 +12,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { loadRelayerKey } from "./relayer-key";
 
 // ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
-// All 6 chains (avax / bnb / eth / xlayer / stable / mantle) default to EIP-7702 Type 4 TXs.
+// All 7 chains (avax / bnb / eth / xlayer / stable / mantle / injective) default to EIP-7702 Type 4 TXs.
 // X Layer additionally supports EIP-3009 as a USDC-only fallback.
 //
 // Chain → relay method:
@@ -267,7 +267,7 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
 
 // ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
 // Contract: 0x8D854436ab0426F5BC6Cc70865C90576AD523E73 (X Layer mainnet)
-// Witness type: TransferAuthorization (identical scheme across all 6 chains)
+// Witness type: TransferAuthorization (identical scheme across all 7 chains)
 // Key detail: verifyingContract = user's EOA (address(this) under EIP-7702)
 //             msg.sender must equal facilitator param
 const XLAYER_EIP7702_ABI = [

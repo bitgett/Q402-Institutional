@@ -6,7 +6,7 @@
  *          USDC on Injective EVM is intentionally not supported.
  * v1.5.0 — Mantle USDT repointed to USDT0 (LayerZero OFT), reflecting the 2025-11-27
  *          ecosystem migration. Legacy bridged USDT deposits sunset 2026-02-03.
- * v1.4.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable/mantle/injective) + EIP-3009 (xlayer USDC fallback)
+ * v1.4.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable/mantle) + EIP-3009 (xlayer USDC fallback)
  *          Exact decimal→raw conversion via ethers.parseUnits (no IEEE-754 precision loss).
  *
  * The authoritative source for witness type, domain, and contract mapping is
@@ -24,7 +24,7 @@
  *  mantle     TransferAuthorization  "Q402 Mantle"       user's EOA          6
  *  injective  TransferAuthorization  "Q402 Injective"    user's EOA          6  ← USDT only
  *
- *  All 6 deployed contracts compute _domainSeparator() with `address(this)`, which
+ *  All 7 deployed contracts compute _domainSeparator() with `address(this)`, which
  *  under EIP-7702 delegation equals the user's EOA — NOT the impl contract.
  *
  *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
