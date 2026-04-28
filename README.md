@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.22** · **SDK: v1.5.0** · **Manifest: v1.5.0** · **Last updated: 2026-04-23**  
+**Version: v1.23** · **SDK: v1.6.0** · **Manifest: v1.6.0** · **Last updated: 2026-04-27**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
@@ -42,7 +42,7 @@
 
 ## 1. Why We Built This
 
-On every EVM chain, users need to hold a native gas token (BNB, ETH, MNT, AVAX, OKB, USDT0) just to move USDC/USDT.
+On every EVM chain, users need to hold a native gas token (BNB, ETH, MNT, AVAX, INJ, OKB, USDT0) just to move USDC/USDT.
 
 > A user holding $100 of USDC on BNB Chain **cannot transfer anything without BNB.**  
 > Web3 onboarding collapses right here.
@@ -51,11 +51,11 @@ On every EVM chain, users need to hold a native gas token (BNB, ETH, MNT, AVAX, 
 
 1. **Gas UX is what's blocking Web3 adoption.** Stripe, PayPal, and Venmo don't push fees onto users. Web3 needs to meet that bar.
 
-2. **AI agents need a gasless payment rail.** Managing gas for 100 agents across 6 chains individually is an operational nightmare. One Gas Tank top-up covers all of them.
+2. **AI agents need a gasless payment rail.** Managing gas for 100 agents across 7 chains individually is an operational nightmare. One Gas Tank top-up covers all of them.
 
 3. **EIP-7702 is the right primitive.** Unlike ERC-4337 (Account Abstraction), existing EOAs work as-is — no wallet migration required. MetaMask and OKX Wallet participate out of the box.
 
-4. **Multi-chain on day one.** Most gasless solutions cover a single chain. Q402 ships on 6 mainnets simultaneously.
+4. **Multi-chain on day one.** Most gasless solutions cover a single chain. Q402 ships on 7 mainnets simultaneously.
 
 ---
 
@@ -63,7 +63,7 @@ On every EVM chain, users need to hold a native gas token (BNB, ETH, MNT, AVAX, 
 
 Q402 is **gasless payment infrastructure built on EIP-7702 + EIP-712**. Integrate the SDK and the Q402 relayer covers every on-chain gas fee on your behalf.
 
-**All 6 chains — unified EIP-7702 flow:**
+**All 7 chains — unified EIP-7702 flow:**
 ```
 User clicks "Pay USDC"
   → SDK: GET /api/relay/info (fetch facilitator address)
@@ -75,7 +75,7 @@ User clicks "Pay USDC"
             → USDC/USDT(0): user EOA → recipient
 ```
 
-> All 6 chains share the same witness type `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`
+> All 7 chains share the same witness type `TransferAuthorization(owner, facilitator, token, recipient, amount, nonce, deadline)`
 > and the same `verifyingContract = user EOA` rule. The only per-chain differences are `domainName` (e.g. "Q402 Avalanche")
 > and the impl address.
 >
@@ -93,9 +93,11 @@ User clicks "Pay USDC"
 | X Layer | 196 | EIP-7702 + EIP-3009 USDC fallback | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | ✅ |
 | **Stable** | **988** | **EIP-7702** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | ✅ |
 | **Mantle** | **5000** | **EIP-7702** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | ✅ |
+| **Injective EVM** | **1776** | **EIP-7702** | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | ✅ USDT only |
 
 > Stable is special: USDT0 is both the gas token and the payment token (native coin = USD-pegged).
 > Mantle is an EVM L2 (Skadi Hard Fork, Prague-aligned) — EIP-7702 natively supported; MNT is the native gas token.
+> Injective EVM (Inferno upgrade, Nov 2025) is the EVM execution layer of Injective — INJ is the native gas token; Q402 ships USDT-only on Injective until Circle's CCTP native USDC mainnet rollout (announced for Q2 2026).
 
 > **Single source of truth**: per-chain contracts, domains, witness types, and token mappings
 > are canonicalized in [`contracts.manifest.json`](./contracts.manifest.json).
@@ -217,7 +219,7 @@ Q402-Institutional/
 │   │   │   ├── route.ts            # POST/GET/DELETE — webhook management
 │   │   │   └── test/route.ts       # POST — send test event
 │   │   ├── transactions/route.ts   # GET  — relay TX history
-│   │   ├── wallet-balance/route.ts # GET  — user wallet balance (6 chains)
+│   │   ├── wallet-balance/route.ts # GET  — user wallet balance (7 chains)
 │   │   └── inquiry/route.ts        # POST/GET — project inquiries
 │   ├── lib/
 │   │   ├── db.ts                   # Vercel KV CRUD helpers (monthly TX sharding)
@@ -229,7 +231,7 @@ Q402-Institutional/
 │   ├── context/WalletContext.tsx   # global wallet state (instant localStorage restore)
 │   ├── components/
 │   │   ├── Hero.tsx                # landing hero + terminal animation
-│   │   ├── HowItWorks.tsx          # 3-step explainer + 6 chain logos
+│   │   ├── HowItWorks.tsx          # 3-step explainer + 7 chain logos
 │   │   ├── Pricing.tsx             # pricing tiers
 │   │   ├── Contact.tsx             # CTA — "Talk to Us" popup
 │   │   ├── Navbar.tsx              # navigation + Agents link
@@ -242,10 +244,10 @@ Q402-Institutional/
 │   ├── docs/page.tsx               # API Reference
 │   └── page.tsx                    # landing
 ├── scripts/
-│   ├── test-eip7702.mjs            # unified EIP-7702 E2E test (--chain avax|bnb|eth|mantle|xlayer|stable)
+│   ├── test-eip7702.mjs            # unified EIP-7702 E2E test (--chain avax|bnb|eth|mantle|injective|xlayer|stable)
 │   └── agent-example.mjs           # Node.js Agent SDK (unified 6-chain example — TransferAuthorization)
 └── public/
-    ├── q402-sdk.js                 # client SDK v1.5.0 (6 chains, USDT0 OFT on Mantle)
+    ├── q402-sdk.js                 # client SDK v1.6.0 (7 chains, Injective EVM USDT-only until CCTP USDC Q2 2026)
     ├── bnb.png / eth.png / avax.png / xlayer.png / stable.jpg
     └── arbitrum.png / scroll.png
 ```
@@ -309,7 +311,7 @@ const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
 const result3 = await q402s.pay({ to: "0xRecipient", amount: "10.00", token: "USDT" });
 ```
 
-SDK: **v1.5.0** — supports all 6 chains (avax, bnb, eth, xlayer, stable, mantle). Mantle USDT resolves to USDT0 OFT (`0x779Ded...`) post the 2025-11 Mantle ecosystem migration.
+SDK: **v1.6.0** — supports all 7 chains (avax, bnb, eth, xlayer, stable, mantle, injective). Mantle USDT resolves to USDT0 OFT (`0x779Ded...`) post the 2025-11 Mantle ecosystem migration. Injective EVM (chainId 1776) ships USDT-only — native USDC via Circle CCTP is announced for Q2 2026 mainnet rollout.
 
 > **⚠ `amount` parameter rule** — always pass a **human-readable decimal string** ("5.00", "0.123456").
 > It is converted internally via `ethers.parseUnits(amount, decimals)`. Precision that exceeds the
@@ -333,7 +335,7 @@ console.log(result.txHash);
 
 ### SDK Internals
 
-**All 6 chains — EIP-7702 (`method: "eip7702" | "eip7702_xlayer" | "eip7702_stable"`)**
+**All 7 chains — EIP-7702 (`method: "eip7702" | "eip7702_xlayer" | "eip7702_stable"`)**
 ```
 q402.pay() invoked
   ├─ 0. GET /api/relay/info → facilitator address
@@ -343,7 +345,7 @@ q402.pay() invoked
   ├─ 2. EIP-7702 authorization signature
   │      { address: implContract, nonce: EOA_nonce }
   └─ 3. POST /api/relay { witnessSig, authorization, <chain-specific nonce field> }
-         avax/bnb/eth/mantle → nonce   |   xlayer → xlayerNonce   |   stable → stableNonce
+         avax/bnb/eth/mantle/injective → nonce   |   xlayer → xlayerNonce   |   stable → stableNonce
 ```
 
 **X Layer EIP-3009 fallback (USDC only)** — selected only when `eip3009Nonce` is supplied.
@@ -679,7 +681,7 @@ kv.get("inquiries")                      → Inquiry[]
 
 ## 13. Relay Internals
 
-### 13-A. EIP-7702 (shared across all 6 chains)
+### 13-A. EIP-7702 (shared across all 7 chains)
 
 ```
 User EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
@@ -688,7 +690,7 @@ User EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
                                          resolves to the user's EOA (hence verifyingContract = EOA)
 ```
 
-**EIP-712 domain (uniform rule across all 6 chains):**
+**EIP-712 domain (uniform rule across all 7 chains):**
 ```javascript
 {
   name:              "Q402 Avalanche",   // per chain: Avalanche | BNB Chain | Ethereum | X Layer | Stable
@@ -697,7 +699,7 @@ User EOA ──(EIP-7702 authorization)──▶ Q402PaymentImplementation
   verifyingContract: userEOA,            // ⭐ same for every chain — NEVER the impl address
 }
 
-// types — identical across all 6 chains
+// types — identical across all 7 chains
 TransferAuthorization: [
   { name: "owner",       type: "address" },
   { name: "facilitator", type: "address" },
@@ -733,13 +735,13 @@ const gasCostNative = parseFloat(formatEther(receipt.gasUsed * receipt.effective
 
 ### 13-B. Per-chain Differences
 
-| Item | avax / bnb / eth / mantle | xlayer | stable |
+| Item | avax / bnb / eth / mantle / injective | xlayer | stable |
 |------|---------------------------|--------|--------|
 | Contract class | `Q402PaymentImplementation` (Mantle shares the deployed-address bytecode family; distinguished from Stable at signing by chainId + domainName) | `Q402PaymentImplementationXLayer` | `Q402PaymentImplementationStable` |
 | Entry function | `transferWithAuthorization()` | `transferWithAuthorization()` | `transferWithAuthorization()` |
 | Witness type | TransferAuthorization | TransferAuthorization | TransferAuthorization |
 | `verifyingContract` | User EOA | User EOA | User EOA |
-| Domain name | "Q402 Avalanche" / "Q402 BNB Chain" / "Q402 Ethereum" / "Q402 Mantle" | "Q402 X Layer" | "Q402 Stable" |
+| Domain name | "Q402 Avalanche" / "Q402 BNB Chain" / "Q402 Ethereum" / "Q402 Mantle" / "Q402 Injective" | "Q402 X Layer" | "Q402 Stable" |
 | EIP-3009 fallback | ✗ | ✓ (USDC only, legacy) | ✗ |
 | Relay API `method` | `"eip7702"` | `"eip7702_xlayer"` / `"eip3009"` | `"eip7702_stable"` |
 
@@ -878,7 +880,7 @@ const result = await q402.pay({ to: "0x...", amount: "5.00", token: "USDC" });
 Users deposit native tokens to the **GASTANK** cold address (`GASTANK_ADDRESS`) → consumed against relay costs. The relayer hot wallet is a separate address; GASTANK→RELAYER transfers are performed manually or via an operator script.
 
 **Deposit scan (default):** `POST /api/gas-tank/verify-deposit` — `{ address }`
-- Batch RPC block scan across all 6 chains (BNB/AVAX/XLayer: 200 blocks, ETH: 50 blocks, Stable/Mantle: 500 blocks).
+- Batch RPC block scan across all 7 chains (BNB/AVAX/XLayer: 200 blocks, ETH: 50 blocks, Stable/Mantle: 500 blocks).
 - Filter `from=user, to=GASTANK, value≠0` → `addGasDeposit()`.
 - Users who come back outside the scan window (~10 minutes on ETH, up to tens of minutes elsewhere) are not credited by this path — use the direct-lookup path below.
 
@@ -940,7 +942,7 @@ newPaidAt = base.toISOString();
 
 | File | Description |
 |------|-------------|
-| `scripts/test-eip7702.mjs` | Unified EIP-7702 E2E test — `--chain avax\|bnb\|eth\|mantle\|xlayer\|stable` |
+| `scripts/test-eip7702.mjs` | Unified EIP-7702 E2E test — `--chain avax\|bnb\|eth\|mantle\|injective\|xlayer\|stable` |
 | `scripts/agent-example.mjs` | Node.js Agent SDK — unified 6-chain example (TransferAuthorization + module export) |
 
 ---
@@ -980,7 +982,7 @@ Stable is a Layer 1 where USDT0 is the native gas token. In an AI agent ecosyste
   name:              "Q402 Stable",
   version:           "1",
   chainId:           988,
-  verifyingContract: userEOA,   // shared across all 6 chains — _domainSeparator uses address(this)
+  verifyingContract: userEOA,   // shared across all 7 chains — _domainSeparator uses address(this)
 }
 ```
 
@@ -1036,7 +1038,7 @@ Stable is a Layer 1 where USDT0 is the native gas token. In an AI agent ecosyste
 |-------|---------|-----|-------|
 | USDT0 | `0x779ded0c9e1022225f8e0630b35a9b54be713736` | 18 | Both `USDC` and `USDT` API keys resolve to this address |
 
-### Contract ABI Summary (shared across all 6 chains)
+### Contract ABI Summary (shared across all 7 chains)
 
 ```solidity
 // Executed from an EIP-7702-delegated EOA — msg.sender = facilitator (relayer), address(this) = owner (user EOA)
@@ -1167,8 +1169,8 @@ Three wallets, three roles, zero commingling. The split ensures a single key com
 | Role | Address | Key Storage | Responsibility |
 |------|---------|-------------|----------------|
 | `SUBSCRIPTION_ADDRESS` | `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` | **Cold** (no key on server) | Receives subscription payments ($29/$49/$149…). Periodically swept manually from a cold device. |
-| `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **Cold** (no key on server) | Receives user gas deposits (BNB/ETH/MNT/AVAX/OKB/USDT0). Cold→hot top-ups to the relayer are done manually. |
-| `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **Hot** (Vercel `RELAYER_PRIVATE_KEY`) | Signs/submits EIP-7702 TXs. Holds only a minimal operational float (BNB/ETH/MNT/AVAX/OKB/USDT0). |
+| `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **Cold** (no key on server) | Receives user gas deposits (BNB/ETH/MNT/AVAX/INJ/OKB/USDT0). Cold→hot top-ups to the relayer are done manually. |
+| `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **Hot** (Vercel `RELAYER_PRIVATE_KEY`) | Signs/submits EIP-7702 TXs. Holds only a minimal operational float (BNB/ETH/MNT/AVAX/INJ/OKB/USDT0). |
 
 The constants are exported from a single module ([`app/lib/wallets.ts`](app/lib/wallets.ts)) — every route/page imports only from there.
 
@@ -1253,6 +1255,51 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 
 ## 25. Changelog
 
+### v1.23 (2026-04-27)
+
+> **Injective EVM integration (7th supported chain).** Injective EVM (chainId 1776, launched 2025-11-11 as the Inferno upgrade) joins as the 7th Q402-supported chain — same EIP-7702 dispatch path as the 6 existing chains, no new relay mode, no new contract class beyond the per-chain Implementation deployment. Injective's positioning as a Cosmos SDK + EVM hybrid built for finance-grade applications (with native orderbook, sub-second blocks, and the IIP-628 agentic-commerce roadmap) lines up directly with Q402's institutional / AI-agent thesis.
+
+#### Deployment
+
+- **Q402PaymentImplementationInjective** deployed to Injective EVM mainnet at `0x2fb2B2D110b6c5664e701666B3741240242bf350` (deployer `0xfc77FF29178B7286A8bA703D7a70895CA74fF466`, nonce 0). Same deterministic CREATE address as Stable and Mantle — distinguished at signing time by chainId 1776 + domainName `"Q402 Injective"`.
+- Injective EVM uses Cosmos SDK fee semantics under the hood, so Hardhat's "auto" `eth_gasPrice` returns a value too low to clear validation; the deploy network entry pins gasPrice at 200 Gwei (~0.12 INJ for a ~600k-gas deploy).
+- Verified on Blockscout at https://blockscout.injective.network/address/0x2fb2B2D110b6c5664e701666B3741240242bf350.
+
+#### Token policy — USDT only at launch
+
+Q402 intentionally ships USDT-only on Injective at v1.23. The on-chain USDC currently at `0x2a25fbD67b3aE485e461fe55d9DbeF302B7D3989` is an IBC-bridged variant (denom: `transfer/channel-148/uusdc IBC token`), analogous to Mantle's pre-migration bridged USDT. Circle announced native USDC via CCTP on Injective on 2026-03-17 with mainnet rollout expected Q2 2026; Q402 will add native USDC in the next minor release once that lands, avoiding the legacy/migration cycle Mantle had to do for USDT0.
+
+USDT on Injective is canonical: `0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13` (symbol "USDT", name "Tether", 6 decimals, MTS-compliant — Cosmos and EVM share the same balance via the MultiVM Token Standard).
+
+#### What changed
+
+- [`contracts.manifest.json`](contracts.manifest.json) → v1.6.0. Adds `chains.injective` with `relayMode: "eip7702"`, `domainName: "Q402 Injective"`, USDT entry, plus `pendingTokens.USDC` documenting the deferred CCTP integration. The drift-guard `tokens.USDC` field intentionally mirrors USDT so the existing manifest⇄relayer⇄SDK assertions still pass; the SDK separately gates `token: "USDC"` calls on Injective with an explicit error.
+- [`app/lib/relayer.ts`](app/lib/relayer.ts) → `CHAIN_CONFIG.injective` + `CHAIN_RPC_FALLBACKS.injective` (sentry.evm-rpc + thirdweb).
+- [`app/lib/blockchain.ts`](app/lib/blockchain.ts) → `CHAINS` scanner entry, `INTENT_CHAIN_MAP`, `CHAIN_THRESHOLDS` (BNB parity), `CHAIN_MULTIPLIERS` (1.0×).
+- [`app/api/relay/route.ts`](app/api/relay/route.ts) → `MIN_GAS_BALANCE.injective` = 0.005 INJ (~$0.10 at $20/INJ); supported-chain error message updated.
+- 4 backend routes (`gas-tank`, `gas-tank/withdraw`, `gas-tank/verify-deposit`, `wallet-balance`) gain Injective entries; `payment/intent` `VALID_CHAINS` and `payment/activate` `CHAIN_NAME_MAP` updated.
+- [`public/q402-sdk.js`](public/q402-sdk.js) → v1.6.0. Adds `Q402_CHAIN_CONFIG.injective` plus a per-chain `supportedTokens` whitelist enforced at `pay()` time — `token: "USDC"` on `chain: "injective"` returns an explicit error pointing at the Q2 2026 CCTP rollout, instead of silently routing to the wrong contract.
+- [`scripts/test-eip7702.mjs`](scripts/test-eip7702.mjs) and [`scripts/agent-example.mjs`](scripts/agent-example.mjs) gain the Injective config block; [`scripts/verify-contracts.mjs`](scripts/verify-contracts.mjs) adds the RPC.
+- Tests: `__tests__/contracts-manifest.test.ts` `CHAINS` tuple extended (6 → 7 chains, +7 drift assertions); `intent-quote.test.ts` adds 3 Injective tier cases plus the `INTENT_CHAIN_MAP.injective` assertion; `relay-body-shape.test.ts` adds `injective → "nonce"` to the per-chain nonce-field map.
+- UI — Hero, TrustedBy, HowItWorks, Footer, Pricing, Contact, Agents, Grant, Payment, Dashboard, Docs all carry Injective through copy, logos, and chain order. The `BNB → ETH → MANTLE → AVAX → INJECTIVE → X Layer → STABLE` visual sequence is preserved everywhere; "6 chains" → "7 chains" / "Six EVM chains" → "Seven EVM chains" updated; `q402-sdk · v1.5.0` terminal stamp + `/docs` v1.5.0 badges → v1.6.0; agents pain-point math `100 agents × 6 chains = 600 wallets` → `× 7 chains = 700 wallets`.
+- Logo asset `public/injective.png` (1.5 KB, 50×50 PNG, official secondary symbol).
+
+#### What did NOT change
+
+- EIP-712 witness type, domain rules, or signing scheme. Identical TransferAuthorization across all 7 chains.
+- Other 6 chains. All contract addresses, RPC URLs, decimals, behavior unchanged.
+- SDK API surface (`token: "USDC" | "USDT"` string). Existing integrations that target chains other than Injective continue to work byte-identically; only Injective rejects `token: "USDC"` explicitly.
+- Subscription flow. Injective is added to `VALID_CHAINS` for relay-chain selection in `payment/intent`; the documented BNB/ETH-only preferred subscription tokens stand (the API remains tolerant per the v1.22 policy).
+
+#### Verification
+
+- Manifest drift test: 46 → 53 cases (7 new per-chain assertions on Injective), still green.
+- intent-quote tier test: +3 Injective tier cases + `INTENT_CHAIN_MAP` coverage.
+- 230 / 230 tests pass.
+- `next build --webpack` green; lint clean.
+- E2E mainnet TX captured for Injective via `node scripts/test-eip7702.mjs --chain injective --amount 0.05` — see commit message for tx hash.
+- Branch: all work on `feat/injective-integration`; main absorbed via single merge for atomic deployment.
+
 ### v1.22 (2026-04-23)
 
 > **Mantle USDT repointed to USDT0 OFT + Codex audit polish + institutional brand pass.** Two parallel threads of work landed in the same release window: (1) repointing Mantle's USDT token to the LayerZero-native USDT0 after Mantle's official ecosystem migration, (2) responding to an external (Codex) audit pass that flagged P2 drift issues and public-copy inconsistencies. Both threads pushed to `feat/mantle-integration`; `main` untouched.
@@ -1301,7 +1348,7 @@ Some reviewers saw a long Vercel preview URL (`q402-institutional-git-feat-mantl
 
 ### v1.21 (2026-04-22)
 
-> **Mantle chain integration (6th supported chain).** Added Mantle (EVM L2, chainId 5000) as a native EIP-7702 chain alongside the existing five. Mantle's Skadi Hard Fork is aligned with Ethereum Prague, so EIP-7702 Type-0x04 transactions work without any new relay mode — `settlePayment()` is reused as-is. Integration followed the drift-guard discipline: `contracts.manifest.json` bumped to v1.4.0 is the single source of truth; `CHAIN_CONFIG` (server) and `Q402_CHAIN_CONFIG` (SDK) mirror it; the existing 39-case manifest test expanded to cover all 6 chains to block silent drift.
+> **Mantle chain integration (6th supported chain).** Added Mantle (EVM L2, chainId 5000) as a native EIP-7702 chain alongside the existing five. Mantle's Skadi Hard Fork is aligned with Ethereum Prague, so EIP-7702 Type-0x04 transactions work without any new relay mode — `settlePayment()` is reused as-is. Integration followed the drift-guard discipline: `contracts.manifest.json` bumped to v1.4.0 is the single source of truth; `CHAIN_CONFIG` (server) and `Q402_CHAIN_CONFIG` (SDK) mirror it; the existing 39-case manifest test expanded to cover all 7 chains to block silent drift.
 
 #### Deployment
 

@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts.manifest.schema.json",
-  "version": "1.5.0",
-  "updatedAt": "2026-04-23",
+  "version": "1.6.0",
+  "updatedAt": "2026-04-27",
   "notes": [
     "Single source of truth for Q402 deployed contracts and EIP-712 signing conventions.",
     "If values in this file differ from app/lib/relayer.ts, public/q402-sdk.js, or README.md — this file wins.",
@@ -109,6 +109,30 @@
       },
       "explorer": "https://explorer.mantle.xyz",
       "verifyUrl": "https://explorer.mantle.xyz/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
+    },
+    "injective": {
+      "name": "Injective",
+      "chainId": 1776,
+      "relayMode": "eip7702",
+      "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+      "witness": {
+        "type": "TransferAuthorization",
+        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "domainName": "Q402 Injective",
+        "domainVersion": "1",
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). Same impl address as Stable/Mantle via deterministic CREATE (deployer 0xfc77...f466, nonce 0); distinguished at signing time by chainId 1776 + domainName 'Q402 Injective'."
+      },
+      "tokens": {
+        "USDC": { "address": "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", "decimals": 6, "aliasFor": "USDT", "notes": "USDC is not yet supported on Injective at the API level. Native CCTP USDC expected Q2 2026; until then this entry mirrors USDT so chain-keyed drift tests still pass — the SDK rejects token='USDC' for chain='injective' explicitly." },
+        "USDT": { "address": "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", "decimals": 6, "notes": "Canonical Tether on Injective EVM (MTS-compliant — Cosmos and EVM share the same balance via MultiVM Token Standard). Verified on-chain: symbol='USDT', name='Tether', decimals=6." }
+      },
+      "supportedApiTokens": ["USDT"],
+      "pendingTokens": {
+        "USDC": "Native USDC via Circle CCTP — expected Q2 2026 mainnet rollout (announced 2026-03-17). Q402 intentionally defers USDC integration on Injective until CCTP native ships, to avoid the legacy/migration cycle. The IBC-bridged USDC currently at 0x2a25fbD67b3aE485e461fe55d9DbeF302B7D3989 (denom 'transfer/channel-148/uusdc IBC token') is NOT supported by Q402; integrators expecting USDC on Injective should wait for the next minor release after Circle's CCTP rollout."
+      },
+      "explorer": "https://blockscout.injective.network",
+      "verifyUrl": "https://blockscout.injective.network/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
     },
     "stable": {
       "name": "Stable",

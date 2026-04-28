@@ -98,16 +98,31 @@ const CHAINS = [
       { symbol: "USDT", address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
     ],
   },
+  {
+    name: "Injective",
+    rpcs: [
+      "https://sentry.evm-rpc.injective.network/",
+      "https://1776.rpc.thirdweb.com",
+    ],
+    blockWindow: 1500,   // ~30 min (~1s effective block time on Injective EVM)
+    // USDT only on Injective for now. Native CCTP USDC is announced for Q2 2026
+    // — Q402 defers USDC integration until then to avoid the legacy/migration cycle
+    // Mantle had to do for USDT0. The IBC-bridged USDC at 0x2a25fbD6... is not Q402-supported.
+    tokens: [
+      { symbol: "USDT", address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
+    ],
+  },
 ];
 
-/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle") to CHAINS[].name */
+/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective") to CHAINS[].name */
 export const INTENT_CHAIN_MAP: Record<string, string> = {
-  bnb:    "BNB Chain",
-  eth:    "Ethereum",
-  avax:   "Avalanche",
-  xlayer: "X Layer",
-  stable: "Stable",
-  mantle: "Mantle",
+  bnb:       "BNB Chain",
+  eth:       "Ethereum",
+  avax:      "Avalanche",
+  xlayer:    "X Layer",
+  stable:    "Stable",
+  mantle:    "Mantle",
+  injective: "Injective",
 };
 
 /**
@@ -319,6 +334,7 @@ const CHAIN_THRESHOLDS: Record<string, number[]> = {
   "X Layer":    [  29,  49,  89,  149,  449,   799,  1999 ],
   "Stable":     [  29,  49,  89,  149,  449,   799,  1999 ],
   "Mantle":     [  29,  49,  89,  149,  449,   799,  1999 ],
+  "Injective":  [  29,  49,  89,  149,  449,   799,  1999 ],
   "Avalanche":  [  29,  49,  99,  159,  489,   879,  2199 ],
   "Ethereum":   [  39,  69, 129,  219,  669,  1199,  2999 ],
 };
@@ -367,6 +383,7 @@ const CHAIN_MULTIPLIERS: Record<string, number> = {
   "X Layer":   1.0,
   "Stable":    1.0,
   "Mantle":    1.0,
+  "Injective": 1.0,
   "Avalanche": 1.1,
   "Ethereum":  1.5,
 };

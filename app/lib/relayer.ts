@@ -56,6 +56,10 @@ const CHAIN_RPC_FALLBACKS: Record<string, string[]> = {
     "https://mantle-rpc.publicnode.com",
     "https://rpc.ankr.com/mantle",
   ],
+  injective: [
+    "https://sentry.evm-rpc.injective.network/",
+    "https://1776.rpc.thirdweb.com",
+  ],
 };
 
 export function getPrimaryRpc(chain: string): string {
@@ -135,6 +139,22 @@ export const CHAIN_CONFIG = {
     // decimals are per-chain (Mantle 6, Stable 18) — symbol exposed as "USDT" to keep the
     // SDK API surface (`token: "USDT"`) consistent with the other chains.
     usdt: { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6, symbol: "USDT" },
+  },
+  injective: {
+    name: "Injective",
+    rpc: "https://sentry.evm-rpc.injective.network/",
+    chainId: 1776,
+    token: "INJ",
+    // Q402PaymentImplementationInjective deployed on Injective EVM Mainnet (Chain ID: 1776).
+    // Same impl address as Stable/Mantle via deterministic CREATE (deployer + nonce 0).
+    implContract: process.env.INJECTIVE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // USDT only on Injective for now. Native USDC via Circle CCTP is announced for
+    // Q2 2026 mainnet rollout — Q402 will add USDC then. The IBC-bridged USDC at
+    // 0x2a25fbD67b3aE485e461fe55d9DbeF302B7D3989 is intentionally not supported to
+    // avoid the legacy/migration cycle. usdc field below mirrors usdt so chain-keyed
+    // lookups don't crash; SDK gates the exposed token list separately.
+    usdc: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6, symbol: "USDT" },
+    usdt: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6, symbol: "USDT" },
   },
 } as const;
 

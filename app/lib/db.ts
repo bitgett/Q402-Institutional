@@ -49,8 +49,8 @@ export interface WebhookDelivery {
 }
 
 export interface GasDeposit {
-  chain: string;       // "bnb" | "eth" | "avax" | "xlayer" | "stable" | "mantle"
-  token: string;       // "BNB" | "ETH" | "AVAX" | "OKB" | "USDT0" | "MNT"
+  chain: string;       // "bnb" | "eth" | "avax" | "xlayer" | "stable" | "mantle" | "injective"
+  token: string;       // "BNB" | "ETH" | "AVAX" | "OKB" | "USDT0" | "MNT" | "INJ"
   amount: number;      // native token amount
   txHash: string;
   depositedAt: string;
@@ -254,7 +254,7 @@ export async function getGasBalance(address: string): Promise<Record<string, num
     getGasDeposits(address),
     getGasUsedTotals(address),
   ]);
-  const totals: Record<string, number> = { bnb: 0, eth: 0, mantle: 0, avax: 0, xlayer: 0, stable: 0 };
+  const totals: Record<string, number> = { bnb: 0, eth: 0, mantle: 0, injective: 0, avax: 0, xlayer: 0, stable: 0 };
   for (const d of deposits) totals[d.chain] = (totals[d.chain] ?? 0) + d.amount;
   for (const chain of Object.keys(usedTotals)) {
     totals[chain] = (totals[chain] ?? 0) - usedTotals[chain];
