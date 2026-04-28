@@ -253,6 +253,13 @@ function Playground({ apiKey }: { apiKey: string }) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<null | { hash: string }>(null);
 
+  // Per-chain default token. Injective is USDT-only until Circle's CCTP native
+  // USDC mainnet rollout (Q2 2026); every other chain defaults to USDC. Keeps
+  // the preview snippet aligned with the server-side allowlist enforcement
+  // in app/api/relay/route.ts so a user copy-pasting the snippet for Injective
+  // doesn't get a 400 TOKEN_NOT_SUPPORTED_ON_CHAIN.
+  const previewToken = chain === "injective" ? "USDT" : "USDC";
+
   async function simulate() {
     setLoading(true); setResult(null);
     await new Promise(r => setTimeout(r, 1800));
@@ -272,12 +279,13 @@ function Playground({ apiKey }: { apiKey: string }) {
               <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
               <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
               <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
+              <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
           </div></div>
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Recipient</label>
           <input value={to} onChange={e => setTo(e.target.value)} placeholder="0x..." className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-yellow/30 placeholder-white/20" /></div>
-        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount (USDC)</label>
+        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount ({previewToken})</label>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30" /></div>
       </div>
       <div className="bg-[#060C14] border border-white/8 rounded-xl p-4 font-mono text-xs text-white/50 leading-6">
@@ -285,7 +293,7 @@ function Playground({ apiKey }: { apiKey: string }) {
         <div className="pl-5">
           <div><span className="text-green-300">to</span><span className="text-white/30">: </span><span className="text-orange-300">&quot;{to}&quot;</span><span className="text-white/30">,</span></div>
           <div><span className="text-green-300">amount</span><span className="text-white/30">: </span><span className="text-cyan-300">&quot;{amount}&quot;</span><span className="text-white/30">,</span></div>
-          <div><span className="text-green-300">token</span><span className="text-white/30">: </span><span className="text-orange-300">&quot;USDC&quot;</span></div>
+          <div><span className="text-green-300">token</span><span className="text-white/30">: </span><span className="text-orange-300">&quot;{previewToken}&quot;</span></div>
         </div>
         <div><span className="text-white/30">{"});"}</span></div>
       </div>
