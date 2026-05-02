@@ -312,7 +312,22 @@ const result = await q402.pay({
 // result → { success: true, txHash: "0xabc...", tokenAmount: "50", chain: "bnb" }
 `} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · That&apos;s it</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · Injective EVM (USDT-only)</h3>
+            <p className="text-white/55 text-sm mb-3">
+              Native USDC via Circle CCTP is announced for Q2 2026; until then, Injective uses USDT as the only payment token. The SDK gates this explicitly — passing <code className="text-orange-300">token: &quot;USDC&quot;</code> with <code className="text-orange-300">chain: &quot;injective&quot;</code> throws before any signature is requested, and the relay route enforces the same allowlist server-side.
+            </p>
+            <CodeBlock lang="javascript" code={`const q402 = new Q402Client({
+  apiKey: "q402_live_YOUR_KEY",
+  chain:  "injective",
+});
+
+const result = await q402.pay({
+  to:     recipientAddress,
+  amount: "50.00",
+  token:  "USDT",   // required — USDC not yet supported on Injective
+});`} />
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · That&apos;s it</h3>
             <CodeBlock lang="typescript" code={`// Full result shape:
 // {
 //   success:       true,

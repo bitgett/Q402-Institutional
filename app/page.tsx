@@ -1,5 +1,6 @@
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
+import ClaudeStrip from "./components/ClaudeStrip";
 import TrustedBy from "./components/TrustedBy";
 import HowItWorks from "./components/HowItWorks";
 import UseCases from "./components/UseCases";
@@ -13,6 +14,7 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
+        <ClaudeStrip />
         <TrustedBy />
         <HowItWorks />
         <UseCases />

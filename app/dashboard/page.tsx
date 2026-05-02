@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
+import ClaudeMcpCard from "../components/ClaudeMcpCard";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
 
@@ -305,7 +306,7 @@ function Playground({ apiKey }: { apiKey: string }) {
           <div className="text-green-400 font-bold mb-2">✓ Simulated</div>
           <div><span className="text-white/30">hash: </span><span className="text-orange-300">{result.hash}</span></div>
           <div><span className="text-white/30">gas by user: </span><span className="text-yellow font-bold">$0.000000</span></div>
-          <div><span className="text-white/30">USDC sent: </span><span className="text-green-400">${amount}.00</span></div>
+          <div><span className="text-white/30">{previewToken} sent: </span><span className="text-green-400">${amount}.00</span></div>
         </motion.div>
       )}
       <div className="pt-4 border-t border-white/6">
@@ -1064,6 +1065,9 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
+
+            {/* Claude MCP */}
+            <ClaudeMcpCard apiKey={sandboxApiKey || (API_KEY !== "—" ? API_KEY : "q402_test_••••")} />
 
             <div className="grid lg:grid-cols-2 gap-5">
               <div className="space-y-4">
