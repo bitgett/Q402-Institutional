@@ -24,6 +24,10 @@ export default function Navbar() {
             <Link href="/#use-cases"    className="hover:text-white transition-colors">Use cases</Link>
             <Link href="/#pricing"      className="hover:text-white transition-colors">Pricing</Link>
             <a href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</a>
+            <a href="/claude"        className="hover:text-orange-300 transition-colors text-orange-300/80 font-medium relative">
+              Claude
+              <span className="absolute -top-1.5 -right-5 text-[8px] font-bold tracking-widest text-orange-300/90">NEW</span>
+            </a>
             <a href="/grant"         className="hover:text-yellow transition-colors text-yellow/70 font-medium">Grant</a>
             <a href="/docs"          className="hover:text-white transition-colors">Docs</a>
           </div>
