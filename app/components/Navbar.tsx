@@ -24,9 +24,9 @@ export default function Navbar() {
             <Link href="/#use-cases"    className="hover:text-white transition-colors">Use cases</Link>
             <Link href="/#pricing"      className="hover:text-white transition-colors">Pricing</Link>
             <a href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</a>
-            <a href="/claude"        className="relative hover:text-orange-200 transition-colors text-orange-300/85 font-medium">
+            <a href="/claude" className="inline-flex items-center gap-1.5 hover:text-orange-200 transition-colors text-orange-300/85 font-medium">
               Claude
-              <span className="absolute -top-2 -right-6 text-[8px] font-extrabold tracking-[0.18em] text-orange-300 bg-orange-300/15 border border-orange-300/40 rounded-sm px-1 py-px">NEW</span>
+              <span className="text-[8px] font-extrabold tracking-[0.14em] text-orange-300 bg-orange-300/15 border border-orange-300/40 rounded-sm px-1 leading-[1.4]">NEW</span>
             </a>
             <a href="/grant"         className="hover:text-yellow transition-colors text-yellow/70 font-medium">Grant</a>
             <a href="/docs"          className="hover:text-white transition-colors">Docs</a>
