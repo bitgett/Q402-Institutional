@@ -324,7 +324,7 @@ function Playground({ apiKey }: { apiKey: string }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-const TABS = ["overview", "gas-tank", "developer", "transactions"] as const;
+const TABS = ["overview", "gas-tank", "developer", "transactions", "claude"] as const;
 type Tab = typeof TABS[number];
 
 export default function DashboardPage() {
@@ -629,6 +629,7 @@ export default function DashboardPage() {
     "gas-tank": "Gas Tank",
     "developer": "Developer",
     "transactions": `Transactions${relayedTxs.length > 0 ? ` (${relayedTxs.length})` : ""}`,
+    "claude": "Claude",
   };
 
   return (
@@ -1066,9 +1067,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Claude MCP */}
-            <ClaudeMcpCard apiKey={sandboxApiKey || (API_KEY !== "—" ? API_KEY : "q402_test_••••")} />
-
             <div className="grid lg:grid-cols-2 gap-5">
               <div className="space-y-4">
                 <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest">Integration Guide</h3>
@@ -1142,6 +1140,40 @@ export default function DashboardPage() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── CLAUDE MCP ── */}
+        {tab === "claude" && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+            <div className="space-y-1 mb-2">
+              <h2 className="text-lg font-semibold">Use Q402 from Claude</h2>
+              <p className="text-white/40 text-sm">
+                Q402 ships as a Model Context Protocol server, so Claude Desktop, Claude Code, and any other
+                MCP-compatible AI client can quote and (optionally) settle gasless USDC and USDT payments
+                directly from a chat. The config snippet below is pre-filled with your API key — copy and
+                paste into <code className="text-white/60">claude_desktop_config.json</code> to connect.
+              </p>
+            </div>
+            <ClaudeMcpCard apiKey={sandboxApiKey || (API_KEY !== "—" ? API_KEY : "q402_test_••••")} />
+            <div className="rounded-2xl border p-5" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2 font-semibold">
+                What ships in the package
+              </div>
+              <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
+                <li>• <code className="text-yellow text-xs">q402_quote</code> — compare gas across all 7 chains. Read-only, no auth.</li>
+                <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key + remaining quota.</li>
+                <li>• <code className="text-yellow text-xs">q402_pay</code> — send a gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
+              </ul>
+              <div className="text-[11px] text-white/30 mt-4 pt-3 border-t border-white/8">
+                Full reference in{" "}
+                <a className="text-yellow hover:underline" href="/docs#claude-mcp">/docs → Claude MCP</a>
+                {" "}· npm:{" "}
+                <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
+                {" "}· source:{" "}
+                <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a>
               </div>
             </div>
           </motion.div>
