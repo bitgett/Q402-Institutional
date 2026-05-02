@@ -37,3 +37,6 @@ next-env.d.ts
 
 # Runtime data — contains live API keys and subscription records; never commit
 data/
+
+# Standalone MCP server package — published separately to npm + github.com/bitgett/q402-mcp
+mcp-server/
