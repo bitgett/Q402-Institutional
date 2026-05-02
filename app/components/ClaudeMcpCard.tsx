@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 /**
- * Dashboard → Developer tab card for the @quackai/q402-mcp launch.
+ * Dashboard → Claude tab card for the @quackai/q402-mcp launch.
  *
  * Renders an install command + Claude Desktop config snippet pre-filled with
  * the user's API key, plus a one-click copy. Sandbox-default: real-payment
@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
  * deliberately before any on-chain TX would fire.
  */
 
-const INSTALL_CMD = "claude mcp add q402 -- npx @quackai/q402-mcp";
+const INSTALL_CMD = "claude mcp add q402 -- npx -y @quackai/q402-mcp";
 
 function buildConfigJson(apiKey: string): string {
   return `{
@@ -128,7 +128,7 @@ export default function ClaudeMcpCard({ apiKey }: Props) {
         <code className="text-white/50">Q402_PRIVATE_KEY</code>,{" "}
         <code className="text-white/50">Q402_ENABLE_REAL_PAYMENTS=1</code>, and a{" "}
         <code className="text-white/50">q402_live_</code> key). See{" "}
-        <a href="/claude#install" className="text-yellow hover:underline">
+        <a href="/claude" className="text-yellow hover:underline">
           /claude
         </a>{" "}
         for the full reference.

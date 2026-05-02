@@ -524,16 +524,13 @@ export default function ClaudePage() {
             No signup. No API key. Sandbox-safe. Real payments later — your first $1 of gas is on us.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <a
-              href="#"
-              onClick={e => {
-                e.preventDefault();
-                navigator.clipboard.writeText(INSTALL_CMD);
-              }}
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(INSTALL_CMD)}
               className="bg-yellow hover:bg-yellow-hover text-navy font-bold px-7 py-3.5 rounded-full transition-colors shadow-lg shadow-yellow/20"
             >
               Copy install command
-            </a>
+            </button>
             <Link
               href="/dashboard"
               className="border border-white/15 hover:border-white/35 text-white/85 hover:text-white px-7 py-3.5 rounded-full transition-colors"
