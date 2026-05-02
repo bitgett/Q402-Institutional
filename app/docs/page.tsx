@@ -7,6 +7,7 @@ const NAV = [
   { id: "overview",     label: "Overview",        icon: "○" },
   { id: "how-it-works", label: "How It Works",    icon: "○" },
   { id: "quickstart",   label: "Quick Start",     icon: "○" },
+  { id: "claude-mcp",   label: "Claude MCP",      icon: "○" },
   { id: "gaspool",      label: "Gas Pool",         icon: "○" },
   { id: "auth",         label: "Authentication",   icon: "○" },
   { id: "api-ref",      label: "API Reference",    icon: "○" },
@@ -343,6 +344,77 @@ console.log("Paid! TX:", result.txHash);`} />
 
             <Callout type="tip">
               The SDK handles signing <em>and</em> relay in one call — no separate backend step needed. The user never touches BNB, ETH, or AVAX. Gas is deducted from your pre-funded gas pool automatically.
+            </Callout>
+          </Section>
+
+          {/* ── CLAUDE MCP ── */}
+          <Section id="claude-mcp" title="Claude MCP">
+            <p className="text-white/55 text-sm mb-6">
+              Q402 ships as a Model Context Protocol server so Claude Desktop, Claude Code, Cline, and any other MCP-compatible AI client can quote and (optionally) settle gasless USDC and USDT payments directly from a chat. The package is{" "}
+              <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>{" "}
+              on npm and{" "}
+              <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a> on GitHub.
+            </p>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Install</h3>
+            <CodeBlock lang="bash" code={`# Claude Code CLI
+claude mcp add q402 -- npx -y @quackai/q402-mcp
+
+# Or paste this into claude_desktop_config.json:
+# (macOS:   ~/Library/Application Support/Claude/claude_desktop_config.json)
+# (Windows: %APPDATA%\\Claude\\claude_desktop_config.json)
+{
+  "mcpServers": {
+    "q402": {
+      "command": "npx",
+      "args": ["-y", "@quackai/q402-mcp"]
+    }
+  }
+}`} />
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · Tools exposed</h3>
+            <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-widest text-white/35" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <th className="px-4 py-3 font-semibold">Tool</th>
+                    <th className="px-4 py-3 font-semibold">Auth</th>
+                    <th className="px-4 py-3 font-semibold">Purpose</th>
+                  </tr>
+                </thead>
+                <tbody className="text-white/65">
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_quote</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
+                    <td className="px-4 py-3">Compare gas cost + supported tokens across chains. Read-only.</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_balance</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">api key</td>
+                    <td className="px-4 py-3">Verify the configured key and show its tier + remaining quota.</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_pay</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
+                    <td className="px-4 py-3">Send a gasless payment. <strong>Sandbox by default</strong> — see below.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · Sandbox vs live mode</h3>
+            <p className="text-white/55 text-sm mb-3">
+              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a deterministic-looking fake transaction hash, no funds move, no gas-tank credit is consumed. To enable real on-chain transactions, all three environment variables must be set:
+            </p>
+            <CodeBlock lang="bash" code={`Q402_API_KEY=q402_live_...      # live-tier key from /dashboard
+Q402_PRIVATE_KEY=0xabc...       # signer for the payer EOA
+Q402_ENABLE_REAL_PAYMENTS=1     # explicit opt-in`} />
+            <p className="text-white/40 text-xs mb-6">
+              Anything missing → automatic sandbox fallback with a hint pointing at what to set. Two additional guards run regardless of mode: <code className="text-white/60">Q402_MAX_AMOUNT_PER_CALL</code> (default $5) caps any single call, and <code className="text-white/60">Q402_ALLOWED_RECIPIENTS</code> optionally restricts to an address allowlist.
+            </p>
+
+            <Callout type="tip">
+              The <code className="text-yellow text-xs">q402_pay</code> tool description tells the model to ALWAYS get explicit user confirmation of recipient + amount in chat before invoking. Combined with the sandbox default + cap + allowlist, that gives four layers of safety before any wei moves.
             </Callout>
           </Section>
 

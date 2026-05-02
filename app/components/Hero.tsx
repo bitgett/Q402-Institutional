@@ -89,6 +89,41 @@ export default function Hero() {
 
             {/* LEFT */}
             <div>
+              {/* Claude × Quack AI ribbon — links to /docs#claude-mcp */}
+              <motion.a
+                href="/docs#claude-mcp"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.05 }}
+                whileHover={{ y: -2 }}
+                className="group inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full mb-6 relative overflow-hidden"
+                style={{
+                  background: "linear-gradient(120deg, rgba(245,158,11,0.10) 0%, rgba(245,197,24,0.08) 60%, rgba(139,92,246,0.06) 100%)",
+                  border: "1px solid rgba(245,158,11,0.28)",
+                  boxShadow: "0 0 22px rgba(245,158,11,0.10)",
+                }}
+              >
+                {/* Animated shine */}
+                <motion.span
+                  className="absolute inset-y-0 w-12 -skew-x-12 pointer-events-none"
+                  initial={{ x: "-120%" }}
+                  animate={{ x: "260%" }}
+                  transition={{ duration: 3.6, repeat: Infinity, repeatDelay: 2.4, ease: "easeInOut" }}
+                  style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent)" }}
+                />
+                <span className="relative w-1.5 h-1.5 rounded-full bg-orange-300 animate-pulse" />
+                <span className="relative text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300/90">
+                  Claude × Quack AI
+                </span>
+                <span className="relative text-white/30 text-xs">·</span>
+                <span className="relative text-xs text-white/75 font-medium">
+                  Now live in Claude Desktop
+                </span>
+                <span className="relative text-orange-300/80 text-xs ml-0.5 group-hover:translate-x-0.5 transition-transform">
+                  →
+                </span>
+              </motion.a>
+
               {/* Chain logos */}
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
