@@ -18,18 +18,6 @@ import { useMemo, useState } from "react";
 
 const INSTALL_CMD = "claude mcp add q402 -- npx -y @quackai/q402-mcp";
 
-const CONFIG_JSON = `{
-  "mcpServers": {
-    "q402": {
-      "command": "npx",
-      "args": ["-y", "@quackai/q402-mcp"],
-      "env": {
-        "Q402_API_KEY": "q402_test_••••"
-      }
-    }
-  }
-}`;
-
 interface ChainRow {
   key: string;
   name: string;
@@ -522,42 +510,6 @@ export default function ClaudePage() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* PASTE-INTO-CONFIG */}
-      <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        <div className="max-w-6xl mx-auto px-6 py-16 md:py-20">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
-            no CLI? · paste into config
-          </div>
-          <h2 className="text-2xl md:text-4xl font-bold mb-2">
-            Or just edit one JSON file.
-          </h2>
-          <p className="text-white/50 text-sm max-w-xl mb-6">
-            macOS:{" "}
-            <code className="text-white/70">
-              ~/Library/Application Support/Claude/claude_desktop_config.json
-            </code>
-            <br />
-            Windows:{" "}
-            <code className="text-white/70">%APPDATA%\Claude\claude_desktop_config.json</code>
-          </p>
-          <div className="relative max-w-3xl">
-            <pre
-              className="rounded-2xl p-5 text-xs font-mono overflow-x-auto"
-              style={{
-                background: "#0A0A14",
-                border: "1px solid rgba(245,158,11,0.18)",
-                boxShadow: "0 0 30px rgba(245,158,11,0.06)",
-              }}
-            >
-              <code className="text-white/85 whitespace-pre">{CONFIG_JSON}</code>
-            </pre>
-            <div className="absolute top-3 right-3">
-              <CopyButton value={CONFIG_JSON} label="Copy JSON" />
-            </div>
           </div>
         </div>
       </section>
