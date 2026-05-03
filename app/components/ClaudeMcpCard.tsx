@@ -6,21 +6,22 @@ import { useMemo, useState } from "react";
  * Dashboard → Claude tab card for the @quackai/q402-mcp launch.
  *
  * Renders an install command + Claude Desktop config snippet pre-filled with
- * the user's API key, plus a one-click copy. Sandbox-default: real-payment
- * env vars are shown as commented-out hints so a user has to opt in
- * deliberately before any on-chain TX would fire.
+ * the user's *sandbox* API key only. Real on-chain payments deliberately are
+ * NOT one-click here — the live key + private key go into shell env, not
+ * claude_desktop_config.json (that file syncs through iCloud/OneDrive on most
+ * setups and is a frequent source of accidental key leaks).
  */
 
 const INSTALL_CMD = "claude mcp add q402 -- npx -y @quackai/q402-mcp";
 
-function buildConfigJson(apiKey: string): string {
+function buildConfigJson(sandboxKey: string): string {
   return `{
   "mcpServers": {
     "q402": {
       "command": "npx",
       "args": ["-y", "@quackai/q402-mcp"],
       "env": {
-        "Q402_API_KEY": "${apiKey}"
+        "Q402_API_KEY": "${sandboxKey}"
       }
     }
   }
@@ -28,12 +29,15 @@ function buildConfigJson(apiKey: string): string {
 }
 
 interface Props {
-  /** A live or sandbox API key — pre-filled into the config snippet. */
-  apiKey: string;
+  /**
+   * The user's sandbox key (q402_test_*) — pre-filled into the config snippet.
+   * Live keys are deliberately not surfaced here; see the component header.
+   */
+  sandboxApiKey: string;
 }
 
-export default function ClaudeMcpCard({ apiKey }: Props) {
-  const config = useMemo(() => buildConfigJson(apiKey), [apiKey]);
+export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
+  const config = useMemo(() => buildConfigJson(sandboxApiKey), [sandboxApiKey]);
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
 
@@ -73,8 +77,8 @@ export default function ClaudeMcpCard({ apiKey }: Props) {
 
       <p className="text-white/45 text-xs leading-relaxed">
         Use Q402 directly from Claude Desktop, Claude Code, Cline, or any MCP-compatible AI
-        client. Sandbox by default — paste this config and Claude can quote across all 7 chains
-        immediately, no wallet hookup required.
+        client. The config below is pre-filled with your sandbox key — safe to paste anywhere.
+        Real on-chain payments are configured separately, in your shell, not in this file.
       </p>
 
       <div>
@@ -100,8 +104,11 @@ export default function ClaudeMcpCard({ apiKey }: Props) {
       </div>
 
       <div>
-        <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2 font-semibold">
-          2 · Or paste this into your config (key pre-filled)
+        <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2 font-semibold flex items-center gap-2">
+          <span>2 · Or paste this into your config</span>
+          <span className="text-yellow/70 normal-case tracking-normal font-mono text-[10px]">
+            sandbox key
+          </span>
         </div>
         <div className="relative">
           <pre className="bg-[#060C14] border border-white/7 rounded-xl p-4 overflow-x-auto">
@@ -123,15 +130,30 @@ export default function ClaudeMcpCard({ apiKey }: Props) {
         </div>
       </div>
 
-      <div className="text-[11px] text-white/35 leading-relaxed border-t border-white/8 pt-3">
-        Real on-chain payments require three more env vars (
-        <code className="text-white/50">Q402_PRIVATE_KEY</code>,{" "}
-        <code className="text-white/50">Q402_ENABLE_REAL_PAYMENTS=1</code>, and a{" "}
-        <code className="text-white/50">q402_live_</code> key). See{" "}
-        <a href="/claude" className="text-yellow hover:underline">
-          /claude
-        </a>{" "}
-        for the full reference.
+      <div className="text-[11px] text-white/40 leading-relaxed border-t border-white/8 pt-3 space-y-2">
+        <div>
+          <span className="text-orange-300/80 font-semibold uppercase tracking-widest text-[10px] mr-2">
+            Live mode
+          </span>
+          Real on-chain payments need a live key (
+          <code className="text-white/55">q402_live_*</code>),{" "}
+          <code className="text-white/55">Q402_PRIVATE_KEY</code>, and{" "}
+          <code className="text-white/55">Q402_ENABLE_REAL_PAYMENTS=1</code>{" "}
+          <strong className="text-white/65">all set in your shell environment</strong> — not in
+          the JSON above. The config file syncs through iCloud/OneDrive on most setups; keeping
+          live secrets out of it is the safer default.
+        </div>
+        <div className="text-white/30">
+          See{" "}
+          <a href="/claude" className="text-yellow/70 hover:text-yellow hover:underline">
+            /claude
+          </a>{" "}
+          or{" "}
+          <a href="/docs#claude-mcp" className="text-yellow/70 hover:text-yellow hover:underline">
+            /docs#claude-mcp
+          </a>{" "}
+          for the live-mode walkthrough.
+        </div>
       </div>
     </div>
   );
