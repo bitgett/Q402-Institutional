@@ -391,7 +391,7 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_balance</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">api key</td>
-                    <td className="px-4 py-3">Verify the configured key and show its tier + remaining quota.</td>
+                    <td className="px-4 py-3">Verify the configured key and report its plan tier (live vs sandbox).</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_pay</code></td>
