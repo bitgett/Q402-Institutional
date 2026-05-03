@@ -1157,7 +1157,7 @@ export default function DashboardPage() {
                 paste into <code className="text-white/60">claude_desktop_config.json</code> to connect.
               </p>
             </div>
-            <ClaudeMcpCard apiKey={sandboxApiKey || (API_KEY !== "—" ? API_KEY : "q402_test_••••")} />
+            <ClaudeMcpCard sandboxApiKey={sandboxApiKey || "q402_test_••••"} />
             <div className="rounded-2xl border p-5" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
               <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2 font-semibold">
                 What ships in the package
