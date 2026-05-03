@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.23** · **SDK: v1.6.0** · **Manifest: v1.6.0** · **Last updated: 2026-04-27**  
+**Version: v1.24** · **SDK: v1.6.0** · **Manifest: v1.6.0** · **MCP: @quackai/q402-mcp v0.1.3** · **Last updated: 2026-05-03**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
@@ -1254,6 +1254,53 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 ---
 
 ## 25. Changelog
+
+### v1.24 (2026-05-03)
+
+> **Claude × Quack AI — Q402 ships as an MCP server.** Q402 is now addressable as a Model Context Protocol server so Claude Desktop, Claude Code, Cline, Continue, and any other MCP-compatible AI client can quote and (optionally) settle gasless USDC and USDT payments directly from a chat. The package is `@quackai/q402-mcp` on npm, source lives at github.com/bitgett/q402-mcp, and the listing is active in Anthropic's official MCP Registry under `io.github.bitgett/q402-mcp`.
+
+#### Distribution surfaces
+
+- **npm** — https://www.npmjs.com/package/@quackai/q402-mcp · v0.1.3 · 0 vulnerabilities · MIT-class Apache-2.0.
+- **GitHub** — https://github.com/bitgett/q402-mcp (separate from this repo so the package can be vendored independently; chain registry is drift-tested against `contracts.manifest.json`).
+- **MCP Registry** — `registry.modelcontextprotocol.io/v0.1/servers?search=q402` — `status: active`, `isLatest: true`. Filed via the official `mcp-publisher` CLI with a server.json that mirrors the published npm package version.
+- **Claude Code CLI** — install in 30 seconds: `claude mcp add q402 -- npx -y @quackai/q402-mcp`.
+- **Claude Desktop / other MCP clients** — paste the snippet from `/dashboard` (Claude tab) or `/claude` into `claude_desktop_config.json`.
+
+#### Tools exposed (three, intentionally minimal)
+
+| Tool | Auth | What it does |
+|---|---|---|
+| `q402_quote` | none | Compare gas + supported tokens across all 7 chains. Read-only — no key, no funds. |
+| `q402_balance` | API key | Verify the configured key, show its tier (live vs sandbox) + remaining quota. |
+| `q402_pay` | API key + signer + flag | Send a gasless USDC or USDT payment. **Sandbox by default**; real on-chain TX requires `Q402_API_KEY` (live tier) + `Q402_PRIVATE_KEY` + `Q402_ENABLE_REAL_PAYMENTS=1`, all set in shell environment, not in the config file (which syncs through iCloud/OneDrive on most setups). Two extra guards on top: per-call max `Q402_MAX_AMOUNT_PER_CALL` (default $5) and an optional recipient allowlist `Q402_ALLOWED_RECIPIENTS`.
+
+The `q402_pay` tool description tells the model to ALWAYS get explicit user confirmation of recipient + amount before invoking, giving four layers of safety before any wei moves: sandbox-default + cap + allowlist + confirm-in-chat.
+
+#### Front-end surfaces added
+
+- `/claude` — long-scroll landing page with a **live `q402_quote` simulation** (amount input + USDC/USDT/ALL filter re-rank all 7 chains via framer-motion layout transitions, mirroring `mcp-server/src/chains.ts`). Animated install command bar with one-click copy. Three gradient tool cards. Four-guard safety panel. CTA to `/dashboard`.
+- `/docs` → new "Claude MCP" section between Quick Start and Gas Pool, with install command + tool reference table + sandbox-vs-live walkthrough.
+- `/dashboard` → new fifth tab "Claude" with a `ClaudeMcpCard` that pre-fills the user's **sandbox key** (deliberately not live) into a copyable `claude_desktop_config.json` snippet, and a Live mode panel that points the user at shell-env setup instead.
+- Hero ribbon — single sleek "Claude × Quack AI · Now live in Claude Desktop →" pill at the top of `/`, animated shine + pulse + hover lift, links to `/docs#claude-mcp`.
+- Navbar — "Claude" link with NEW pill in the orange/yellow palette.
+
+#### Drift guard (CI)
+
+The MCP package ships from a separate repo so a normal lockfile bump won't catch chain-config drift between `contracts.manifest.json` and `mcp-server/src/chains.ts`. New test `__tests__/mcp-package-drift.test.ts` (30 cases) fetches the published package's `chains.ts` from GitHub raw and verifies — for every chain — `chainId`, `implContract`, EIP-712 `domainName`, USDC + USDT addresses, plus the Injective USDT-only allowlist. Soft-fails on offline CI; hard fails on real drift.
+
+#### Hardening pass (post-launch external review)
+
+- Per-call cap (`Q402_MAX_AMOUNT_PER_CALL`, default $5) and recipient allowlist (`Q402_ALLOWED_RECIPIENTS`) made explicit in tool guard layers, not just env-var docs.
+- `ClaudeMcpCard` now takes only a `sandboxApiKey` prop and labels its config snippet "(sandbox key)" — addresses the prior `sandbox || live` ambiguity by making it impossible to surface a live key into a synced config file by accident.
+- `postcss` pinned to `^8.5.10` via `overrides` to clear a transitive moderate advisory (GHSA-qx2v-qp2m-jg93) without dragging Next 16 backwards. `npm audit` now reports 0 vulnerabilities.
+
+#### Verification
+
+- 269 / 269 tests pass (239 prior + 30 drift cases).
+- `npm audit` 0 vulnerabilities.
+- `next build --webpack` green; lint clean.
+- MCP package fully exercised in Claude Code: `q402_quote` returned the expected 7-chain ranking with Stable cheapest at $0.0005 and Ethereum highest at ~$1.20.
 
 ### v1.23 (2026-04-27)
 
