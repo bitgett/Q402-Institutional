@@ -5,15 +5,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMemo, useState } from "react";
 
 /**
- * /claude — second-iteration landing for the @quackai/q402-mcp launch.
+ * /claude — landing page for the @quackai/q402-mcp Claude integration.
  *
- * Cooler than v1: live `q402_quote` simulation that re-ranks 7 chains as the
- * visitor changes the amount, animated terminal install line with one-click
- * copy + npm/GitHub deeplinks, gradient tool cards, and a sharper hero.
+ * Live `q402_quote` simulation that re-ranks 7 chains as the visitor changes
+ * the amount, animated install line with one-click copy + npm/GitHub deeplinks,
+ * gradient tool cards.
  *
- * Stays fully static (no fetches) — the chain table mirrors the manifest in
- * mcp-server/src/chains.ts so the simulation is authoritative without
- * round-tripping the relayer.
+ * Fully static (no fetches) — the chain table mirrors the manifest in
+ * mcp-server/src/chains.ts and contracts.manifest.json so the simulation is
+ * authoritative without round-tripping the relayer.
  */
 
 const INSTALL_CMD = "claude mcp add q402 -- npx -y @quackai/q402-mcp";
@@ -155,7 +155,7 @@ export default function ClaudePage() {
             </span>
             <span className="text-white/20 text-xs">·</span>
             <span className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold">
-              v0.1.1 live on npm
+              v0.1.3 live on npm
             </span>
           </motion.div>
 
