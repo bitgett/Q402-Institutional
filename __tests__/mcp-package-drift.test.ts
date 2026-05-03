@@ -8,8 +8,13 @@
  * it manually) and would happen again the next time we add a chain, rotate an
  * impl, or change a token alias.
  *
- * This test fetches the published mcp-server's `src/chains.ts` straight from
- * GitHub raw and verifies, for every supported chain, that:
+ * To prove the *currently published* package matches this repo (not just the
+ * GitHub main branch — those can drift in either direction), we resolve the
+ * latest npm version first, then fetch `src/chains.ts` at the matching git
+ * tag (e.g. v0.1.3). That ties the assertion to the artifact users actually
+ * install via `npx -y @quackai/q402-mcp`.
+ *
+ * For every supported chain we verify:
  *   - chainId matches the manifest
  *   - implContract matches the manifest (case-insensitive)
  *   - USDC + USDT token addresses match (case-insensitive)
@@ -25,7 +30,10 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const RAW_URL = "https://raw.githubusercontent.com/bitgett/q402-mcp/main/src/chains.ts";
+const NPM_LATEST_URL = "https://registry.npmjs.org/@quackai/q402-mcp/latest";
+function rawUrlFor(version: string): string {
+  return `https://raw.githubusercontent.com/bitgett/q402-mcp/v${version}/src/chains.ts`;
+}
 
 interface ManifestToken { address: string; decimals: number }
 interface ManifestChain {
@@ -44,6 +52,7 @@ const manifest = JSON.parse(
 const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective"] as const;
 
 let mcpSource: string | null = null;
+let mcpVersion: string | null = null;
 let fetchError: string | null = null;
 
 // One-shot fetch shared across test cases. Network calls happen inside the
@@ -51,9 +60,24 @@ let fetchError: string | null = null;
 async function loadMcpChainsSource(): Promise<void> {
   if (mcpSource !== null || fetchError !== null) return;
   try {
-    const resp = await fetch(RAW_URL);
+    // Step 1: ask npm for the currently published version.
+    const npmResp = await fetch(NPM_LATEST_URL);
+    if (!npmResp.ok) {
+      fetchError = `HTTP ${npmResp.status} fetching ${NPM_LATEST_URL}`;
+      return;
+    }
+    const npmJson = (await npmResp.json()) as { version?: string };
+    if (!npmJson.version) {
+      fetchError = "npm 'latest' record had no version field";
+      return;
+    }
+    mcpVersion = npmJson.version;
+
+    // Step 2: fetch chains.ts at that exact git tag.
+    const rawUrl = rawUrlFor(mcpVersion);
+    const resp = await fetch(rawUrl);
     if (!resp.ok) {
-      fetchError = `HTTP ${resp.status} fetching ${RAW_URL}`;
+      fetchError = `HTTP ${resp.status} fetching ${rawUrl} (no git tag for v${mcpVersion}?)`;
       return;
     }
     mcpSource = await resp.text();
@@ -97,13 +121,14 @@ function extractTokenAddress(src: string, chain: string, token: "usdc" | "usdt")
 }
 
 describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)", () => {
-  it("fetches the published mcp-server source", async () => {
+  it("resolves the npm-published version and fetches its tagged source", async () => {
     await loadMcpChainsSource();
     if (!mcpSource) {
       // soft-skip on offline CI — the rest of the cases will warn-and-pass
       console.warn(`[mcp-package-drift] offline — ${fetchError}`);
       return;
     }
+    expect(mcpVersion, "npm latest must report a version").toBeTruthy();
     expect(mcpSource.length).toBeGreaterThan(500);
     expect(mcpSource).toContain("export const CHAIN_CONFIG");
   });

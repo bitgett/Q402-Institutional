@@ -92,3 +92,38 @@ console.log(JSON.stringify({
   expectedTransferAuthTypehash: TRANSFER_AUTH_TYPEHASH,
   results,
 }, null, 2));
+
+// ── Required-invariant gate ─────────────────────────────────────────────────
+// The script is used as a launch / deploy gate, so a broken chain MUST exit
+// non-zero. We previously printed JSON and returned 0 even when hasCode was
+// false or the on-chain typehash mismatched, which let bad state look green.
+const failures = [];
+for (const row of results) {
+  const c = row.checks ?? {};
+  if (row.error) {
+    failures.push(`${row.chain}: rpc/contract read error — ${row.error}`);
+    continue;
+  }
+  if (!c.hasCode) {
+    failures.push(`${row.chain}: no bytecode at ${row.address}`);
+  }
+  if (c.nameMatch === false) {
+    failures.push(`${row.chain}: NAME() = "${c.onChainName}" does not match manifest "${manifest.chains[row.chain].witness.domainName}"`);
+  }
+  if (c.nameError) {
+    failures.push(`${row.chain}: NAME() read failed — ${c.nameError}`);
+  }
+  if (c.typehashMatchesTransferAuth === false) {
+    failures.push(`${row.chain}: TRANSFER_AUTHORIZATION_TYPEHASH() does not match the expected TransferAuthorization typehash`);
+  }
+  if (c.typehashError) {
+    failures.push(`${row.chain}: TRANSFER_AUTHORIZATION_TYPEHASH() read failed — ${c.typehashError}`);
+  }
+}
+
+if (failures.length > 0) {
+  console.error(`\n✖ verify-contracts: ${failures.length} invariant failure${failures.length > 1 ? "s" : ""}:`);
+  for (const msg of failures) console.error(`  - ${msg}`);
+  process.exit(1);
+}
+console.error("\n✓ verify-contracts: all required invariants pass.");

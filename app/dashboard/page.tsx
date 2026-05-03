@@ -1153,8 +1153,11 @@ export default function DashboardPage() {
               <p className="text-white/40 text-sm">
                 Q402 ships as a Model Context Protocol server, so Claude Desktop, Claude Code, and any other
                 MCP-compatible AI client can quote and (optionally) settle gasless USDC and USDT payments
-                directly from a chat. The config snippet below is pre-filled with your API key — copy and
-                paste into <code className="text-white/60">claude_desktop_config.json</code> to connect.
+                directly from a chat. The config snippet below is pre-filled with your{" "}
+                <strong className="text-white/60">sandbox key</strong> — safe to paste into{" "}
+                <code className="text-white/60">claude_desktop_config.json</code>. Real on-chain payments
+                are configured separately, via shell environment variables — your live key never leaves
+                your terminal.
               </p>
             </div>
             <ClaudeMcpCard sandboxApiKey={sandboxApiKey || "q402_test_••••"} />
@@ -1164,7 +1167,7 @@ export default function DashboardPage() {
               </div>
               <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
                 <li>• <code className="text-yellow text-xs">q402_quote</code> — compare gas across all 7 chains. Read-only, no auth.</li>
-                <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key + remaining quota.</li>
+                <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
                 <li>• <code className="text-yellow text-xs">q402_pay</code> — send a gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
               </ul>
               <div className="text-[11px] text-white/30 mt-4 pt-3 border-t border-white/8">

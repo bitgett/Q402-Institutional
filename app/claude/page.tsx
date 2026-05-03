@@ -401,7 +401,7 @@ export default function ClaudePage() {
                 color: "rgba(245,197,24,0.30)",
                 bg: "rgba(245,197,24,0.05)",
                 description:
-                  "Verify the configured key, show its tier (live vs sandbox), and remaining subscription quota.",
+                  "Verify the configured key and report its plan tier (live vs sandbox). Read-only.",
               },
               {
                 name: "q402_pay",
