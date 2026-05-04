@@ -5,14 +5,55 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
 
 const CHAINS = [
-  { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",   blockWindow: 200 },
-  { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",       blockWindow: 50  },
-  { key: "mantle", name: "Mantle",    token: "MNT",   rpc: "https://rpc.mantle.xyz",                blockWindow: 500 },
-  { key: "injective", name: "Injective", token: "INJ", rpc: "https://sentry.evm-rpc.injective.network/", blockWindow: 500 },
-  { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc", blockWindow: 200 },
-  { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",               blockWindow: 200 },
-  { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                blockWindow: 500 },
+  { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",       blockWindow: 200, explorer: "https://bscscan.com/tx/" },
+  { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",          blockWindow: 50,  explorer: "https://etherscan.io/tx/" },
+  { key: "mantle", name: "Mantle",    token: "MNT",   rpc: "https://rpc.mantle.xyz",                   blockWindow: 500, explorer: "https://mantlescan.xyz/tx/" },
+  { key: "injective", name: "Injective", token: "INJ", rpc: "https://sentry.evm-rpc.injective.network/", blockWindow: 500, explorer: "https://blockscout.injective.network/tx/" },
+  { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",    blockWindow: 200, explorer: "https://snowtrace.io/tx/" },
+  { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                  blockWindow: 200, explorer: "https://www.oklink.com/xlayer/tx/" },
+  { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 500, explorer: "https://stable-explorer.io/tx/" },
 ];
+
+/**
+ * Operator alert (Telegram) — new gas-tank deposit credited.
+ *
+ * Fires only after `addGasDeposit` returns true (i.e. NOT a duplicate). Same
+ * await + try/catch pattern as payment/activate and grant/inquiry: missing env
+ * vars, a Telegram outage, or a malformed payload here must NEVER fail the
+ * deposit credit, since KV state is already authoritative at this point.
+ */
+async function notifyTelegramDeposit(args: {
+  address: string;
+  chain: typeof CHAINS[number];
+  amount: number;
+  txHash: string;
+}): Promise<void> {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId   = process.env.TELEGRAM_CHAT_ID;
+  if (!botToken || !chatId) return;
+  const explorerUrl = `${args.chain.explorer}${args.txHash}`;
+  const amount      = args.amount.toFixed(args.amount >= 1 ? 4 : 6);
+  const lines = [
+    `⛽ *New Gas Tank Deposit*`,
+    ``,
+    `*From:* \`${args.address}\``,
+    `*Chain:* ${args.chain.name} (${args.chain.token})`,
+    `*Amount:* ${amount} ${args.chain.token}`,
+    `*TX:* [${args.txHash.slice(0, 10)}…${args.txHash.slice(-6)}](${explorerUrl})`,
+  ].join("\n");
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        chat_id: chatId,
+        text: lines,
+        parse_mode: "Markdown",
+        disable_web_page_preview: true,
+      }),
+    });
+  } catch { /* non-critical — deposit is already credited */ }
+}
 
 async function scanNativeDeposits(
   chain: typeof CHAINS[number],
@@ -156,6 +197,14 @@ export async function POST(req: NextRequest) {
       txHash: body.txHash,
       depositedAt: new Date().toISOString(),
     });
+    if (added) {
+      await notifyTelegramDeposit({
+        address,
+        chain,
+        amount: result.amount,
+        txHash: body.txHash,
+      });
+    }
     const balances = await getGasBalance(address);
     return NextResponse.json({ newDeposits: added ? 1 : 0, balances, alreadyCredited: !added });
   }
@@ -177,7 +226,15 @@ export async function POST(req: NextRequest) {
         txHash: tx.txHash,
         depositedAt: new Date().toISOString(),
       });
-      if (added) newDeposits++;
+      if (added) {
+        newDeposits++;
+        await notifyTelegramDeposit({
+          address,
+          chain,
+          amount: tx.amount,
+          txHash: tx.txHash,
+        });
+      }
     }
   }
 
