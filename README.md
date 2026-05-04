@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.24** · **SDK: v1.6.0** · **Manifest: v1.6.0** · **MCP: @quackai/q402-mcp v0.1.3** · **Last updated: 2026-05-03**  
+**Version: v1.25** · **SDK: v1.6.0** · **Manifest: v1.6.0** · **MCP: @quackai/q402-mcp v0.1.3** · **Last updated: 2026-05-03**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
@@ -1254,6 +1254,40 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 ---
 
 ## 25. Changelog
+
+### v1.25 (2026-05-03)
+
+> **SUBSCRIPTION wallet migrated to a 2-of-3 Safe multisig on BNB Chain.** Subscription revenue used to flow into a single-EOA cold wallet whose key was held by the founder alone. As the team scaled and revenue accumulated, single-key custody became disproportionate to the value at rest, so the founder and Quack AI agreed to move SUBSCRIPTION to a multisig. Deployed today — same day as the Q402 MCP launch — so all v1.24 announcement traffic settles into the new wallet from day one.
+
+#### Setup
+
+- **New address**: `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE` (Safe Wallet by Safe Labs, BNB Chain).
+- **Threshold**: 2 of 3.
+- **Signers** (cold wallets, no overlap with any operational Q402 key):
+  - Founder personal cold wallet
+  - Company 1 cold wallet
+  - Company 2 cold wallet
+- **Retired**: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` — the previous single-EOA SUBSCRIPTION address. Residual balance was transferred out and the address no longer receives revenue. Code references kept in `app/lib/wallets.ts` JSDoc for historical clarity, but the constant `SUBSCRIPTION_ADDRESS` now points at the Safe.
+
+#### Why the other two wallets stay EOAs
+
+GASTANK (`0x10fb07…747a`) and RELAYER (`0xfc77ff…f466`) deliberately remain single EOAs. RELAYER signs every relay transaction — a multisig there would block every payment behind a multi-party signature flow, defeating the gasless UX that Q402 sells. GASTANK is the cold half of the relayer pair and gets manually topped up to RELAYER on low-balance alerts; multisig'ing it would slow that on-call response without commensurate security gain at current TVL. Subscription revenue is the only Q402 wallet with both (a) high-value at rest and (b) low operational cadence (withdrawals are weekly-to-monthly), so it's the natural multisig target.
+
+#### Threat-model delta
+
+A complete compromise of the Vercel runtime now drains at most the operational gas float in RELAYER — a few cents to a couple of dollars per chain at any given time. A complete compromise of any single founder/Company cold wallet now leaves SUBSCRIPTION funds untouchable; an attacker would need to compromise two of the three signers simultaneously, each on separate cold devices.
+
+#### What changed
+
+- [`app/lib/wallets.ts`](app/lib/wallets.ts) — `SUBSCRIPTION_ADDRESS` repointed to the new Safe; SECURITY MODEL JSDoc updated with the multisig setup, threshold, and a note on the retired EOA. `SUBSCRIPTION_ADDRESS_LC` follows automatically via `.toLowerCase()`.
+- No code-flow changes elsewhere — every backend route (`payment/intent`, `payment/activate`, `wallet-balance`, `gas-tank/*`) reads `SUBSCRIPTION_ADDRESS` through this single import, so the swap is byte-localised. Lint + tests + build all green with no test fixtures referencing the old address.
+
+#### Verification
+
+- 269/269 tests pass.
+- `next build --webpack` green.
+- `npm audit` 0 vulnerabilities.
+- A test subscription ($29) was settled end-to-end into the new Safe before the announcement window opened — incoming USDC visible on BscScan, Safe shows the receipt, both confirmable on the Q402 dashboard's Transactions tab.
 
 ### v1.24 (2026-05-03)
 
