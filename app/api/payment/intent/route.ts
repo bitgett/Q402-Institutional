@@ -31,7 +31,15 @@ import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/b
 
 const INTENT_TTL = 2 * 60 * 60; // 2 hours
 
-const VALID_CHAINS = ["bnb", "avax", "eth", "xlayer", "stable", "mantle", "injective"];
+// Subscription payment chains the SUBSCRIPTION_ADDRESS Safe is actually
+// deployed on. Today: BNB Chain + Ethereum (same multisig address on both
+// via deterministic CREATE2). Other chains the relayer supports
+// (avax/xlayer/stable/mantle/injective) are NOT yet payment rails — sending
+// USDC there would deposit to a non-deployed address, locking funds until a
+// matching Safe is deployed. The Quote Builder UI only offers BNB/ETH; this
+// allowlist mirrors that on the server so a direct API caller cannot bypass
+// it.
+const VALID_CHAINS = ["bnb", "eth"];
 const VALID_TOKENS = ["USDC", "USDT", "USDT0"];
 
 
