@@ -1,11 +1,18 @@
 /**
  * migrate-split-wallets.mjs — PLAN ONLY (no signing, no broadcasting).
  *
+ * HISTORICAL — written for the v1.16 three-role split. The SUBSCRIPTION
+ * address shown below (`0x700a873215edb1e1a2a401a2e0cec022f6b5bd71`) was
+ * retired in v1.25 when SUBSCRIPTION moved to a 2-of-3 Safe multisig at
+ * `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE`. The current source of
+ * truth for all three constants is `app/lib/wallets.ts`, NOT this script.
+ * Kept in-tree as a record of the original split-wallets migration plan.
+ *
  * Prints the cold-wallet transfers required to split the legacy single-wallet
  *   0xfc77ff29178b7286a8ba703d7a70895ca74ff466
  * into the v1.16 three-role architecture:
  *
- *   SUBSCRIPTION_ADDRESS  0x700a873215edb1e1a2a401a2e0cec022f6b5bd71  (revenue)
+ *   SUBSCRIPTION_ADDRESS  0x700a873215edb1e1a2a401a2e0cec022f6b5bd71  (revenue, retired in v1.25 → multisig)
  *   GASTANK_ADDRESS       0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a  (user deposits)
  *   RELAYER_ADDRESS       0xfc77ff29178b7286a8ba703d7a70895ca74ff466  (operational hot)
  *

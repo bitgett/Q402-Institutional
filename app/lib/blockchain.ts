@@ -2,7 +2,10 @@ import { ethers } from "ethers";
 import { SUBSCRIPTION_ADDRESS } from "./wallets";
 
 // Subscription payment scanner target — where user pays $29/$49/$149 subscription.
-const RELAYER = SUBSCRIPTION_ADDRESS;
+// Named SUBSCRIPTION (was historically misleadingly RELAYER from the v1.16 split).
+// Always reflects the SUBSCRIPTION_ADDRESS constant (a 2-of-3 Safe multisig since
+// v1.25); never name-shadowed by anything else in this module.
+const SUBSCRIPTION = SUBSCRIPTION_ADDRESS;
 
 const ERC20_ABI = [
   "event Transfer(address indexed from, address indexed to, uint256 value)",
@@ -226,7 +229,7 @@ async function scanChainWithRpc(
 
   for (const token of chain.tokens) {
     const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
-    const filter = contract.filters.Transfer(fromAddress, RELAYER);
+    const filter = contract.filters.Transfer(fromAddress, SUBSCRIPTION);
     try {
       const events = await Promise.race([
         contract.queryFilter(filter, fromBlock, currentBlock),
@@ -291,7 +294,7 @@ export async function verifyPaymentTx(txHash: string, fromAddress: string): Prom
 
         for (const token of chain.tokens) {
           const contract = new ethers.Contract(token.address, ERC20_ABI, provider);
-          const filter = contract.filters.Transfer(fromAddress, RELAYER);
+          const filter = contract.filters.Transfer(fromAddress, SUBSCRIPTION);
           const events = await Promise.race([
             contract.queryFilter(filter, receipt.blockNumber, receipt.blockNumber),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),

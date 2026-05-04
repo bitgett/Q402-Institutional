@@ -282,7 +282,7 @@ The `/payment` page drives a self-serve on-chain checkout → automatic API Key 
 | Enterprise  | 500,000  | $1,999 | $2,199 | $2,999 |
 
 Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT**. The Quote Builder UI currently defaults to BNB/ETH USDC/USDT for the simplest checkout flow; the underlying API accepts payment on any of the 7 supported chains for integrators who want to settle elsewhere.  
-Payment address: `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` (SUBSCRIPTION cold wallet — revenue-only).
+Payment address: `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE` (SUBSCRIPTION — 2-of-3 Safe multisig on BNB Chain since v1.25, revenue-only, no server-side key). The address shown in the Quote Builder always reflects the current `SUBSCRIPTION_ADDRESS` constant in [`app/lib/wallets.ts`](app/lib/wallets.ts).
 
 ---
 
@@ -1168,7 +1168,7 @@ Three wallets, three roles, zero commingling. The split ensures a single key com
 
 | Role | Address | Key Storage | Responsibility |
 |------|---------|-------------|----------------|
-| `SUBSCRIPTION_ADDRESS` | `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` | **Cold** (no key on server) | Receives subscription payments ($29/$49/$149…). Periodically swept manually from a cold device. |
+| `SUBSCRIPTION_ADDRESS` | `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE` | **Cold multisig** (2-of-3 Safe on BNB Chain, no key on server) | Receives subscription payments ($29/$49/$149…). Withdrawals require two of three cold-wallet signers to co-sign on Safe Web. Migrated from a single-EOA in v1.25; the previous address (`0x700a87…d71`) is retired and no longer receives revenue. |
 | `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **Cold** (no key on server) | Receives user gas deposits (BNB/ETH/MNT/AVAX/INJ/OKB/USDT0). Cold→hot top-ups to the relayer are done manually. |
 | `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **Hot** (Vercel `RELAYER_PRIVATE_KEY`) | Signs/submits EIP-7702 TXs. Holds only a minimal operational float (BNB/ETH/MNT/AVAX/INJ/OKB/USDT0). |
 
