@@ -281,8 +281,8 @@ The `/payment` page drives a self-serve on-chain checkout → automatic API Key 
 | Business    | 100,000  | $799   | $879   | $1,199 |
 | Enterprise  | 500,000  | $1,999 | $2,199 | $2,999 |
 
-Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT**. The Quote Builder UI currently defaults to BNB/ETH USDC/USDT for the simplest checkout flow; the underlying API accepts payment on any of the 7 supported chains for integrators who want to settle elsewhere.  
-Payment address: `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE` (SUBSCRIPTION — 2-of-3 Safe multisig on BNB Chain since v1.25, revenue-only, no server-side key). The address shown in the Quote Builder always reflects the current `SUBSCRIPTION_ADDRESS` constant in [`app/lib/wallets.ts`](app/lib/wallets.ts).
+Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT**. The SUBSCRIPTION Safe is currently deployed on BNB Chain + Ethereum at the same deterministic CREATE2 address — the API explicitly rejects payment intents for chains where the Safe is not yet deployed (avalanche/x-layer/stable/mantle/injective) so funds cannot land on an undeployed Safe address. Other chains will be enabled as the Safe is replicated to each network.  
+Payment address: `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE` (SUBSCRIPTION — 2-of-3 Safe multisig, BNB + Ethereum, revenue-only, no server-side key). The address shown in the Quote Builder always reflects the current `SUBSCRIPTION_ADDRESS` constant in [`app/lib/wallets.ts`](app/lib/wallets.ts) and the chain allowlist in [`app/api/payment/intent/route.ts`](app/api/payment/intent/route.ts).
 
 ---
 

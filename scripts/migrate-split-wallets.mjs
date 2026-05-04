@@ -56,10 +56,36 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// ── Retired-script guard ─────────────────────────────────────────────────────
+// This script was written for the v1.16 single-wallet→three-role split. The
+// SUBSCR address it sweeps to is the v1.16 EOA, retired in v1.25 when
+// SUBSCRIPTION moved to a 2-of-3 Safe multisig. Re-running this without
+// updating SUBSCR would generate sweep instructions to a wallet that no
+// longer receives revenue.
+//
+// To run anyway (e.g. recovering historical context): pass
+// --acknowledge-retired and the script will continue. Otherwise it exits 1.
+if (!process.argv.includes("--acknowledge-retired")) {
+  console.error("\nmigrate-split-wallets.mjs is RETIRED.\n");
+  console.error("This script was written for the v1.16 single-wallet split. The");
+  console.error("SUBSCRIPTION_ADDRESS it targets (0x700a87...d71) was retired in");
+  console.error("v1.25 when subscription revenue moved to a 2-of-3 Safe multisig");
+  console.error("at 0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE (BNB + Ethereum).");
+  console.error("");
+  console.error("The current source of truth for all three constants is");
+  console.error("app/lib/wallets.ts — read from there, do not from this file.");
+  console.error("");
+  console.error("If you really need to run this for historical context, pass");
+  console.error("--acknowledge-retired. Do not, however, follow the printed");
+  console.error("instructions: they sweep to the retired EOA.\n");
+  process.exit(1);
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const LEGACY  = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466"; // ← also the future RELAYER
 const GASTANK = "0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a";
+// HISTORICAL — retired v1.25, see the guard above.
 const SUBSCR  = "0x700a873215edb1e1a2a401a2e0cec022f6b5bd71";
 
 // Operational reserves to keep in RELAYER per chain (in native token units).
