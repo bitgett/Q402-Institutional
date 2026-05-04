@@ -5,7 +5,9 @@
  *
  *   SUBSCRIPTION_ADDRESS  revenue only — subscription payments ($29/$49/$149…)
  *                         arrive here. As of v1.25 this is a 2-of-3 Safe
- *                         multisig on BNB Chain (deployed 2026-05-03):
+ *                         multisig deployed on BNB Chain + Ethereum at the
+ *                         same deterministic CREATE2 address (deployed
+ *                         2026-05-03):
  *                           - signer: Founder personal cold wallet
  *                           - signer: Company 1 cold wallet
  *                           - signer: Company 2 cold wallet
@@ -16,6 +18,19 @@
  *                         `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` is
  *                         retired — any residual balance was transferred
  *                         out and the address no longer receives revenue.
+ *
+ *                         The chains the Safe is *currently* deployed on
+ *                         are exported as `SUBSCRIPTION_DEPLOYED_CHAINS`
+ *                         below — that constant is the single source of
+ *                         truth for the payment-intent allowlist
+ *                         (`/api/payment/intent`) and the CI drift guard
+ *                         (`__tests__/subscription-safe-deployed.test.ts`).
+ *                         Adding a new payment rail is a two-step process:
+ *                         (1) replicate the Safe to that chain via Safe
+ *                         Web's "Add network" flow at the same address;
+ *                         (2) add the chain key to
+ *                         SUBSCRIPTION_DEPLOYED_CHAINS — the test will
+ *                         fail if step (2) is done before step (1).
  *
  *   GASTANK_ADDRESS       user-deposited relay credits (BNB/ETH/MNT/INJ/AVAX/OKB/USDT0).
  *                         KV ledger tracks per-user balance; on-chain balance
@@ -60,3 +75,23 @@ export const RELAYER_ADDRESS      = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466"
 export const SUBSCRIPTION_ADDRESS_LC = SUBSCRIPTION_ADDRESS.toLowerCase();
 export const GASTANK_ADDRESS_LC      = GASTANK_ADDRESS.toLowerCase();
 export const RELAYER_ADDRESS_LC      = RELAYER_ADDRESS.toLowerCase();
+
+/**
+ * Chain keys where the SUBSCRIPTION Safe is *actually deployed*. The Safe is a
+ * CREATE2 contract so the same address resolves on every EVM chain, but the
+ * runtime bytecode only exists where we've explicitly run the Safe deploy
+ * flow. Sending funds to the address on any other chain would land them in a
+ * counterfactual address that only becomes withdrawable after a future Safe
+ * deploy — so the payment-intent route restricts subscription rails to chains
+ * in this list, and a CI drift guard
+ * (`__tests__/subscription-safe-deployed.test.ts`) verifies via eth_getCode
+ * that bytecode actually exists on every chain listed here.
+ *
+ * To add a new payment rail:
+ *   1. Replicate the Safe at the same address on the new chain via Safe
+ *      Web's "Add network" flow.
+ *   2. Append the chain key here.
+ *   3. CI runs eth_getCode on every entry and fails if step (1) was skipped.
+ */
+export const SUBSCRIPTION_DEPLOYED_CHAINS = ["bnb", "eth"] as const;
+export type SubscriptionDeployedChain = typeof SUBSCRIPTION_DEPLOYED_CHAINS[number];

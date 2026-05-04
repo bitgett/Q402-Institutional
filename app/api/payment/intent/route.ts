@@ -5,6 +5,7 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { randomBytes } from "crypto";
 import { intentByIdKey, intentLatestKey } from "@/app/lib/payment-intent";
 import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/blockchain";
+import { SUBSCRIPTION_DEPLOYED_CHAINS } from "@/app/lib/wallets";
 
 /**
  * POST /api/payment/intent
@@ -31,16 +32,22 @@ import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/b
 
 const INTENT_TTL = 2 * 60 * 60; // 2 hours
 
-// Subscription payment chains the SUBSCRIPTION_ADDRESS Safe is actually
-// deployed on. Today: BNB Chain + Ethereum (same multisig address on both
-// via deterministic CREATE2). Other chains the relayer supports
-// (avax/xlayer/stable/mantle/injective) are NOT yet payment rails — sending
-// USDC there would deposit to a non-deployed address, locking funds until a
-// matching Safe is deployed. The Quote Builder UI only offers BNB/ETH; this
-// allowlist mirrors that on the server so a direct API caller cannot bypass
-// it.
-const VALID_CHAINS = ["bnb", "eth"];
-const VALID_TOKENS = ["USDC", "USDT", "USDT0"];
+// Subscription payment chains track SUBSCRIPTION_DEPLOYED_CHAINS — the single
+// source of truth for where the SUBSCRIPTION Safe is actually deployed (see
+// app/lib/wallets.ts). A CI drift guard
+// (__tests__/subscription-safe-deployed.test.ts) verifies via eth_getCode
+// that every chain key here has Safe bytecode at SUBSCRIPTION_ADDRESS, so a
+// future PR that adds a chain without deploying the Safe first fails before
+// it reaches production.
+const VALID_CHAINS: ReadonlyArray<string> = SUBSCRIPTION_DEPLOYED_CHAINS;
+
+// Subscription tokens the BNB/ETH on-chain scanner actually recognizes —
+// USDC and USDT only. USDT0 is a Mantle/Stable-chain alias for relay/gas
+// contexts and intentionally NOT a subscription rail (no USDT0 contract on
+// BNB or ETH for the user to send from). Including it here would let a
+// direct API caller create a payment intent that the scanner can never
+// match, leaving the user's payment in limbo.
+const VALID_TOKENS = ["USDC", "USDT"];
 
 
 export async function POST(req: NextRequest) {
