@@ -1168,7 +1168,7 @@ Three wallets, three roles, zero commingling. The split ensures a single key com
 
 | Role | Address | Key Storage | Responsibility |
 |------|---------|-------------|----------------|
-| `SUBSCRIPTION_ADDRESS` | `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE` | **Cold multisig** (2-of-3 Safe on BNB Chain, no key on server) | Receives subscription payments ($29/$49/$149…). Withdrawals require two of three cold-wallet signers to co-sign on Safe Web. Migrated from a single-EOA in v1.25; the previous address (`0x700a87…d71`) is retired and no longer receives revenue. |
+| `SUBSCRIPTION_ADDRESS` | `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE` | **Cold multisig** (2-of-3 Safe on BNB Chain + Ethereum, same address via deterministic CREATE2, no key on server) | Receives subscription payments ($29/$49/$149…). Withdrawals require two of three cold-wallet signers to co-sign on Safe Web. Migrated from a single-EOA in v1.25; the previous address (`0x700a87…d71`) is retired and no longer receives revenue. The set of chains where the Safe is actually deployed is exported as `SUBSCRIPTION_DEPLOYED_CHAINS` in `app/lib/wallets.ts` and CI-verified via `__tests__/subscription-safe-deployed.test.ts`. |
 | `GASTANK_ADDRESS`      | `0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a` | **Cold** (no key on server) | Receives user gas deposits (BNB/ETH/MNT/AVAX/INJ/OKB/USDT0). Cold→hot top-ups to the relayer are done manually. |
 | `RELAYER_ADDRESS`      | `0xfc77ff29178b7286a8ba703d7a70895ca74ff466` | **Hot** (Vercel `RELAYER_PRIVATE_KEY`) | Signs/submits EIP-7702 TXs. Holds only a minimal operational float (BNB/ETH/MNT/AVAX/INJ/OKB/USDT0). |
 
