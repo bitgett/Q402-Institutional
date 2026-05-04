@@ -4,8 +4,18 @@
  * SECURITY MODEL — three roles, three wallets, zero commingling.
  *
  *   SUBSCRIPTION_ADDRESS  revenue only — subscription payments ($29/$49/$149…)
- *                         arrive here. No server-side private key. Withdraw
- *                         manually from a cold device.
+ *                         arrive here. As of v1.25 this is a 2-of-3 Safe
+ *                         multisig on BNB Chain (deployed 2026-05-03):
+ *                           - signer: Founder personal cold wallet
+ *                           - signer: Company 1 cold wallet
+ *                           - signer: Company 2 cold wallet
+ *                           - threshold: 2 / 3
+ *                         No server-side private key. Withdrawals require
+ *                         two of the three signers to co-sign on Safe Web.
+ *                         The previous single-EOA address
+ *                         `0x700a873215edb1e1a2a401a2e0cec022f6b5bd71` is
+ *                         retired — any residual balance was transferred
+ *                         out and the address no longer receives revenue.
  *
  *   GASTANK_ADDRESS       user-deposited relay credits (BNB/ETH/MNT/INJ/AVAX/OKB/USDT0).
  *                         KV ledger tracks per-user balance; on-chain balance
@@ -22,7 +32,9 @@
  * INVARIANT: RELAYER_ADDRESS never receives user funds (gas deposits go to
  * GASTANK_ADDRESS; subscription payments go to SUBSCRIPTION_ADDRESS). A
  * compromise of the server (Vercel env) can drain only the operational gas
- * float in RELAYER_ADDRESS — never revenue, never user deposits.
+ * float in RELAYER_ADDRESS — never revenue, never user deposits. With v1.25,
+ * even a complete compromise of any single founder/Taylor cold wallet leaves
+ * SUBSCRIPTION funds untouchable (2-of-3 needed).
  *
  * KNOWN LIMITATION — per-user gas custody.
  *   This split protects the *aggregate* user gas pool (it lives in a cold
@@ -40,7 +52,7 @@
  *   non-goal at current TVL — see README §22 trade-off discussion.
  */
 
-export const SUBSCRIPTION_ADDRESS = "0x700a873215edb1e1a2a401a2e0cec022f6b5bd71";
+export const SUBSCRIPTION_ADDRESS = "0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE";
 export const GASTANK_ADDRESS      = "0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a";
 export const RELAYER_ADDRESS      = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
 
