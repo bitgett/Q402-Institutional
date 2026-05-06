@@ -190,31 +190,32 @@ export default function Hero() {
                 </a>
               </motion.div>
 
-              {/* Stats — verifiable infra metrics */}
+              {/* Stats — verifiable infra metrics. Sized to fit four data points
+                  on a single row at the lg breakpoint; wraps on narrower screens. */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.55 }}
-                className="flex flex-wrap items-center gap-7"
+                className="flex flex-wrap lg:flex-nowrap items-center gap-3 lg:gap-4"
               >
                 <div>
-                  <div className="text-2xl font-bold font-mono text-yellow">99.99%</div>
-                  <div className="text-xs text-white/30 mt-0.5">Uptime</div>
+                  <div className="text-lg font-bold font-mono text-yellow whitespace-nowrap">99.99%</div>
+                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">Uptime</div>
                 </div>
-                <div className="w-px h-10 bg-white/8" />
+                <div className="w-px h-9 bg-white/8" />
                 <div>
-                  <div className="text-2xl font-bold font-mono text-yellow">&lt;0.9 sec</div>
-                  <div className="text-xs text-white/30 mt-0.5">Inclusion time</div>
+                  <div className="text-lg font-bold font-mono text-yellow whitespace-nowrap">&lt;0.9 sec</div>
+                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">Inclusion time</div>
                 </div>
-                <div className="w-px h-10 bg-white/8" />
+                <div className="w-px h-9 bg-white/8" />
                 <div>
-                  <div className="text-2xl font-bold">1 tx</div>
-                  <div className="text-xs text-white/30 mt-0.5">full payment flow</div>
+                  <div className="text-lg font-bold whitespace-nowrap">1 tx</div>
+                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">full payment flow</div>
                 </div>
-                <div className="w-px h-10 bg-white/8" />
+                <div className="w-px h-9 bg-white/8" />
                 <div>
-                  <div className="text-2xl font-bold">7 chains</div>
-                  <div className="text-xs text-white/30 mt-0.5">mainnet live</div>
+                  <div className="text-lg font-bold whitespace-nowrap">7 chains</div>
+                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">mainnet live</div>
                 </div>
               </motion.div>
             </div>
