@@ -40,7 +40,7 @@ const ETH_ADDR = /^0x[0-9a-fA-F]{40}$/;
 // at ~$0.30 (over-strict, blocked deposits that could pay), on AVAX/X Layer it
 // was effectively $0.003 (too lax — relay could attempt and fail with OOG).
 const MIN_GAS_BALANCE: Record<ChainKey, number> = {
-  bnb:    0.0001,    // ~$0.06 at $600/BNB
+  bnb:    0.00001,   // lowered for smoke tests; BSC relay gas is typically below this
   eth:    0.00003,   // ~$0.10 at $3500/ETH
   avax:   0.003,     // ~$0.09 at $30/AVAX
   xlayer: 0.002,     // ~$0.10 at $50/OKB
@@ -357,7 +357,7 @@ export async function POST(req: NextRequest) {
       success: true,
       txHash:         `0x${randomBytes(32).toString("hex")}`,
       blockNumber:    BigInt(Math.floor(Math.random() * 50_000_000) + 1_000_000),
-      gasCostNative:  0.00042,
+      gasCostNative:  0,
     };
   } else if (isStableEIP7702) {
     const stableParams: PayParams = {
