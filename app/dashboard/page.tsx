@@ -85,6 +85,27 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
 
   function copyAddr() { navigator.clipboard.writeText(DEPOSIT_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 2000); }
 
+  async function creditByTxHashWithRetry(txHash: string, attempts = 8) {
+    let lastError = "Payment submitted, but we could not credit it yet.";
+    for (let i = 0; i < attempts; i++) {
+      const res = await fetch("/api/gas-tank/verify-deposit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, txHash, chain: chainKey }),
+      });
+      const data = await res.json();
+      if (res.ok && (data.newDeposits > 0 || data.alreadyCredited)) return data;
+      lastError = data.error ?? lastError;
+
+      const retryable =
+        res.status === 404 &&
+        /not found|not yet confirmed/i.test(lastError);
+      if (!retryable || i === attempts - 1) break;
+      await new Promise(resolve => setTimeout(resolve, 2500 + i * 1000));
+    }
+    throw new Error(`${lastError} Try the TX hash fallback in a moment.`);
+  }
+
   async function verifyDeposit() {
     setPhase("checking");
     setTxHashError("");
@@ -106,22 +127,12 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
     setTxHashError("");
     setPhase("checking");
     try {
-      const res = await fetch("/api/gas-tank/verify-deposit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, txHash: trimmed, chain: chainKey }),
-      });
-      const data = await res.json();
-      if (res.ok && (data.newDeposits > 0 || data.alreadyCredited)) {
-        setVerifiedBalances(data.balances);
-        setPhase("deposit_verified");
-        onDepositVerified?.(data.balances);
-      } else {
-        setTxHashError(data.error ?? "Could not credit that transaction.");
-        setPhase("not_found");
-      }
-    } catch {
-      setTxHashError("Network error — try again.");
+      const data = await creditByTxHashWithRetry(trimmed, 3);
+      setVerifiedBalances(data.balances);
+      setPhase("deposit_verified");
+      onDepositVerified?.(data.balances);
+    } catch (err) {
+      setTxHashError(err instanceof Error ? err.message : "Network error — try again.");
       setPhase("not_found");
     }
   }
@@ -149,22 +160,12 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
       await waitForWalletReceipt(chainKey as WalletChainKey, txHash);
 
       setPhase("checking");
-      const res = await fetch("/api/gas-tank/verify-deposit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, txHash, chain: chainKey }),
-      });
-      const data = await res.json();
-      if (res.ok && (data.newDeposits > 0 || data.alreadyCredited)) {
-        setVerifiedBalances(data.balances);
-        setPhase("deposit_verified");
-        onDepositVerified?.(data.balances);
-      } else {
-        setTxHashError(data.error ?? "Payment submitted, but we could not credit it yet. Try the TX hash fallback.");
-        setPhase("not_found");
-      }
+      const data = await creditByTxHashWithRetry(txHash);
+      setVerifiedBalances(data.balances);
+      setPhase("deposit_verified");
+      onDepositVerified?.(data.balances);
     } catch (err) {
-      setTxHashError(walletErrorMessage(err));
+      setTxHashError(err instanceof Error ? err.message : walletErrorMessage(err));
       setPhase("not_found");
     }
   }
@@ -255,7 +256,9 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
                   : "Crediting your Gas Tank..."}
               </p>
               <p className="text-white/30 text-xs mt-1">
-                {submittedTxHash ? shortHash(submittedTxHash) : "Do not close this modal."}
+                {phase === "checking"
+                  ? "Public RPCs can lag for a few seconds. We will retry automatically."
+                  : submittedTxHash ? shortHash(submittedTxHash) : "Do not close this modal."}
               </p>
             </div>
           </div>
