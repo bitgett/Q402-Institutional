@@ -7,6 +7,7 @@ import { useWallet } from "@/app/context/WalletContext";
 import WalletModal from "@/app/components/WalletModal";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "@/app/lib/auth-client";
 import { SUBSCRIPTION_ADDRESS } from "@/app/lib/wallets";
+import { sendErc20Transfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "@/app/lib/wallet";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -15,10 +16,10 @@ import { SUBSCRIPTION_ADDRESS } from "@/app/lib/wallets";
 const PAYMENT_ADDRESS = SUBSCRIPTION_ADDRESS;
 
 const PAY_TOKENS = [
-  { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", chainId: "bnb", token: "USDC", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "bnb-usdt", label: "BNB USDT", chain: "BNB Chain", chainId: "bnb", token: "USDT", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "eth-usdc", label: "ETH USDC", chain: "Ethereum",  chainId: "eth", token: "USDC", color: "#627EEA", img: "/eth.png"  },
-  { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  chainId: "eth", token: "USDT", color: "#627EEA", img: "/eth.png"  },
+  { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", chainId: "bnb", token: "USDC", decimals: 18, address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "bnb-usdt", label: "BNB USDT", chain: "BNB Chain", chainId: "bnb", token: "USDT", decimals: 18, address: "0x55d398326f99059fF775485246999027B3197955", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "eth-usdc", label: "ETH USDC", chain: "Ethereum",  chainId: "eth", token: "USDC", decimals: 6,  address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", color: "#627EEA", img: "/eth.png"  },
+  { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  chainId: "eth", token: "USDT", decimals: 6,  address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", color: "#627EEA", img: "/eth.png"  },
 ];
 
 // `multiplier` is display-only for the "+X% rate" badge and must mirror
@@ -55,7 +56,7 @@ const VOLUMES = [
 // value, so the UI and server MUST agree to the dollar.
 // Order: [500, 1K, 5K, 10K, 50K, 100K, 500K]
 const CHAIN_PRICES: Record<string, number[]> = {
-  bnb:       [ 29,  49,  89,  149,  449,   799,  1999 ],
+  bnb:       [0.01,  49,  89,  149,  449,   799,  1999 ],
   xlayer:    [ 29,  49,  89,  149,  449,   799,  1999 ],
   stable:    [ 29,  49,  89,  149,  449,   799,  1999 ],
   mantle:    [ 29,  49,  89,  149,  449,   799,  1999 ],
@@ -76,24 +77,6 @@ function calcPrice(chainId: string, volume: number) {
 }
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Copy button
-// ─────────────────────────────────────────────────────────────────────────────
-
-function CopyButton({ value, label }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
-        copied ? "bg-green-400/15 text-green-400" : "bg-white/6 text-white/50 hover:bg-yellow/10 hover:text-yellow"
-      }`}
-    >
-      {copied ? "✓ Copied" : (label ?? "Copy")}
-    </button>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step header (numbered)
@@ -119,15 +102,24 @@ function StepHeader({ n, title, sub, done }: { n: string; title: string; sub: st
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
 
-type PayStep = "idle" | "ready" | "verifying" | "success" | "error";
+type PayStep =
+  | "idle"
+  | "ready"
+  | "preparing_intent"
+  | "awaiting_wallet"
+  | "confirming_tx"
+  | "activating"
+  | "verifying"
+  | "success"
+  | "error";
 
 export default function PaymentPage() {
   const router = useRouter();
   const { address, isConnected, signMessage } = useWallet();
 
   const [selectedChain,    setSelectedChain]    = useState("bnb");
-  const [selectedVolume,   setSelectedVolume]   = useState(10_000);
-  const [selectedPayToken, setSelectedPayToken] = useState("bnb-usdc");
+  const [selectedVolume,   setSelectedVolume]   = useState(500);
+  const [selectedPayToken, setSelectedPayToken] = useState("bnb-usdt");
   // Read localStorage synchronously so Step 3 shows "connected" immediately
   // if the user already connected on the landing page — no flash.
   const [payStepState, setPayStep] = useState<PayStep>(() => {
@@ -137,10 +129,11 @@ export default function PaymentPage() {
   const [verifyAttempts,   setVerifyAttempts]   = useState(0);
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
-  const [txHashInput,      setTxHashInput]      = useState("");
+  const [submittedTxHash,  setSubmittedTxHash]  = useState("");
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, perTx } = calcPrice(selectedChain, selectedVolume);
+  const checkoutPrice = price;
   const payToken = PAY_TOKENS.find(t => t.id === selectedPayToken)!;
 
   // Derived: once wallet connects, treat idle as ready. Computed at render so
@@ -149,13 +142,12 @@ export default function PaymentPage() {
 
   // Removed: no longer redirect existing subscribers — they can top up credits
 
-  async function verifyPayment() {
-    if (!address) return;
-    setPayStep("verifying");
+  async function payWithWallet() {
+    if (!address) { setShowWalletModal(true); return; }
     setVerifyError(null);
-    let nextIntentId: string | null = null;
+    setSubmittedTxHash("");
     try {
-      // Step 1: session nonce for intent (cached 55 min; one wallet popup per session)
+      setPayStep("preparing_intent");
       const auth = await getAuthCreds(address, signMessage);
       if (!auth) {
         setVerifyError("__sig_declined__");
@@ -163,73 +155,66 @@ export default function PaymentPage() {
         return;
       }
       const { nonce, signature } = auth;
-
-      // Record payment intent (chain + expected USD) before scanning blockchain.
-      // activate route validates the found TX against this intent.
-      if (price > 0) {
-        const intentRes = await fetch("/api/payment/intent", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          // chain = payment chain (where funds move); planChain = selected relay chain.
-        // Server locks quotedPlan/quotedCredits at intent time — activate uses those values.
-        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, planChain: selectedChain, expectedUSD: price, token: payToken?.token }),
-        });
-        if (!intentRes.ok) {
-          const d = await intentRes.json();
-          if (intentRes.status === 401 && d.code === "NONCE_EXPIRED") { clearAuthCache(address); }
-          setVerifyAttempts(v => v + 1);
-          setVerifyError(d.error ?? "Could not record payment intent.");
-          setPayStep("error");
-          return;
-        }
-        // Capture intentId in a local so the activate call below sees it on
-        // the first render — setState would be async and leave intentId null
-        // in the very same tick, defeating the per-intent cross-tab guarantee.
-        const intentData = await intentRes.json();
-        nextIntentId = intentData.intentId ?? null;
+      const intentRes = await fetch("/api/payment/intent", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, planChain: selectedChain, expectedUSD: checkoutPrice, token: payToken.token }),
+      });
+      if (!intentRes.ok) {
+        const d = await intentRes.json();
+        if (intentRes.status === 401 && d.code === "NONCE_EXPIRED") { clearAuthCache(address); }
+        setVerifyAttempts(v => v + 1);
+        setVerifyError(d.error ?? "Could not record payment intent.");
+        setPayStep("error");
+        return;
       }
+      const intentData = await intentRes.json();
+      const intentId = intentData.intentId ?? null;
 
-      // Step 2: fresh one-time challenge for activation (always prompts wallet)
+      setPayStep("awaiting_wallet");
+      const txHash = await sendErc20Transfer({
+        chain: payToken.chainId as WalletChainKey,
+        from: address,
+        tokenAddress: payToken.address,
+        to: PAYMENT_ADDRESS,
+        amount: String(checkoutPrice),
+        decimals: payToken.decimals,
+      });
+      setSubmittedTxHash(txHash);
+
+      setPayStep("confirming_tx");
+      await waitForWalletReceipt(payToken.chainId as WalletChainKey, txHash);
+
+      setPayStep("activating");
       const chal = await getFreshChallenge(address, signMessage);
       if (!chal) {
         setVerifyError("__sig_declined__");
         setPayStep("error");
         return;
       }
-
-      const res  = await fetch("/api/payment/activate", {
+      const res = await fetch("/api/payment/activate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({
           address,
-          challenge:  chal.challenge,
-          signature:  chal.signature,
-          // intentId validates the server uses the same quote the user saw.
-          ...(nextIntentId ? { intentId: nextIntentId } : {}),
-          // If user provided a txHash, pass it for deterministic verification.
-          ...(txHashInput.trim() ? { txHash: txHashInput.trim() } : {}),
+          challenge: chal.challenge,
+          signature: chal.signature,
+          ...(intentId ? { intentId } : {}),
+          txHash,
         }),
       });
       const data = await res.json();
-
-      if (res.status === 401 && data.code === "NONCE_EXPIRED") {
-        setVerifyAttempts(v => v + 1);
-        setVerifyError("Challenge expired. Please try again.");
-        setPayStep("error");
-        return;
-      }
-
       if (res.ok && (data.status === "activated" || data.status === "already_active" || data.status === "credits_added")) {
         setActivatedPlan(data.plan);
         setPayStep("success");
       } else {
         setVerifyAttempts(v => v + 1);
-        setVerifyError(data.error ?? "Payment not found on-chain yet.");
+        setVerifyError(data.error ?? "Payment submitted, but activation did not complete. Paste the TX hash below to retry.");
         setPayStep("error");
       }
-    } catch {
+    } catch (err) {
       setVerifyAttempts(v => v + 1);
-      setVerifyError("Network error. Please try again.");
+      setVerifyError(walletErrorMessage(err));
       setPayStep("error");
     }
   }
@@ -390,8 +375,8 @@ export default function PaymentPage() {
                 done={payStep === "success"}
               />
 
-              {/* Verifying */}
-              {payStep === "verifying" && (
+              {/* In progress */}
+              {(["preparing_intent", "awaiting_wallet", "confirming_tx", "activating", "verifying"] as PayStep[]).includes(payStep) && (
                 <div className="flex items-center gap-4 py-4">
                   <svg className="animate-spin w-8 h-8 text-yellow flex-shrink-0" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
@@ -480,45 +465,43 @@ export default function PaymentPage() {
                     </div>
                   </div>
 
-                  {/* Address */}
-                  <div>
-                    <p className="text-xs text-white/30 uppercase tracking-widest mb-2 font-semibold">
-                      Send ${price.toLocaleString()} {payToken.token} on {payToken.chain} to
-                    </p>
-                    <div className="flex items-center gap-2 bg-[#060C14] border border-white/10 rounded-xl px-3 py-3">
-                      <span className="font-mono text-xs text-white/70 flex-1 break-all">{PAYMENT_ADDRESS}</span>
-                      <CopyButton value={PAYMENT_ADDRESS} />
+                  <div className="rounded-2xl border border-yellow/20 bg-yellow/5 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-yellow">Pay with wallet</p>
+                        <p className="text-xs text-white/40 mt-1">
+                          We will switch to {payToken.chain}, send {checkoutPrice.toLocaleString()} {payToken.token}, then activate your API key automatically.
+                        </p>
+                      </div>
+                      <span className="text-[10px] uppercase tracking-widest text-yellow/60 border border-yellow/20 rounded-full px-2 py-1 flex-shrink-0">
+                        fastest
+                      </span>
                     </div>
-                    <p className="text-white/20 text-[10px] mt-2">
-                      ⚠ Send from <span className="font-mono text-white/35">{address ? shortAddr(address) : "—"}</span> only. Payments from other wallets will not activate your account.
+                    <button
+                      onClick={payWithWallet}
+                      className="w-full bg-yellow text-navy font-extrabold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
+                    >
+                      Pay with wallet
+                    </button>
+                    <p className="text-[10px] text-white/30 leading-relaxed">
+                      Subscription checkout is a normal ERC-20 transfer, so your wallet pays network gas once. Q402 still makes your users&apos; payments gasless.
                     </p>
+                    {submittedTxHash && (
+                      <p className="text-[10px] text-white/35 font-mono break-all">
+                        Submitted TX: {submittedTxHash}
+                      </p>
+                    )}
                   </div>
 
-                  {/* Optional txHash input */}
-                  <div>
-                    <label className="block text-[10px] text-white/25 uppercase tracking-widest mb-1">
-                      Transaction Hash <span className="normal-case text-white/15">(optional — paste for instant verification)</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="0x..."
-                      value={txHashInput}
-                      onChange={e => setTxHashInput(e.target.value)}
-                      className="w-full bg-white/[0.03] border border-white/8 rounded-xl px-3 py-2.5 text-xs font-mono text-white/70 placeholder-white/20 focus:outline-none focus:border-yellow/30"
-                    />
-                  </div>
-
-                  {/* Verify */}
-                  <button
-                    onClick={verifyPayment}
-                    className="w-full bg-yellow text-navy font-bold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
-                  >
-                    {verifyError === "__sig_declined__" ? "Approve Signature →" : payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
-                  </button>
-                  {payStep === "ready" && (
-                    <p className="text-yellow/80 text-[11px] text-center mt-2 bg-yellow/5 border border-yellow/15 rounded-lg px-3 py-2">
-                      After sending payment, wait ~30 seconds before verifying.
-                    </p>
+                  {/* Retry on error — re-runs payWithWallet (server-side intent + activate
+                      already include their own RPC retry / chain-fallback rescue). */}
+                  {payStep === "error" && (
+                    <button
+                      onClick={payWithWallet}
+                      className="w-full bg-white/[0.04] text-yellow border border-yellow/20 font-bold text-sm py-3.5 rounded-xl hover:bg-yellow/10 transition-all"
+                    >
+                      {verifyError === "__sig_declined__" ? "Approve Signature →" : "Try Again →"}
+                    </button>
                   )}
                 </div>
               )}
@@ -576,7 +559,7 @@ export default function PaymentPage() {
                 <div className="flex items-baseline justify-between mb-1">
                   <span className="text-white/40 text-sm">+30 days · {selectedVolume.toLocaleString()} TXs</span>
                   <div>
-                    <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
+                    <span className="text-3xl font-extrabold text-yellow">${checkoutPrice.toLocaleString()}</span>
                   </div>
                 </div>
                 <p className="text-white/25 text-xs text-right mb-1">
