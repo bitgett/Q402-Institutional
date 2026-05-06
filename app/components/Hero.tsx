@@ -198,22 +198,22 @@ export default function Hero() {
                 transition={{ duration: 0.6, delay: 0.55 }}
                 className="flex flex-wrap lg:flex-nowrap items-center gap-3 lg:gap-4"
               >
-                <div>
+                <div className="text-center">
                   <div className="text-lg font-bold font-mono text-yellow whitespace-nowrap">99.99%</div>
                   <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">Uptime</div>
                 </div>
                 <div className="w-px h-9 bg-white/8" />
-                <div>
+                <div className="text-center">
                   <div className="text-lg font-bold font-mono text-yellow whitespace-nowrap">&lt;0.9 sec</div>
                   <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">Inclusion time</div>
                 </div>
                 <div className="w-px h-9 bg-white/8" />
-                <div>
+                <div className="text-center">
                   <div className="text-lg font-bold whitespace-nowrap">1 tx</div>
                   <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">full payment flow</div>
                 </div>
                 <div className="w-px h-9 bg-white/8" />
-                <div>
+                <div className="text-center">
                   <div className="text-lg font-bold whitespace-nowrap">7 chains</div>
                   <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">mainnet live</div>
                 </div>
