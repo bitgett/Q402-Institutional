@@ -468,23 +468,26 @@ export default function PaymentPage() {
                   <div className="rounded-2xl border border-yellow/20 bg-yellow/5 p-4 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-bold text-yellow">Pay with wallet</p>
-                        <p className="text-xs text-white/40 mt-1">
-                          We will switch to {payToken.chain}, send {checkoutPrice.toLocaleString()} {payToken.token}, then activate your API key automatically.
+                        <p className="text-sm font-bold text-yellow">One signature. Instant activation.</p>
+                        <p className="text-xs text-white/45 mt-1 leading-relaxed">
+                          <span className="text-white/65 font-semibold">{checkoutPrice.toLocaleString()} {payToken.token}</span>
+                          <span className="text-white/30"> on </span>
+                          <span className="text-white/65 font-semibold">{payToken.chain}</span>
+                          <span className="text-white/30">. Confirm in your wallet — your API key flips live the moment the block lands.</span>
                         </p>
                       </div>
-                      <span className="text-[10px] uppercase tracking-widest text-yellow/60 border border-yellow/20 rounded-full px-2 py-1 flex-shrink-0">
-                        fastest
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-yellow/70 border border-yellow/25 rounded-full px-2.5 py-1 flex-shrink-0 font-bold">
+                        instant
                       </span>
                     </div>
                     <button
                       onClick={payWithWallet}
-                      className="w-full bg-yellow text-navy font-extrabold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
+                      className="w-full bg-yellow text-navy font-extrabold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01] shadow-lg shadow-yellow/15"
                     >
                       Pay with wallet
                     </button>
-                    <p className="text-[10px] text-white/30 leading-relaxed">
-                      Subscription checkout is a normal ERC-20 transfer, so your wallet pays network gas once. Q402 still makes your users&apos; payments gasless.
+                    <p className="text-[10px] text-white/35 leading-relaxed">
+                      The one and only time your wallet pays gas — every customer you serve through Q402 sends for <span className="text-white/55 font-semibold">$0</span>, forever.
                     </p>
                     {submittedTxHash && (
                       <p className="text-[10px] text-white/35 font-mono break-all">
