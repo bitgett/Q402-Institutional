@@ -55,8 +55,8 @@ describe("planChain vs payChain — quote must follow planChain", () => {
 // ── BNB plan chain thresholds ─────────────────────────────────────────────────
 
 describe("intent quote — BNB plan chain", () => {
-  it("$29 → starter / 500 credits", () => {
-    expect(computeQuote(29, "bnb")).toEqual({ quotedPlan: "starter", quotedCredits: 500 });
+  it("$0.01 → starter / 500 credits", () => {
+    expect(computeQuote(0.01, "bnb")).toEqual({ quotedPlan: "starter", quotedCredits: 500 });
   });
 
   it("$149 → pro / 10,000 credits", () => {
@@ -67,8 +67,8 @@ describe("intent quote — BNB plan chain", () => {
     expect(computeQuote(799, "bnb")).toEqual({ quotedPlan: "business", quotedCredits: 100_000 });
   });
 
-  it("$28 (below minimum) → null / 0 credits", () => {
-    expect(computeQuote(28, "bnb")).toEqual({ quotedPlan: null, quotedCredits: 0 });
+  it("$0.009 (below minimum) → null / 0 credits", () => {
+    expect(computeQuote(0.009, "bnb")).toEqual({ quotedPlan: null, quotedCredits: 0 });
   });
 });
 

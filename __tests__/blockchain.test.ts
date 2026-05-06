@@ -5,13 +5,13 @@ import { planFromAmount, txQuotaFromAmount } from "@/app/lib/blockchain";
 
 describe("planFromAmount", () => {
   describe("BNB Chain thresholds", () => {
-    it("returns null below minimum ($29)", () => {
+    it("returns null below temporary smoke-test minimum ($0.01)", () => {
       expect(planFromAmount(0, "BNB Chain")).toBeNull();
-      expect(planFromAmount(28.99, "BNB Chain")).toBeNull();
+      expect(planFromAmount(0.009, "BNB Chain")).toBeNull();
     });
 
-    it("returns starter at $29", () => {
-      expect(planFromAmount(29, "BNB Chain")).toBe("starter");
+    it("returns starter at $0.01", () => {
+      expect(planFromAmount(0.01, "BNB Chain")).toBe("starter");
     });
 
     it("returns basic at $49", () => {
@@ -89,8 +89,8 @@ describe("planFromAmount", () => {
 
   describe("unknown chain falls back to BNB defaults", () => {
     it("uses BNB thresholds for undefined chain", () => {
-      expect(planFromAmount(28)).toBeNull();
-      expect(planFromAmount(29)).toBe("starter");
+      expect(planFromAmount(0.009)).toBeNull();
+      expect(planFromAmount(0.01)).toBe("starter");
       expect(planFromAmount(799)).toBe("business");
     });
 
@@ -104,13 +104,13 @@ describe("planFromAmount", () => {
 
 describe("txQuotaFromAmount", () => {
   describe("BNB Chain", () => {
-    it("returns 0 below $29", () => {
+    it("returns 0 below temporary smoke-test minimum ($0.01)", () => {
       expect(txQuotaFromAmount(0, "BNB Chain")).toBe(0);
-      expect(txQuotaFromAmount(28.99, "BNB Chain")).toBe(0);
+      expect(txQuotaFromAmount(0.009, "BNB Chain")).toBe(0);
     });
 
-    it("returns 500 at $29", () => {
-      expect(txQuotaFromAmount(29, "BNB Chain")).toBe(500);
+    it("returns 500 at $0.01", () => {
+      expect(txQuotaFromAmount(0.01, "BNB Chain")).toBe(500);
     });
 
     it("returns 1000 at $49", () => {
@@ -155,7 +155,7 @@ describe("txQuotaFromAmount", () => {
   describe("plan and quota are consistent (same tier boundaries)", () => {
     it("planFromAmount and txQuotaFromAmount agree at every BNB tier boundary", () => {
       const cases: [number, string, number][] = [
-        [29,   "starter",        500],
+        [0.01, "starter",        500],
         [49,   "basic",        1_000],
         [89,   "growth",       5_000],
         [149,  "pro",         10_000],
