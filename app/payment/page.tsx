@@ -7,6 +7,7 @@ import { useWallet } from "@/app/context/WalletContext";
 import WalletModal from "@/app/components/WalletModal";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "@/app/lib/auth-client";
 import { SUBSCRIPTION_ADDRESS } from "@/app/lib/wallets";
+import { sendErc20Transfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "@/app/lib/wallet";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -15,10 +16,10 @@ import { SUBSCRIPTION_ADDRESS } from "@/app/lib/wallets";
 const PAYMENT_ADDRESS = SUBSCRIPTION_ADDRESS;
 
 const PAY_TOKENS = [
-  { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", chainId: "bnb", token: "USDC", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "bnb-usdt", label: "BNB USDT", chain: "BNB Chain", chainId: "bnb", token: "USDT", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "eth-usdc", label: "ETH USDC", chain: "Ethereum",  chainId: "eth", token: "USDC", color: "#627EEA", img: "/eth.png"  },
-  { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  chainId: "eth", token: "USDT", color: "#627EEA", img: "/eth.png"  },
+  { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", chainId: "bnb", token: "USDC", decimals: 18, address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "bnb-usdt", label: "BNB USDT", chain: "BNB Chain", chainId: "bnb", token: "USDT", decimals: 18, address: "0x55d398326f99059fF775485246999027B3197955", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "eth-usdc", label: "ETH USDC", chain: "Ethereum",  chainId: "eth", token: "USDC", decimals: 6,  address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", color: "#627EEA", img: "/eth.png"  },
+  { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  chainId: "eth", token: "USDT", decimals: 6,  address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", color: "#627EEA", img: "/eth.png"  },
 ];
 
 // `multiplier` is display-only for the "+X% rate" badge and must mirror
@@ -75,6 +76,17 @@ function calcPrice(chainId: string, volume: number) {
   return { price, perTx: price / volume };
 }
 
+function readTestCheckoutUSD() {
+  try {
+    const raw = new URLSearchParams(window.location.search).get("testUsd");
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,7 +131,16 @@ function StepHeader({ n, title, sub, done }: { n: string; title: string; sub: st
 // Main Page
 // ─────────────────────────────────────────────────────────────────────────────
 
-type PayStep = "idle" | "ready" | "verifying" | "success" | "error";
+type PayStep =
+  | "idle"
+  | "ready"
+  | "preparing_intent"
+  | "awaiting_wallet"
+  | "confirming_tx"
+  | "activating"
+  | "verifying"
+  | "success"
+  | "error";
 
 export default function PaymentPage() {
   const router = useRouter();
@@ -127,7 +148,7 @@ export default function PaymentPage() {
 
   const [selectedChain,    setSelectedChain]    = useState("bnb");
   const [selectedVolume,   setSelectedVolume]   = useState(10_000);
-  const [selectedPayToken, setSelectedPayToken] = useState("bnb-usdc");
+  const [selectedPayToken, setSelectedPayToken] = useState(() => readTestCheckoutUSD() ? "bnb-usdt" : "bnb-usdc");
   // Read localStorage synchronously so Step 3 shows "connected" immediately
   // if the user already connected on the landing page — no flash.
   const [payStepState, setPayStep] = useState<PayStep>(() => {
@@ -138,9 +159,12 @@ export default function PaymentPage() {
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
   const [txHashInput,      setTxHashInput]      = useState("");
+  const [submittedTxHash,  setSubmittedTxHash]  = useState("");
+  const [testCheckoutUSD] = useState<number | null>(() => readTestCheckoutUSD());
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, perTx } = calcPrice(selectedChain, selectedVolume);
+  const checkoutPrice = testCheckoutUSD ?? price;
   const payToken = PAY_TOKENS.find(t => t.id === selectedPayToken)!;
 
   // Derived: once wallet connects, treat idle as ready. Computed at render so
@@ -148,6 +172,84 @@ export default function PaymentPage() {
   const payStep: PayStep = isConnected && payStepState === "idle" ? "ready" : payStepState;
 
   // Removed: no longer redirect existing subscribers — they can top up credits
+
+  async function payWithWallet() {
+    if (!address) { setShowWalletModal(true); return; }
+    setVerifyError(null);
+    setSubmittedTxHash("");
+    try {
+      setPayStep("preparing_intent");
+      const auth = await getAuthCreds(address, signMessage);
+      if (!auth) {
+        setVerifyError("__sig_declined__");
+        setPayStep("error");
+        return;
+      }
+      const { nonce, signature } = auth;
+      const intentRes = await fetch("/api/payment/intent", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, planChain: selectedChain, expectedUSD: checkoutPrice, token: payToken.token }),
+      });
+      if (!intentRes.ok) {
+        const d = await intentRes.json();
+        if (intentRes.status === 401 && d.code === "NONCE_EXPIRED") { clearAuthCache(address); }
+        setVerifyAttempts(v => v + 1);
+        setVerifyError(d.error ?? "Could not record payment intent.");
+        setPayStep("error");
+        return;
+      }
+      const intentData = await intentRes.json();
+      const intentId = intentData.intentId ?? null;
+
+      setPayStep("awaiting_wallet");
+      const txHash = await sendErc20Transfer({
+        chain: payToken.chainId as WalletChainKey,
+        from: address,
+        tokenAddress: payToken.address,
+        to: PAYMENT_ADDRESS,
+        amount: String(checkoutPrice),
+        decimals: payToken.decimals,
+      });
+      setSubmittedTxHash(txHash);
+      setTxHashInput(txHash);
+
+      setPayStep("confirming_tx");
+      await waitForWalletReceipt(payToken.chainId as WalletChainKey, txHash);
+
+      setPayStep("activating");
+      const chal = await getFreshChallenge(address, signMessage);
+      if (!chal) {
+        setVerifyError("__sig_declined__");
+        setPayStep("error");
+        return;
+      }
+      const res = await fetch("/api/payment/activate", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          address,
+          challenge: chal.challenge,
+          signature: chal.signature,
+          ...(intentId ? { intentId } : {}),
+          txHash,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && (data.status === "activated" || data.status === "already_active" || data.status === "credits_added")) {
+        setActivatedPlan(data.plan);
+        setPayStep("success");
+      } else {
+        setVerifyAttempts(v => v + 1);
+        setVerifyError(data.error ?? "Payment submitted, but activation did not complete. Paste the TX hash below to retry.");
+        setPayStep("error");
+      }
+    } catch (err) {
+      setVerifyAttempts(v => v + 1);
+      setVerifyError(walletErrorMessage(err));
+      setPayStep("error");
+    }
+  }
 
   async function verifyPayment() {
     if (!address) return;
@@ -166,13 +268,13 @@ export default function PaymentPage() {
 
       // Record payment intent (chain + expected USD) before scanning blockchain.
       // activate route validates the found TX against this intent.
-      if (price > 0) {
+      if (checkoutPrice > 0) {
         const intentRes = await fetch("/api/payment/intent", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           // chain = payment chain (where funds move); planChain = selected relay chain.
         // Server locks quotedPlan/quotedCredits at intent time — activate uses those values.
-        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, planChain: selectedChain, expectedUSD: price, token: payToken?.token }),
+        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, planChain: selectedChain, expectedUSD: checkoutPrice, token: payToken?.token }),
         });
         if (!intentRes.ok) {
           const d = await intentRes.json();
@@ -390,8 +492,8 @@ export default function PaymentPage() {
                 done={payStep === "success"}
               />
 
-              {/* Verifying */}
-              {payStep === "verifying" && (
+              {/* In progress */}
+              {(["preparing_intent", "awaiting_wallet", "confirming_tx", "activating", "verifying"] as PayStep[]).includes(payStep) && (
                 <div className="flex items-center gap-4 py-4">
                   <svg className="animate-spin w-8 h-8 text-yellow flex-shrink-0" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
@@ -480,10 +582,43 @@ export default function PaymentPage() {
                     </div>
                   </div>
 
+                  <div className="rounded-2xl border border-yellow/20 bg-yellow/5 p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-bold text-yellow">Pay with wallet</p>
+                        <p className="text-xs text-white/40 mt-1">
+                          We will switch to {payToken.chain}, send {checkoutPrice.toLocaleString()} {payToken.token}, then activate your API key automatically.
+                        </p>
+                      </div>
+                      <span className="text-[10px] uppercase tracking-widest text-yellow/60 border border-yellow/20 rounded-full px-2 py-1 flex-shrink-0">
+                        fastest
+                      </span>
+                    </div>
+                    <button
+                      onClick={payWithWallet}
+                      className="w-full bg-yellow text-navy font-extrabold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
+                    >
+                      Pay with wallet
+                    </button>
+                    <p className="text-[10px] text-white/30 leading-relaxed">
+                      Subscription checkout is a normal ERC-20 transfer, so your wallet pays network gas once. Q402 still makes your users&apos; payments gasless.
+                    </p>
+                    {testCheckoutUSD && (
+                      <p className="text-[10px] text-yellow/70 leading-relaxed border border-yellow/15 rounded-lg px-3 py-2 bg-yellow/5">
+                        Test checkout mode: this URL pays ${testCheckoutUSD.toLocaleString()} and only works when the server env allows your exact wallet.
+                      </p>
+                    )}
+                    {submittedTxHash && (
+                      <p className="text-[10px] text-white/35 font-mono break-all">
+                        Submitted TX: {submittedTxHash}
+                      </p>
+                    )}
+                  </div>
+
                   {/* Address */}
                   <div>
                     <p className="text-xs text-white/30 uppercase tracking-widest mb-2 font-semibold">
-                      Send ${price.toLocaleString()} {payToken.token} on {payToken.chain} to
+                      Manual fallback: send ${checkoutPrice.toLocaleString()} {payToken.token} on {payToken.chain} to
                     </p>
                     <div className="flex items-center gap-2 bg-[#060C14] border border-white/10 rounded-xl px-3 py-3">
                       <span className="font-mono text-xs text-white/70 flex-1 break-all">{PAYMENT_ADDRESS}</span>
@@ -511,7 +646,7 @@ export default function PaymentPage() {
                   {/* Verify */}
                   <button
                     onClick={verifyPayment}
-                    className="w-full bg-yellow text-navy font-bold text-sm py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.01]"
+                    className="w-full bg-white/[0.04] text-yellow border border-yellow/20 font-bold text-sm py-3.5 rounded-xl hover:bg-yellow/10 transition-all"
                   >
                     {verifyError === "__sig_declined__" ? "Approve Signature →" : payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
                   </button>
@@ -576,12 +711,18 @@ export default function PaymentPage() {
                 <div className="flex items-baseline justify-between mb-1">
                   <span className="text-white/40 text-sm">+30 days · {selectedVolume.toLocaleString()} TXs</span>
                   <div>
-                    <span className="text-3xl font-extrabold text-yellow">${price.toLocaleString()}</span>
+                    <span className="text-3xl font-extrabold text-yellow">${checkoutPrice.toLocaleString()}</span>
                   </div>
                 </div>
-                <p className="text-white/25 text-xs text-right mb-1">
-                  ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
-                </p>
+                {testCheckoutUSD ? (
+                  <p className="text-yellow/55 text-xs text-right mb-1">
+                    Test checkout override. Standard price: ${price.toLocaleString()}
+                  </p>
+                ) : (
+                  <p className="text-white/25 text-xs text-right mb-1">
+                    ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
+                  </p>
+                )}
                 {chain.multiplier > 1.0 && (
                   <p className="text-white/20 text-xs text-right">
                     Includes {chain.name} +{Math.round((chain.multiplier - 1) * 100)}% rate
