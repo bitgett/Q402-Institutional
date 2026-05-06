@@ -4,14 +4,21 @@ import { addGasDeposit, getGasBalance } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
 
+// blockWindow is sized so every chain covers ~10 minutes of recent history,
+// matching the realistic gap between a user submitting a deposit and tapping
+// "Verify". The BSC and Injective values were doubled in May 2026 after
+// observed block times dropped to ~0.75s — the previous 200-block window only
+// covered ~2.5 minutes on BSC, which silently dropped legitimate deposits
+// older than a couple of minutes (caught when 0xfe7ba1…6726f's 6-min-old
+// 0.001 BNB deposit failed to surface in the scan path).
 const CHAINS = [
-  { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",       blockWindow: 200, explorer: "https://bscscan.com/tx/" },
+  { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",       blockWindow: 800, explorer: "https://bscscan.com/tx/" },
   { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",          blockWindow: 50,  explorer: "https://etherscan.io/tx/" },
   { key: "mantle", name: "Mantle",    token: "MNT",   rpc: "https://rpc.mantle.xyz",                   blockWindow: 500, explorer: "https://mantlescan.xyz/tx/" },
-  { key: "injective", name: "Injective", token: "INJ", rpc: "https://sentry.evm-rpc.injective.network/", blockWindow: 500, explorer: "https://blockscout.injective.network/tx/" },
-  { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",    blockWindow: 200, explorer: "https://snowtrace.io/tx/" },
+  { key: "injective", name: "Injective", token: "INJ", rpc: "https://sentry.evm-rpc.injective.network/", blockWindow: 800, explorer: "https://blockscout.injective.network/tx/" },
+  { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",    blockWindow: 300, explorer: "https://snowtrace.io/tx/" },
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                  blockWindow: 200, explorer: "https://www.oklink.com/xlayer/tx/" },
-  { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 500, explorer: "https://stable-explorer.io/tx/" },
+  { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 600, explorer: "https://stable-explorer.io/tx/" },
 ];
 
 /**
