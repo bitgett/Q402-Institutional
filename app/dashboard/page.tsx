@@ -10,6 +10,7 @@ import WalletButton from "../components/WalletButton";
 import ClaudeMcpCard from "../components/ClaudeMcpCard";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
+import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
@@ -72,11 +73,13 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
   onDepositVerified?: (balances: Record<string, number>) => void;
 }) {
   const chainKey = Object.entries(CHAIN_META).find(([, v]) => v.name === chain)?.[0] ?? chain.toLowerCase();
-  const [phase, setPhase] = useState<"loading"|"main"|"checking"|"deposit_verified"|"not_found">("loading");
+  const [phase, setPhase] = useState<"loading"|"main"|"awaiting_wallet"|"confirming_tx"|"checking"|"deposit_verified"|"not_found">("loading");
   const [copied, setCopied] = useState(false);
   const [verifiedBalances, setVerifiedBalances] = useState<Record<string, number>>({});
   const [txHashInput, setTxHashInput] = useState("");
   const [txHashError, setTxHashError] = useState("");
+  const [depositAmount, setDepositAmount] = useState("");
+  const [submittedTxHash, setSubmittedTxHash] = useState("");
 
   useEffect(() => { const t = setTimeout(() => setPhase("main"), 1000); return () => clearTimeout(t); }, []);
 
@@ -123,6 +126,49 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
     }
   }
 
+  async function topUpWithWallet() {
+    const amount = depositAmount.trim();
+    if (!/^(?:\d+|\d*\.\d+)$/.test(amount) || Number(amount) <= 0) {
+      setTxHashError(`Enter an amount of ${token} to deposit.`);
+      return;
+    }
+    setTxHashError("");
+    setSubmittedTxHash("");
+    try {
+      setPhase("awaiting_wallet");
+      const txHash = await sendNativeTransfer({
+        chain: chainKey as WalletChainKey,
+        from: address,
+        to: DEPOSIT_ADDRESS,
+        amount,
+      });
+      setSubmittedTxHash(txHash);
+      setTxHashInput(txHash);
+
+      setPhase("confirming_tx");
+      await waitForWalletReceipt(chainKey as WalletChainKey, txHash);
+
+      setPhase("checking");
+      const res = await fetch("/api/gas-tank/verify-deposit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, txHash, chain: chainKey }),
+      });
+      const data = await res.json();
+      if (res.ok && (data.newDeposits > 0 || data.alreadyCredited)) {
+        setVerifiedBalances(data.balances);
+        setPhase("deposit_verified");
+        onDepositVerified?.(data.balances);
+      } else {
+        setTxHashError(data.error ?? "Payment submitted, but we could not credit it yet. Try the TX hash fallback.");
+        setPhase("not_found");
+      }
+    } catch (err) {
+      setTxHashError(walletErrorMessage(err));
+      setPhase("not_found");
+    }
+  }
+
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(10px)" }} onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl border p-6 shadow-2xl shadow-black" style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }} onClick={e => e.stopPropagation()}>
@@ -136,6 +182,34 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
         {phase === "main" && (
           <div className="space-y-4">
             <p className="text-white/40 text-sm">Send <span className="text-yellow font-semibold">{token}</span> to Q402 to top up your gas tank.</p>
+            <div className="rounded-2xl border border-yellow/20 bg-yellow/5 p-4 space-y-3">
+              <div>
+                <label className="block text-[10px] text-white/30 uppercase tracking-widest mb-1">
+                  Amount to deposit
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={depositAmount}
+                    onChange={e => setDepositAmount(e.target.value)}
+                    placeholder={`0.10 ${token}`}
+                    className="min-w-0 flex-1 bg-[#060C14] border border-white/10 rounded-xl px-3 py-3 text-sm font-mono text-white placeholder:text-white/20 focus:outline-none focus:border-yellow/40"
+                  />
+                  <span className="text-xs text-white/35 font-semibold w-14 text-right">{token}</span>
+                </div>
+              </div>
+              <button
+                onClick={topUpWithWallet}
+                disabled={!depositAmount.trim()}
+                className="w-full py-3 rounded-xl font-bold text-sm bg-yellow text-navy hover:bg-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                Top up with wallet
+              </button>
+              <p className="text-[10px] text-white/30 leading-relaxed">
+                We will switch to {chain}, send native {token}, wait for confirmation, and credit your Gas Tank automatically.
+              </p>
+            </div>
             <div>
               <p className="text-xs text-white/30 mb-2 uppercase tracking-widest">Q402 Gas Tank Address</p>
               <div className="flex items-center gap-2 bg-white/4 border border-white/10 rounded-xl px-3 py-3">
@@ -171,7 +245,21 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
           </div>
         )}
 
-        {phase === "checking" && <div className="flex flex-col items-center gap-4 py-8"><Spinner /><p className="text-white/40 text-sm">Scanning on-chain…</p></div>}
+        {(phase === "awaiting_wallet" || phase === "confirming_tx" || phase === "checking") && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <Spinner />
+            <div className="text-center">
+              <p className="text-white/60 text-sm font-semibold">
+                {phase === "awaiting_wallet" ? `Confirm ${token} deposit in your wallet`
+                  : phase === "confirming_tx" ? "Waiting for on-chain confirmation..."
+                  : "Crediting your Gas Tank..."}
+              </p>
+              <p className="text-white/30 text-xs mt-1">
+                {submittedTxHash ? shortHash(submittedTxHash) : "Do not close this modal."}
+              </p>
+            </div>
+          </div>
+        )}
 
         {phase === "deposit_verified" && (
           <div className="space-y-4 py-2">
