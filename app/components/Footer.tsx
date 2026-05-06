@@ -39,13 +39,18 @@ export default function Footer() {
         {/* Stats bar */}
         <div className="flex flex-wrap items-center gap-6 py-5 border-y border-white/8 mb-6">
           <div className="flex items-center gap-2">
-            <span className="text-yellow font-bold font-mono text-sm">41,132,423</span>
-            <span className="text-white/30 text-xs">total transactions processed</span>
+            <span className="text-yellow font-bold font-mono text-sm">99.99%</span>
+            <span className="text-white/30 text-xs">Uptime</span>
           </div>
           <div className="w-px h-4 bg-white/10 hidden sm:block" />
           <div className="flex items-center gap-2">
-            <span className="text-white font-bold text-sm">7+</span>
-            <span className="text-white/30 text-xs">EVM chains supported</span>
+            <span className="text-yellow font-bold font-mono text-sm">&lt;0.9 sec</span>
+            <span className="text-white/30 text-xs">Inclusion time</span>
+          </div>
+          <div className="w-px h-4 bg-white/10 hidden sm:block" />
+          <div className="flex items-center gap-2">
+            <span className="text-white font-bold text-sm">7</span>
+            <span className="text-white/30 text-xs">EVM chains live</span>
           </div>
           <div className="w-px h-4 bg-white/10 hidden sm:block" />
           <div className="flex items-center gap-2">
