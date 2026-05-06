@@ -236,7 +236,16 @@ export async function addGasDeposit(address: string, deposit: GasDeposit): Promi
   if (deposit.txHash) {
     try {
       const added = await kv.sadd(gasDepDedupKey(address), deposit.txHash);
-      if (added === 0) return false; // duplicate
+      if (added === 0) {
+        // Repair rare dedup/list drift: SADD may have succeeded while RPUSH
+        // failed or timed out, leaving the txHash marked credited but absent
+        // from the ledger. In that case, append the missing deposit so
+        // balances reconcile instead of staying at zero forever.
+        const existing = await getGasDeposits(address);
+        if (existing.some(d => d.txHash === deposit.txHash)) return false;
+        await kv.rpush(gasDepKey(address), deposit);
+        return true;
+      }
       kv.expire(gasDepDedupKey(address), 90 * 24 * 60 * 60).catch(() => {});
       await kv.rpush(gasDepKey(address), deposit);
       return true;
