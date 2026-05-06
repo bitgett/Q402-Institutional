@@ -1,46 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import RegisterModal from "./RegisterModal";
 
 
-function useCountUp(target: number, duration = 2200) {
-  const [count, setCount] = useState(0);
-  const ref = useRef<HTMLDivElement>(null);
-  const started = useRef(false);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true;
-          const startTime = Date.now();
-          const tick = () => {
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            setCount(Math.floor(eased * target));
-            if (progress < 1) requestAnimationFrame(tick);
-          };
-          requestAnimationFrame(tick);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.4 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [target, duration]);
-
-  return { count, ref };
-}
-
 export default function Hero() {
   const [showModal, setShowModal] = useState(false);
-  const { count: txCount, ref: txRef } = useCountUp(41);
 
   return (
     <>
@@ -224,24 +190,21 @@ export default function Hero() {
                 </a>
               </motion.div>
 
-              {/* Stats with counter animation */}
+              {/* Stats — verifiable infra metrics */}
               <motion.div
-                ref={txRef as React.RefObject<HTMLDivElement>}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.55 }}
                 className="flex flex-wrap items-center gap-7"
               >
                 <div>
-                  <div className="text-2xl font-bold font-mono text-yellow">
-                    {txCount}M+
-                  </div>
-                  <div className="text-xs text-white/30 mt-0.5">transactions processed</div>
+                  <div className="text-2xl font-bold font-mono text-yellow">99.99%</div>
+                  <div className="text-xs text-white/30 mt-0.5">Uptime</div>
                 </div>
                 <div className="w-px h-10 bg-white/8" />
                 <div>
-                  <div className="text-2xl font-bold">1 tx</div>
-                  <div className="text-xs text-white/30 mt-0.5">full payment flow</div>
+                  <div className="text-2xl font-bold font-mono text-yellow">&lt;0.9 sec</div>
+                  <div className="text-xs text-white/30 mt-0.5">Inclusion time</div>
                 </div>
                 <div className="w-px h-10 bg-white/8" />
                 <div>

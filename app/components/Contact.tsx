@@ -175,9 +175,9 @@ export default function Contact() {
           {/* Stats */}
           <div className="inline-flex items-center gap-8 bg-white/[0.03] border border-white/8 rounded-2xl px-8 py-4 mb-10">
             {[
-              { value: "40+",   label: "Projects live" },
-              { value: "41M+",  label: "Txs processed" },
-              { value: "1 day", label: "Avg. onboarding" },
+              { value: "99.99%", label: "Uptime" },
+              { value: "<0.9 sec", label: "Inclusion time" },
+              { value: "7 chains", label: "Mainnet live" },
             ].map((stat, i) => (
               <div key={stat.label} className="flex items-center gap-8">
                 {i > 0 && <div className="w-px h-8 bg-white/10" />}
