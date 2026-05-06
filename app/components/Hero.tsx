@@ -208,6 +208,11 @@ export default function Hero() {
                 </div>
                 <div className="w-px h-10 bg-white/8" />
                 <div>
+                  <div className="text-2xl font-bold">1 tx</div>
+                  <div className="text-xs text-white/30 mt-0.5">full payment flow</div>
+                </div>
+                <div className="w-px h-10 bg-white/8" />
+                <div>
                   <div className="text-2xl font-bold">7 chains</div>
                   <div className="text-xs text-white/30 mt-0.5">mainnet live</div>
                 </div>
