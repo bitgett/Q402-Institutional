@@ -56,7 +56,7 @@ const VOLUMES = [
 // value, so the UI and server MUST agree to the dollar.
 // Order: [500, 1K, 5K, 10K, 50K, 100K, 500K]
 const CHAIN_PRICES: Record<string, number[]> = {
-  bnb:       [0.01,  49,  89,  149,  449,   799,  1999 ],
+  bnb:       [  29,  49,  89,  149,  449,   799,  1999 ],
   xlayer:    [ 29,  49,  89,  149,  449,   799,  1999 ],
   stable:    [ 29,  49,  89,  149,  449,   799,  1999 ],
   mantle:    [ 29,  49,  89,  149,  449,   799,  1999 ],
