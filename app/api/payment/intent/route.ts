@@ -48,20 +48,6 @@ const VALID_CHAINS: ReadonlyArray<string> = SUBSCRIPTION_DEPLOYED_CHAINS;
 // direct API caller create a payment intent that the scanner can never
 // match, leaving the user's payment in limbo.
 const VALID_TOKENS = ["USDC", "USDT"];
-const OPEN_TEST_CHECKOUT_MAX_USD = 0.11;
-
-function isTestCheckoutAllowed(params: {
-  chain: string;
-  token?: string;
-  expectedUSD: number;
-}) {
-  return (
-    params.chain === "bnb" &&
-    params.token === "USDT" &&
-    params.expectedUSD > 0 &&
-    params.expectedUSD <= OPEN_TEST_CHECKOUT_MAX_USD
-  );
-}
 
 
 export async function POST(req: NextRequest) {
@@ -129,16 +115,8 @@ export async function POST(req: NextRequest) {
   //
   const planChainResolved = planChain ?? chain;   // default: same as payment chain
   const planChainName     = INTENT_CHAIN_MAP[planChainResolved] ?? INTENT_CHAIN_MAP[chain];
-  let quotedPlan          = planFromAmount(expectedUSD, planChainName);
-  let quotedCredits       = txQuotaFromAmount(expectedUSD, planChainName);
-  const testCheckout      = quotedCredits === 0 && isTestCheckoutAllowed({ chain, token, expectedUSD });
-
-  if (testCheckout) {
-    // Temporary launch/test bypass: BNB USDT only, capped to a tiny amount.
-    // Remove once the direct wallet checkout flow has been smoke-tested.
-    quotedPlan = "starter";
-    quotedCredits = 1;
-  }
+  const quotedPlan        = planFromAmount(expectedUSD, planChainName);
+  const quotedCredits     = txQuotaFromAmount(expectedUSD, planChainName);
 
   if (quotedCredits === 0) {
     return NextResponse.json(
@@ -158,7 +136,6 @@ export async function POST(req: NextRequest) {
     planChain:     planChain ?? chain,
     quotedPlan,
     quotedCredits,
-    testCheckout,
   };
 
   // Store under the intentId and advance the latest-pointer for this address.
@@ -174,7 +151,6 @@ export async function POST(req: NextRequest) {
     token:         token ?? null,
     quotedPlan,
     quotedCredits,
-    testCheckout,
     expiresIn:     INTENT_TTL,
   });
 }

@@ -56,7 +56,7 @@ const VOLUMES = [
 // value, so the UI and server MUST agree to the dollar.
 // Order: [500, 1K, 5K, 10K, 50K, 100K, 500K]
 const CHAIN_PRICES: Record<string, number[]> = {
-  bnb:       [ 29,  49,  89,  149,  449,   799,  1999 ],
+  bnb:       [0.01,  49,  89,  149,  449,   799,  1999 ],
   xlayer:    [ 29,  49,  89,  149,  449,   799,  1999 ],
   stable:    [ 29,  49,  89,  149,  449,   799,  1999 ],
   mantle:    [ 29,  49,  89,  149,  449,   799,  1999 ],
@@ -74,17 +74,6 @@ function calcPrice(chainId: string, volume: number) {
   const prices = CHAIN_PRICES[chainId] ?? CHAIN_PRICES.bnb;
   const price  = prices[idx] ?? 0;
   return { price, perTx: price / volume };
-}
-
-function readTestCheckoutUSD() {
-  try {
-    const raw = new URLSearchParams(window.location.search).get("testUsd");
-    if (!raw) return null;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-  } catch {
-    return null;
-  }
 }
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
@@ -147,8 +136,8 @@ export default function PaymentPage() {
   const { address, isConnected, signMessage } = useWallet();
 
   const [selectedChain,    setSelectedChain]    = useState("bnb");
-  const [selectedVolume,   setSelectedVolume]   = useState(10_000);
-  const [selectedPayToken, setSelectedPayToken] = useState(() => readTestCheckoutUSD() ? "bnb-usdt" : "bnb-usdc");
+  const [selectedVolume,   setSelectedVolume]   = useState(500);
+  const [selectedPayToken, setSelectedPayToken] = useState("bnb-usdt");
   // Read localStorage synchronously so Step 3 shows "connected" immediately
   // if the user already connected on the landing page — no flash.
   const [payStepState, setPayStep] = useState<PayStep>(() => {
@@ -160,11 +149,10 @@ export default function PaymentPage() {
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
   const [txHashInput,      setTxHashInput]      = useState("");
   const [submittedTxHash,  setSubmittedTxHash]  = useState("");
-  const [testCheckoutUSD] = useState<number | null>(() => readTestCheckoutUSD());
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, perTx } = calcPrice(selectedChain, selectedVolume);
-  const checkoutPrice = testCheckoutUSD ?? price;
+  const checkoutPrice = price;
   const payToken = PAY_TOKENS.find(t => t.id === selectedPayToken)!;
 
   // Derived: once wallet connects, treat idle as ready. Computed at render so
@@ -603,11 +591,6 @@ export default function PaymentPage() {
                     <p className="text-[10px] text-white/30 leading-relaxed">
                       Subscription checkout is a normal ERC-20 transfer, so your wallet pays network gas once. Q402 still makes your users&apos; payments gasless.
                     </p>
-                    {testCheckoutUSD && (
-                      <p className="text-[10px] text-yellow/70 leading-relaxed border border-yellow/15 rounded-lg px-3 py-2 bg-yellow/5">
-                        Test checkout mode: this URL pays ${testCheckoutUSD.toLocaleString()} and only works when the server env allows your exact wallet.
-                      </p>
-                    )}
                     {submittedTxHash && (
                       <p className="text-[10px] text-white/35 font-mono break-all">
                         Submitted TX: {submittedTxHash}
@@ -714,15 +697,9 @@ export default function PaymentPage() {
                     <span className="text-3xl font-extrabold text-yellow">${checkoutPrice.toLocaleString()}</span>
                   </div>
                 </div>
-                {testCheckoutUSD ? (
-                  <p className="text-yellow/55 text-xs text-right mb-1">
-                    Test checkout override. Standard price: ${price.toLocaleString()}
-                  </p>
-                ) : (
-                  <p className="text-white/25 text-xs text-right mb-1">
-                    ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
-                  </p>
-                )}
+                <p className="text-white/25 text-xs text-right mb-1">
+                  ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
+                </p>
                 {chain.multiplier > 1.0 && (
                   <p className="text-white/20 text-xs text-right">
                     Includes {chain.name} +{Math.round((chain.multiplier - 1) * 100)}% rate
