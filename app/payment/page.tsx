@@ -79,24 +79,6 @@ function calcPrice(chainId: string, volume: number) {
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Copy button
-// ─────────────────────────────────────────────────────────────────────────────
-
-function CopyButton({ value, label }: { value: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-      className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all flex-shrink-0 ${
-        copied ? "bg-green-400/15 text-green-400" : "bg-white/6 text-white/50 hover:bg-yellow/10 hover:text-yellow"
-      }`}
-    >
-      {copied ? "✓ Copied" : (label ?? "Copy")}
-    </button>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Step header (numbered)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -147,7 +129,6 @@ export default function PaymentPage() {
   const [verifyAttempts,   setVerifyAttempts]   = useState(0);
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
-  const [txHashInput,      setTxHashInput]      = useState("");
   const [submittedTxHash,  setSubmittedTxHash]  = useState("");
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
@@ -200,7 +181,6 @@ export default function PaymentPage() {
         decimals: payToken.decimals,
       });
       setSubmittedTxHash(txHash);
-      setTxHashInput(txHash);
 
       setPayStep("confirming_tx");
       await waitForWalletReceipt(payToken.chainId as WalletChainKey, txHash);
@@ -235,91 +215,6 @@ export default function PaymentPage() {
     } catch (err) {
       setVerifyAttempts(v => v + 1);
       setVerifyError(walletErrorMessage(err));
-      setPayStep("error");
-    }
-  }
-
-  async function verifyPayment() {
-    if (!address) return;
-    setPayStep("verifying");
-    setVerifyError(null);
-    let nextIntentId: string | null = null;
-    try {
-      // Step 1: session nonce for intent (cached 55 min; one wallet popup per session)
-      const auth = await getAuthCreds(address, signMessage);
-      if (!auth) {
-        setVerifyError("__sig_declined__");
-        setPayStep("error");
-        return;
-      }
-      const { nonce, signature } = auth;
-
-      // Record payment intent (chain + expected USD) before scanning blockchain.
-      // activate route validates the found TX against this intent.
-      if (checkoutPrice > 0) {
-        const intentRes = await fetch("/api/payment/intent", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          // chain = payment chain (where funds move); planChain = selected relay chain.
-        // Server locks quotedPlan/quotedCredits at intent time — activate uses those values.
-        body:    JSON.stringify({ address, nonce, signature, chain: payToken.chainId, planChain: selectedChain, expectedUSD: checkoutPrice, token: payToken?.token }),
-        });
-        if (!intentRes.ok) {
-          const d = await intentRes.json();
-          if (intentRes.status === 401 && d.code === "NONCE_EXPIRED") { clearAuthCache(address); }
-          setVerifyAttempts(v => v + 1);
-          setVerifyError(d.error ?? "Could not record payment intent.");
-          setPayStep("error");
-          return;
-        }
-        // Capture intentId in a local so the activate call below sees it on
-        // the first render — setState would be async and leave intentId null
-        // in the very same tick, defeating the per-intent cross-tab guarantee.
-        const intentData = await intentRes.json();
-        nextIntentId = intentData.intentId ?? null;
-      }
-
-      // Step 2: fresh one-time challenge for activation (always prompts wallet)
-      const chal = await getFreshChallenge(address, signMessage);
-      if (!chal) {
-        setVerifyError("__sig_declined__");
-        setPayStep("error");
-        return;
-      }
-
-      const res  = await fetch("/api/payment/activate", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          address,
-          challenge:  chal.challenge,
-          signature:  chal.signature,
-          // intentId validates the server uses the same quote the user saw.
-          ...(nextIntentId ? { intentId: nextIntentId } : {}),
-          // If user provided a txHash, pass it for deterministic verification.
-          ...(txHashInput.trim() ? { txHash: txHashInput.trim() } : {}),
-        }),
-      });
-      const data = await res.json();
-
-      if (res.status === 401 && data.code === "NONCE_EXPIRED") {
-        setVerifyAttempts(v => v + 1);
-        setVerifyError("Challenge expired. Please try again.");
-        setPayStep("error");
-        return;
-      }
-
-      if (res.ok && (data.status === "activated" || data.status === "already_active" || data.status === "credits_added")) {
-        setActivatedPlan(data.plan);
-        setPayStep("success");
-      } else {
-        setVerifyAttempts(v => v + 1);
-        setVerifyError(data.error ?? "Payment not found on-chain yet.");
-        setPayStep("error");
-      }
-    } catch {
-      setVerifyAttempts(v => v + 1);
-      setVerifyError("Network error. Please try again.");
       setPayStep("error");
     }
   }
@@ -598,45 +493,15 @@ export default function PaymentPage() {
                     )}
                   </div>
 
-                  {/* Address */}
-                  <div>
-                    <p className="text-xs text-white/30 uppercase tracking-widest mb-2 font-semibold">
-                      Manual fallback: send ${checkoutPrice.toLocaleString()} {payToken.token} on {payToken.chain} to
-                    </p>
-                    <div className="flex items-center gap-2 bg-[#060C14] border border-white/10 rounded-xl px-3 py-3">
-                      <span className="font-mono text-xs text-white/70 flex-1 break-all">{PAYMENT_ADDRESS}</span>
-                      <CopyButton value={PAYMENT_ADDRESS} />
-                    </div>
-                    <p className="text-white/20 text-[10px] mt-2">
-                      ⚠ Send from <span className="font-mono text-white/35">{address ? shortAddr(address) : "—"}</span> only. Payments from other wallets will not activate your account.
-                    </p>
-                  </div>
-
-                  {/* Optional txHash input */}
-                  <div>
-                    <label className="block text-[10px] text-white/25 uppercase tracking-widest mb-1">
-                      Transaction Hash <span className="normal-case text-white/15">(optional — paste for instant verification)</span>
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="0x..."
-                      value={txHashInput}
-                      onChange={e => setTxHashInput(e.target.value)}
-                      className="w-full bg-white/[0.03] border border-white/8 rounded-xl px-3 py-2.5 text-xs font-mono text-white/70 placeholder-white/20 focus:outline-none focus:border-yellow/30"
-                    />
-                  </div>
-
-                  {/* Verify */}
-                  <button
-                    onClick={verifyPayment}
-                    className="w-full bg-white/[0.04] text-yellow border border-yellow/20 font-bold text-sm py-3.5 rounded-xl hover:bg-yellow/10 transition-all"
-                  >
-                    {verifyError === "__sig_declined__" ? "Approve Signature →" : payStep === "error" ? "Try Again →" : "I've Sent — Verify Now →"}
-                  </button>
-                  {payStep === "ready" && (
-                    <p className="text-yellow/80 text-[11px] text-center mt-2 bg-yellow/5 border border-yellow/15 rounded-lg px-3 py-2">
-                      After sending payment, wait ~30 seconds before verifying.
-                    </p>
+                  {/* Retry on error — re-runs payWithWallet (server-side intent + activate
+                      already include their own RPC retry / chain-fallback rescue). */}
+                  {payStep === "error" && (
+                    <button
+                      onClick={payWithWallet}
+                      className="w-full bg-white/[0.04] text-yellow border border-yellow/20 font-bold text-sm py-3.5 rounded-xl hover:bg-yellow/10 transition-all"
+                    >
+                      {verifyError === "__sig_declined__" ? "Approve Signature →" : "Try Again →"}
+                    </button>
                   )}
                 </div>
               )}

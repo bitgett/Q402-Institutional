@@ -333,7 +333,7 @@ export const TIER_PLANS   = ["starter", "basic", "growth", "pro", "scale", "busi
 // calcPrice output per chain per tier (pre-computed from payment/page.tsx formula)
 const CHAIN_THRESHOLDS: Record<string, number[]> = {
   //                  500  1K   5K    10K   50K   100K   300K
-  "BNB Chain":  [0.01,  49,  89,  149,  449,   799,  1999 ],
+  "BNB Chain":  [  29,  49,  89,  149,  449,   799,  1999 ],
   "X Layer":    [  29,  49,  89,  149,  449,   799,  1999 ],
   "Stable":     [  29,  49,  89,  149,  449,   799,  1999 ],
   "Mantle":     [  29,  49,  89,  149,  449,   799,  1999 ],
