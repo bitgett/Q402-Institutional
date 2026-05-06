@@ -21,11 +21,12 @@ const mockKv = vi.hoisted(() => ({
   lrange: vi.fn(async (key: string) => listStore.get(key) ?? []),
   get: vi.fn(async () => null),
   hgetall: vi.fn(async () => null),
+  hincrbyfloat: vi.fn(async () => 0),
 }));
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
 
-import { addGasDeposit, getGasBalance } from "@/app/lib/db";
+import { addGasDeposit, getGasBalance, recordRelayedTx } from "@/app/lib/db";
 
 const ADDR = "0x8266d8e3b231dfd16fa21e40cc3b99f38bc4b6c2";
 const TX = "0xfae8d5e441643fd2f1fff3e2403be47eb359c7627c34f0de3d6b3b2a1f073f17";
@@ -70,6 +71,31 @@ describe("addGasDeposit dedup/list drift repair", () => {
     });
 
     expect(duplicate).toBe(false);
+    await expect(getGasBalance(ADDR)).resolves.toMatchObject({ bnb: 0.0001 });
+  });
+
+  it("does not deduct sandbox relay gas from the available gas balance", async () => {
+    await addGasDeposit(ADDR, {
+      chain: "bnb",
+      token: "BNB",
+      amount: 0.0001,
+      txHash: TX,
+      depositedAt: "2026-05-07T00:00:00.000Z",
+    });
+
+    await recordRelayedTx(ADDR, {
+      apiKey: "q402_sandbox_test",
+      address: ADDR,
+      chain: "bnb",
+      fromUser: ADDR,
+      toUser: "0x0000000000000000000000000000000000000001",
+      tokenAmount: "1",
+      tokenSymbol: "USDT",
+      gasCostNative: 0.0001,
+      relayTxHash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+      relayedAt: new Date().toISOString(),
+    });
+
     await expect(getGasBalance(ADDR)).resolves.toMatchObject({ bnb: 0.0001 });
   });
 });
