@@ -211,5 +211,5 @@ export async function waitForWalletReceipt(
     }
     await new Promise(resolve => setTimeout(resolve, 2500));
   }
-  throw new Error("Transaction submitted, but confirmation timed out. Paste the TX hash to verify manually.");
+  throw new Error("Transaction submitted, but confirmation timed out. Please retry in a moment.");
 }

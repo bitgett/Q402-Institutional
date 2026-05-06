@@ -74,17 +74,16 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
 }) {
   const chainKey = Object.entries(CHAIN_META).find(([, v]) => v.name === chain)?.[0] ?? chain.toLowerCase();
   const [phase, setPhase] = useState<"loading"|"main"|"awaiting_wallet"|"confirming_tx"|"checking"|"deposit_verified"|"not_found">("loading");
-  const [copied, setCopied] = useState(false);
   const [verifiedBalances, setVerifiedBalances] = useState<Record<string, number>>({});
-  const [txHashInput, setTxHashInput] = useState("");
   const [txHashError, setTxHashError] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [submittedTxHash, setSubmittedTxHash] = useState("");
 
   useEffect(() => { const t = setTimeout(() => setPhase("main"), 1000); return () => clearTimeout(t); }, []);
 
-  function copyAddr() { navigator.clipboard.writeText(DEPOSIT_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 2000); }
-
+  // Internal rescue: server-side retry that absorbs public-RPC lag for a freshly
+  // confirmed wallet deposit. Triggered automatically by topUpWithWallet — no
+  // user-facing TX-hash input is needed.
   async function creditByTxHashWithRetry(txHash: string, attempts = 8) {
     let lastError = "Payment submitted, but we could not credit it yet.";
     for (let i = 0; i < attempts; i++) {
@@ -103,38 +102,7 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
       if (!retryable || i === attempts - 1) break;
       await new Promise(resolve => setTimeout(resolve, 2500 + i * 1000));
     }
-    throw new Error(`${lastError} Try the TX hash fallback in a moment.`);
-  }
-
-  async function verifyDeposit() {
-    setPhase("checking");
-    setTxHashError("");
-    try {
-      const res = await fetch("/api/gas-tank/verify-deposit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
-      const data = await res.json();
-      if (res.ok && data.newDeposits > 0) { setVerifiedBalances(data.balances); setPhase("deposit_verified"); onDepositVerified?.(data.balances); }
-      else setPhase("not_found");
-    } catch { setPhase("not_found"); }
-  }
-
-  // Direct-lookup rescue path — for deposits that fell outside the block scan window.
-  async function verifyByTxHash() {
-    const trimmed = txHashInput.trim();
-    if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
-      setTxHashError("Paste a full TX hash (0x + 64 hex chars).");
-      return;
-    }
-    setTxHashError("");
-    setPhase("checking");
-    try {
-      const data = await creditByTxHashWithRetry(trimmed, 3);
-      setVerifiedBalances(data.balances);
-      setPhase("deposit_verified");
-      onDepositVerified?.(data.balances);
-    } catch (err) {
-      setTxHashError(err instanceof Error ? err.message : "Network error — try again.");
-      setPhase("not_found");
-    }
+    throw new Error(lastError);
   }
 
   async function topUpWithWallet() {
@@ -154,7 +122,6 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
         amount,
       });
       setSubmittedTxHash(txHash);
-      setTxHashInput(txHash);
 
       setPhase("confirming_tx");
       await waitForWalletReceipt(chainKey as WalletChainKey, txHash);
@@ -211,13 +178,6 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
                 We will switch to {chain}, send native {token}, wait for confirmation, and credit your Gas Tank automatically.
               </p>
             </div>
-            <div>
-              <p className="text-xs text-white/30 mb-2 uppercase tracking-widest">Q402 Gas Tank Address</p>
-              <div className="flex items-center gap-2 bg-white/4 border border-white/10 rounded-xl px-3 py-3">
-                <span className="font-mono text-xs text-white/70 break-all flex-1">{DEPOSIT_ADDRESS}</span>
-                <button onClick={copyAddr} className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-lg font-semibold transition-all ${copied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>{copied ? "Copied!" : "Copy"}</button>
-              </div>
-            </div>
             {chainKey === "stable" ? (
               <div className="flex items-start gap-2.5 bg-green-400/5 border border-green-400/20 rounded-xl px-4 py-3 text-xs text-green-400/80">
                 <span className="mt-0.5 flex-shrink-0">ℹ</span>
@@ -233,9 +193,6 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
                 <span>Only send <strong>{token}</strong> on the <strong>{chain}</strong> network.</span>
               </div>
             )}
-            <button onClick={verifyDeposit} className="w-full py-3 rounded-xl font-bold text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all">
-              I&apos;ve deposited — Verify
-            </button>
             <div className="border-t border-white/8 pt-4">
               <p className="text-xs text-white/30 mb-1">Gas Tank withdrawals</p>
               <p className="text-xs text-white/20 leading-relaxed">
@@ -286,29 +243,14 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
         {phase === "not_found" && (
           <div className="space-y-4 py-2">
             <div className="bg-red-400/8 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">
-              {txHashError || "No deposit found yet. Transactions may take 1–2 minutes."}
+              {txHashError || "Deposit could not be confirmed yet. Try again in a moment."}
             </div>
-            <div className="flex gap-3">
-              <button onClick={() => { setTxHashError(""); setPhase("main"); }} className="flex-1 py-2.5 rounded-xl text-sm border border-white/10 text-white/50 hover:text-white transition-all">← Back</button>
-              <button onClick={verifyDeposit} className="flex-1 py-2.5 rounded-xl text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all font-semibold">Rescan</button>
-            </div>
-            <div className="border-t border-white/8 pt-4 space-y-2">
-              <p className="text-xs text-white/40">Deposited earlier? Paste the TX hash to credit it directly.</p>
-              <input
-                type="text"
-                value={txHashInput}
-                onChange={e => setTxHashInput(e.target.value)}
-                placeholder="0x..."
-                className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder:text-white/20 focus:outline-none focus:border-yellow/40"
-              />
-              <button
-                onClick={verifyByTxHash}
-                disabled={!txHashInput.trim()}
-                className="w-full py-2.5 rounded-xl text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold"
-              >
-                Credit by TX Hash
-              </button>
-            </div>
+            <button
+              onClick={() => { setTxHashError(""); setPhase("main"); }}
+              className="w-full py-2.5 rounded-xl text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all font-semibold"
+            >
+              Try Again
+            </button>
           </div>
         )}
       </div>
