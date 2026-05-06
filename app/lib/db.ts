@@ -236,7 +236,16 @@ export async function addGasDeposit(address: string, deposit: GasDeposit): Promi
   if (deposit.txHash) {
     try {
       const added = await kv.sadd(gasDepDedupKey(address), deposit.txHash);
-      if (added === 0) return false; // duplicate
+      if (added === 0) {
+        // Repair rare dedup/list drift: SADD may have succeeded while RPUSH
+        // failed or timed out, leaving the txHash marked credited but absent
+        // from the ledger. In that case, append the missing deposit so
+        // balances reconcile instead of staying at zero forever.
+        const existing = await getGasDeposits(address);
+        if (existing.some(d => d.txHash === deposit.txHash)) return false;
+        await kv.rpush(gasDepKey(address), deposit);
+        return true;
+      }
       kv.expire(gasDepDedupKey(address), 90 * 24 * 60 * 60).catch(() => {});
       await kv.rpush(gasDepKey(address), deposit);
       return true;
@@ -252,7 +261,7 @@ export async function addGasDeposit(address: string, deposit: GasDeposit): Promi
 export async function getGasBalance(address: string): Promise<Record<string, number>> {
   const [deposits, usedTotals] = await Promise.all([
     getGasDeposits(address),
-    getGasUsedTotals(address),
+    getBillableGasUsedTotals(address),
   ]);
   const totals: Record<string, number> = { bnb: 0, eth: 0, mantle: 0, injective: 0, avax: 0, xlayer: 0, stable: 0 };
   for (const d of deposits) totals[d.chain] = (totals[d.chain] ?? 0) + d.amount;
@@ -312,6 +321,35 @@ export async function getThisMonthTxCount(address: string): Promise<number> {
   } catch { /* WRONGTYPE — legacy format */ }
   const txs = await kv.get<RelayedTx[]>(key);
   return txs?.length ?? 0;
+}
+
+function recentMonths(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - i);
+    return ym(d);
+  });
+}
+
+/**
+ * Returns billable gas only. Sandbox relays are useful for integration testing
+ * but never touch the chain, so they must not consume a user's Gas Tank.
+ *
+ * The hash total (`gasused:{addr}`) is kept as an atomic write-through cache for
+ * live relays, but early preview builds accidentally wrote sandbox gas there.
+ * Recomputing from relay history repairs that drift for dashboard balances.
+ */
+async function getBillableGasUsedTotals(address: string): Promise<Record<string, number>> {
+  const txs = await getRelayedTxs(address, recentMonths(12), Number.POSITIVE_INFINITY);
+  if (txs.length === 0) return getGasUsedTotals(address);
+
+  const totals: Record<string, number> = {};
+  for (const tx of txs) {
+    if (tx.apiKey?.startsWith("q402_sandbox_") || tx.apiKey?.startsWith("q402_test_")) continue;
+    if (!tx.chain || tx.gasCostNative <= 0) continue;
+    totals[tx.chain] = (totals[tx.chain] ?? 0) + tx.gasCostNative;
+  }
+  return totals;
 }
 
 /**
