@@ -98,4 +98,29 @@ describe("addGasDeposit dedup/list drift repair", () => {
 
     await expect(getGasBalance(ADDR)).resolves.toMatchObject({ bnb: 0.0001 });
   });
+
+  it("does not deduct legacy q402_test relay gas from the available gas balance", async () => {
+    await addGasDeposit(ADDR, {
+      chain: "bnb",
+      token: "BNB",
+      amount: 0.0001,
+      txHash: TX,
+      depositedAt: "2026-05-07T00:00:00.000Z",
+    });
+
+    await recordRelayedTx(ADDR, {
+      apiKey: "q402_test_legacy",
+      address: ADDR,
+      chain: "bnb",
+      fromUser: ADDR,
+      toUser: "0x0000000000000000000000000000000000000001",
+      tokenAmount: "1",
+      tokenSymbol: "USDT",
+      gasCostNative: 0.00042,
+      relayTxHash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+      relayedAt: new Date().toISOString(),
+    });
+
+    await expect(getGasBalance(ADDR)).resolves.toMatchObject({ bnb: 0.0001 });
+  });
 });

@@ -345,7 +345,7 @@ async function getBillableGasUsedTotals(address: string): Promise<Record<string,
 
   const totals: Record<string, number> = {};
   for (const tx of txs) {
-    if (tx.apiKey?.startsWith("q402_sandbox_")) continue;
+    if (tx.apiKey?.startsWith("q402_sandbox_") || tx.apiKey?.startsWith("q402_test_")) continue;
     if (!tx.chain || tx.gasCostNative <= 0) continue;
     totals[tx.chain] = (totals[tx.chain] ?? 0) + tx.gasCostNative;
   }
