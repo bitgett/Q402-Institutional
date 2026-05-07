@@ -5,7 +5,11 @@ import { ethers } from "ethers";
 
 const provider = new ethers.JsonRpcProvider("https://rpc.xlayer.tech");
 const USDC_XLAYER = "0x74b7F16337b8972027F6196A17a631aC6dE26d22";
-const PAYER = "0xfe7ba1cdc7077f71855627f9983a70188826726f";
+const PAYER = (process.env.Q402_PAYER ?? "").trim();
+if (!/^0x[0-9a-fA-F]{40}$/.test(PAYER)) {
+  console.error("Set Q402_PAYER (40-hex 0x address) before running.");
+  process.exit(1);
+}
 
 const abi = [
   "function nonces(address owner) view returns (uint256)",

@@ -28,8 +28,11 @@ vi.mock("@vercel/kv", () => ({ kv: mockKv }));
 
 import { addGasDeposit, getGasBalance, recordRelayedTx } from "@/app/lib/db";
 
-const ADDR = "0x8266d8e3b231dfd16fa21e40cc3b99f38bc4b6c2";
-const TX = "0xfae8d5e441643fd2f1fff3e2403be47eb359c7627c34f0de3d6b3b2a1f073f17";
+// Placeholder fixtures — never use real owner/customer addresses in tests so
+// the suite reads as anonymized data and grep-for-real-EOAs across tracked
+// source returns nothing.
+const ADDR = "0x000000000000000000000000000000000000beef";
+const TX = "0x" + "ab".repeat(32);
 
 beforeEach(() => {
   listStore.clear();

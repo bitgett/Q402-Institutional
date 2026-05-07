@@ -22,8 +22,14 @@ import { kv } from "@vercel/kv";
 import { randomBytes } from "node:crypto";
 
 // ── config ──────────────────────────────────────────────────────────────────
-const FROM_ADDR = "0x8266d8e3b231dfd16fa21e40cc3b99f38bc4b6c2";
-const TO_ADDR   = "0xfe7ba1cdc7077f71855627f9983a70188826726f";
+// Wallets come from env so personal/internal addresses stay out of tracked
+// source. Set Q402_FROM_ADDR + Q402_TO_ADDR in your local env file.
+const FROM_ADDR = (process.env.Q402_FROM_ADDR ?? "").trim();
+const TO_ADDR   = (process.env.Q402_TO_ADDR   ?? "").trim();
+if (!/^0x[0-9a-fA-F]{40}$/.test(FROM_ADDR) || !/^0x[0-9a-fA-F]{40}$/.test(TO_ADDR)) {
+  console.error("Set Q402_FROM_ADDR and Q402_TO_ADDR (40-hex 0x addresses) in your env file.");
+  process.exit(1);
+}
 const AMOUNT    = 50000;
 const PLAN      = "sponsored";
 
