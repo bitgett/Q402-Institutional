@@ -109,7 +109,6 @@ type PayStep =
   | "awaiting_wallet"
   | "confirming_tx"
   | "activating"
-  | "verifying"
   | "success"
   | "error";
 
@@ -209,7 +208,7 @@ export default function PaymentPage() {
         setPayStep("success");
       } else {
         setVerifyAttempts(v => v + 1);
-        setVerifyError(data.error ?? "Payment submitted, but activation did not complete. Paste the TX hash below to retry.");
+        setVerifyError(data.error ?? "Payment submitted, but activation did not complete. Please try again in a moment.");
         setPayStep("error");
       }
     } catch (err) {
@@ -376,7 +375,7 @@ export default function PaymentPage() {
               />
 
               {/* In progress */}
-              {(["preparing_intent", "awaiting_wallet", "confirming_tx", "activating", "verifying"] as PayStep[]).includes(payStep) && (
+              {(["preparing_intent", "awaiting_wallet", "confirming_tx", "activating"] as PayStep[]).includes(payStep) && (
                 <div className="flex items-center gap-4 py-4">
                   <svg className="animate-spin w-8 h-8 text-yellow flex-shrink-0" viewBox="0 0 24 24" fill="none">
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
