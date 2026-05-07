@@ -4,6 +4,7 @@ import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, g
 import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { isPaymentAmountSufficient } from "@/app/lib/payment-amount";
 
 /**
  * POST /api/payment/activate
@@ -117,9 +118,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 4. Amount: allow 5% tolerance (price feed drift / fee deduction)
-  const minExpected = intent.expectedUSD * 0.95;
-  if ((result.amountUSD ?? 0) < minExpected) {
+  // 4. Amount: subscription rails are exact stablecoin transfers (BNB/ETH
+  // USDC/USDT), not oracle-priced swaps. Do not allow a percentage tolerance:
+  // a direct API caller could otherwise intentionally underpay every tier.
+  if (!isPaymentAmountSufficient(result.amountUSD ?? 0, intent.expectedUSD)) {
     return NextResponse.json(
       { error: `Payment amount $${result.amountUSD} is less than intended $${intent.expectedUSD}`, code: "AMOUNT_LOW" },
       { status: 402 },
