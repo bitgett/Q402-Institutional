@@ -34,7 +34,11 @@ const RPC           = "https://rpc.xlayer.tech";
 const CHAIN_ID      = 196;
 const USDC          = "0x74b7F16337b8972027F6196A17a631aC6dE26d22";
 const USDC_DECIMALS = 6;
-const RECIPIENT     = "0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28";
+const RECIPIENT     = (envVars.Q402_TEST_RECIPIENT ?? process.env.Q402_TEST_RECIPIENT ?? "").trim();
+if (!/^0x[0-9a-fA-F]{40}$/.test(RECIPIENT)) {
+  console.error("Set Q402_TEST_RECIPIENT (40-hex 0x address) in your env file.");
+  process.exit(1);
+}
 const AMOUNT_USDC   = "0.05";
 
 // ── USDC EIP-3009 ABI ─────────────────────────────────────────────────────────

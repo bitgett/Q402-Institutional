@@ -1,7 +1,12 @@
 import { ethers } from "ethers";
 
-const PAYER     = "0xfe7ba1cdc7077f71855627f9983a70188826726f";
-const RECIPIENT = "0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28";
+// Wallets come from env. Set Q402_PAYER + Q402_TEST_RECIPIENT before running.
+const PAYER     = (process.env.Q402_PAYER           ?? "").trim();
+const RECIPIENT = (process.env.Q402_TEST_RECIPIENT  ?? "").trim();
+if (!/^0x[0-9a-fA-F]{40}$/.test(PAYER) || !/^0x[0-9a-fA-F]{40}$/.test(RECIPIENT)) {
+  console.error("Set Q402_PAYER and Q402_TEST_RECIPIENT (40-hex 0x addresses) before running.");
+  process.exit(1);
+}
 const CONTRACT  = "0x2fb2B2D110b6c5664e701666B3741240242bf350";
 
 const provider = new ethers.JsonRpcProvider("https://rpc.xlayer.tech");

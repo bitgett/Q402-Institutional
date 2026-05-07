@@ -545,11 +545,17 @@ export default function DashboardPage() {
 
   if (!mounted || !isConnected || !address) return null;
 
-  const MASTER_ADDRESSES_LC = [
-    "0xfc77ff29178b7286a8ba703d7a70895ca74ff466",
-    "0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28",
-    "0x3717d6ed5c2bce558e715cda158023db6705fd47",
-  ];
+  // Paywall bypass list. The relayer hot wallet is a public production
+  // identifier (referenced across docs and on-chain receipts) so it stays
+  // inline; owner EOAs come from env to keep personal wallets out of the
+  // tracked source. Configure NEXT_PUBLIC_OWNER_WALLETS as a comma-separated
+  // lowercase 0x list in .env.local + Vercel project settings.
+  const RELAYER_HOT_LC = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
+  const OWNER_WALLETS_LC = (process.env.NEXT_PUBLIC_OWNER_WALLETS ?? "")
+    .split(",")
+    .map(s => s.trim().toLowerCase())
+    .filter(s => /^0x[0-9a-f]{40}$/.test(s));
+  const MASTER_ADDRESSES_LC = [RELAYER_HOT_LC, ...OWNER_WALLETS_LC];
   const isMaster = MASTER_ADDRESSES_LC.includes(address.toLowerCase());
   const isGated = hasPaid === false && !isMaster;
 
