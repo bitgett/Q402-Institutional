@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSubscription, setSubscription, generateSandboxKey } from "@/app/lib/db";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { isOwnerWallet } from "@/app/lib/owners";
 
 /**
  * POST /api/keys/provision
@@ -58,6 +59,7 @@ export async function POST(req: NextRequest) {
       sandboxApiKey:  existing.sandboxApiKey,
       plan:           existing.plan,
       hasPaid:        isPaid,
+      isOwner:        isOwnerWallet(addr),
       quotaBonus:     existing.quotaBonus ?? 0,
       paidAt:         existing.paidAt,
       isNew:          false,
@@ -83,6 +85,7 @@ export async function POST(req: NextRequest) {
     sandboxApiKey,
     plan:          "starter",
     hasPaid:       false,
+    isOwner:       isOwnerWallet(addr),
     isNew:         true,
     quotaBonus:    0,
     paidAt:        "",

@@ -1197,10 +1197,19 @@ This split protects the **aggregate user gas pool** (held in the cold GASTANK), 
 ### Master Accounts (always treated as paid)
 The relayer hot wallet (`0xfc77ff29…74ff466` — public production identifier,
 referenced across docs and on-chain receipts) is hardcoded inline in
-[`app/dashboard/page.tsx`](app/dashboard/page.tsx). Owner EOAs are loaded at
-build/runtime from `NEXT_PUBLIC_OWNER_WALLETS` (comma-separated lowercase
-0x list) so personal addresses stay out of tracked source — set the var in
-`.env.local` for dev and in Vercel project settings for production.
+[`app/lib/owners.ts`](app/lib/owners.ts). Owner EOAs are loaded at request
+time from the **server-only** `OWNER_WALLETS` env var (comma-separated 0x
+addresses, any case) so personal addresses stay out of both tracked source
+**and the client bundle**. The dashboard learns its bypass flag only via an
+authenticated `isOwner` boolean returned by `/api/keys/provision`; the list
+itself never reaches the browser.
+
+Configure in `.env.local` for dev and in Vercel project settings for
+production. Env edits are picked up by the next request after the function
+instance restarts (Vercel cycles instances on env changes; restart
+`next dev` locally). Invalid entries are dropped with a `console.warn` in
+the function logs — see [`app/lib/owners.ts`](app/lib/owners.ts) and
+[`__tests__/owners.test.ts`](__tests__/owners.test.ts).
 
 ---
 

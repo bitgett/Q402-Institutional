@@ -385,6 +385,10 @@ export default function DashboardPage() {
   const [tankLoading, setTankLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hasPaid, setHasPaid] = useState<boolean | null>(null);
+  // Server-computed paywall bypass flag — see /api/keys/provision. The list
+  // of owner EOAs lives in OWNER_WALLETS (server-only env) and never reaches
+  // the client bundle; we receive only the boolean for the connected address.
+  const [isOwner,  setIsOwner]  = useState<boolean>(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookUrlInput, setWebhookUrlInput] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
@@ -478,6 +482,7 @@ export default function DashboardPage() {
 
       if (provData.sandboxApiKey) setSandboxApiKey(provData.sandboxApiKey as string);
       setHasPaid(provData.hasPaid === true);
+      setIsOwner(provData.isOwner === true);
 
       setSubscription(prev => ({
         ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }),
@@ -545,19 +550,7 @@ export default function DashboardPage() {
 
   if (!mounted || !isConnected || !address) return null;
 
-  // Paywall bypass list. The relayer hot wallet is a public production
-  // identifier (referenced across docs and on-chain receipts) so it stays
-  // inline; owner EOAs come from env to keep personal wallets out of the
-  // tracked source. Configure NEXT_PUBLIC_OWNER_WALLETS as a comma-separated
-  // lowercase 0x list in .env.local + Vercel project settings.
-  const RELAYER_HOT_LC = "0xfc77ff29178b7286a8ba703d7a70895ca74ff466";
-  const OWNER_WALLETS_LC = (process.env.NEXT_PUBLIC_OWNER_WALLETS ?? "")
-    .split(",")
-    .map(s => s.trim().toLowerCase())
-    .filter(s => /^0x[0-9a-f]{40}$/.test(s));
-  const MASTER_ADDRESSES_LC = [RELAYER_HOT_LC, ...OWNER_WALLETS_LC];
-  const isMaster = MASTER_ADDRESSES_LC.includes(address.toLowerCase());
-  const isGated = hasPaid === false && !isMaster;
+  const isGated = hasPaid === false && !isOwner;
 
   const API_KEY = subscription?.apiKey ?? "—";
   const plan = subscription?.plan ?? "starter";
