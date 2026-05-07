@@ -225,7 +225,6 @@ Q402-Institutional/
 │   │   ├── db.ts                   # Vercel KV CRUD helpers (monthly TX sharding)
 │   │   ├── blockchain.ts           # ERC-20 Transfer event scan
 │   │   ├── relayer.ts              # viem EIP-7702 settle functions
-│   │   ├── access.ts               # MASTER_ADDRESSES / isPaid()
 │   │   ├── ratelimit.ts            # KV fixed-window rate limiter
 │   │   └── wallet.ts               # MetaMask / OKX connectWallet
 │   ├── context/WalletContext.tsx   # global wallet state (instant localStorage restore)
@@ -1196,12 +1195,12 @@ This split protects the **aggregate user gas pool** (held in the cold GASTANK), 
 **Customer alerts (email, v1.19)** — `/api/cron/usage-alert` fans out to every wallet opted in via `/api/usage-alert`. For each subscriber, it compares `quota:{addr}` (atomic remaining credits) to `subscription.quotaBonus` (peak at last top-up) and fires a Resend email when the ratio crosses 20 % or 10 %. `lastThresholdAlerted` hysteresis ensures one email per downward tier crossing per window; the activate route resets it on every top-up so repeat customers re-enter the alert loop. Schedule: `0 10 * * *` UTC daily (Hobby plan cap — upgrade to Vercel Pro to restore `0 */6 * * *`). Outer auth: Vercel-issued `Authorization: Bearer ${CRON_SECRET}`, fail-closed when `CRON_SECRET` is unset. Requires env `RESEND_API_KEY` + `RESEND_FROM_ADDRESS` (e.g. `Q402 <alerts@quackai.ai>`) and a Resend-verified sending domain (DKIM/SPF/MX).
 
 ### Master Accounts (always treated as paid)
-```
-0xfc77ff29178b7286a8ba703d7a70895ca74ff466  (RELAYER hot)
-0xf5cdcd89b7dae1484197a4a65b97cd7a5e945c28  (Owner)
-0x3717d6ed5c2bce558e715cda158023db6705fd47  (Owner)
-```
-Hardcoded in the `MASTER_ADDRESSES` array of `app/lib/access.ts` — Quote page / dashboard whitelist.
+The relayer hot wallet (`0xfc77ff29…74ff466` — public production identifier,
+referenced across docs and on-chain receipts) is hardcoded inline in
+[`app/dashboard/page.tsx`](app/dashboard/page.tsx). Owner EOAs are loaded at
+build/runtime from `NEXT_PUBLIC_OWNER_WALLETS` (comma-separated lowercase
+0x list) so personal addresses stay out of tracked source — set the var in
+`.env.local` for dev and in Vercel project settings for production.
 
 ---
 
