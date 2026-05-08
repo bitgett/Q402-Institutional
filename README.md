@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.25** · **SDK: v1.6.0** · **Manifest: v1.6.0** · **MCP: @quackai/q402-mcp v0.1.3** · **Last updated: 2026-05-03**  
+**Version: v1.26** · **SDK: v1.6.0** · **Manifest: v1.6.0** · **MCP: @quackai/q402-mcp v0.2.1** · **Last updated: 2026-05-08**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
@@ -218,13 +218,20 @@ Q402-Institutional/
 │   │   ├── webhook/
 │   │   │   ├── route.ts            # POST/GET/DELETE — webhook management
 │   │   │   └── test/route.ts       # POST — send test event
-│   │   ├── transactions/route.ts   # GET  — relay TX history
+│   │   ├── transactions/route.ts   # GET  — relay TX history (with receiptId column)
 │   │   ├── wallet-balance/route.ts # GET  — user wallet balance (7 chains)
+│   │   ├── receipt/[id]/route.ts   # GET  — public Trust Receipt JSON (v1.26)
+│   │   ├── cron/receipt-backfill/  # GET  — drain receipt-backfill-queue (v1.26)
 │   │   └── inquiry/route.ts        # POST/GET — project inquiries
 │   ├── lib/
-│   │   ├── db.ts                   # Vercel KV CRUD helpers (monthly TX sharding)
+│   │   ├── db.ts                   # Vercel KV CRUD helpers (monthly TX sharding) + patchRelayedTxReceiptId / webhook-by-tx index (v1.26)
 │   │   ├── blockchain.ts           # ERC-20 Transfer event scan
 │   │   ├── relayer.ts              # viem EIP-7702 settle functions
+│   │   ├── receipt.ts              # Trust Receipt server CRUD + EIP-191 signing (v1.26)
+│   │   ├── receipt-shared.ts       # client-safe canonicalize + verify (v1.26)
+│   │   ├── receipt-backfill.ts     # backfill queue + processor + per-tx lock (v1.26)
+│   │   ├── ops-alerts.ts           # Telegram fan-out for critical breaches (v1.26)
+│   │   ├── owners.ts               # paywall bypass list (server-only env)
 │   │   ├── ratelimit.ts            # KV fixed-window rate limiter
 │   │   └── wallet.ts               # MetaMask / OKX connectWallet
 │   ├── context/WalletContext.tsx   # global wallet state (instant localStorage restore)
@@ -238,12 +245,14 @@ Q402-Institutional/
 │   │   ├── WalletButton.tsx        # MetaMask + OKX wallet modal
 │   │   └── RegisterModal.tsx       # project inquiry popup
 │   ├── agents/page.tsx             # AI Agent plan page
-│   ├── dashboard/page.tsx          # dashboard (4 tabs)
+│   ├── dashboard/page.tsx          # dashboard (5 tabs incl. receipt links)
 │   ├── payment/page.tsx            # on-chain payment Builder
 │   ├── docs/page.tsx               # API Reference
+│   ├── receipt/[id]/               # Trust Receipt page + ReceiptCard + OG image (v1.26)
 │   └── page.tsx                    # landing
 ├── scripts/
 │   ├── test-eip7702.mjs            # unified EIP-7702 E2E test (--chain avax|bnb|eth|mantle|injective|xlayer|stable)
+│   ├── test-receipt.mjs            # end-to-end Trust Receipt smoke (auto-opens browser) (v1.26)
 │   └── agent-example.mjs           # Node.js Agent SDK (unified 6-chain example — TransferAuthorization)
 └── public/
     ├── q402-sdk.js                 # client SDK v1.6.0 (7 chains, Injective EVM USDT-only until CCTP USDC Q2 2026)
@@ -1275,6 +1284,35 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 ---
 
 ## 25. Changelog
+
+### v1.26 (2026-05-08)
+
+> **Trust Receipt v1 — every successful relay produces a machine-verifiable settlement page.** The relay path now creates a per-tx receipt anchored to the on-chain settlement, signed by the relayer EOA via EIP-191 personal_sign, with a public verify button that recovers the signer client-side, a live webhook delivery timeline, and an auto-generated 1200×630 OG card for X / Telegram previews. Five rounds of audit closed (atomic idempotency, durable backfill, webhook truth recovery, 429 polling backoff, ops alert on KV outage). The companion MCP server gained a fourth tool, `q402_receipt`, so Claude / Cline / any MCP client can fetch + locally verify a receipt in the same chat.
+
+#### What's in the box
+
+- **Receipt page** [`/receipt/[id]`](app/receipt/%5Bid%5D/page.tsx) — Verified ECDSA stamp, Settlement / On-chain proof / Delivery trace sections, mobile-responsive, `noindex` (the URL is "shareable but not indexable"). [`ReceiptCard.tsx`](app/receipt/%5Bid%5D/ReceiptCard.tsx) handles the live polling + 429 backoff with a "Live status delayed" inline note.
+- **JSON endpoint** [`/api/receipt/[id]`](app/api/receipt/%5Bid%5D/route.ts) — public-shaped record with rate limit 120/min and `X-Robots-Tag: noindex, nofollow`. Strips `apiKeyId` (server-only — was a stable correlation handle for project activity) and conditionally `apiKeyTier`.
+- **OG image** [`/receipt/[id]/opengraph-image`](app/receipt/%5Bid%5D/opengraph-image.tsx) — Node runtime (1MB Edge cap concern, same as the root OG), branded card with chain + amount + verified badge.
+- **Server module** [`app/lib/receipt.ts`](app/lib/receipt.ts) — `createReceipt` is **atomic on `txHash`** via Redis `SET NX` claim of `receipt-by-tx:{txHash}`; concurrent retries converge on a single `receiptId`. Sandbox-safe (banner forced, explorer link suppressed, simulated note shown).
+- **Shared module** [`app/lib/receipt-shared.ts`](app/lib/receipt-shared.ts) — pure types + `canonicalize` + `verifyReceiptSignature`. Client-safe (no kv, no Wallet); the verify button reuses the exact same canonical-JSON serializer the server signs with.
+- **Backfill safety net** [`app/lib/receipt-backfill.ts`](app/lib/receipt-backfill.ts) + [`/api/cron/receipt-backfill`](app/api/cron/receipt-backfill/route.ts) — relay does inline retry once + awaits a queue write; the daily cron drains the queue with a per-tx KV lock and `MAX_ATTEMPTS=5` give-up. Backfilled receipts recover **truthful** webhook delivery state (delivered / failed / pending) from the new `webhook_delivery_by_tx:{txHash}` index — no more false-negative "failed" when an audit row scrolled off the per-address list.
+- **Dashboard wiring** — Transactions tab grows a Receipt column (`patchRelayedTxReceiptId` in [`app/lib/db.ts`](app/lib/db.ts) back-fills the row when a deferred receipt eventually materializes).
+- **Last-resort alert** [`app/lib/ops-alerts.ts`](app/lib/ops-alerts.ts) — when both inline retries AND the backfill enqueue fail (KV unreachable on both sides), the relay route fires a `critical` Telegram message with txHash / chain / payer / recipient / amount so an operator can manually recover the receipt. The only path where a successful relay can ship without a reachable receipt.
+- **Webhook payload** — `amount` switched from JS number to decimal string (matches SDK precision); `receiptId` + `receiptUrl` (absolute URL) added; both nullable to mirror the inline-fail-then-backfill window.
+- **MCP `q402_receipt`** ([`mcp-server` v0.2.1](https://www.npmjs.com/package/@quackai/q402-mcp)) — fourth tool, takes a `rct_…` id and returns the public record + a locally-verified ECDSA boolean. `txHash`-only lookup is reserved for a future round (the public JSON endpoint doesn't expose the tx index yet).
+
+#### Audit rounds closed in this release
+
+| Round | Findings addressed |
+|---|---|
+| 1 — initial v1 | bundle leak via NEXT_PUBLIC_, README "build/runtime" wording, silent invalid env drop |
+| 2 — round-2 fix | unsafe-webhook eternal-pending, page indexability, sandbox-vs-explorer dissonance, apiKeyId correlation handle |
+| 3 — strong guarantee | inline-only → backfill queue + cron, q402_balance docs/code drift, polling 429 swallowed silently |
+| 4 — durability | fire-and-forget enqueue → `await`, no dashboard row patch on backfill |
+| 5 — atomicity + truth | read-then-write race in createReceipt → `SET NX`, audit-log false negative on heavy webhook traffic → tx-keyed index, q402_receipt txHash framing, MCP `server.json` metadata bump |
+
+Verification: eslint clean, tsc clean, vitest **333/333**, `next build --webpack` green.
 
 ### v1.25 (2026-05-03)
 

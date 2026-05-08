@@ -19,7 +19,11 @@
 
 import { kv } from "@vercel/kv";
 import { createReceipt } from "@/app/lib/receipt";
-import { patchRelayedTxReceiptId, getWebhookDeliveries } from "@/app/lib/db";
+import {
+  patchRelayedTxReceiptId,
+  getWebhookDeliveries,
+  getWebhookDeliveryByTx,
+} from "@/app/lib/db";
 import type { ChainKey } from "@/app/lib/relayer";
 import type { ReceiptMethod, ReceiptWebhook } from "@/app/lib/receipt-shared";
 
@@ -142,11 +146,17 @@ async function reconstructWebhookState(entry: BackfillEntry): Promise<ReceiptWeb
     };
   }
 
-  let match: Awaited<ReturnType<typeof getWebhookDeliveries>>[number] | undefined;
+  // Prefer the tx-keyed index (durable for 1y, immune to per-address list
+  // cap). Fall back to scanning the per-address list for backwards
+  // compatibility with delivery rows recorded before the index existed.
+  let match: Awaited<ReturnType<typeof getWebhookDeliveries>>[number] | null = null;
   try {
-    const deliveries = await getWebhookDeliveries(entry.address);
-    const targetTx = entry.txHash.toLowerCase();
-    match = deliveries.find(d => (d.txHash ?? "").toLowerCase() === targetTx);
+    match = await getWebhookDeliveryByTx(entry.txHash);
+    if (!match) {
+      const deliveries = await getWebhookDeliveries(entry.address);
+      const targetTx = entry.txHash.toLowerCase();
+      match = deliveries.find(d => (d.txHash ?? "").toLowerCase() === targetTx) ?? null;
+    }
   } catch {
     /* ignore — fall through to "pending" below */
   }

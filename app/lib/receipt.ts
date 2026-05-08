@@ -88,24 +88,45 @@ export async function signReceiptFields(fields: ReceiptSignedFields): Promise<{
 export async function createReceipt(input: Omit<Receipt,
   | "receiptId" | "createdAt" | "signature" | "signedBy" | "signedAt"
 >): Promise<Receipt> {
-  // Idempotency on txHash — if a receipt already exists for this settlement,
-  // return it unchanged instead of producing a duplicate. Closes the
-  // "one tx → two receipts" race that opens up when the inline body write
-  // succeeds but the surrounding bookkeeping (RelayedTx record, queue
-  // dequeue, response delivery) fails and a retry/backfill path tries again.
-  // The receipt-by-tx index is the canonical lookup; if it points to a
-  // present body, we're done. If the index points to something missing
-  // (TTL'd, manually purged), we fall through and re-create — accepting the
-  // very rare orphan over the more common silent loss.
+  // Atomic idempotency on txHash — uses Redis SET NX so only one worker can
+  // claim a given txHash even under highly concurrent retries (the previous
+  // read-then-write pattern was vulnerable to a race where two workers both
+  // saw "no existing receipt" and each created a fresh one).
+  //
+  // Three states after the claim:
+  //   1. We won the claim          → use our candidate id and write the body.
+  //   2. We lost; winner has a body → return their receipt unchanged.
+  //   3. We lost; winner orphaned   → adopt their id, write the body. The
+  //      next read succeeds and the orphan window closes. (Falls through
+  //      to the body write below using `receiptId = winnerId`.)
+  //
+  // If input.txHash is empty (relay never reached chain), skip the claim —
+  // there's nothing to make idempotent on. This path is reachable from
+  // backfill but is effectively dead in production.
+  let receiptId = newReceiptId();
+
   if (input.txHash) {
-    const existingId = await getReceiptIdByTx(input.txHash);
-    if (existingId) {
-      const existing = await getReceipt(existingId);
-      if (existing) return existing;
+    const claimed = await kv.set(
+      receiptByTxKey(input.txHash),
+      receiptId,
+      { nx: true, ex: RECEIPT_TTL_SECONDS },
+    );
+
+    if (claimed !== "OK") {
+      // Lost the race. Return the winner's receipt if their body is in
+      // place; otherwise adopt their id (the orphan recovery path).
+      const winnerId = await getReceiptIdByTx(input.txHash);
+      if (winnerId) {
+        const existing = await getReceipt(winnerId);
+        if (existing) return existing;
+        receiptId = winnerId;
+      }
+      // winnerId being null is implausible (we just lost a SET NX so
+      // *something* claimed the key) but defensible: fall through with
+      // our candidate id and a re-write of the mapping below.
     }
   }
 
-  const receiptId = newReceiptId();
   const createdAt = new Date().toISOString();
 
   const signedFields: ReceiptSignedFields = {
@@ -131,10 +152,19 @@ export async function createReceipt(input: Omit<Receipt,
     ...proof,
   };
 
-  await Promise.all([
-    kv.set(receiptKey(receiptId), receipt, { ex: RECEIPT_TTL_SECONDS }),
-    kv.set(receiptByTxKey(input.txHash), receiptId, { ex: RECEIPT_TTL_SECONDS }),
-  ]);
+  // Body write. The receipt-by-tx mapping was already set atomically by the
+  // SET NX claim above (or by the winner whose id we adopted), so no second
+  // mapping write is needed in the happy path. If we fell through with our
+  // own candidate (the unreachable winnerId-null branch above), we re-write
+  // the mapping defensively to keep the index pointing at the body that
+  // actually exists.
+  await kv.set(receiptKey(receiptId), receipt, { ex: RECEIPT_TTL_SECONDS });
+  if (input.txHash) {
+    // Fixed-cost extra write on the "won the claim" path; ensures the
+    // mapping survives the rare TTL/orphan edge case without a second
+    // round-trip on every relay.
+    await kv.set(receiptByTxKey(input.txHash), receiptId, { ex: RECEIPT_TTL_SECONDS });
+  }
 
   return receipt;
 }

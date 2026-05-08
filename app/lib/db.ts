@@ -198,19 +198,55 @@ export async function deleteWebhookConfig(address: string) {
   await kv.del(webhookKey(address));
 }
 
+// Tx-keyed delivery index. The per-address list is capped at 20 entries so
+// a heavy webhook customer can roll old deliveries off the back of the
+// list. The receipt backfill then loses the ability to recover those
+// older deliveries' state ("delivered" / "failed") and falls back to
+// "pending", which is a false negative for receipts produced after the
+// audit log has aged. This per-tx key keeps the most recent delivery for
+// each settlement reachable for 1 year regardless of subsequent traffic.
+const webhookDeliveryByTxKey = (txHash: string) =>
+  `webhook_delivery_by_tx:${txHash.toLowerCase()}`;
+
+const WEBHOOK_DELIVERY_BY_TX_TTL_SECONDS = 365 * 24 * 60 * 60;     // 1 year, mirrors receipts
+
 /**
  * Prepend a delivery record (LPUSH) and cap list at 20 entries.
  * Most recent delivery is always at index 0.
+ *
+ * Also writes a tx-keyed copy so receipt-backfill can recover state for
+ * settlements older than 20 webhook events ago.
  */
 export async function recordWebhookDelivery(address: string, delivery: WebhookDelivery) {
   const key = webhookDeliveryKey(address);
   await kv.lpush(key, delivery);
   kv.ltrim(key, 0, 19).catch(() => {});
+
+  if (delivery.txHash) {
+    // Best-effort — the per-address list is the canonical record; this
+    // index is a backfill helper. Failure here doesn't affect dispatch
+    // accounting.
+    kv.set(
+      webhookDeliveryByTxKey(delivery.txHash),
+      delivery,
+      { ex: WEBHOOK_DELIVERY_BY_TX_TTL_SECONDS },
+    ).catch(() => {});
+  }
 }
 
 /** Returns up to 20 most recent delivery records, newest first. */
 export async function getWebhookDeliveries(address: string): Promise<WebhookDelivery[]> {
   return kv.lrange<WebhookDelivery>(webhookDeliveryKey(address), 0, 19);
+}
+
+/**
+ * Returns the most recent delivery record for a given txHash, or null if
+ * none was ever recorded. Reads the tx-keyed index — survives the 20-entry
+ * cap on the per-address list, so receipt-backfill can recover the truthful
+ * delivery state for settlements that happened arbitrarily long ago.
+ */
+export async function getWebhookDeliveryByTx(txHash: string): Promise<WebhookDelivery | null> {
+  return kv.get<WebhookDelivery>(webhookDeliveryByTxKey(txHash));
 }
 
 // ── Gas Deposits ─────────────────────────────────────────────────────────────
