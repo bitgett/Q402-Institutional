@@ -57,7 +57,6 @@ const SAMPLE_FIELDS: ReceiptSignedFields = {
   tokenAmount:    "5.00",
   tokenAmountRaw: "5000000000000000000",
   method:         "eip7702",
-  apiKeyId:       "abcd1234ef567890",
   sandbox:        false,
 };
 
@@ -84,7 +83,6 @@ describe("canonicalize", () => {
     const a: ReceiptSignedFields = { ...SAMPLE_FIELDS };
     const b: ReceiptSignedFields = {
       sandbox:        SAMPLE_FIELDS.sandbox,
-      apiKeyId:       SAMPLE_FIELDS.apiKeyId,
       method:         SAMPLE_FIELDS.method,
       tokenAmountRaw: SAMPLE_FIELDS.tokenAmountRaw,
       tokenAmount:    SAMPLE_FIELDS.tokenAmount,
@@ -97,6 +95,12 @@ describe("canonicalize", () => {
       receiptId:      SAMPLE_FIELDS.receiptId,
     };
     expect(canonicalize(a)).toBe(canonicalize(b));
+  });
+
+  it("does NOT include apiKeyId or apiKeyTier (privacy: external readers must not be able to correlate receipts to a project)", () => {
+    const out = canonicalize(SAMPLE_FIELDS);
+    expect(out).not.toContain("apiKeyId");
+    expect(out).not.toContain("apiKeyTier");
   });
 
   it("changes when any signed field changes", () => {
@@ -178,6 +182,7 @@ describe("publicView", () => {
   function buildReceipt(showTier: boolean): Receipt {
     return {
       ...SAMPLE_FIELDS,
+      apiKeyId:   "abcd1234ef567890",
       apiKeyTier: "growth",
       showTier,
       webhook: {
@@ -191,6 +196,11 @@ describe("publicView", () => {
     };
   }
 
+  it("ALWAYS strips apiKeyId (privacy — external readers must not correlate)", () => {
+    expect("apiKeyId" in publicView(buildReceipt(false))).toBe(false);
+    expect("apiKeyId" in publicView(buildReceipt(true))).toBe(false);
+  });
+
   it("strips apiKeyTier when showTier is false (default privacy)", () => {
     const view = publicView(buildReceipt(false));
     expect("apiKeyTier" in view).toBe(false);
@@ -203,8 +213,8 @@ describe("publicView", () => {
 
   it("public view still contains everything in the signed subset", () => {
     const view = publicView(buildReceipt(false));
-    // These are the fields that go into the canonical hash — Verify needs
-    // them all present so it can recompute the digest client-side.
+    // Fields that go into the canonical hash — Verify needs them all so it
+    // can recompute the digest client-side.
     expect(view.receiptId).toBe(SAMPLE_FIELDS.receiptId);
     expect(view.createdAt).toBe(SAMPLE_FIELDS.createdAt);
     expect(view.txHash).toBe(SAMPLE_FIELDS.txHash);
@@ -215,11 +225,10 @@ describe("publicView", () => {
     expect(view.tokenAmount).toBe(SAMPLE_FIELDS.tokenAmount);
     expect(view.tokenAmountRaw).toBe(SAMPLE_FIELDS.tokenAmountRaw);
     expect(view.method).toBe(SAMPLE_FIELDS.method);
-    expect(view.apiKeyId).toBe(SAMPLE_FIELDS.apiKeyId);
     expect(view.sandbox).toBe(SAMPLE_FIELDS.sandbox);
   });
 
-  it("hidden tier still verifies (signed payload excludes tier)", async () => {
+  it("public view still verifies even with apiKeyId stripped (signed payload excludes apiKeyId/Tier)", async () => {
     const { signature, signedBy } = await signReceiptFields(SAMPLE_FIELDS);
     const view = publicView(buildReceipt(false));
     // Reconstruct the signed subset from the public view — should match.
@@ -234,7 +243,6 @@ describe("publicView", () => {
       tokenAmount:    view.tokenAmount,
       tokenAmountRaw: view.tokenAmountRaw,
       method:         view.method,
-      apiKeyId:       view.apiKeyId,
       sandbox:        view.sandbox,
     };
     expect(verifyReceiptSignature(reconstructed, signature, signedBy)).toBe(true);

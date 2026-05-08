@@ -102,7 +102,6 @@ export async function createReceipt(input: Omit<Receipt,
     tokenAmount:    input.tokenAmount,
     tokenAmountRaw: input.tokenAmountRaw,
     method:         input.method,
-    apiKeyId:       input.apiKeyId,
     sandbox:        input.sandbox,
   };
 
@@ -147,13 +146,17 @@ export async function updateReceiptWebhookStatus(
 }
 
 /**
- * Public-shaped receipt view. Strips apiKeyTier when the customer hasn't
- * opted into showing it. apiKeyTier is intentionally NOT in the signed
- * canonical hash, so stripping it here doesn't break Verify.
+ * Public-shaped receipt view. Strips both apiKeyId (always — it's a stable
+ * identifier that lets external readers correlate activity across receipts
+ * for the same project) and apiKeyTier (unless the customer explicitly
+ * toggled showTier on; default false).
+ *
+ * Neither field is in the signed canonical hash, so stripping them here
+ * doesn't break the Verify button on the receipt page.
  */
-export function publicView(receipt: Receipt): Omit<Receipt, "apiKeyTier"> & { apiKeyTier?: string } {
-  if (receipt.showTier) return receipt;
-  const view = { ...receipt };
-  delete (view as Partial<Receipt>).apiKeyTier;
+export function publicView(receipt: Receipt): Receipt {
+  const view: Receipt = { ...receipt };
+  delete view.apiKeyId;
+  if (!receipt.showTier) delete view.apiKeyTier;
   return view;
 }

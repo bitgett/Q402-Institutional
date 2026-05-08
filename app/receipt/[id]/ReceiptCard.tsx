@@ -100,7 +100,6 @@ export default function ReceiptCard({ initialReceipt }: { initialReceipt: Receip
     tokenAmount:    receipt.tokenAmount,
     tokenAmountRaw: receipt.tokenAmountRaw,
     method:         receipt.method,
-    apiKeyId:       receipt.apiKeyId,
     sandbox:        receipt.sandbox,
   }), [receipt]);
 
@@ -151,15 +150,20 @@ export default function ReceiptCard({ initialReceipt }: { initialReceipt: Receip
             chainLabel={chainLabel}
             method={receipt.method}
             apiKeyTier={receipt.apiKeyTier}
+            sandbox={receipt.sandbox}
           />
-          <OnChainProof
-            txHash={receipt.txHash}
-            blockNumber={receipt.blockNumber}
-            explorerName={explorer?.name ?? "Explorer"}
-            explorerUrl={explorer ? explorer.tx(receipt.txHash) : null}
-            gasCostNative={receipt.gasCostNative}
-          />
-          <DeliveryTrace webhook={receipt.webhook} />
+          {receipt.sandbox ? (
+            <SimulatedNote txHash={receipt.txHash} />
+          ) : (
+            <OnChainProof
+              txHash={receipt.txHash}
+              blockNumber={receipt.blockNumber}
+              explorerName={explorer?.name ?? "Explorer"}
+              explorerUrl={explorer ? explorer.tx(receipt.txHash) : null}
+              gasCostNative={receipt.gasCostNative}
+            />
+          )}
+          <DeliveryTrace webhook={receipt.webhook} sandbox={receipt.sandbox} />
           <Footer onShare={onShare} shareTip={shareTip} signedAt={receipt.signedAt} />
         </div>
 
@@ -248,14 +252,14 @@ function VerifyBlock({
 }
 
 function Settlement({
-  payer, recipient, token, tokenAmount, chainLabel, method, apiKeyTier,
+  payer, recipient, token, tokenAmount, chainLabel, method, apiKeyTier, sandbox,
 }: {
   payer: string; recipient: string; token: string; tokenAmount: string;
-  chainLabel: string; method: string; apiKeyTier?: string;
+  chainLabel: string; method: string; apiKeyTier?: string; sandbox: boolean;
 }) {
   return (
     <div className="px-7 py-5 border-t border-white/8">
-      <SectionHeader>Settlement</SectionHeader>
+      <SectionHeader>{sandbox ? "Simulated settlement" : "Settlement"}</SectionHeader>
       <div className="space-y-2.5 text-xs">
         <Row label="Payer">     <code className="font-mono text-white/85">{payer}</code></Row>
         <Row label="Recipient"> <code className="font-mono text-white/85">{recipient}</code></Row>
@@ -271,6 +275,29 @@ function Settlement({
         {apiKeyTier && (
           <Row label="API tier"><span className="text-white/85 capitalize">{apiKeyTier}</span></Row>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Sandbox replacement for the on-chain proof section. We deliberately don't
+// link out to a block explorer (the txHash is fabricated and the explorer
+// will return "not found", which would dent trust). Instead we show the
+// fabricated hash inline with a plain note explaining what it is.
+function SimulatedNote({ txHash }: { txHash: string }) {
+  return (
+    <div className="px-7 py-5 border-t border-white/8">
+      <SectionHeader>Simulated transaction</SectionHeader>
+      <div className="space-y-2.5 text-xs">
+        <Row label="Stub hash">
+          <code className="font-mono text-white/55 break-all">{txHash}</code>
+        </Row>
+        <p className="text-[11px] text-white/45 leading-relaxed pt-1">
+          No on-chain transaction was broadcast. This receipt was issued from a
+          Q402 sandbox API key — the hash above is fabricated solely to keep
+          development and CI flows symmetrical with live mode. Block explorer
+          links are intentionally omitted.
+        </p>
       </div>
     </div>
   );
@@ -308,12 +335,14 @@ function OnChainProof({
   );
 }
 
-function DeliveryTrace({ webhook }: { webhook: Receipt["webhook"] }) {
+function DeliveryTrace({ webhook, sandbox }: { webhook: Receipt["webhook"]; sandbox: boolean }) {
   return (
     <div className="px-7 py-5 border-t border-white/8">
       <SectionHeader>Delivery trace</SectionHeader>
       <ol className="space-y-2 text-xs">
-        <TraceStep state="done" label="On-chain settlement" detail="Confirmed" />
+        {sandbox
+          ? <TraceStep state="muted" label="On-chain settlement" detail="Skipped (sandbox)" />
+          : <TraceStep state="done"  label="On-chain settlement" detail="Confirmed" />}
         {!webhook.configured ? (
           <TraceStep state="muted" label="Webhook delivery" detail="No webhook configured" />
         ) : webhook.deliveryStatus === "pending" ? (

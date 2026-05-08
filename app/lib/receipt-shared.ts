@@ -46,8 +46,13 @@ export interface Receipt {
   tokenAmountRaw:   string;
   method:           ReceiptMethod;
   gasCostNative?:   string;
-  apiKeyId:         string;
-  apiKeyTier?:      string;            // optional in public view (showTier toggle)
+  // apiKeyId + apiKeyTier are server-only audit fields. They are stored in
+  // the raw KV record for internal correlation, but stripped by publicView()
+  // and excluded from ReceiptSignedFields so a public reader can't use the
+  // receipt URL to correlate activity across multiple settlements for the
+  // same project. (Reviewer P3 feedback, 2026-05.)
+  apiKeyId?:        string;
+  apiKeyTier?:      string;
   showTier:         boolean;
   sandbox:          boolean;
   webhook:          ReceiptWebhook;
@@ -67,7 +72,6 @@ export type ReceiptSignedFields = Pick<Receipt,
   | "tokenAmount"
   | "tokenAmountRaw"
   | "method"
-  | "apiKeyId"
   | "sandbox"
 >;
 

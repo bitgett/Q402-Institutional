@@ -21,6 +21,12 @@ export async function generateMetadata({
   return {
     title,
     description: desc,
+    // Receipt URLs are unguessable but, once shared in messengers / X /
+    // GitHub issues, search engine crawlers can pick them up. The whole
+    // model is "shareable to a specific audience, not indexed publicly" —
+    // ask robots to skip both the page and the OG image. Belt-and-suspenders
+    // with the X-Robots-Tag header on /api/receipt/[id].
+    robots: { index: false, follow: false, nocache: true },
     openGraph: {
       title,
       description: desc,

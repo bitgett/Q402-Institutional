@@ -41,9 +41,14 @@ export async function GET(
   // creation, but the webhook trace can flip pending → delivered, so we
   // can't hard-cache. 5-second SWR is enough to absorb polling bursts
   // without blocking real status updates.
+  //
+  // X-Robots-Tag: receipt JSON is "shareable but unguessable" — we don't
+  // want crawlers indexing the structured data either, even if they hit
+  // the API endpoint directly via referer leak.
   return NextResponse.json(publicView(receipt), {
     headers: {
-      "Cache-Control": "public, max-age=5, stale-while-revalidate=30",
+      "Cache-Control":   "public, max-age=5, stale-while-revalidate=30",
+      "X-Robots-Tag":    "noindex, nofollow",
     },
   });
 }

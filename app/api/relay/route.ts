@@ -513,7 +513,12 @@ export async function POST(req: NextRequest) {
       },
     });
     receiptId  = receipt.receiptId;
-    receiptUrl = `/receipt/${receipt.receiptId}`;
+    // Absolute URL so external integrators can open it as-is (drop into a
+    // Slack message, paste into a browser, render in an OG card). Falls
+    // back to the request origin when NEXT_PUBLIC_BASE_URL isn't set so
+    // local dev still produces a clickable link.
+    const origin = (process.env.NEXT_PUBLIC_BASE_URL ?? new URL(req.url).origin).replace(/\/$/, "");
+    receiptUrl = `${origin}/receipt/${receipt.receiptId}`;
   } catch (e) {
     console.error("[relay] receipt creation failed (non-fatal):", e);
   }
@@ -551,7 +556,25 @@ export async function POST(req: NextRequest) {
     // can't be used to pivot into internal networks.
     const webhookSafe = validateWebhookUrl(webhookCfg.url) === null;
 
+    if (!webhookSafe && receiptId) {
+      // Unsafe URL — dispatch is being skipped. Flip the receipt's webhook
+      // state to a terminal "failed" so it doesn't sit in "pending" forever
+      // and confuse ops debugging. The receipt's initial state was set to
+      // pending under the assumption dispatch would happen; SSRF blocking
+      // means it won't, so the receipt should reflect that.
+      updateReceiptWebhookStatus(receiptId, {
+        deliveryStatus: "failed",
+        attempts:       0,
+        lastError:      "Webhook URL blocked by SSRF guard",
+      }).catch(e => console.error("[relay] receipt webhook update (blocked) failed:", e));
+    }
+
     if (webhookSafe) {
+      // receiptId + receiptUrl give ops/support a one-click path from the
+      // customer's webhook log entry to the human-verifiable receipt page.
+      // Both are nullable when receipt creation failed upstream so the
+      // webhook still fires (relay.success is the source of truth, the
+      // receipt is the audit layer on top of it).
       const payload = JSON.stringify({
         event:        "relay.success",
         sandbox:      isSandbox,
@@ -563,6 +586,8 @@ export async function POST(req: NextRequest) {
         token,
         gasCostNative,
         timestamp:    relayedAt,
+        receiptId,
+        receiptUrl,
       });
       const hmac = createHmac("sha256", webhookCfg.secret).update(payload).digest("hex");
       const webhookUrl     = webhookCfg.url;
