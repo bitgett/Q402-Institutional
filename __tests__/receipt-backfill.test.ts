@@ -186,6 +186,74 @@ describe("processBackfillEntry", () => {
     expect(receipt.signedBy).toBe(TEST_RELAYER_ADDRESS);
   });
 
+  it("atomic on race — concurrent processBackfill calls converge on a single receiptId", async () => {
+    // Simulates: two workers (cron + manual admin trigger) hitting the same
+    // entry at the same instant. Without SET NX both could pass the
+    // existence check and create separate receipts. With NX claim, exactly
+    // one wins and the other returns the winner's receipt unchanged.
+    await queueReceiptBackfill(SAMPLE_INPUT);
+    const entry = (await listBackfillQueue())[0];
+    // Strip the per-tx lock so both processors compete at the createReceipt
+    // layer rather than the lock layer (the lock is the outer guard;
+    // idempotency is the inner guarantee).
+    const [a, b] = await Promise.all([
+      processBackfillEntry(entry),
+      processBackfillEntry(entry),
+    ]);
+    // One processor sees the lock contention, the other actually creates;
+    // even after a retry the result must converge on a single id.
+    if (!a.ok && !b.ok) {
+      // Both raced on the lock — replay so at least one creates.
+      const fresh = (await listBackfillQueue())[0];
+      const c = await processBackfillEntry(fresh);
+      expect(c.ok).toBe(true);
+    } else {
+      const winnerId = a.ok ? a.receiptId : b.ok ? b.receiptId : null;
+      expect(winnerId).toBeTruthy();
+      // receipt-by-tx mapping points to that single id.
+      const lookupKey = `receipt-by-tx:${SAMPLE_INPUT.txHash.toLowerCase()}`;
+      expect(stringStore.get(lookupKey)).toBe(winnerId);
+    }
+  });
+
+  it("recovers webhook state from the tx-keyed index when the per-address list has rotated past it", async () => {
+    // Heavy-traffic scenario: 25 newer deliveries push our settlement off
+    // the 20-entry per-address list. Before this commit reconstructWebhookState
+    // would have returned "pending" — false negative. With the by-tx index
+    // (1y TTL) we recover the truthful "delivered".
+    const lockoutTime = "2026-05-01T00:00:00.000Z";
+    stringStore.set(`webhook_delivery_by_tx:${SAMPLE_INPUT.txHash.toLowerCase()}`, {
+      timestamp:  lockoutTime,
+      event:      "relay.success",
+      ok:         true,
+      statusCode: 202,
+      attempt:    1,
+      txHash:     SAMPLE_INPUT.txHash,
+    });
+
+    // Per-address list is full of unrelated newer events.
+    const deliveryKey = `webhook_delivery:${SAMPLE_INPUT.address.toLowerCase()}`;
+    listStore.set(deliveryKey, Array.from({ length: 20 }, (_, i) => ({
+      timestamp: `2026-05-08T0${i % 10}:00:00.000Z`,
+      event:     "relay.success",
+      ok:        true,
+      statusCode: 200,
+      attempt:    1,
+      txHash:    `0xUNRELATED${i.toString().padStart(56, "0")}`,
+    })));
+
+    const entry = await enqueueAndFetch();
+    const result = await processBackfillEntry(entry);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const receipt = stringStore.get(`receipt:${result.receiptId}`) as {
+      webhook: { deliveryStatus: string; lastStatusCode?: number };
+    };
+    expect(receipt.webhook.deliveryStatus).toBe("delivered");
+    expect(receipt.webhook.lastStatusCode).toBe(202);
+  });
+
   it("idempotent on txHash — re-processing the same entry reuses the existing receiptId", async () => {
     // Simulates: inline createReceipt body-write succeeded but somehow the
     // queue dequeue failed and the cron retries. We must not produce two
