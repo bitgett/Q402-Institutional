@@ -33,8 +33,9 @@ const CHAIN_LABELS: Record<string, string> = {
   injective: "Injective EVM",
 };
 
-const POLL_INTERVAL_MS  = 2_500;
-const POLL_MAX_DURATION = 90_000;     // stop polling after 90 s
+const POLL_INTERVAL_MS      = 2_500;
+const POLL_SLOW_INTERVAL_MS = 10_000;     // backoff after 429
+const POLL_MAX_DURATION     = 90_000;     // stop polling after 90 s
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Component
@@ -47,14 +48,17 @@ type VerifyState =
   | { kind: "fail"; reason: string };
 
 export default function ReceiptCard({ initialReceipt }: { initialReceipt: Receipt }) {
-  const [receipt,  setReceipt]  = useState<Receipt>(initialReceipt);
-  const [verify,   setVerify]   = useState<VerifyState>({ kind: "idle" });
-  const [shareTip, setShareTip] = useState<string | null>(null);
+  const [receipt,    setReceipt]    = useState<Receipt>(initialReceipt);
+  const [verify,     setVerify]     = useState<VerifyState>({ kind: "idle" });
+  const [shareTip,   setShareTip]   = useState<string | null>(null);
+  const [pollingNote, setPollingNote] = useState<string | null>(null);
 
   // ── Live webhook delivery polling ─────────────────────────────────────────
   // Stop conditions: terminal status reached, or we've polled past
   // POLL_MAX_DURATION (a misconfigured customer endpoint shouldn't keep
-  // us hammering KV forever).
+  // us hammering KV forever). On 429 (shared NAT bursts) we back off to
+  // the slow-poll interval and surface a tiny "live status delayed"
+  // hint so users don't think the page is frozen.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const status = receipt.webhook.deliveryStatus;
@@ -65,19 +69,25 @@ export default function ReceiptCard({ initialReceipt }: { initialReceipt: Receip
 
     const tick = async () => {
       if (cancelled) return;
+      let nextDelay = POLL_INTERVAL_MS;
       try {
         const res = await fetch(`/api/receipt/${receipt.receiptId}`, { cache: "no-store" });
-        if (res.ok) {
+        if (res.status === 429) {
+          // Shared-IP burst — back off, tell the user, keep going.
+          setPollingNote("Live status delayed — retrying soon.");
+          nextDelay = POLL_SLOW_INTERVAL_MS;
+        } else if (res.ok) {
+          if (pollingNote) setPollingNote(null);
           const next = (await res.json()) as Receipt;
           if (!cancelled) setReceipt(next);
           const ns = next.webhook.deliveryStatus;
           if (ns === "delivered" || ns === "failed") return;
         }
       } catch {
-        /* network blip — keep trying */
+        /* network blip — keep trying at the normal interval */
       }
       if (!cancelled && Date.now() - startedAt < POLL_MAX_DURATION) {
-        setTimeout(tick, POLL_INTERVAL_MS);
+        setTimeout(tick, nextDelay);
       }
     };
 
@@ -163,7 +173,7 @@ export default function ReceiptCard({ initialReceipt }: { initialReceipt: Receip
               gasCostNative={receipt.gasCostNative}
             />
           )}
-          <DeliveryTrace webhook={receipt.webhook} sandbox={receipt.sandbox} />
+          <DeliveryTrace webhook={receipt.webhook} sandbox={receipt.sandbox} pollingNote={pollingNote} />
           <Footer onShare={onShare} shareTip={shareTip} signedAt={receipt.signedAt} />
         </div>
 
@@ -335,10 +345,17 @@ function OnChainProof({
   );
 }
 
-function DeliveryTrace({ webhook, sandbox }: { webhook: Receipt["webhook"]; sandbox: boolean }) {
+function DeliveryTrace({ webhook, sandbox, pollingNote }: {
+  webhook: Receipt["webhook"]; sandbox: boolean; pollingNote: string | null;
+}) {
   return (
     <div className="px-7 py-5 border-t border-white/8">
-      <SectionHeader>Delivery trace</SectionHeader>
+      <div className="flex items-center justify-between mb-3">
+        <SectionHeader>Delivery trace</SectionHeader>
+        {pollingNote && (
+          <span className="text-[10px] text-yellow/70 font-medium">{pollingNote}</span>
+        )}
+      </div>
       <ol className="space-y-2 text-xs">
         {sandbox
           ? <TraceStep state="muted" label="On-chain settlement" detail="Skipped (sandbox)" />

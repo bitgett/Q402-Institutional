@@ -22,8 +22,12 @@ export async function GET(
   req:    NextRequest,
   ctx:    { params: Promise<{ id: string }> },
 ) {
+  // 120/min per IP — calibrated for shared NAT scenarios where several
+  // people in the same office might be staring at the same receipt page
+  // (each page polls every 2.5s during pending). The receipt itself is
+  // tiny so this isn't a meaningful KV-load concern.
   const ip = getClientIP(req);
-  if (!(await rateLimit(ip, "receipt-get", 60, 60))) {
+  if (!(await rateLimit(ip, "receipt-get", 120, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 

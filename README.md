@@ -413,18 +413,22 @@ Requires `apiKey`; validates subscription expiry and key rotation state.
 ```json
 {
   "success":      true,
-  "txHash":       "0x...",
+  "txHash":       "0x9afdc4358da70bc6044cd94835e517dc6dd6f2541f4f321bd81951475bb052a4",
   "blockNumber":  "54540550",
-  "tokenAmount":  "5.0",
+  "tokenAmount":  "5.00",
   "token":        "USDC",
   "chain":        "avax",
   "gasCostNative": 0.00042,
-  "method":       "eip7702"
+  "method":       "eip7702",
+  "receiptId":    "rct_abcdef0123456789abcdef01",
+  "receiptUrl":   "https://q402.quackai.ai/receipt/rct_abcdef0123456789abcdef01"
 }
 ```
 > `tokenAmount` is a **string** (`ethers.formatUnits` output) — not narrowed to a JS `number` so that precision is preserved for 18-decimal tokens (USDT0). Parse as a `string` and re-convert via `BigInt`, or treat as human-readable only.
 
-> method values: `"eip7702"` / `"eip7702_xlayer"` / `"eip3009"`
+> `method` values: `"eip7702"` / `"eip7702_xlayer"` / `"eip7702_stable"` / `"eip3009"`
+
+> `receiptId` / `receiptUrl` (added v1.20): the [Trust Receipt](app/receipt/[id]/page.tsx) for this settlement. **Strong guarantee** — the relay path tries inline twice and falls back to `/api/cron/receipt-backfill` so a successful relay always produces a receipt eventually. Both fields are `null` only in the rare window between the inline failure and the next cron run; in that case the webhook payload's `receiptId`/`receiptUrl` are also `null`, and the dashboard shows "—" until the backfill catches up.
 
 ### GET /api/relay/info
 
@@ -803,6 +807,13 @@ Every successful relay TX dispatches an HMAC-SHA256 signed event to the register
 
 ### Payload
 
+`amount` is a human-readable decimal **string** (matches the SDK input), not
+a number — keeps 18-decimal precision intact across JSON. `receiptId` and
+`receiptUrl` are nullable; relay success is the source of truth and the
+Trust Receipt is the audit layer on top of it. When inline receipt creation
+fails the receipt is queued for backfill (see `/api/cron/receipt-backfill`)
+and these fields can be `null` until the cron run produces it.
+
 ```json
 {
   "event":        "relay.success",
@@ -811,10 +822,12 @@ Every successful relay TX dispatches an HMAC-SHA256 signed event to the register
   "chain":        "avax",
   "from":         "0xUSER",
   "to":           "0xRECIPIENT",
-  "amount":       5.0,
+  "amount":       "5.00",
   "token":        "USDC",
   "gasCostNative": 0.00042,
-  "timestamp":    "2026-04-09T12:00:00.000Z"
+  "timestamp":    "2026-04-09T12:00:00.000Z",
+  "receiptId":    "rct_abcdef0123456789abcdef01",
+  "receiptUrl":   "https://q402.quackai.ai/receipt/rct_abcdef0123456789abcdef01"
 }
 ```
 
@@ -1314,7 +1327,7 @@ A complete compromise of the Vercel runtime now drains at most the operational g
 | Tool | Auth | What it does |
 |---|---|---|
 | `q402_quote` | none | Compare gas + supported tokens across all 7 chains. Read-only — no key, no funds. |
-| `q402_balance` | API key | Verify the configured key, show its tier (live vs sandbox) + remaining quota. |
+| `q402_balance` | API key | Verify the configured key, show its plan tier (live vs sandbox) and the atomic remaining-credit count from `quota:{address}`. |
 | `q402_pay` | API key + signer + flag | Send a gasless USDC or USDT payment. **Sandbox by default**; real on-chain TX requires `Q402_API_KEY` (live tier) + `Q402_PRIVATE_KEY` + `Q402_ENABLE_REAL_PAYMENTS=1`, all set in shell environment, not in the config file (which syncs through iCloud/OneDrive on most setups). Two extra guards on top: per-call max `Q402_MAX_AMOUNT_PER_CALL` (default $5) and an optional recipient allowlist `Q402_ALLOWED_RECIPIENTS`.
 
 The `q402_pay` tool description tells the model to ALWAYS get explicit user confirmation of recipient + amount before invoking, giving four layers of safety before any wei moves: sandbox-default + cap + allowlist + confirm-in-chat.

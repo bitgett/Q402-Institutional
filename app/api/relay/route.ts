@@ -19,6 +19,7 @@ import {
   apiKeyFingerprint,
   type ReceiptMethod,
 } from "@/app/lib/receipt";
+import { queueReceiptBackfill } from "@/app/lib/receipt-backfill";
 import { createHash } from "crypto";
 import { createHmac, randomBytes } from "crypto";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -486,32 +487,39 @@ export async function POST(req: NextRequest) {
       !webhookCfg?.active || !webhookCfg.url ? "not_configured"
     :                                          "pending";
 
+  // The receipt input shape — declared once so inline + retry + backfill
+  // can all reference the same data without copy-paste drift.
+  const apiKeyIdHash = apiKeyFingerprint(apiKey);
+  const apiKeyTier   = keyRecord.plan ?? "starter";
+  const blockNumberInt = typeof result.blockNumber === "bigint"
+                           ? Number(result.blockNumber)
+                           : result.blockNumber;
+  const receiptInput = {
+    txHash:         result.txHash ?? "",
+    blockNumber:    blockNumberInt,
+    chain,
+    payer:          from.toLowerCase(),
+    recipient:      to.toLowerCase(),
+    token,
+    tokenAmount,
+    tokenAmountRaw,
+    method,
+    gasCostNative:  gasCostNative ? gasCostNative.toString() : undefined,
+    apiKeyId:       apiKeyIdHash,
+    apiKeyTier,
+    showTier:       false,
+    sandbox:        isSandbox,
+    webhook: {
+      configured:     !!webhookCfg?.active && !!webhookCfg.url,
+      event:          "relay.success",
+      deliveryStatus: initialDeliveryStatus,
+    },
+  } as const;
+
   let receiptId:  string | null = null;
   let receiptUrl: string | null = null;
   try {
-    const receipt = await createReceipt({
-      txHash:         result.txHash ?? "",
-      blockNumber:    typeof result.blockNumber === "bigint"
-                        ? Number(result.blockNumber)
-                        : result.blockNumber,
-      chain,
-      payer:          from.toLowerCase(),
-      recipient:      to.toLowerCase(),
-      token,
-      tokenAmount,
-      tokenAmountRaw,
-      method,
-      gasCostNative:  gasCostNative ? gasCostNative.toString() : undefined,
-      apiKeyId:       apiKeyFingerprint(apiKey),
-      apiKeyTier:     keyRecord.plan ?? "starter",
-      showTier:       false,
-      sandbox:        isSandbox,
-      webhook: {
-        configured:     !!webhookCfg?.active && !!webhookCfg.url,
-        event:          "relay.success",
-        deliveryStatus: initialDeliveryStatus,
-      },
-    });
+    const receipt = await createReceipt(receiptInput);
     receiptId  = receipt.receiptId;
     // Absolute URL so external integrators can open it as-is (drop into a
     // Slack message, paste into a browser, render in an OG card). Falls
@@ -519,8 +527,42 @@ export async function POST(req: NextRequest) {
     // local dev still produces a clickable link.
     const origin = (process.env.NEXT_PUBLIC_BASE_URL ?? new URL(req.url).origin).replace(/\/$/, "");
     receiptUrl = `${origin}/receipt/${receipt.receiptId}`;
-  } catch (e) {
-    console.error("[relay] receipt creation failed (non-fatal):", e);
+  } catch (firstErr) {
+    console.error("[relay] receipt creation failed, retrying once:", firstErr);
+    // Inline retry once — covers transient KV blips before falling back to
+    // the queued backfill. Two attempts catches the bulk of intermittent
+    // failures without changing the response shape.
+    try {
+      const receipt = await createReceipt(receiptInput);
+      receiptId  = receipt.receiptId;
+      const origin = (process.env.NEXT_PUBLIC_BASE_URL ?? new URL(req.url).origin).replace(/\/$/, "");
+      receiptUrl = `${origin}/receipt/${receipt.receiptId}`;
+    } catch (secondErr) {
+      console.error("[relay] receipt retry also failed — queuing backfill:", secondErr);
+      // Queue for the cron-driven backfill so the receipt still gets
+      // created eventually. Fire-and-forget at this site: we already lost
+      // the inline path, so failing the queue write would just compound
+      // the problem. The cron run will read the existing on-chain state
+      // and produce the same canonical receipt, just later.
+      queueReceiptBackfill({
+        txHash:            result.txHash ?? "",
+        address:           keyRecord.address,
+        chain,
+        payer:             from.toLowerCase(),
+        recipient:         to.toLowerCase(),
+        token,
+        tokenAmount,
+        tokenAmountRaw,
+        method,
+        gasCostNative:     gasCostNative ? gasCostNative.toString() : undefined,
+        apiKeyTier,
+        apiKeyId:          apiKeyIdHash,
+        sandbox:           isSandbox,
+        webhookConfigured: !!webhookCfg?.active && !!webhookCfg.url,
+        blockNumber:       blockNumberInt,
+        relayedAt,
+      }).catch(qErr => console.error("[relay] receipt backfill enqueue failed:", qErr));
+    }
   }
 
   // ── 11. Record the TX (including receipt id for dashboard link) ──────────
