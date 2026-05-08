@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/usage-alert",
       "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/cron/receipt-backfill",
+      "schedule": "0 11 * * *"
     }
   ]
 }
