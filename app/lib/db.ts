@@ -67,6 +67,7 @@ export interface RelayedTx {
   gasCostNative: number; // gas used in native token (BNB/ETH/AVAX/OKB/USDT0/MNT/INJ)
   relayTxHash: string;   // on-chain tx hash
   relayedAt: string;
+  receiptId?: string;    // Trust Receipt id (rct_…), populated when receipt created successfully
 }
 
 // ── Key helpers ──────────────────────────────────────────────────────────────
