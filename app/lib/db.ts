@@ -67,6 +67,7 @@ export interface RelayedTx {
   gasCostNative: number; // gas used in native token (BNB/ETH/AVAX/OKB/USDT0/MNT/INJ)
   relayTxHash: string;   // on-chain tx hash
   relayedAt: string;
+  receiptId?: string;    // Trust Receipt id (rct_…), populated when receipt created successfully
 }
 
 // ── Key helpers ──────────────────────────────────────────────────────────────
@@ -407,6 +408,66 @@ export async function recordRelayedTx(address: string, tx: RelayedTx) {
 /** @deprecated Use getRelayedTxs with months param */
 export async function getGasUsed(address: string): Promise<RelayedTx[]> {
   return getRelayedTxs(address);
+}
+
+/**
+ * Patch the receiptId of an existing RelayedTx history row. Used by the
+ * receipt backfill cron after it successfully creates the deferred receipt:
+ * the original record was written with receiptId=undefined (because inline
+ * createReceipt failed), and the dashboard "View Receipt" link is keyed on
+ * that field. Without this patch the dashboard would forever show "—" for
+ * that row even after the backfill caught up.
+ *
+ * Looks up the right monthly key via `relayedAt` (so we don't have to scan
+ * every month), with a one-month fallback for clock skew. Tries the LIST
+ * format first (kv.lset by index), falls back to legacy JSON-array format.
+ * Returns true if the patch landed, false if the row couldn't be located —
+ * the caller logs but doesn't fail; the receipt itself is the source of
+ * truth and the dashboard column is cosmetic.
+ */
+export async function patchRelayedTxReceiptId(
+  address:     string,
+  txHash:      string,
+  receiptId:   string,
+  relayedAt?:  string,
+): Promise<boolean> {
+  const targetTxLc = txHash.toLowerCase();
+  // Primary: the month containing relayedAt. Fallback: the immediately
+  // preceding month — covers the rare case where backfill ran across a
+  // month boundary or the entry's relayedAt is missing.
+  const months = relayedAt
+    ? [ym(new Date(relayedAt)), ym(new Date(new Date(relayedAt).getTime() - 30 * 24 * 60 * 60 * 1000))]
+    : recentMonths(2);
+
+  for (const month of months) {
+    const key = relayTxMonthKey(address, month);
+
+    // LIST path
+    try {
+      const list = await kv.lrange<RelayedTx>(key, 0, -1);
+      const idx = list.findIndex(tx => (tx.relayTxHash ?? "").toLowerCase() === targetTxLc);
+      if (idx >= 0) {
+        const updated = { ...list[idx], receiptId };
+        // @vercel/kv exposes the underlying Upstash command; lset is
+        // O(N) but our lists are bounded by MAX_TX_HISTORY anyway.
+        await (kv as unknown as { lset: (k: string, i: number, v: unknown) => Promise<unknown> })
+          .lset(key, idx, updated);
+        return true;
+      }
+    } catch { /* WRONGTYPE — fall through to JSON-array path */ }
+
+    // Legacy JSON-array fallback
+    try {
+      const arr = (await kv.get<RelayedTx[]>(key)) ?? [];
+      const idx = arr.findIndex(tx => (tx.relayTxHash ?? "").toLowerCase() === targetTxLc);
+      if (idx >= 0) {
+        arr[idx] = { ...arr[idx], receiptId };
+        await kv.set(key, arr);
+        return true;
+      }
+    } catch { /* nothing to patch in this month */ }
+  }
+  return false;
 }
 
 // ── Atomic TX credit counter ──────────────────────────────────────────────────

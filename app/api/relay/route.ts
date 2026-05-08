@@ -13,6 +13,14 @@ import {
   refundCredit,
   recordWebhookDelivery,
 } from "@/app/lib/db";
+import {
+  createReceipt,
+  updateReceiptWebhookStatus,
+  apiKeyFingerprint,
+  type ReceiptMethod,
+} from "@/app/lib/receipt";
+import { queueReceiptBackfill } from "@/app/lib/receipt-backfill";
+import { createHash } from "crypto";
 import { createHmac, randomBytes } from "crypto";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { validateWebhookUrl } from "@/app/lib/webhook-validator";
@@ -454,10 +462,120 @@ export async function POST(req: NextRequest) {
   // ── 9. Gas cost — computed directly from the receipt by relayer.ts ───────
   const gasCostNative = result.gasCostNative ?? 0;
 
-  // ── 10. Record the TX (including actual gas cost) ────────────────────────
-  const tokenAmount = ethers.formatUnits(amount, tokenCfg.decimals);
+  // ── 10. Resolve common settlement fields ─────────────────────────────────
+  const tokenAmount    = ethers.formatUnits(amount, tokenCfg.decimals);
+  const tokenAmountRaw = amount.toString();
+  const relayedAt      = new Date().toISOString();
 
-  const relayedAt = new Date().toISOString();
+  // Webhook config fetched once and reused below for both receipt's initial
+  // delivery state and the actual dispatch. Sandbox is excluded entirely
+  // (Q402-SEC-002).
+  const webhookCfg = isSandbox ? null : await getWebhookConfig(keyRecord.address);
+
+  // ── 10a. Trust Receipt — settlement record + cryptographic proof ─────────
+  // Created BEFORE recording the TX so we can stamp the receipt id onto the
+  // RelayedTx history row (powers the dashboard's "View Receipt" link). If
+  // signing/KV fails we degrade gracefully — the on-chain TX already
+  // succeeded and the response should still confirm settlement.
+  const method: ReceiptMethod =
+      isStableEIP7702 ? "eip7702_stable"
+    : isXLayerEIP7702 ? "eip7702_xlayer"
+    : isXLayerEIP3009 ? "eip3009"
+    :                   "eip7702";
+
+  const initialDeliveryStatus =
+      !webhookCfg?.active || !webhookCfg.url ? "not_configured"
+    :                                          "pending";
+
+  // The receipt input shape — declared once so inline + retry + backfill
+  // can all reference the same data without copy-paste drift.
+  const apiKeyIdHash = apiKeyFingerprint(apiKey);
+  const apiKeyTier   = keyRecord.plan ?? "starter";
+  const blockNumberInt = typeof result.blockNumber === "bigint"
+                           ? Number(result.blockNumber)
+                           : result.blockNumber;
+  const receiptInput = {
+    txHash:         result.txHash ?? "",
+    blockNumber:    blockNumberInt,
+    chain,
+    payer:          from.toLowerCase(),
+    recipient:      to.toLowerCase(),
+    token,
+    tokenAmount,
+    tokenAmountRaw,
+    method,
+    gasCostNative:  gasCostNative ? gasCostNative.toString() : undefined,
+    apiKeyId:       apiKeyIdHash,
+    apiKeyTier,
+    showTier:       false,
+    sandbox:        isSandbox,
+    webhook: {
+      configured:     !!webhookCfg?.active && !!webhookCfg.url,
+      event:          "relay.success",
+      deliveryStatus: initialDeliveryStatus,
+    },
+  } as const;
+
+  let receiptId:  string | null = null;
+  let receiptUrl: string | null = null;
+  try {
+    const receipt = await createReceipt(receiptInput);
+    receiptId  = receipt.receiptId;
+    // Absolute URL so external integrators can open it as-is (drop into a
+    // Slack message, paste into a browser, render in an OG card). Falls
+    // back to the request origin when NEXT_PUBLIC_BASE_URL isn't set so
+    // local dev still produces a clickable link.
+    const origin = (process.env.NEXT_PUBLIC_BASE_URL ?? new URL(req.url).origin).replace(/\/$/, "");
+    receiptUrl = `${origin}/receipt/${receipt.receiptId}`;
+  } catch (firstErr) {
+    console.error("[relay] receipt creation failed, retrying once:", firstErr);
+    // Inline retry once — covers transient KV blips before falling back to
+    // the queued backfill. Two attempts catches the bulk of intermittent
+    // failures without changing the response shape.
+    try {
+      const receipt = await createReceipt(receiptInput);
+      receiptId  = receipt.receiptId;
+      const origin = (process.env.NEXT_PUBLIC_BASE_URL ?? new URL(req.url).origin).replace(/\/$/, "");
+      receiptUrl = `${origin}/receipt/${receipt.receiptId}`;
+    } catch (secondErr) {
+      console.error("[relay] receipt retry also failed — queuing backfill:", secondErr);
+      // Queue for the cron-driven backfill so the receipt still gets
+      // created eventually. We AWAIT the enqueue: the response is about
+      // to return, so a fire-and-forget here can be silently dropped by
+      // the serverless runtime mid-flight, which would break the
+      // "every payment gets a receipt" guarantee. KV SADD + SET is two
+      // round-trips, ~50ms; worth paying once per (already-rare)
+      // double-failure case.
+      try {
+        await queueReceiptBackfill({
+          txHash:            result.txHash ?? "",
+          address:           keyRecord.address,
+          chain,
+          payer:             from.toLowerCase(),
+          recipient:         to.toLowerCase(),
+          token,
+          tokenAmount,
+          tokenAmountRaw,
+          method,
+          gasCostNative:     gasCostNative ? gasCostNative.toString() : undefined,
+          apiKeyTier,
+          apiKeyId:          apiKeyIdHash,
+          sandbox:           isSandbox,
+          webhookConfigured: !!webhookCfg?.active && !!webhookCfg.url,
+          blockNumber:       blockNumberInt,
+          relayedAt,
+        });
+      } catch (qErr) {
+        // KV is genuinely unreachable here — the inline path AND the
+        // queue write both failed. The on-chain TX is still real; we
+        // log loudly but don't fail the response (failing here would
+        // tell the caller the relay didn't happen, which is wrong).
+        console.error("[relay] receipt backfill enqueue failed (KV unreachable):", qErr);
+      }
+    }
+  }
+
+  // ── 11. Record the TX (including receipt id for dashboard link) ──────────
   // Fire-and-forget — on-chain TX already succeeded; don't block response on KV write
   recordRelayedTx(keyRecord.address, {
     apiKey,
@@ -470,6 +588,7 @@ export async function POST(req: NextRequest) {
     gasCostNative,
     relayTxHash:  result.txHash ?? "",
     relayedAt,
+    receiptId:    receiptId ?? undefined,
   }).catch(e => console.error("[relay] TX record failed (non-fatal):", e));
 
   // Sync subscription.quotaBonus for dashboard display (fire-and-forget, non-critical).
@@ -481,20 +600,33 @@ export async function POST(req: NextRequest) {
     }).catch(e => console.error("[relay] quotaBonus display sync failed (non-fatal):", e));
   }
 
-  // ── 11. Webhook dispatch (non-blocking, LIVE only) ───────────────────────
-  // Q402-SEC-002: sandbox relays are simulated — no on-chain TX exists.
-  // Emitting HMAC-signed `relay.success` events for sandbox calls let a
-  // downstream consumer that only validates the signature mistake a
-  // fabricated event for a real settlement. Skip webhook dispatch entirely
-  // for sandbox so sandbox traffic cannot be used to forge trusted events.
-  const webhookCfg = isSandbox ? null : await getWebhookConfig(keyRecord.address);
+  // ── 11b. Webhook dispatch (non-blocking, LIVE only) ──────────────────────
+
   if (webhookCfg?.active && webhookCfg.url) {
     // SSRF guard — shared ruleset with /api/webhook save + test paths.
     // Re-check at dispatch time so legacy rows stored under older rules
     // can't be used to pivot into internal networks.
     const webhookSafe = validateWebhookUrl(webhookCfg.url) === null;
 
+    if (!webhookSafe && receiptId) {
+      // Unsafe URL — dispatch is being skipped. Flip the receipt's webhook
+      // state to a terminal "failed" so it doesn't sit in "pending" forever
+      // and confuse ops debugging. The receipt's initial state was set to
+      // pending under the assumption dispatch would happen; SSRF blocking
+      // means it won't, so the receipt should reflect that.
+      updateReceiptWebhookStatus(receiptId, {
+        deliveryStatus: "failed",
+        attempts:       0,
+        lastError:      "Webhook URL blocked by SSRF guard",
+      }).catch(e => console.error("[relay] receipt webhook update (blocked) failed:", e));
+    }
+
     if (webhookSafe) {
+      // receiptId + receiptUrl give ops/support a one-click path from the
+      // customer's webhook log entry to the human-verifiable receipt page.
+      // Both are nullable when receipt creation failed upstream so the
+      // webhook still fires (relay.success is the source of truth, the
+      // receipt is the audit layer on top of it).
       const payload = JSON.stringify({
         event:        "relay.success",
         sandbox:      isSandbox,
@@ -506,6 +638,8 @@ export async function POST(req: NextRequest) {
         token,
         gasCostNative,
         timestamp:    relayedAt,
+        receiptId,
+        receiptUrl,
       });
       const hmac = createHmac("sha256", webhookCfg.secret).update(payload).digest("hex");
       const webhookUrl     = webhookCfg.url;
@@ -516,6 +650,13 @@ export async function POST(req: NextRequest) {
       // response — `setTimeout`/fire-and-forget isn't guaranteed to survive the
       // serverless shutdown, which was silently dropping retries 2 and 3.
       // Delivery result is recorded in KV for visibility.
+      // SHA256 of the payload + HMAC signature, stamped onto the receipt's
+      // webhook trace. Lets a customer cross-check the bytes their endpoint
+      // saw against the bytes Q402 dispatched, without re-running HMAC.
+      const payloadSha256   = createHash("sha256").update(payload).digest("hex");
+      const signatureSha256 = createHash("sha256").update(hmac).digest("hex");
+      const trackedReceiptId = receiptId; // capture in closure scope
+
       const dispatchWebhook = async () => {
         const DELAYS = [0, 1_000, 3_000];
         let lastStatus: number | undefined;
@@ -535,10 +676,21 @@ export async function POST(req: NextRequest) {
           });
           lastStatus = res.status;
           if (res.ok) {
+            const deliveredAt = new Date().toISOString();
             recordWebhookDelivery(webhookAddr, {
-              timestamp: new Date().toISOString(), event: "relay.success",
+              timestamp: deliveredAt, event: "relay.success",
               ok: true, statusCode: res.status, attempt: i + 1,
             }).catch(() => {});
+            if (trackedReceiptId) {
+              updateReceiptWebhookStatus(trackedReceiptId, {
+                deliveryStatus:  "delivered",
+                attempts:        i + 1,
+                lastStatusCode:  res.status,
+                deliveredAt,
+                payloadSha256,
+                signatureSha256,
+              }).catch(e => console.error("[relay] receipt webhook update (delivered) failed:", e));
+            }
             return;
           }
           lastError = res.error;
@@ -548,6 +700,16 @@ export async function POST(req: NextRequest) {
           timestamp: new Date().toISOString(), event: "relay.success",
           ok: false, statusCode: lastStatus, error: lastError, attempt: DELAYS.length,
         }).catch(() => {});
+        if (trackedReceiptId) {
+          updateReceiptWebhookStatus(trackedReceiptId, {
+            deliveryStatus:  "failed",
+            attempts:        DELAYS.length,
+            lastStatusCode:  lastStatus,
+            lastError,
+            payloadSha256,
+            signatureSha256,
+          }).catch(e => console.error("[relay] receipt webhook update (failed) failed:", e));
+        }
       };
       after(dispatchWebhook);
     } // end webhookSafe
@@ -561,6 +723,8 @@ export async function POST(req: NextRequest) {
     token,
     chain,
     gasCostNative,
-    method:      isStableEIP7702 ? "eip7702_stable" : isXLayerEIP7702 ? "eip7702_xlayer" : isXLayerEIP3009 ? "eip3009" : "eip7702",
+    method,
+    receiptId,
+    receiptUrl,
   });
 }

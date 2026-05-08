@@ -55,6 +55,7 @@ interface RelayedTx {
   apiKey: string; address: string; chain: string;
   fromUser: string; toUser: string; tokenAmount: number | string; tokenSymbol: string;
   gasCostNative: number; relayTxHash: string; relayedAt: string;
+  receiptId?: string;
 }
 interface GasDeposit { chain: string; token: string; amount: number; txHash: string; depositedAt: string; }
 
@@ -1137,14 +1138,14 @@ export default function DashboardPage() {
                 <table className="w-full min-w-[640px]">
                   <thead>
                     <tr className="border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-                      {["Date", "Chain", "From → To", "Amount", "Tx Hash", "Status"].map(h => (
+                      {["Date", "Chain", "From → To", "Amount", "Tx Hash", "Receipt", "Status"].map(h => (
                         <th key={h} className="text-left text-xs text-white/25 font-normal px-5 py-3">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {relayedTxs.length === 0 ? (
-                      <tr><td colSpan={6} className="px-6 py-12 text-center text-white/25 text-sm">No transactions yet</td></tr>
+                      <tr><td colSpan={7} className="px-6 py-12 text-center text-white/25 text-sm">No transactions yet</td></tr>
                     ) : [...relayedTxs].reverse().map((tx, i) => {
                       const meta = CHAIN_META[tx.chain];
                       return (
@@ -1164,6 +1165,16 @@ export default function DashboardPage() {
                             {Number(tx.tokenAmount).toFixed(2)} <span className="text-white/30">{tx.tokenSymbol}</span>
                           </td>
                           <td className="px-5 py-4 font-mono text-xs text-white/30">{shortHash(tx.relayTxHash)}</td>
+                          <td className="px-5 py-4 text-xs">
+                            {tx.receiptId ? (
+                              <a href={`/receipt/${tx.receiptId}`} target="_blank" rel="noopener noreferrer"
+                                 className="text-yellow/80 hover:text-yellow transition">
+                                View ↗
+                              </a>
+                            ) : (
+                              <span className="text-white/20">—</span>
+                            )}
+                          </td>
                           <td className="px-5 py-4">
                             <span className="text-xs text-green-400 bg-green-400/8 border border-green-400/20 px-2.5 py-1 rounded-full">Success</span>
                           </td>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiKeyRecord, getSubscription } from "@/app/lib/db";
+import { getApiKeyRecord, getSubscription, getQuotaCredits } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
@@ -45,10 +45,16 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Atomic remaining credits — populated when q402_balance MCP tool calls
+  // through. Sandbox keys share the same counter logic as live keys; the
+  // call is cheap (single KV GET) so we always compute it.
+  const remainingCredits = await getQuotaCredits(record.address);
+
   return NextResponse.json({
     valid: true,
     address: record.address,
     plan: record.plan,
     createdAt: record.createdAt,
+    remainingCredits,
   });
 }
