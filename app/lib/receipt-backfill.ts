@@ -19,6 +19,7 @@
 
 import { kv } from "@vercel/kv";
 import { createReceipt } from "@/app/lib/receipt";
+import { patchRelayedTxReceiptId } from "@/app/lib/db";
 import type { ChainKey } from "@/app/lib/relayer";
 import type { ReceiptMethod } from "@/app/lib/receipt-shared";
 
@@ -170,6 +171,27 @@ export async function processBackfillEntry(entry: BackfillEntry): Promise<Proces
                           : undefined,
       },
     });
+
+    // Patch the existing RelayedTx history row so the dashboard's
+    // "View Receipt" link starts working for this tx. The original row
+    // was written with receiptId=undefined when inline createReceipt
+    // failed; without this patch the dashboard would forever show "—"
+    // even after the receipt itself exists. Best-effort — the receipt
+    // is the source of truth, the column is cosmetic.
+    const patched = await patchRelayedTxReceiptId(
+      entry.address,
+      entry.txHash,
+      receipt.receiptId,
+      entry.relayedAt,
+    ).catch((e: unknown) => {
+      console.error(`[receipt-backfill] tx-history patch failed for ${entry.txHash}:`, e);
+      return false;
+    });
+    if (!patched) {
+      console.warn(
+        `[receipt-backfill] tx-history row for ${entry.txHash} not found — dashboard will not show the receipt link until the row ages out`,
+      );
+    }
 
     await dequeue(entry.txHash);
     return { ok: true, receiptId: receipt.receiptId };

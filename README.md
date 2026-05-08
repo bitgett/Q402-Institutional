@@ -428,7 +428,7 @@ Requires `apiKey`; validates subscription expiry and key rotation state.
 
 > `method` values: `"eip7702"` / `"eip7702_xlayer"` / `"eip7702_stable"` / `"eip3009"`
 
-> `receiptId` / `receiptUrl` (added v1.20): the [Trust Receipt](app/receipt/[id]/page.tsx) for this settlement. **Strong guarantee** — the relay path tries inline twice and falls back to `/api/cron/receipt-backfill` so a successful relay always produces a receipt eventually. Both fields are `null` only in the rare window between the inline failure and the next cron run; in that case the webhook payload's `receiptId`/`receiptUrl` are also `null`, and the dashboard shows "—" until the backfill catches up.
+> `receiptId` / `receiptUrl` (added v1.20): the [Trust Receipt](app/receipt/[id]/page.tsx) for this settlement. **Strong guarantee** — the relay path tries inline twice (synchronous retries) and `await`s the backfill enqueue before responding, so the receipt is reachable either via the inline path or via the next `/api/cron/receipt-backfill` run. Both fields are `null` only in the window between the inline failure and the next cron run; in that case the webhook payload's `receiptId`/`receiptUrl` are also `null` and the dashboard transactions row shows "—". When the cron run materializes the receipt it also calls `patchRelayedTxReceiptId(...)` to back-fill the dashboard row's `receiptId`, so the "View Receipt" link appears retroactively without a manual refresh story.
 
 ### GET /api/relay/info
 

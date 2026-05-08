@@ -15,6 +15,11 @@ const stringStore = new Map<string, unknown>();
 const setStore    = new Map<string, Set<string>>();
 const ttlStore    = new Map<string, number>();
 
+// LIST + HASH stores so the recordRelayedTx + patchRelayedTxReceiptId
+// path can round-trip through the same in-memory KV mock.
+const listStore = new Map<string, unknown[]>();
+const hashStore = new Map<string, Record<string, number>>();
+
 const mockKv = vi.hoisted(() => ({
   set: vi.fn(async (key: string, value: unknown, opts?: { ex?: number; nx?: boolean }) => {
     if (opts?.nx && stringStore.has(key)) return null;
@@ -43,6 +48,27 @@ const mockKv = vi.hoisted(() => ({
   }),
   smembers: vi.fn(async (key: string) => Array.from(setStore.get(key) ?? [])),
   expire: vi.fn(async () => 1),
+  rpush: vi.fn(async (key: string, value: unknown) => {
+    const list = listStore.get(key) ?? [];
+    list.push(value);
+    listStore.set(key, list);
+    return list.length;
+  }),
+  lrange: vi.fn(async (key: string) => listStore.get(key) ?? []),
+  ltrim: vi.fn(async () => "OK"),
+  lset:  vi.fn(async (key: string, index: number, value: unknown) => {
+    const list = listStore.get(key);
+    if (!list || index < 0 || index >= list.length) throw new Error("ERR index out of range");
+    list[index] = value;
+    return "OK";
+  }),
+  hincrbyfloat: vi.fn(async (key: string, field: string, by: number) => {
+    const h = hashStore.get(key) ?? {};
+    h[field] = (h[field] ?? 0) + by;
+    hashStore.set(key, h);
+    return h[field];
+  }),
+  hgetall: vi.fn(async (key: string) => hashStore.get(key) ?? null),
 }));
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
@@ -57,6 +83,7 @@ import {
   type BackfillInput,
   type BackfillEntry,
 } from "@/app/lib/receipt-backfill";
+import { recordRelayedTx, patchRelayedTxReceiptId } from "@/app/lib/db";
 
 const TEST_RELAYER_KEY     = "0x" + "33".repeat(32);
 const TEST_RELAYER_ADDRESS = new Wallet(TEST_RELAYER_KEY).address.toLowerCase();
@@ -83,6 +110,8 @@ beforeEach(() => {
   stringStore.clear();
   setStore.clear();
   ttlStore.clear();
+  listStore.clear();
+  hashStore.clear();
   vi.clearAllMocks();
   process.env.RELAYER_PRIVATE_KEY = TEST_RELAYER_KEY;
 });
@@ -195,6 +224,48 @@ describe("processBackfillEntry", () => {
     expect((await listBackfillQueue())).toHaveLength(1);
   });
 
+  it("patches the matching RelayedTx history row with the new receiptId", async () => {
+    // Pre-populate the dashboard's tx history list with a row that has
+    // no receiptId — exactly the state the relay path leaves it in
+    // when inline createReceipt fails.
+    await recordRelayedTx(SAMPLE_INPUT.address, {
+      apiKey:        "q402_live_xxx",
+      address:       SAMPLE_INPUT.address,
+      chain:         SAMPLE_INPUT.chain,
+      fromUser:      SAMPLE_INPUT.payer,
+      toUser:        SAMPLE_INPUT.recipient,
+      tokenAmount:   SAMPLE_INPUT.tokenAmount,
+      tokenSymbol:   SAMPLE_INPUT.token,
+      gasCostNative: 0.0001,
+      relayTxHash:   SAMPLE_INPUT.txHash,
+      relayedAt:     SAMPLE_INPUT.relayedAt,
+      // Note: NO receiptId — this is the state we want backfill to repair
+    });
+
+    // Now run a backfill: queue + process
+    const entry = await enqueueAndFetch();
+    const result = await processBackfillEntry(entry);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // The history list row should now carry the new receiptId
+    const ymOf = (d: string) => `${new Date(d).getUTCFullYear()}-${String(new Date(d).getUTCMonth() + 1).padStart(2, "0")}`;
+    const monthKey = `relaytx:${SAMPLE_INPUT.address.toLowerCase()}:${ymOf(SAMPLE_INPUT.relayedAt)}`;
+    const list = listStore.get(monthKey) as Array<{ relayTxHash: string; receiptId?: string }>;
+    expect(list).toBeDefined();
+    expect(list).toHaveLength(1);
+    expect(list[0].receiptId).toBe(result.receiptId);
+  });
+
+  it("backfill still succeeds (returns ok) even if no matching tx history row exists to patch", async () => {
+    // No recordRelayedTx call — patch will return false, but the receipt
+    // itself is the source of truth. Backfill must not fail just because
+    // the cosmetic dashboard link can't be wired.
+    const entry = await enqueueAndFetch();
+    const result = await processBackfillEntry(entry);
+    expect(result.ok).toBe(true);
+  });
+
   it("gives up after MAX_ATTEMPTS and removes the entry", async () => {
     const entry = await enqueueAndFetch();
     // Sabotage signing so every attempt throws.
@@ -215,5 +286,60 @@ describe("processBackfillEntry", () => {
     expect((await listBackfillQueue())).toHaveLength(0);
     void entry;
     void ENTRY_PREFIX;
+  });
+});
+
+// ── patchRelayedTxReceiptId ──────────────────────────────────────────────────
+
+describe("patchRelayedTxReceiptId", () => {
+  const ADDR    = "0x000000000000000000000000000000000000beef";
+  const TX      = "0x" + "ab".repeat(32);
+  const NEW_ID  = "rct_" + "1".repeat(24);
+
+  async function planRow(receiptId?: string): Promise<void> {
+    await recordRelayedTx(ADDR, {
+      apiKey:        "q402_live_xxx",
+      address:       ADDR,
+      chain:         "bnb",
+      fromUser:      ADDR,
+      toUser:        "0x000000000000000000000000000000000000feed",
+      tokenAmount:   "5.00",
+      tokenSymbol:   "USDT",
+      gasCostNative: 0.0001,
+      relayTxHash:   TX,
+      relayedAt:     new Date().toISOString(),
+      receiptId,
+    });
+  }
+
+  it("rewrites the matching row's receiptId", async () => {
+    await planRow();
+    const ok = await patchRelayedTxReceiptId(ADDR, TX, NEW_ID, new Date().toISOString());
+    expect(ok).toBe(true);
+    const monthKey = Array.from(listStore.keys()).find(k => k.startsWith(`relaytx:${ADDR.toLowerCase()}`))!;
+    const list = listStore.get(monthKey) as Array<{ receiptId?: string }>;
+    expect(list[0].receiptId).toBe(NEW_ID);
+  });
+
+  it("returns false when the txHash is not in any recent month", async () => {
+    await planRow();
+    const ok = await patchRelayedTxReceiptId(ADDR, "0xunknown", NEW_ID, new Date().toISOString());
+    expect(ok).toBe(false);
+  });
+
+  it("is idempotent — re-patching the same row with the same id is a no-op", async () => {
+    await planRow();
+    expect(await patchRelayedTxReceiptId(ADDR, TX, NEW_ID, new Date().toISOString())).toBe(true);
+    expect(await patchRelayedTxReceiptId(ADDR, TX, NEW_ID, new Date().toISOString())).toBe(true);
+    const monthKey = Array.from(listStore.keys()).find(k => k.startsWith(`relaytx:${ADDR.toLowerCase()}`))!;
+    const list = listStore.get(monthKey) as Array<{ receiptId?: string }>;
+    expect(list).toHaveLength(1);  // didn't append a duplicate
+    expect(list[0].receiptId).toBe(NEW_ID);
+  });
+
+  it("matches case-insensitively on txHash", async () => {
+    await planRow();
+    const ok = await patchRelayedTxReceiptId(ADDR, TX.toUpperCase(), NEW_ID, new Date().toISOString());
+    expect(ok).toBe(true);
   });
 });

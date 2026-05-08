@@ -540,28 +540,38 @@ export async function POST(req: NextRequest) {
     } catch (secondErr) {
       console.error("[relay] receipt retry also failed — queuing backfill:", secondErr);
       // Queue for the cron-driven backfill so the receipt still gets
-      // created eventually. Fire-and-forget at this site: we already lost
-      // the inline path, so failing the queue write would just compound
-      // the problem. The cron run will read the existing on-chain state
-      // and produce the same canonical receipt, just later.
-      queueReceiptBackfill({
-        txHash:            result.txHash ?? "",
-        address:           keyRecord.address,
-        chain,
-        payer:             from.toLowerCase(),
-        recipient:         to.toLowerCase(),
-        token,
-        tokenAmount,
-        tokenAmountRaw,
-        method,
-        gasCostNative:     gasCostNative ? gasCostNative.toString() : undefined,
-        apiKeyTier,
-        apiKeyId:          apiKeyIdHash,
-        sandbox:           isSandbox,
-        webhookConfigured: !!webhookCfg?.active && !!webhookCfg.url,
-        blockNumber:       blockNumberInt,
-        relayedAt,
-      }).catch(qErr => console.error("[relay] receipt backfill enqueue failed:", qErr));
+      // created eventually. We AWAIT the enqueue: the response is about
+      // to return, so a fire-and-forget here can be silently dropped by
+      // the serverless runtime mid-flight, which would break the
+      // "every payment gets a receipt" guarantee. KV SADD + SET is two
+      // round-trips, ~50ms; worth paying once per (already-rare)
+      // double-failure case.
+      try {
+        await queueReceiptBackfill({
+          txHash:            result.txHash ?? "",
+          address:           keyRecord.address,
+          chain,
+          payer:             from.toLowerCase(),
+          recipient:         to.toLowerCase(),
+          token,
+          tokenAmount,
+          tokenAmountRaw,
+          method,
+          gasCostNative:     gasCostNative ? gasCostNative.toString() : undefined,
+          apiKeyTier,
+          apiKeyId:          apiKeyIdHash,
+          sandbox:           isSandbox,
+          webhookConfigured: !!webhookCfg?.active && !!webhookCfg.url,
+          blockNumber:       blockNumberInt,
+          relayedAt,
+        });
+      } catch (qErr) {
+        // KV is genuinely unreachable here — the inline path AND the
+        // queue write both failed. The on-chain TX is still real; we
+        // log loudly but don't fail the response (failing here would
+        // tell the caller the relay didn't happen, which is wrong).
+        console.error("[relay] receipt backfill enqueue failed (KV unreachable):", qErr);
+      }
     }
   }
 
