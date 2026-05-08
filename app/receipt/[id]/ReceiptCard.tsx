@@ -77,7 +77,11 @@ export default function ReceiptCard({ initialReceipt }: { initialReceipt: Receip
           setPollingNote("Live status delayed — retrying soon.");
           nextDelay = POLL_SLOW_INTERVAL_MS;
         } else if (res.ok) {
-          if (pollingNote) setPollingNote(null);
+          // Unconditional clear — if we read `pollingNote` from closure
+          // here it's stale (the effect captures the initial null). Always
+          // calling the setter is closure-safe and React de-dupes a
+          // null→null transition automatically.
+          setPollingNote(null);
           const next = (await res.json()) as Receipt;
           if (!cancelled) setReceipt(next);
           const ns = next.webhook.deliveryStatus;
