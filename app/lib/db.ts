@@ -46,6 +46,8 @@ export interface WebhookDelivery {
   statusCode?: number;
   error?: string;
   attempt: number;  // 1-based attempt number that succeeded or final attempt on failure
+  txHash?: string;  // on-chain tx the dispatch was for — lets receipt-backfill
+                    // recover the actual delivery state instead of guessing
 }
 
 export interface GasDeposit {

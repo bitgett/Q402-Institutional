@@ -88,6 +88,23 @@ export async function signReceiptFields(fields: ReceiptSignedFields): Promise<{
 export async function createReceipt(input: Omit<Receipt,
   | "receiptId" | "createdAt" | "signature" | "signedBy" | "signedAt"
 >): Promise<Receipt> {
+  // Idempotency on txHash — if a receipt already exists for this settlement,
+  // return it unchanged instead of producing a duplicate. Closes the
+  // "one tx → two receipts" race that opens up when the inline body write
+  // succeeds but the surrounding bookkeeping (RelayedTx record, queue
+  // dequeue, response delivery) fails and a retry/backfill path tries again.
+  // The receipt-by-tx index is the canonical lookup; if it points to a
+  // present body, we're done. If the index points to something missing
+  // (TTL'd, manually purged), we fall through and re-create — accepting the
+  // very rare orphan over the more common silent loss.
+  if (input.txHash) {
+    const existingId = await getReceiptIdByTx(input.txHash);
+    if (existingId) {
+      const existing = await getReceipt(existingId);
+      if (existing) return existing;
+    }
+  }
+
   const receiptId = newReceiptId();
   const createdAt = new Date().toISOString();
 

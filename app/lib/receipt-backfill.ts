@@ -19,9 +19,9 @@
 
 import { kv } from "@vercel/kv";
 import { createReceipt } from "@/app/lib/receipt";
-import { patchRelayedTxReceiptId } from "@/app/lib/db";
+import { patchRelayedTxReceiptId, getWebhookDeliveries } from "@/app/lib/db";
 import type { ChainKey } from "@/app/lib/relayer";
-import type { ReceiptMethod } from "@/app/lib/receipt-shared";
+import type { ReceiptMethod, ReceiptWebhook } from "@/app/lib/receipt-shared";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -122,6 +122,57 @@ async function dequeue(txHash: string): Promise<void> {
   ]);
 }
 
+/**
+ * Recover the webhook delivery state for a backfilled receipt from the
+ * audit log. recordWebhookDelivery() stamps txHash on every entry so we
+ * can find the matching dispatch attempt and rebuild a truthful trace
+ * (delivered / failed / pending) instead of always marking it "failed",
+ * which produced false negatives in the previous implementation.
+ *
+ * If the customer never configured a webhook, returns "not_configured".
+ * If a webhook was configured but no delivery record exists yet, returns
+ * "pending" (the dispatch may still be in flight when the cron runs).
+ */
+async function reconstructWebhookState(entry: BackfillEntry): Promise<ReceiptWebhook> {
+  if (!entry.webhookConfigured) {
+    return {
+      configured:     false,
+      event:          "relay.success",
+      deliveryStatus: "not_configured",
+    };
+  }
+
+  let match: Awaited<ReturnType<typeof getWebhookDeliveries>>[number] | undefined;
+  try {
+    const deliveries = await getWebhookDeliveries(entry.address);
+    const targetTx = entry.txHash.toLowerCase();
+    match = deliveries.find(d => (d.txHash ?? "").toLowerCase() === targetTx);
+  } catch {
+    /* ignore — fall through to "pending" below */
+  }
+
+  if (!match) {
+    // Configured but we have no audit record — best honest answer is
+    // "pending" (delivery may still happen) rather than the previous
+    // false-negative "failed".
+    return {
+      configured:     true,
+      event:          "relay.success",
+      deliveryStatus: "pending",
+    };
+  }
+
+  return {
+    configured:      true,
+    event:           "relay.success",
+    deliveryStatus:  match.ok ? "delivered" : "failed",
+    attempts:        match.attempt,
+    lastStatusCode:  match.statusCode,
+    lastError:       match.error,
+    deliveredAt:     match.ok ? match.timestamp : undefined,
+  };
+}
+
 async function bumpAttempts(entry: BackfillEntry): Promise<void> {
   await kv.set(entryKey(entry.txHash), { ...entry, attempts: entry.attempts + 1 }, { ex: TTL_SECONDS });
 }
@@ -142,6 +193,12 @@ export async function processBackfillEntry(entry: BackfillEntry): Promise<Proces
     return { ok: false, reason: "Locked by another worker", givenUp: false };
   }
 
+  // Recover the actual webhook delivery state from the audit log so the
+  // backfilled receipt's trace reflects what really happened, not a worst-
+  // case guess. recordWebhookDelivery now stamps txHash on every entry, so
+  // a precise lookup is possible.
+  const webhookState = await reconstructWebhookState(entry);
+
   try {
     const receipt = await createReceipt({
       txHash:         entry.txHash,
@@ -158,18 +215,7 @@ export async function processBackfillEntry(entry: BackfillEntry): Promise<Proces
       apiKeyTier:     entry.apiKeyTier,
       showTier:       false,
       sandbox:        entry.sandbox,
-      webhook: {
-        configured:     entry.webhookConfigured,
-        event:          "relay.success",
-        // The original webhook dispatch (if any) happened at relay time —
-        // its state isn't recoverable here. Mark configured webhooks as
-        // "failed" with an explanatory error so the timeline doesn't claim
-        // a delivery that we can't actually attest to.
-        deliveryStatus: entry.webhookConfigured ? "failed" : "not_configured",
-        lastError:      entry.webhookConfigured
-                          ? "Receipt created via backfill — original webhook delivery state not recoverable"
-                          : undefined,
-      },
+      webhook:        webhookState,
     });
 
     // Patch the existing RelayedTx history row so the dashboard's
