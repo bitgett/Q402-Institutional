@@ -186,16 +186,66 @@ describe("processBackfillEntry", () => {
     expect(receipt.signedBy).toBe(TEST_RELAYER_ADDRESS);
   });
 
-  it("backfilled receipt's webhook trace marks configured deliveries as 'failed' (state not recoverable)", async () => {
+  it("idempotent on txHash — re-processing the same entry reuses the existing receiptId", async () => {
+    // Simulates: inline createReceipt body-write succeeded but somehow the
+    // queue dequeue failed and the cron retries. We must not produce two
+    // receipts for the same settlement.
+    await queueReceiptBackfill(SAMPLE_INPUT);
+    const entry = (await listBackfillQueue())[0];
+    const first = await processBackfillEntry(entry);
+    expect(first.ok).toBe(true);
+    const firstId = first.ok ? first.receiptId : "";
+
+    // Re-queue + re-process — without idempotency this would create a
+    // second receipt with a different receiptId.
+    await queueReceiptBackfill(SAMPLE_INPUT);
+    const entry2 = (await listBackfillQueue())[0];
+    const second = await processBackfillEntry(entry2);
+    expect(second.ok).toBe(true);
+    if (second.ok) expect(second.receiptId).toBe(firstId);
+
+    // receipt-by-tx mapping points to the original receiptId.
+    const lookupKey = `receipt-by-tx:${SAMPLE_INPUT.txHash.toLowerCase()}`;
+    expect(stringStore.get(lookupKey)).toBe(firstId);
+  });
+
+  it("recovers actual webhook delivery state from the audit log (not always 'failed')", async () => {
+    // Plant a successful webhook delivery audit row stamped with our txHash.
+    const deliveryKey = `webhook_delivery:${SAMPLE_INPUT.address.toLowerCase()}`;
+    listStore.set(deliveryKey, [{
+      timestamp:  "2026-05-08T00:00:01.000Z",
+      event:      "relay.success",
+      ok:         true,
+      statusCode: 200,
+      attempt:    1,
+      txHash:     SAMPLE_INPUT.txHash,
+    }]);
+
     const entry = await enqueueAndFetch();
     const result = await processBackfillEntry(entry);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
+
     const receipt = stringStore.get(`receipt:${result.receiptId}`) as {
-      webhook: { deliveryStatus: string; lastError?: string };
+      webhook: { deliveryStatus: string; lastStatusCode?: number };
     };
-    expect(receipt.webhook.deliveryStatus).toBe("failed");
-    expect(receipt.webhook.lastError).toContain("backfill");
+    expect(receipt.webhook.deliveryStatus).toBe("delivered");
+    expect(receipt.webhook.lastStatusCode).toBe(200);
+  });
+
+  it("falls back to 'pending' (not 'failed') when no audit record exists yet", async () => {
+    // Configured webhook but no delivery row in the audit log — could mean
+    // dispatch is still in flight. "pending" is the truthful answer; the
+    // previous behavior of forcing "failed" was a false negative.
+    const entry = await enqueueAndFetch();
+    const result = await processBackfillEntry(entry);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const receipt = stringStore.get(`receipt:${result.receiptId}`) as {
+      webhook: { deliveryStatus: string };
+    };
+    expect(receipt.webhook.deliveryStatus).toBe("pending");
   });
 
   it("not_configured stays not_configured when there was no webhook", async () => {

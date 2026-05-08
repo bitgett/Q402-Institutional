@@ -20,6 +20,7 @@ import {
   type ReceiptMethod,
 } from "@/app/lib/receipt";
 import { queueReceiptBackfill } from "@/app/lib/receipt-backfill";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { createHash } from "crypto";
 import { createHmac, randomBytes } from "crypto";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -570,7 +571,23 @@ export async function POST(req: NextRequest) {
         // queue write both failed. The on-chain TX is still real; we
         // log loudly but don't fail the response (failing here would
         // tell the caller the relay didn't happen, which is wrong).
+        // We also page the operator: this is the only path where a
+        // successful relay can produce no receipt at all. Catching
+        // these in real time is the difference between "best-effort"
+        // and "every payment gets a receipt".
         console.error("[relay] receipt backfill enqueue failed (KV unreachable):", qErr);
+        const errMsg = qErr instanceof Error ? qErr.message : String(qErr);
+        sendOpsAlert(
+          `Q402 receipt durability breach\n` +
+          `tx: <code>${result.txHash}</code>\n` +
+          `chain: ${chain}\n` +
+          `payer: ${from}\n` +
+          `recipient: ${to}\n` +
+          `amount: ${tokenAmount} ${token}\n` +
+          `error: ${errMsg}\n\n` +
+          `Inline retry + backfill enqueue both failed. Manual receipt creation required.`,
+          "critical",
+        ).catch(() => {});
       }
     }
   }
@@ -680,6 +697,7 @@ export async function POST(req: NextRequest) {
             recordWebhookDelivery(webhookAddr, {
               timestamp: deliveredAt, event: "relay.success",
               ok: true, statusCode: res.status, attempt: i + 1,
+              txHash: result.txHash ?? undefined,
             }).catch(() => {});
             if (trackedReceiptId) {
               updateReceiptWebhookStatus(trackedReceiptId, {
@@ -699,6 +717,7 @@ export async function POST(req: NextRequest) {
         recordWebhookDelivery(webhookAddr, {
           timestamp: new Date().toISOString(), event: "relay.success",
           ok: false, statusCode: lastStatus, error: lastError, attempt: DELAYS.length,
+          txHash: result.txHash ?? undefined,
         }).catch(() => {});
         if (trackedReceiptId) {
           updateReceiptWebhookStatus(trackedReceiptId, {
