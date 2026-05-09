@@ -385,7 +385,7 @@ export default function ClaudePage() {
             hallucination cost you money.
           </p>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid md:grid-cols-2 gap-5">
             {[
               {
                 name: "q402_quote",
@@ -405,7 +405,7 @@ export default function ClaudePage() {
               },
               {
                 name: "q402_pay",
-                auth: "api key + signer + flag",
+                auth: "live mode",
                 color: "rgba(245,158,11,0.32)",
                 bg: "rgba(245,158,11,0.06)",
                 description:
