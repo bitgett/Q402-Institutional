@@ -385,7 +385,7 @@ export default function ClaudePage() {
             hallucination cost you money.
           </p>
 
-          <div className="grid md:grid-cols-3 gap-5">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               {
                 name: "q402_quote",
@@ -401,7 +401,7 @@ export default function ClaudePage() {
                 color: "rgba(245,197,24,0.30)",
                 bg: "rgba(245,197,24,0.05)",
                 description:
-                  "Verify the configured key and report its plan tier (live vs sandbox). Read-only.",
+                  "Verify the configured key, report its plan tier and remaining quota credits.",
               },
               {
                 name: "q402_pay",
@@ -410,6 +410,14 @@ export default function ClaudePage() {
                 bg: "rgba(245,158,11,0.06)",
                 description:
                   "Send a gasless USDC or USDT payment. Sandbox by default — three env vars must align before a single wei moves.",
+              },
+              {
+                name: "q402_receipt",
+                auth: "no auth",
+                color: "rgba(96,165,250,0.32)",
+                bg: "rgba(96,165,250,0.06)",
+                description:
+                  "Fetch a Trust Receipt by rct_… id and locally verify its ECDSA signature against the relayer EOA. Read-only.",
               },
             ].map(t => (
               <motion.div
@@ -430,6 +438,70 @@ export default function ClaudePage() {
                 <p className="text-sm text-white/65 leading-relaxed">{t.description}</p>
               </motion.div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* TRUST RECEIPT */}
+      <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <div className="max-w-6xl mx-auto px-6 py-16 md:py-20">
+          <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
+            trust receipt
+          </div>
+          <h2 className="text-2xl md:text-4xl font-bold mb-3">
+            Receipts are how AI agents communicate.
+          </h2>
+          <p className="text-white/50 text-sm max-w-2xl mb-10">
+            Every successful Q402 settlement now produces a verifiable proof page.
+            ECDSA-signed by the relayer, recovered locally in your browser, with
+            on-chain tx + delivery trace on one URL. The receipt URL is the proof —
+            no server round-trip, no trusted UI layer.
+          </p>
+
+          <div className="grid md:grid-cols-3 gap-5 mb-10">
+            <div className="rounded-2xl p-6 border border-white/10 bg-white/[0.02]">
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2">01 · settlement facts</div>
+              <p className="text-sm text-white/70 leading-relaxed">
+                Payer · recipient · amount · chain · method. The actual on-chain
+                tx hash, block, and the gas Q402 sponsored on the customer&apos;s
+                behalf — all surfaced inline.
+              </p>
+            </div>
+            <div className="rounded-2xl p-6 border border-white/10 bg-white/[0.02]">
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2">02 · cryptographic proof</div>
+              <p className="text-sm text-white/70 leading-relaxed">
+                EIP-191 ECDSA signature over a canonical hash of the settlement
+                fields. Click <code className="text-yellow text-xs">Verify</code> —
+                the recovery runs in your browser against the relayer EOA.
+              </p>
+            </div>
+            <div className="rounded-2xl p-6 border border-white/10 bg-white/[0.02]">
+              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2">03 · live delivery trace</div>
+              <p className="text-sm text-white/70 leading-relaxed">
+                Webhook delivery state polls in real time — pending → delivered
+                or failed. Customers see exactly which downstream system saw the
+                event without grepping logs.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border p-6 bg-yellow/5"
+               style={{ borderColor: "rgba(245,197,24,0.30)" }}>
+            <div className="text-[10px] uppercase tracking-widest text-yellow/80 font-bold mb-2">
+              live demo
+            </div>
+            <a
+              href="https://q402.quackai.ai/receipt/rct_afa5f50bc49a65ebba3b28ab"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs md:text-sm text-yellow hover:text-yellow/80 transition break-all"
+            >
+              q402.quackai.ai/receipt/rct_afa5f50bc49a65ebba3b28ab ↗
+            </a>
+            <p className="text-white/45 text-xs mt-3 leading-relaxed">
+              First production Trust Receipt — 0.01 USDT settled on BNB Chain via
+              EIP-7702. Click through to see the verify button in action.
+            </p>
           </div>
         </div>
       </section>
