@@ -4,17 +4,18 @@ import Link from "next/link";
 import { useState } from "react";
 
 const NAV = [
-  { id: "overview",     label: "Overview",        icon: "○" },
-  { id: "how-it-works", label: "How It Works",    icon: "○" },
-  { id: "quickstart",   label: "Quick Start",     icon: "○" },
-  { id: "claude-mcp",   label: "Claude MCP",      icon: "○" },
-  { id: "gaspool",      label: "Gas Pool",         icon: "○" },
-  { id: "auth",         label: "Authentication",   icon: "○" },
-  { id: "api-ref",      label: "API Reference",    icon: "○" },
-  { id: "chains",       label: "Chain Support",    icon: "○" },
-  { id: "eip712",       label: "EIP-712 Signing",  icon: "○" },
-  { id: "errors",       label: "Error Codes",      icon: "○" },
-  { id: "faq",          label: "FAQ",              icon: "○" },
+  { id: "overview",       label: "Overview",        icon: "○" },
+  { id: "how-it-works",   label: "How It Works",    icon: "○" },
+  { id: "quickstart",     label: "Quick Start",     icon: "○" },
+  { id: "claude-mcp",     label: "Claude MCP",      icon: "○" },
+  { id: "trust-receipt",  label: "Trust Receipt",   icon: "○" },
+  { id: "gaspool",        label: "Gas Pool",        icon: "○" },
+  { id: "auth",           label: "Authentication",  icon: "○" },
+  { id: "api-ref",        label: "API Reference",   icon: "○" },
+  { id: "chains",         label: "Chain Support",   icon: "○" },
+  { id: "eip712",         label: "EIP-712 Signing", icon: "○" },
+  { id: "errors",         label: "Error Codes",     icon: "○" },
+  { id: "faq",            label: "FAQ",             icon: "○" },
 ];
 
 function CodeBlock({ code, lang = "typescript" }: { code: string; lang?: string }) {
@@ -415,6 +416,75 @@ Q402_ENABLE_REAL_PAYMENTS=1     # explicit opt-in`} />
 
             <Callout type="tip">
               The <code className="text-yellow text-xs">q402_pay</code> tool description tells the model to ALWAYS get explicit user confirmation of recipient + amount in chat before invoking. Combined with the sandbox default + cap + allowlist, that gives four layers of safety before any wei moves.
+            </Callout>
+          </Section>
+
+          {/* ── TRUST RECEIPT ── */}
+          <Section id="trust-receipt" title="Trust Receipt">
+            <p className="text-white/55 text-sm mb-6">
+              Every successful Q402 settlement produces a <strong className="text-white/80">Trust Receipt</strong> — a verifiable proof page anchored to the on-chain settlement, signed by the relayer EOA, and recoverable in any browser without trusting our UI. Receipts are how AI agents communicate provable settlement state to each other and to humans.
+            </p>
+
+            <h3 className="text-lg font-semibold mb-3 mt-8">What&apos;s on a receipt</h3>
+            <ul className="text-white/55 text-sm space-y-2 mb-6 list-disc pl-5">
+              <li><strong className="text-white/80">Settlement facts</strong> — payer, recipient, amount, chain, EIP method (eip7702 / eip3009 etc.).</li>
+              <li><strong className="text-white/80">On-chain proof</strong> — tx hash, block number, gas sponsored by Q402, link to the relevant explorer.</li>
+              <li><strong className="text-white/80">Cryptographic signature</strong> — EIP-191 ECDSA over a canonical hash of the settlement subset, signed by the relayer wallet. Click <code className="text-yellow text-xs">Verify signature</code> on the page and recovery runs locally in your browser.</li>
+              <li><strong className="text-white/80">Live delivery trace</strong> — webhook delivery state polls in real time. Pending → delivered (200 OK) or failed (with retry count + last status code). Surfaces both delivery success AND the actual response code your endpoint returned.</li>
+            </ul>
+
+            <h3 className="text-lg font-semibold mb-3 mt-8">Receipt URL</h3>
+            <p className="text-white/55 text-sm mb-3">
+              Every <code className="text-yellow text-xs">/api/relay</code> success response now includes <code className="text-yellow text-xs">receiptId</code> + <code className="text-yellow text-xs">receiptUrl</code>:
+            </p>
+            <CodeBlock lang="json" code={`{
+  "success":      true,
+  "txHash":       "0x9afd...52a4",
+  "tokenAmount":  "0.10",
+  "token":        "USDT",
+  "chain":        "bnb",
+  "receiptId":    "rct_afa5f50bc49a65ebba3b28ab",
+  "receiptUrl":   "https://q402.quackai.ai/receipt/rct_afa5f50bc49a65ebba3b28ab"
+}`} />
+            <p className="text-white/55 text-sm mb-6">
+              The same fields are mirrored in the webhook payload, so a downstream consumer can correlate the on-chain tx with its public proof URL without a second lookup.
+            </p>
+
+            <h3 className="text-lg font-semibold mb-3 mt-8">JSON endpoint</h3>
+            <p className="text-white/55 text-sm mb-3">
+              For machine consumption (e.g., another agent running a verification step), the receipt is also reachable as JSON:
+            </p>
+            <CodeBlock lang="bash" code={`curl https://q402.quackai.ai/api/receipt/rct_afa5f50bc49a65ebba3b28ab`} />
+            <p className="text-white/55 text-sm mb-6">
+              Rate limited 120/min per IP, returned with <code className="text-yellow text-xs">X-Robots-Tag: noindex, nofollow</code>. The id is unguessable (12 random bytes) so the URL doubles as a shareable audit link without iteration risk.
+            </p>
+
+            <h3 className="text-lg font-semibold mb-3 mt-8">Strong guarantee — durable backfill</h3>
+            <p className="text-white/55 text-sm mb-6">
+              The relay path tries <code className="text-yellow text-xs">createReceipt()</code> synchronously twice and <code className="text-yellow text-xs">await</code>s a queue write to <code className="text-yellow text-xs">receipt-backfill-queue</code> before responding. <code className="text-yellow text-xs">/api/cron/receipt-backfill</code> drains the queue with a per-tx KV lock and SET-NX idempotency, so a successful relay always produces exactly one receipt — synchronously when KV is healthy, within the next cron run otherwise. If both inline retries AND the backfill enqueue fail, the relay route fires a critical Telegram alert so an operator can manually recover.
+            </p>
+
+            <h3 className="text-lg font-semibold mb-3 mt-8">Verify any receipt from Claude</h3>
+            <p className="text-white/55 text-sm mb-3">
+              The <code className="text-yellow text-xs">@quackai/q402-mcp</code> server (v0.2.1+) exposes a <code className="text-yellow text-xs">q402_receipt</code> tool. After <code className="text-yellow text-xs">q402_pay</code> hands back a <code className="text-yellow text-xs">rct_…</code> id, ask Claude to verify it and the recovery runs inside the MCP process — same canonical-JSON + ECDSA recovery the receipt page does, no UI trust required:
+            </p>
+            <CodeBlock lang="text" code={`> Send 0.10 USDT to alice on BNB via Q402, then verify the receipt.
+
+Claude → q402_pay   → settles + returns rct_afa5...
+Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
+
+            <h3 className="text-lg font-semibold mb-3 mt-8">Live demo</h3>
+            <Callout type="warn">
+              First production Trust Receipt — 0.01 USDT settled on BNB Chain via EIP-7702:
+              <br/>
+              <a
+                href="https://q402.quackai.ai/receipt/rct_afa5f50bc49a65ebba3b28ab"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-yellow underline underline-offset-2 hover:text-yellow/80 break-all font-mono text-xs mt-2 inline-block"
+              >
+                q402.quackai.ai/receipt/rct_afa5f50bc49a65ebba3b28ab ↗
+              </a>
             </Callout>
           </Section>
 
