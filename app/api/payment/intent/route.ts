@@ -23,7 +23,12 @@ import { SUBSCRIPTION_DEPLOYED_CHAINS } from "@/app/lib/wallets";
  *   chain:      payment chain id — "bnb" | "eth" (where funds actually move)
  *   planChain:  selected relay chain — "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective"
  *               (determines plan/credit thresholds; defaults to `chain` if omitted)
- *   token:      "USDC" | "USDT" | "USDT0" (optional — cross-checked in activate)
+ *   token:      "USDC" | "USDT" | "RLUSD" (optional — cross-checked in activate).
+ *               RLUSD is Ethereum-only; chain≠"eth" + token="RLUSD" is rejected
+ *               below before the intent is reserved (mirrors the relay route's
+ *               CHAIN_TOKEN_ALLOWLIST). USDT0 is never an accepted intent rail
+ *               — Stable / Mantle alias USDT0 internally but the user-facing
+ *               token symbol is always USDC or USDT.
  *
  * Each intent is stored under its own intentId for 2 hours. The "latest"
  * pointer for the address is updated on every creation — clients that don't
