@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: lint + test + build + audit
+    runs-on: ubuntu-latest
+
+    env:
+      # Drift-guard tests check process.env.CI to switch from
+      # warn-and-pass to hard-fail. GitHub Actions already sets CI=true
+      # for every step, but we make it explicit here so a fork running
+      # nektos/act locally also gets the strict path.
+      CI: "true"
+
+    steps:
+      - name: Checkout q402-landing
+        uses: actions/checkout@v4
+
+      # `mcp-server/` is `.gitignore`d in this repo because @quackai/q402-mcp
+      # lives in a separate repo (bitgett/q402-mcp). For drift-guard tests to
+      # actually run (instead of `describe.skipIf(!mcpAvailable)` skipping the
+      # MCP-side assertions on fresh clones), clone it as a sibling directory
+      # the test file already expects.
+      - name: Clone sibling MCP repo for drift assertions
+        run: git clone --depth=1 https://github.com/bitgett/q402-mcp.git mcp-server
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      - name: ESLint
+        run: npx eslint .
+
+      - name: Vitest (full suite — no MCP block skips on CI)
+        run: npx vitest run
+
+      - name: Next.js build (webpack)
+        run: npm run build
+
+      - name: npm audit (production deps only, fail on high or above)
+        run: npm audit --omit=dev --audit-level=high

@@ -39,10 +39,16 @@ const intentRouteSource = readFileSync(
 );
 
 // MCP server lives in a separate repo (bitgett/q402-mcp) and the `mcp-server/`
-// directory is .gitignore'd in this repo. The MCP-side assertions only run if
-// the local dev tree happens to have the working copy checked out — on CI or
-// a fresh clone, they're skipped (still verified by the MCP repo's own tests
-// + the published-version drift guard in `mcp-package-drift.test.ts`).
+// directory is .gitignore'd in this repo. On a local dev tree the working copy
+// often sits as a sibling and the MCP-side assertions run; on a fresh clone
+// they would normally be skipped.
+//
+// Skipping is acceptable in local dev (the MCP repo has its own tests + the
+// published-version drift guard in `mcp-package-drift.test.ts`), but on CI it
+// hides a real coverage gap. The CI workflow at .github/workflows/ci.yml
+// clones the MCP repo before running the suite specifically so the assertions
+// below execute. If anything goes wrong with that clone step, the explicit
+// hard-fail here surfaces it instead of leaving the suite quietly green.
 function tryRead(...segments: string[]): string | null {
   try {
     return readFileSync(resolve(__dirname, "..", ...segments), "utf8");
@@ -54,6 +60,18 @@ const mcpChainsSource    = tryRead("mcp-server", "src", "chains.ts");
 const mcpPayToolSource   = tryRead("mcp-server", "src", "tools", "pay.ts");
 const mcpQuoteToolSource = tryRead("mcp-server", "src", "tools", "quote.ts");
 const mcpAvailable       = mcpChainsSource !== null && mcpPayToolSource !== null && mcpQuoteToolSource !== null;
+
+// On CI we expect the workflow to have cloned the sibling MCP repo. If it
+// didn't, fail loudly during the top-level describe registration so the
+// reason is obvious in the run log (vs 11 silent skips).
+if (process.env.CI === "true" && !mcpAvailable) {
+  throw new Error(
+    "[rlusd-cross-chain-guard] CI=true but mcp-server/ is missing — " +
+    "the .github/workflows/ci.yml step that clones bitgett/q402-mcp " +
+    "didn't run or failed. The MCP-side cross-chain guard would be " +
+    "silently skipped, which defeats the purpose. Aborting.",
+  );
+}
 
 const NON_ETH_CHAINS = ["avax", "bnb", "xlayer", "stable", "mantle", "injective"] as const;
 

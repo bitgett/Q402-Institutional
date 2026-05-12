@@ -57,11 +57,32 @@ let fetchError: string | null = null;
 
 // One-shot fetch shared across test cases. Network calls happen inside the
 // describe.beforeAll so every assertion below has the same source string.
+// Retry network fetches up to 3 times with 500ms / 1500ms / 4500ms backoff —
+// transient npm registry or raw.githubusercontent.com hiccups shouldn't
+// downgrade a real drift detection to a warn-and-pass.
+async function fetchWithRetry(url: string, attempts = 3): Promise<Response> {
+  let lastErr: unknown = null;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const resp = await fetch(url);
+      // 2xx → return; 5xx → retry (transient); 4xx → return (real failure, no retry)
+      if (resp.ok || (resp.status >= 400 && resp.status < 500)) return resp;
+      lastErr = new Error(`HTTP ${resp.status} on ${url}`);
+    } catch (err) {
+      lastErr = err;
+    }
+    if (i < attempts - 1) {
+      await new Promise(r => setTimeout(r, 500 * Math.pow(3, i)));
+    }
+  }
+  throw lastErr ?? new Error(`fetch failed after ${attempts} attempts: ${url}`);
+}
+
 async function loadMcpChainsSource(): Promise<void> {
   if (mcpSource !== null || fetchError !== null) return;
   try {
     // Step 1: ask npm for the currently published version.
-    const npmResp = await fetch(NPM_LATEST_URL);
+    const npmResp = await fetchWithRetry(NPM_LATEST_URL);
     if (!npmResp.ok) {
       fetchError = `HTTP ${npmResp.status} fetching ${NPM_LATEST_URL}`;
       return;
@@ -75,7 +96,7 @@ async function loadMcpChainsSource(): Promise<void> {
 
     // Step 2: fetch chains.ts at that exact git tag.
     const rawUrl = rawUrlFor(mcpVersion);
-    const resp = await fetch(rawUrl);
+    const resp = await fetchWithRetry(rawUrl);
     if (!resp.ok) {
       fetchError = `HTTP ${resp.status} fetching ${rawUrl} (no git tag for v${mcpVersion}?)`;
       return;
@@ -86,9 +107,22 @@ async function loadMcpChainsSource(): Promise<void> {
   }
 }
 
+// On CI we want a real drift to surface as a red build, not a warning. Local
+// dev keeps the soft-skip so developers without network access (planes,
+// internal-only environments) aren't blocked. The CI / local split is what
+// closes the previous "environment problem looks identical to a real drift"
+// trapdoor that the external reviewer flagged.
 function skipIfOffline(): boolean {
   if (mcpSource) return false;
-  console.warn(`[mcp-package-drift] skipping — could not fetch chains.ts (${fetchError ?? "unknown"})`);
+  const message = `[mcp-package-drift] could not fetch chains.ts (${fetchError ?? "unknown"})`;
+  if (process.env.CI === "true") {
+    throw new Error(
+      `${message} — CI=true requires the drift guard to fetch successfully. ` +
+      "Retried 3 times with backoff. If npm or raw.githubusercontent.com is " +
+      "down, re-run the workflow; do not bypass the check.",
+    );
+  }
+  console.warn(`${message} (skipping — set CI=true to hard-fail)`);
   return true;
 }
 
