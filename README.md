@@ -253,6 +253,7 @@ Q402-Institutional/
 ├── scripts/
 │   ├── test-eip7702.mjs            # unified EIP-7702 E2E test (--chain avax|bnb|eth|mantle|injective|xlayer|stable)
 │   ├── test-receipt.mjs            # end-to-end Trust Receipt smoke (auto-opens browser) (v1.26)
+│   ├── refresh-dune-datasets.mjs   # weekly push of off-chain widgets (npm downloads etc.) → dune.coincraze.* (v1.28)
 │   └── agent-example.mjs           # Node.js Agent SDK (unified 6-chain example — TransferAuthorization)
 └── public/
     ├── q402-sdk.js                 # client SDK v1.7.0 (7 chains; USDC + USDT everywhere except Injective USDT-only until CCTP USDC Q2 2026; RLUSD on Ethereum only)
