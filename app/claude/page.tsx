@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMemo, useState } from "react";
+import { MCP_VERSION } from "@/app/lib/version";
 
 /**
  * /claude — landing page for the @quackai/q402-mcp Claude integration.
@@ -155,7 +156,7 @@ export default function ClaudePage() {
             </span>
             <span className="text-white/20 text-xs">·</span>
             <span className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold">
-              v0.1.3 live on npm
+              v{MCP_VERSION} live on npm
             </span>
           </motion.div>
 
@@ -375,7 +376,7 @@ export default function ClaudePage() {
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-6xl mx-auto px-6 py-16 md:py-20">
           <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
-            three tools · one package
+            four tools · one package
           </div>
           <h2 className="text-2xl md:text-4xl font-bold mb-2">
             Only what an agent should reach for.
