@@ -33,18 +33,27 @@ const routeSource = readFileSync(
   "utf8"
 );
 
-const mcpChainsSource = readFileSync(
-  resolve(__dirname, "..", "mcp-server", "src", "chains.ts"),
+const intentRouteSource = readFileSync(
+  resolve(__dirname, "..", "app", "api", "payment", "intent", "route.ts"),
   "utf8"
 );
-const mcpPayToolSource = readFileSync(
-  resolve(__dirname, "..", "mcp-server", "src", "tools", "pay.ts"),
-  "utf8"
-);
-const mcpQuoteToolSource = readFileSync(
-  resolve(__dirname, "..", "mcp-server", "src", "tools", "quote.ts"),
-  "utf8"
-);
+
+// MCP server lives in a separate repo (bitgett/q402-mcp) and the `mcp-server/`
+// directory is .gitignore'd in this repo. The MCP-side assertions only run if
+// the local dev tree happens to have the working copy checked out — on CI or
+// a fresh clone, they're skipped (still verified by the MCP repo's own tests
+// + the published-version drift guard in `mcp-package-drift.test.ts`).
+function tryRead(...segments: string[]): string | null {
+  try {
+    return readFileSync(resolve(__dirname, "..", ...segments), "utf8");
+  } catch {
+    return null;
+  }
+}
+const mcpChainsSource    = tryRead("mcp-server", "src", "chains.ts");
+const mcpPayToolSource   = tryRead("mcp-server", "src", "tools", "pay.ts");
+const mcpQuoteToolSource = tryRead("mcp-server", "src", "tools", "quote.ts");
+const mcpAvailable       = mcpChainsSource !== null && mcpPayToolSource !== null && mcpQuoteToolSource !== null;
 
 const NON_ETH_CHAINS = ["avax", "bnb", "xlayer", "stable", "mantle", "injective"] as const;
 
@@ -136,7 +145,32 @@ describe("RLUSD: Ethereum-only invariant — relay route allowlist", () => {
   });
 });
 
-describe("RLUSD: Ethereum-only invariant — MCP server local source", () => {
+describe("RLUSD: Ethereum-only invariant — subscription payment intent route", () => {
+  // payment/intent is the subscription checkout entry point (separate from the
+  // /api/relay path that handles end-user gasless settlements). The payment
+  // page exposes eth-rlusd in PAY_TOKENS, so the intent route MUST also accept
+  // RLUSD or the checkout drops 400 before any user signature.
+  it("VALID_TOKENS includes RLUSD alongside USDC and USDT", () => {
+    expect(intentRouteSource).toMatch(
+      /VALID_TOKENS\s*=\s*\[\s*["']USDC["']\s*,\s*["']USDT["']\s*,\s*["']RLUSD["']\s*\]/,
+    );
+  });
+
+  it("rejects RLUSD when chain is not eth (mirrors relay route's CHAIN_TOKEN_ALLOWLIST)", () => {
+    // Source-level check that the cross-chain guard exists in the intent
+    // route. The /api/relay path has its own guard; both must enforce the
+    // same Ethereum-only invariant or one becomes an attack surface for
+    // creating intents that the scanner can never match.
+    expect(intentRouteSource).toMatch(
+      /token\s*===\s*["']RLUSD["']\s*&&\s*chain\s*!==\s*["']eth["']/,
+    );
+    expect(intentRouteSource).toMatch(
+      /RLUSD is only supported on Ethereum mainnet/,
+    );
+  });
+});
+
+describe.skipIf(!mcpAvailable)("RLUSD: Ethereum-only invariant — MCP server local source (skipped when mcp-server/ is absent)", () => {
   it("mcp-server chains.ts declares eth.rlusd with the canonical address + decimals 18", () => {
     expect(mcpChainsSource).toMatch(
       /eth:\s*\{[\s\S]*?rlusd:\s*\{\s*address:\s*["']0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD["']\s*,\s*decimals:\s*18\s*\}/i,
@@ -144,7 +178,7 @@ describe("RLUSD: Ethereum-only invariant — MCP server local source", () => {
   });
 
   it("mcp-server eth.supportedTokens includes RLUSD", () => {
-    const m = mcpChainsSource.match(
+    const m = mcpChainsSource!.match(
       /eth:\s*\{[\s\S]*?supportedTokens:\s*\[([^\]]+)\][\s\S]*?\}/,
     );
     expect(m, "MCP eth chain should declare supportedTokens").not.toBeNull();
@@ -155,7 +189,7 @@ describe("RLUSD: Ethereum-only invariant — MCP server local source", () => {
   it.each(NON_ETH_CHAINS)(
     "mcp-server %s.supportedTokens does NOT include RLUSD",
     (chain) => {
-      const m = mcpChainsSource.match(
+      const m = mcpChainsSource!.match(
         new RegExp(`${chain}:\\s*\\{[\\s\\S]*?supportedTokens:\\s*\\[([^\\]]+)\\][\\s\\S]*?\\}`),
       );
       expect(
