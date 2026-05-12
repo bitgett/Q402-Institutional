@@ -110,7 +110,7 @@ function extractField(src: string, chain: string, field: string): string | null 
   return m?.[1] ?? m?.[2] ?? null;
 }
 
-function extractTokenAddress(src: string, chain: string, token: "usdc" | "usdt"): string | null {
+function extractTokenAddress(src: string, chain: string, token: "usdc" | "usdt" | "rlusd"): string | null {
   const blockRe = new RegExp(
     `${chain}:\\s*\\{([\\s\\S]*?)\\n\\s*\\}\\s*,?`,
   );
@@ -118,6 +118,17 @@ function extractTokenAddress(src: string, chain: string, token: "usdc" | "usdt")
   if (!block) return null;
   const addrRe = new RegExp(`${token}:\\s*\\{[\\s\\S]*?address:\\s*"(0x[0-9a-fA-F]+)"`);
   return block.match(addrRe)?.[1] ?? null;
+}
+
+function extractTokenDecimals(src: string, chain: string, token: "usdc" | "usdt" | "rlusd"): number | null {
+  const blockRe = new RegExp(
+    `${chain}:\\s*\\{([\\s\\S]*?)\\n\\s*\\}\\s*,?`,
+  );
+  const block = src.match(blockRe)?.[1];
+  if (!block) return null;
+  const decRe = new RegExp(`${token}:\\s*\\{[\\s\\S]*?decimals:\\s*(\\d+)`);
+  const m = block.match(decRe);
+  return m ? Number(m[1]) : null;
 }
 
 describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)", () => {
@@ -178,5 +189,39 @@ describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)"
     // The supportedTokens whitelist is the SDK + MCP gate that mirrors the
     // manifest's supportedApiTokens. Easier to grep than to extract structurally.
     expect(mcpSource).toMatch(/injective:\s*\{[\s\S]*?supportedTokens:\s*\[\s*"USDT"\s*\][\s\S]*?\}/);
+  });
+
+  // ── RLUSD Ethereum-only invariant (cross-repo drift guard) ──────────────
+  // RLUSD is the third stablecoin Q402 supports, listed only on Ethereum.
+  // The previously published MCP version must keep its eth.rlusd entry in
+  // sync with this repo's manifest, or the SDK / MCP gates diverge for
+  // RLUSD callers. Each assertion is a separate it() so the failure tells
+  // you exactly which dimension drifted.
+  it("eth.rlusd.address matches manifest.chains.eth.tokens.RLUSD.address", async () => {
+    await loadMcpChainsSource();
+    if (skipIfOffline()) return;
+    const manifestRlusd = manifest.chains.eth.tokens.RLUSD;
+    expect(manifestRlusd, "manifest.chains.eth.tokens.RLUSD must exist").toBeDefined();
+    const observed = extractTokenAddress(mcpSource!, "eth", "rlusd");
+    expect(observed, "rlusd.address must be extractable from mcp-server chains.ts").not.toBeNull();
+    expect(observed!.toLowerCase()).toBe(manifestRlusd.address.toLowerCase());
+  });
+
+  it("eth.rlusd.decimals is 18", async () => {
+    await loadMcpChainsSource();
+    if (skipIfOffline()) return;
+    const observed = extractTokenDecimals(mcpSource!, "eth", "rlusd");
+    expect(observed, "rlusd.decimals must be extractable from mcp-server chains.ts").not.toBeNull();
+    expect(observed).toBe(18);
+    expect(manifest.chains.eth.tokens.RLUSD.decimals).toBe(18);
+  });
+
+  it('eth supportedTokens === ["USDC","USDT","RLUSD"] in chains.ts', async () => {
+    await loadMcpChainsSource();
+    if (skipIfOffline()) return;
+    // Source-level grep — keep in step with the manifest + SDK + relay route
+    // allowlist. If RLUSD is ever removed here without removing it from the
+    // manifest's eth.tokens entry, this test catches the asymmetry.
+    expect(mcpSource).toMatch(/eth:\s*\{[\s\S]*?supportedTokens:\s*\[\s*"USDC"\s*,\s*"USDT"\s*,\s*"RLUSD"\s*\][\s\S]*?\}/);
   });
 });

@@ -45,7 +45,7 @@ export default function UseCases() {
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Built for every use case</h2>
           <p className="text-white/50 max-w-xl mx-auto">
-            Any product that needs seamless, gasless USDC/USDT transfers on EVM.
+            Any product that needs seamless, gasless USDC, USDT, or RLUSD transfers on EVM.
           </p>
         </div>
 

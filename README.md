@@ -3,7 +3,7 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC, USDT, or RLUSD with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.27** · **SDK: v1.7.0** · **Manifest: v1.7.0** · **MCP: @quackai/q402-mcp v0.3.0** · **Last updated: 2026-05-12**  
+**Version: v1.27** · **SDK: v1.7.0** · **Manifest: v1.7.0** · **MCP: @quackai/q402-mcp v0.3.2** · **Last updated: 2026-05-12**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
@@ -1410,7 +1410,7 @@ The `q402_pay` tool description tells the model to ALWAYS get explicit user conf
 
 #### Drift guard (CI)
 
-The MCP package ships from a separate repo so a normal lockfile bump won't catch chain-config drift between `contracts.manifest.json` and `mcp-server/src/chains.ts`. New test `__tests__/mcp-package-drift.test.ts` (30 cases) fetches the published package's `chains.ts` from GitHub raw and verifies — for every chain — `chainId`, `implContract`, EIP-712 `domainName`, USDC + USDT addresses, plus the Injective USDT-only allowlist. Soft-fails on offline CI; hard fails on real drift.
+The MCP package ships from a separate repo so a normal lockfile bump won't catch chain-config drift between `contracts.manifest.json` and `mcp-server/src/chains.ts`. Test `__tests__/mcp-package-drift.test.ts` fetches the published package's `chains.ts` from GitHub raw (resolved via npm `latest` → matching git tag) and verifies — for every chain — `chainId`, `implContract`, EIP-712 `domainName`, USDC + USDT addresses, the Injective USDT-only allowlist, plus the **Ethereum-only RLUSD invariant** (`eth.rlusd.address` matches manifest, `decimals === 18`, `supportedTokens === ["USDC","USDT","RLUSD"]`). Soft-fails on offline CI; hard fails on real drift.
 
 #### Hardening pass (post-launch external review)
 
