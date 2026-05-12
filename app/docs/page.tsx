@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { SDK_VERSION, MCP_VERSION } from "@/app/lib/version";
 
 const NAV = [
   { id: "overview",       label: "Overview",        icon: "○" },
@@ -84,7 +85,7 @@ export default function DocsPage() {
               <span className="text-white/50 text-xs font-medium">docs</span>
             </Link>
             <div className="hidden sm:flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-lg px-3 py-1.5">
-              <span className="text-white/25 text-xs font-mono">v1.6.0</span>
+              <span className="text-white/25 text-xs font-mono">v{SDK_VERSION}</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -142,7 +143,7 @@ export default function DocsPage() {
           {/* Docs hero banner */}
           <div className="px-8 pt-12 pb-10 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, transparent 100%)" }}>
             <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v1.6.0</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded" style={{ background: "rgba(245,197,24,0.12)", color: "#F5C518" }}>v{SDK_VERSION}</span>
               <span className="text-white/20 text-xs">·</span>
               <span className="text-white/30 text-xs">EIP-712 + EIP-7702</span>
             </div>
@@ -166,7 +167,7 @@ export default function DocsPage() {
           <Section id="overview" title="Overview">
             <p className="text-white/60 text-base leading-relaxed mb-6">
               Q402 is a <span className="text-white font-medium">managed relay layer for stablecoin payments</span> across EVM chains.
-              Your product sends USDC or USDT from a user&apos;s wallet without the user ever holding a native token —
+              Your product sends USDC, USDT, or RLUSD from a user&apos;s wallet without the user ever holding a native token —
               Q402&apos;s relayer submits the on-chain transaction and pays the gas.
             </p>
 
@@ -213,7 +214,7 @@ export default function DocsPage() {
             <div className="grid sm:grid-cols-3 gap-4 mb-8">
               {[
                 { label: "Protocol",         value: "EIP-712 + EIP-7702" },
-                { label: "Settlement token", value: "USDC · USDT" },
+                { label: "Settlement token", value: "USDC · USDT · RLUSD (eth-only)" },
                 { label: "Gas source",       value: "Your gas pool" },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
@@ -409,10 +410,15 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                     <td className="px-4 py-3 text-white/40 text-xs">api key</td>
                     <td className="px-4 py-3">Verify the configured key and report its plan tier (live vs sandbox).</td>
                   </tr>
-                  <tr>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_pay</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
-                    <td className="px-4 py-3">Send a gasless payment. <strong>Sandbox by default</strong> — see below.</td>
+                    <td className="px-4 py-3">Send a gasless USDC, USDT, or RLUSD payment. <strong>Sandbox by default</strong> — see below.</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_receipt</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
+                    <td className="px-4 py-3">Fetch + locally verify a Trust Receipt by <code className="text-white/60 text-xs">rct_…</code> id. Recovers the relayer ECDSA signature client-side.</td>
                   </tr>
                 </tbody>
               </table>
@@ -474,14 +480,14 @@ Q402_ENABLE_REAL_PAYMENTS=1     # explicit opt-in`} />
               Rate limited 120/min per IP, returned with <code className="text-yellow text-xs">X-Robots-Tag: noindex, nofollow</code>. The id is unguessable (12 random bytes) so the URL doubles as a shareable audit link without iteration risk.
             </p>
 
-            <h3 className="text-lg font-semibold mb-3 mt-8">Strong guarantee — durable backfill</h3>
+            <h3 className="text-lg font-semibold mb-3 mt-8">Best-effort inline + durable backfill</h3>
             <p className="text-white/55 text-sm mb-6">
-              The relay path tries <code className="text-yellow text-xs">createReceipt()</code> synchronously twice and <code className="text-yellow text-xs">await</code>s a queue write to <code className="text-yellow text-xs">receipt-backfill-queue</code> before responding. <code className="text-yellow text-xs">/api/cron/receipt-backfill</code> drains the queue with a per-tx KV lock and SET-NX idempotency, so a successful relay always produces exactly one receipt — synchronously when KV is healthy, within the next cron run otherwise. If both inline retries AND the backfill enqueue fail, the relay route fires a critical Telegram alert so an operator can manually recover.
+              The relay path tries <code className="text-yellow text-xs">createReceipt()</code> synchronously twice and <code className="text-yellow text-xs">await</code>s a queue write to <code className="text-yellow text-xs">receipt-backfill-queue</code> before responding. <code className="text-yellow text-xs">/api/cron/receipt-backfill</code> drains the queue with a per-tx KV lock and SET-NX idempotency, so a successful relay normally produces exactly one receipt — synchronously when KV is healthy, within the next cron run otherwise. If both inline retries <em>and</em> the backfill enqueue fail (rare, requires KV to be unreachable for both writes within the same request), the relay route fires a critical Telegram alert with the tx hash + payload snapshot so an operator can manually recover. That alert path is the third leg; we don&apos;t claim a hard guarantee in the absence of it.
             </p>
 
             <h3 className="text-lg font-semibold mb-3 mt-8">Verify any receipt from Claude</h3>
             <p className="text-white/55 text-sm mb-3">
-              The <code className="text-yellow text-xs">@quackai/q402-mcp</code> server (v0.2.1+) exposes a <code className="text-yellow text-xs">q402_receipt</code> tool. After <code className="text-yellow text-xs">q402_pay</code> hands back a <code className="text-yellow text-xs">rct_…</code> id, ask Claude to verify it and the recovery runs inside the MCP process — same canonical-JSON + ECDSA recovery the receipt page does, no UI trust required:
+              The <code className="text-yellow text-xs">@quackai/q402-mcp</code> server (v{MCP_VERSION}) exposes a <code className="text-yellow text-xs">q402_receipt</code> tool. After <code className="text-yellow text-xs">q402_pay</code> hands back a <code className="text-yellow text-xs">rct_…</code> id, ask Claude to verify it and the recovery runs inside the MCP process — same canonical-JSON + ECDSA recovery the receipt page does, no UI trust required:
             </p>
             <CodeBlock lang="text" code={`> Send 0.10 USDT to alice on BNB via Q402, then verify the receipt.
 
