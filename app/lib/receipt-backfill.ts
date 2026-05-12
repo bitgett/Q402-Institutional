@@ -54,7 +54,7 @@ export interface BackfillEntry {
   chain:             ChainKey;
   payer:             string;
   recipient:         string;
-  token:             "USDC" | "USDT";
+  token:             "USDC" | "USDT" | "RLUSD";
   tokenAmount:       string;
   tokenAmountRaw:    string;
   method:            ReceiptMethod;

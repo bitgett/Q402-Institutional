@@ -1,9 +1,9 @@
 # Q402 — Gasless Payment Infrastructure
 
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
-> Users pay USDC/USDT with zero gas — Q402 relayer covers all transaction fees.
+> Users pay USDC, USDT, or RLUSD with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.26** · **SDK: v1.6.0** · **Manifest: v1.6.0** · **MCP: @quackai/q402-mcp v0.2.1** · **Last updated: 2026-05-08**  
+**Version: v1.27** · **SDK: v1.7.0** · **Manifest: v1.7.0** · **MCP: @quackai/q402-mcp v0.3.0** · **Last updated: 2026-05-12**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
@@ -1284,6 +1284,36 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 ---
 
 ## 25. Changelog
+
+### v1.27 (2026-05-12)
+
+> **RLUSD (Ripple USD, NY DFS regulated stablecoin) added on Ethereum mainnet.** Q402 now accepts USDC / USDT / RLUSD on Ethereum; the other six chains continue to support USDC / USDT (Injective USDT-only). RLUSD is intentionally Ethereum-only — Ripple has not yet deployed RLUSD on the XRPL EVM Sidechain, and XRPL native is non-EVM so it's outside Q402's facilitator pattern. The whole stack moves at once: manifest → SDK v1.7.0 → relay route allowlist → MCP server v0.3.0 → 5 UI surfaces (Dashboard / Payment / Docs / Claude / Landing) → Trust Receipt → tests.
+
+#### What's in the box
+
+- **`contracts.manifest.json` v1.7.0** — `chains.eth.tokens.RLUSD` with the canonical proxy `0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD` (UUPS, implementation `0x9747...0fa9e`), decimals **18** (not 6 — separate `sdk-amount` test guards against the wrong-decimal regression).
+- **SDK v1.7.0** — all 7 chains now declare an explicit `supportedTokens` list. Ethereum lists `["USDC", "USDT", "RLUSD"]`; the other 6 omit RLUSD, so `pay({ chain: "bnb", token: "RLUSD" })` throws at call time before any signature is requested.
+- **Relay route** — `CHAIN_TOKEN_ALLOWLIST` is now exhaustive per chain (was previously only `injective: ["USDT"]`). Server enforces RLUSD ↔ Ethereum-only with a token-specific error message.
+- **`@quackai/q402-mcp` v0.3.0** — `q402_pay` / `q402_quote` / `q402_receipt` zod enums extended to `["USDC", "USDT", "RLUSD"]`. `tokenFor()` throws when RLUSD is requested on a non-eth chain (belt-and-braces guard).
+- **Dashboard Playground** — explicit Token dropdown (Chain / Token / Recipient / Amount, 4-col grid). Selecting Ethereum unlocks the RLUSD option; switching to another chain auto-coerces the token onto the new chain's allowlist. `previewToken` is bound to the dropdown so the code preview + result card both flip in lockstep (no more `USDC sent: $X` hard-code from the v1.23 Codex finding).
+- **Trust Receipt** — `Receipt.token` widened to `"USDC" | "USDT" | "RLUSD"`. Receipt page + OG image both render the token symbol dynamically, so RLUSD receipts work out of the box.
+- **Tests** — new `__tests__/rlusd-cross-chain-guard.test.ts` (35 cases) asserts the triplet invariant across manifest / SDK / relay route / MCP server local source. Full suite: **368/368 green**.
+
+#### Why Ethereum-only
+
+RLUSD is natively issued on XRP Ledger and Ethereum mainnet. The Ethereum form is a standard UUPS-upgradeable ERC-20 with EIP-2612 permit support, which slots cleanly into Q402's existing EIP-7702 + TransferAuthorization witness pattern — no contract redeployment needed.
+
+The XRPL EVM Sidechain (chainId 1440000) is EVM-compatible (Cosmos SDK + Cosmos EVM v0.4.1), so it could host Q402's facilitator in principle, but at the time of writing it has near-zero TVL / TX volume and RLUSD isn't deployed there yet (Ripple status: "coming soon" as of 2026-03). Adding it now would be an empty-chain entry — we wait for traffic + RLUSD deployment before integrating.
+
+XRPL native (the XRP Ledger itself) is non-EVM (no EIP-7702 / EIP-712 equivalents, uses trustlines and native multisig), so integrating it would require a parallel transaction layer in the relayer. That's a separate R&D track, not part of this sprint.
+
+#### Out of scope (deferred)
+
+- **XRPL EVM Sidechain chain integration**: waiting for RLUSD deployment + meaningful TVL on the sidechain.
+- **RLUSD on L2** (Base / Optimism / Ink / Unichain): Ripple has announced these for 2026 via Wormhole NTT, pending NYDFS approval. Q402 currently doesn't support those chains either; will revisit once both pieces ship.
+- **XRPL native settlement**: separate R&D track, requires a non-EVM transaction layer in the relayer.
+
+---
 
 ### v1.26 (2026-05-08)
 

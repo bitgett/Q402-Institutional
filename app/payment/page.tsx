@@ -16,10 +16,13 @@ import { sendErc20Transfer, waitForWalletReceipt, walletErrorMessage, type Walle
 const PAYMENT_ADDRESS = SUBSCRIPTION_ADDRESS;
 
 const PAY_TOKENS = [
-  { id: "bnb-usdc", label: "BNB USDC", chain: "BNB Chain", chainId: "bnb", token: "USDC", decimals: 18, address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "bnb-usdt", label: "BNB USDT", chain: "BNB Chain", chainId: "bnb", token: "USDT", decimals: 18, address: "0x55d398326f99059fF775485246999027B3197955", color: "#F0B90B", img: "/bnb.png"  },
-  { id: "eth-usdc", label: "ETH USDC", chain: "Ethereum",  chainId: "eth", token: "USDC", decimals: 6,  address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", color: "#627EEA", img: "/eth.png"  },
-  { id: "eth-usdt", label: "ETH USDT", chain: "Ethereum",  chainId: "eth", token: "USDT", decimals: 6,  address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", color: "#627EEA", img: "/eth.png"  },
+  { id: "bnb-usdc",  label: "BNB USDC",  chain: "BNB Chain", chainId: "bnb", token: "USDC",  decimals: 18, address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "bnb-usdt",  label: "BNB USDT",  chain: "BNB Chain", chainId: "bnb", token: "USDT",  decimals: 18, address: "0x55d398326f99059fF775485246999027B3197955", color: "#F0B90B", img: "/bnb.png"  },
+  { id: "eth-usdc",  label: "ETH USDC",  chain: "Ethereum",  chainId: "eth", token: "USDC",  decimals: 6,  address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", color: "#627EEA", img: "/eth.png"  },
+  { id: "eth-usdt",  label: "ETH USDT",  chain: "Ethereum",  chainId: "eth", token: "USDT",  decimals: 6,  address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", color: "#627EEA", img: "/eth.png"  },
+  // RLUSD (Ripple USD) — NY DFS regulated stablecoin, ERC-20 + EIP-2612 permit, decimals 18.
+  // Ethereum-only; the relay route rejects RLUSD on every other chain.
+  { id: "eth-rlusd", label: "ETH RLUSD", chain: "Ethereum",  chainId: "eth", token: "RLUSD", decimals: 18, address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", color: "#627EEA", img: "/eth.png"  },
 ];
 
 // `multiplier` is display-only for the "+X% rate" badge and must mirror
@@ -577,7 +580,7 @@ export default function PaymentPage() {
                 <div className="mt-5 pt-4 border-t border-white/6 flex gap-2">
                   <span className="text-yellow/40 text-xs flex-shrink-0">🔒</span>
                   <p className="text-white/20 text-[10px] leading-relaxed">
-                    API key tied to your wallet. Pay in USDC / USDT on BNB Chain or Ethereum — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable · Mantle · Injective).
+                    API key tied to your wallet. Pay in USDC / USDT / RLUSD on BNB Chain or Ethereum (RLUSD is Ethereum-only) — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable · Mantle · Injective).
                   </p>
                 </div>
               </div>

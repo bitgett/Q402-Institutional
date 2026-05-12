@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   let body: {
     apiKey:       string;
     chain:        ChainKey;
-    token:        "USDC" | "USDT";
+    token:        "USDC" | "USDT" | "RLUSD";
     from:         string;
     to:           string;
     amount:       string;
@@ -116,13 +116,24 @@ export async function POST(req: NextRequest) {
 
   // ── 1aa. Per-chain token policy (server-side allowlist) ──────────────────
   // SDK rejects unsupported tokens at pay() time, but a direct API caller
-  // could still try chain="injective" + token="USDC". Mirror the SDK's
-  // supportedTokens guard here so the server is the source of truth and
-  // the asymmetric defense (SDK strict, server tolerant) is closed.
-  // For Injective, native USDC via Circle CCTP is announced for Q2 2026 —
-  // until then USDT is the only token Q402 settles on Injective EVM.
-  const CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT">>> = {
+  // could still try chain="injective" + token="USDC" or chain="bnb" + token="RLUSD".
+  // Mirror the SDK's supportedTokens guard here so the server is the source
+  // of truth and the asymmetric defense (SDK strict, server tolerant) is closed.
+  //
+  //   - Injective: USDT only. Native USDC via Circle CCTP is announced for Q2 2026.
+  //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18).
+  //   - RLUSD is intentionally Ethereum-only — Ripple has not deployed RLUSD on
+  //     the XRPL EVM Sidechain yet, and Q402 is EVM-only so XRPL native is
+  //     out of scope. Other 6 chains reject RLUSD via the absence of the token
+  //     from their allowlist entry.
+  const CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
     injective: ["USDT"],
+    eth:       ["USDC", "USDT", "RLUSD"],
+    bnb:       ["USDC", "USDT"],
+    avax:      ["USDC", "USDT"],
+    xlayer:    ["USDC", "USDT"],
+    mantle:    ["USDC", "USDT"],
+    stable:    ["USDC", "USDT"],
   };
   const allowedTokens = CHAIN_TOKEN_ALLOWLIST[chain];
   if (allowedTokens && !allowedTokens.includes(token)) {
@@ -131,7 +142,9 @@ export async function POST(req: NextRequest) {
         error:
           chain === "injective" && token === "USDC"
             ? "USDC is not yet supported on Injective. Native USDC via Circle CCTP is announced for Q2 2026; until then use USDT on Injective."
-            : `Token "${token}" is not supported on chain "${chain}". Supported: ${allowedTokens.join(", ")}.`,
+            : token === "RLUSD"
+              ? `RLUSD is only supported on Ethereum mainnet. Tried chain="${chain}".`
+              : `Token "${token}" is not supported on chain "${chain}". Supported: ${allowedTokens.join(", ")}.`,
         code: "TOKEN_NOT_SUPPORTED_ON_CHAIN",
       },
       { status: 400 }

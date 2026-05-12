@@ -144,7 +144,7 @@ export default function Hero() {
                   <span className="text-shimmer">stablecoin rails.</span>
                 </h1>
                 <p className="text-xl text-white/45 font-light tracking-wide mb-6">
-                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC or USDT, we cover the rest.
+                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
                 </p>
               </motion.div>
 
@@ -158,7 +158,7 @@ export default function Hero() {
                 {[
                   "EIP-712 off-chain — users never hold a gas token",
                   "One relay call — we cover micro-gas on every chain",
-                  "USDC / USDT settle in seconds, every tx auditable on-chain",
+                  "USDC / USDT / RLUSD settle in seconds, every tx auditable on-chain",
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <span className="text-yellow font-bold text-xs mt-0.5 flex-shrink-0">0{i + 1}</span>

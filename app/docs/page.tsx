@@ -351,7 +351,7 @@ console.log("Paid! TX:", result.txHash);`} />
           {/* ── CLAUDE MCP ── */}
           <Section id="claude-mcp" title="Claude MCP">
             <p className="text-white/55 text-sm mb-6">
-              Q402 ships as a Model Context Protocol server so Claude Desktop, Claude Code, Cline, and any other MCP-compatible AI client can quote and (optionally) settle gasless USDC and USDT payments directly from a chat. The package is{" "}
+              Q402 ships as a Model Context Protocol server so Claude Desktop, Claude Code, Cline, and any other MCP-compatible AI client can quote and (optionally) settle gasless USDC, USDT, and RLUSD payments directly from a chat. The package is{" "}
               <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>{" "}
               on npm and{" "}
               <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a> on GitHub.
@@ -771,7 +771,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "Can I use Q402 with tokens other than USDC?",
-                a: "Currently USDC and USDT are supported on every live chain except Injective EVM, which is USDT-only at launch — native USDC via Circle CCTP is announced for Q2 2026 and will be added in the next minor release. Additional ERC-20 token support is on the roadmap."
+                a: "USDC and USDT are supported on every live chain except Injective EVM, which is USDT-only at launch — native USDC via Circle CCTP is announced for Q2 2026 and will be added in the next minor release. RLUSD (Ripple USD, NY DFS regulated, decimals 18) is supported on Ethereum mainnet only; the SDK rejects RLUSD on any other chain at call time and the relay route enforces the same allowlist server-side. Additional ERC-20 token support is on the roadmap."
               },
               {
                 q: "How do I get an API key?",
