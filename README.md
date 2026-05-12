@@ -255,7 +255,8 @@ Q402-Institutional/
 │   ├── test-receipt.mjs            # end-to-end Trust Receipt smoke (auto-opens browser) (v1.26)
 │   └── agent-example.mjs           # Node.js Agent SDK (unified 6-chain example — TransferAuthorization)
 └── public/
-    ├── q402-sdk.js                 # client SDK v1.6.0 (7 chains, Injective EVM USDT-only until CCTP USDC Q2 2026)
+    ├── q402-sdk.js                 # client SDK v1.7.0 (7 chains; USDC + USDT everywhere except Injective USDT-only until CCTP USDC Q2 2026; RLUSD on Ethereum only)
+    ├── rlusd.png                   # Ripple USD logo (TrustedBy strip + payment rail)
     ├── bnb.png / eth.png / avax.png / xlayer.png / stable.jpg
     └── arbitrum.png / scroll.png
 ```
@@ -289,7 +290,7 @@ The `/payment` page drives a self-serve on-chain checkout → automatic API Key 
 | Business    | 100,000  | $799   | $879   | $1,199 |
 | Enterprise  | 500,000  | $1,999 | $2,199 | $2,999 |
 
-Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT**. The SUBSCRIPTION Safe is currently deployed on BNB Chain + Ethereum at the same deterministic CREATE2 address — the API explicitly rejects payment intents for chains where the Safe is not yet deployed (avalanche/x-layer/stable/mantle/injective) so funds cannot land on an undeployed Safe address. Other chains will be enabled as the Safe is replicated to each network.  
+Accepted payment tokens: **BNB USDC, BNB USDT, ETH USDC, ETH USDT, ETH RLUSD**. The SUBSCRIPTION Safe is currently deployed on BNB Chain + Ethereum at the same deterministic CREATE2 address — the API explicitly rejects payment intents for chains where the Safe is not yet deployed (avalanche/x-layer/stable/mantle/injective) so funds cannot land on an undeployed Safe address. Other chains will be enabled as the Safe is replicated to each network.  
 Payment address: `0x2ffdFD41E461DdE8bE5a28A392dA511084d23faE` (SUBSCRIPTION — 2-of-3 Safe multisig, BNB + Ethereum, revenue-only, no server-side key). The address shown in the Quote Builder always reflects the current `SUBSCRIPTION_ADDRESS` constant in [`app/lib/wallets.ts`](app/lib/wallets.ts) and the chain allowlist in [`app/api/payment/intent/route.ts`](app/api/payment/intent/route.ts).
 
 ---
@@ -319,7 +320,7 @@ const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
 const result3 = await q402s.pay({ to: "0xRecipient", amount: "10.00", token: "USDT" });
 ```
 
-SDK: **v1.6.0** — supports all 7 chains (avax, bnb, eth, xlayer, stable, mantle, injective). Mantle USDT resolves to USDT0 OFT (`0x779Ded...`) post the 2025-11 Mantle ecosystem migration. Injective EVM (chainId 1776) ships USDT-only — native USDC via Circle CCTP is announced for Q2 2026 mainnet rollout.
+SDK: **v1.7.0** — supports all 7 chains (avax, bnb, eth, xlayer, stable, mantle, injective). Mantle USDT resolves to USDT0 OFT (`0x779Ded...`) post the 2025-11 Mantle ecosystem migration. Injective EVM (chainId 1776) ships USDT-only — native USDC via Circle CCTP is announced for Q2 2026 mainnet rollout. **RLUSD (Ripple USD, NY DFS regulated, decimals 18)** is supported on Ethereum mainnet only; every chain now declares an explicit `supportedTokens` allowlist so accidental `chain="bnb", token="RLUSD"` throws at SDK call time before any signature is requested.
 
 > **⚠ `amount` parameter rule** — always pass a **human-readable decimal string** ("5.00", "0.123456").
 > It is converted internally via `ethers.parseUnits(amount, decimals)`. Precision that exceeds the
@@ -1294,7 +1295,7 @@ Env vars: `Q402_API_KEY` and `TEST_PAYER_KEY` required in `.env.local`.
 - **`contracts.manifest.json` v1.7.0** — `chains.eth.tokens.RLUSD` with the canonical proxy `0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD` (UUPS, implementation `0x9747...0fa9e`), decimals **18** (not 6 — separate `sdk-amount` test guards against the wrong-decimal regression).
 - **SDK v1.7.0** — all 7 chains now declare an explicit `supportedTokens` list. Ethereum lists `["USDC", "USDT", "RLUSD"]`; the other 6 omit RLUSD, so `pay({ chain: "bnb", token: "RLUSD" })` throws at call time before any signature is requested.
 - **Relay route** — `CHAIN_TOKEN_ALLOWLIST` is now exhaustive per chain (was previously only `injective: ["USDT"]`). Server enforces RLUSD ↔ Ethereum-only with a token-specific error message.
-- **`@quackai/q402-mcp` v0.3.0** — `q402_pay` / `q402_quote` / `q402_receipt` zod enums extended to `["USDC", "USDT", "RLUSD"]`. `tokenFor()` throws when RLUSD is requested on a non-eth chain (belt-and-braces guard).
+- **`@quackai/q402-mcp` v0.3.3** — `q402_pay` / `q402_quote` / `q402_receipt` zod enums **and** public `inputSchema.enum` extended to `["USDC", "USDT", "RLUSD"]`. `tokenFor()` throws when RLUSD is requested on a non-eth chain (belt-and-braces guard). v0.3.1 set the package author to `David Lee <davidlee@quackai.ai>`; v0.3.2 closed an inputSchema-vs-zod-enum drift caught in external review; v0.3.3 surfaces RLUSD in the `PAY_TOOL` description so MCP clients pick up the new capability.
 - **Dashboard Playground** — explicit Token dropdown (Chain / Token / Recipient / Amount, 4-col grid). Selecting Ethereum unlocks the RLUSD option; switching to another chain auto-coerces the token onto the new chain's allowlist. `previewToken` is bound to the dropdown so the code preview + result card both flip in lockstep (no more `USDC sent: $X` hard-code from the v1.23 Codex finding).
 - **Trust Receipt** — `Receipt.token` widened to `"USDC" | "USDT" | "RLUSD"`. Receipt page + OG image both render the token symbol dynamically, so RLUSD receipts work out of the box.
 - **Tests** — new `__tests__/rlusd-cross-chain-guard.test.ts` (35 cases) asserts the triplet invariant across manifest / SDK / relay route / MCP server local source. Full suite: **368/368 green**.
@@ -1330,7 +1331,7 @@ XRPL native (the XRP Ledger itself) is non-EVM (no EIP-7702 / EIP-712 equivalent
 - **Dashboard wiring** — Transactions tab grows a Receipt column (`patchRelayedTxReceiptId` in [`app/lib/db.ts`](app/lib/db.ts) back-fills the row when a deferred receipt eventually materializes).
 - **Last-resort alert** [`app/lib/ops-alerts.ts`](app/lib/ops-alerts.ts) — when both inline retries AND the backfill enqueue fail (KV unreachable on both sides), the relay route fires a `critical` Telegram message with txHash / chain / payer / recipient / amount so an operator can manually recover the receipt. The only path where a successful relay can ship without a reachable receipt.
 - **Webhook payload** — `amount` switched from JS number to decimal string (matches SDK precision); `receiptId` + `receiptUrl` (absolute URL) added; both nullable to mirror the inline-fail-then-backfill window.
-- **MCP `q402_receipt`** ([`mcp-server` v0.2.1](https://www.npmjs.com/package/@quackai/q402-mcp)) — fourth tool, takes a `rct_…` id and returns the public record + a locally-verified ECDSA boolean. `txHash`-only lookup is reserved for a future round (the public JSON endpoint doesn't expose the tx index yet).
+- **MCP `q402_receipt`** ([`mcp-server` v0.3.3](https://www.npmjs.com/package/@quackai/q402-mcp)) — fourth tool, takes a `rct_…` id and returns the public record + a locally-verified ECDSA boolean. `txHash`-only lookup is reserved for a future round (the public JSON endpoint doesn't expose the tx index yet).
 
 #### Audit rounds closed in this release
 
@@ -1384,25 +1385,26 @@ A complete compromise of the Vercel runtime now drains at most the operational g
 
 #### Distribution surfaces
 
-- **npm** — https://www.npmjs.com/package/@quackai/q402-mcp · v0.1.3 · 0 vulnerabilities · MIT-class Apache-2.0.
+- **npm** — https://www.npmjs.com/package/@quackai/q402-mcp · v0.3.3 (latest) · Apache-2.0. Version history covers the original three-tool launch (v0.1.x), Trust Receipt fourth tool (v0.2.x), RLUSD support (v0.3.x).
 - **GitHub** — https://github.com/bitgett/q402-mcp (separate from this repo so the package can be vendored independently; chain registry is drift-tested against `contracts.manifest.json`).
 - **MCP Registry** — `registry.modelcontextprotocol.io/v0.1/servers?search=q402` — `status: active`, `isLatest: true`. Filed via the official `mcp-publisher` CLI with a server.json that mirrors the published npm package version.
 - **Claude Code CLI** — install in 30 seconds: `claude mcp add q402 -- npx -y @quackai/q402-mcp`.
 - **Claude Desktop / other MCP clients** — paste the snippet from `/dashboard` (Claude tab) or `/claude` into `claude_desktop_config.json`.
 
-#### Tools exposed (three, intentionally minimal)
+#### Tools exposed (four, intentionally minimal)
 
 | Tool | Auth | What it does |
 |---|---|---|
 | `q402_quote` | none | Compare gas + supported tokens across all 7 chains. Read-only — no key, no funds. |
 | `q402_balance` | API key | Verify the configured key, show its plan tier (live vs sandbox) and the atomic remaining-credit count from `quota:{address}`. |
-| `q402_pay` | API key + signer + flag | Send a gasless USDC or USDT payment. **Sandbox by default**; real on-chain TX requires `Q402_API_KEY` (live tier) + `Q402_PRIVATE_KEY` + `Q402_ENABLE_REAL_PAYMENTS=1`, all set in shell environment, not in the config file (which syncs through iCloud/OneDrive on most setups). Two extra guards on top: per-call max `Q402_MAX_AMOUNT_PER_CALL` (default $5) and an optional recipient allowlist `Q402_ALLOWED_RECIPIENTS`.
+| `q402_pay` | API key + signer + flag | Send a gasless USDC, USDT, or RLUSD payment. **Sandbox by default**; real on-chain TX requires `Q402_API_KEY` (live tier) + `Q402_PRIVATE_KEY` + `Q402_ENABLE_REAL_PAYMENTS=1`, all set in shell environment, not in the config file (which syncs through iCloud/OneDrive on most setups). Two extra guards on top: per-call max `Q402_MAX_AMOUNT_PER_CALL` (default $5) and an optional recipient allowlist `Q402_ALLOWED_RECIPIENTS`. RLUSD requires `chain: "eth"` — the zod enum and `tokenFor()` runtime guard both reject it on any other chain.
+| `q402_receipt` | none | Fetch + locally verify a Trust Receipt by its `rct_…` id. Recovers the relayer ECDSA signature inside the MCP process; same canonical-JSON + EIP-191 recovery the receipt page does in the browser.
 
 The `q402_pay` tool description tells the model to ALWAYS get explicit user confirmation of recipient + amount before invoking, giving four layers of safety before any wei moves: sandbox-default + cap + allowlist + confirm-in-chat.
 
 #### Front-end surfaces added
 
-- `/claude` — long-scroll landing page with a **live `q402_quote` simulation** (amount input + USDC/USDT/ALL filter re-rank all 7 chains via framer-motion layout transitions, mirroring `mcp-server/src/chains.ts`). Animated install command bar with one-click copy. Three gradient tool cards. Four-guard safety panel. CTA to `/dashboard`.
+- `/claude` — long-scroll landing page with a **live `q402_quote` simulation** (amount input + ANY / USDC / USDT / RLUSD filter re-rank all 7 chains via framer-motion layout transitions, mirroring `mcp-server/src/chains.ts`). Animated install command bar with one-click copy. Four gradient tool cards (now including `q402_receipt`). Four-guard safety panel. CTA to `/dashboard`.
 - `/docs` → new "Claude MCP" section between Quick Start and Gas Pool, with install command + tool reference table + sandbox-vs-live walkthrough.
 - `/dashboard` → new fifth tab "Claude" with a `ClaudeMcpCard` that pre-fills the user's **sandbox key** (deliberately not live) into a copyable `claude_desktop_config.json` snippet, and a Live mode panel that points the user at shell-env setup instead.
 - Hero ribbon — single sleek "Claude × Quack AI · Now live in Claude Desktop →" pill at the top of `/`, animated shine + pulse + hover lift, links to `/docs#claude-mcp`.
