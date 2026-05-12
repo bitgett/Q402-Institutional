@@ -103,6 +103,11 @@ export const CHAIN_CONFIG = {
     implContract: process.env.ETH_IMPLEMENTATION_CONTRACT ?? "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
     usdc: { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, symbol: "USDC" },
     usdt: { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, symbol: "USDT" },
+    // Ripple USD — NY DFS regulated stablecoin. ERC-20 + EIP-2612 permit, decimals 18.
+    // UUPS proxy; implementation at 0x9747a0d261c2d56eb93f542068e5d1e23170fa9e.
+    // Only listed on Ethereum (no XRPL EVM deployment yet; XRPL native is non-EVM and
+    // out of scope). Cross-chain use is rejected by CHAIN_TOKEN_ALLOWLIST in the relay route.
+    rlusd: { address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", decimals: 18, symbol: "RLUSD" },
   },
   xlayer: {
     name: "X Layer",
@@ -209,7 +214,7 @@ export interface EIP3009PayParams {
   /** Chain key — currently xlayer only */
   chainKey: ChainKey;
   /** Token symbol */
-  token: "USDC" | "USDT";
+  token: "USDC" | "USDT" | "RLUSD";
 }
 
 /**
@@ -409,8 +414,18 @@ export function getRelayerWallet(chainKey: ChainKey): ethers.Wallet {
   return new ethers.Wallet(key.privateKey, provider);
 }
 
-export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT") {
+export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT" | "RLUSD") {
   const cfg = CHAIN_CONFIG[chainKey];
+  if (tokenSymbol === "RLUSD") {
+    // RLUSD is Ethereum-only. The relay route's CHAIN_TOKEN_ALLOWLIST rejects
+    // chain≠eth + token=RLUSD before we reach here, so this access is safe.
+    // Throwing instead of returning undefined keeps the function's return type
+    // narrow (no `| undefined`) for callers that index into .address / .decimals.
+    if (chainKey !== "eth") {
+      throw new Error(`RLUSD is only supported on Ethereum mainnet (got chain=${chainKey})`);
+    }
+    return (cfg as typeof CHAIN_CONFIG.eth).rlusd;
+  }
   return tokenSymbol === "USDC" ? cfg.usdc : cfg.usdt;
 }
 

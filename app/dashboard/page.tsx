@@ -283,17 +283,32 @@ function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
 // ── Playground ────────────────────────────────────────────────────────────────
 function Playground({ apiKey }: { apiKey: string }) {
   const [chain, setChain] = useState("avax");
+  const [token, setToken] = useState<"USDC" | "USDT" | "RLUSD">("USDC");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("5");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<null | { hash: string }>(null);
 
-  // Per-chain default token. Injective is USDT-only until Circle's CCTP native
-  // USDC mainnet rollout (Q2 2026); every other chain defaults to USDC. Keeps
-  // the preview snippet aligned with the server-side allowlist enforcement
-  // in app/api/relay/route.ts so a user copy-pasting the snippet for Injective
-  // doesn't get a 400 TOKEN_NOT_SUPPORTED_ON_CHAIN.
-  const previewToken = chain === "injective" ? "USDT" : "USDC";
+  // Per-chain token availability mirrors app/api/relay/route.ts CHAIN_TOKEN_ALLOWLIST.
+  //   - Injective: USDT only (Circle CCTP native USDC announced for Q2 2026)
+  //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18)
+  //   - Others:    USDC / USDT
+  // Keep the preview snippet aligned so a copy-paste never hits a 400.
+  const availableTokens: ("USDC" | "USDT" | "RLUSD")[] =
+    chain === "injective" ? ["USDT"]
+      : chain === "eth"    ? ["USDC", "USDT", "RLUSD"]
+      :                       ["USDC", "USDT"];
+
+  // Coerce the selected token onto the chain's allowlist when chain changes.
+  // (e.g. user had RLUSD selected on eth, then switched to bnb → snap to USDC.)
+  useEffect(() => {
+    if (!availableTokens.includes(token)) {
+      setToken(availableTokens[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain]);
+
+  const previewToken = token;
 
   async function simulate() {
     setLoading(true); setResult(null);
@@ -304,7 +319,7 @@ function Playground({ apiKey }: { apiKey: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid sm:grid-cols-3 gap-3">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Chain</label>
           <div className="relative">
             <select value={chain} onChange={e => setChain(e.target.value)} className="w-full appearance-none border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30 cursor-pointer" style={{ background: "#0d1422" }}>
@@ -315,6 +330,15 @@ function Playground({ apiKey }: { apiKey: string }) {
               <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
               <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
               <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
+            </select>
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
+          </div></div>
+        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Token</label>
+          <div className="relative">
+            <select value={token} onChange={e => setToken(e.target.value as "USDC" | "USDT" | "RLUSD")} className="w-full appearance-none border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30 cursor-pointer" style={{ background: "#0d1422" }}>
+              {availableTokens.map(t => (
+                <option key={t} value={t} style={{ background: "#0d1422" }}>{t}{t === "RLUSD" ? " (Ethereum-only)" : ""}</option>
+              ))}
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
           </div></div>
@@ -1195,7 +1219,7 @@ export default function DashboardPage() {
               <h2 className="text-lg font-semibold">Use Q402 from Claude</h2>
               <p className="text-white/40 text-sm">
                 Q402 ships as a Model Context Protocol server, so Claude Desktop, Claude Code, and any other
-                MCP-compatible AI client can quote and (optionally) settle gasless USDC and USDT payments
+                MCP-compatible AI client can quote and (optionally) settle gasless USDC, USDT, and RLUSD payments
                 directly from a chat. The config snippet below is pre-filled with your{" "}
                 <strong className="text-white/60">sandbox key</strong> — safe to paste into{" "}
                 <code className="text-white/60">claude_desktop_config.json</code>. Real on-chain payments

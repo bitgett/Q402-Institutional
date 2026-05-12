@@ -304,7 +304,7 @@ export async function POST(req: NextRequest) {
       const priorLabel  = priorPlan ? `was: ${priorPlan}` : "first activation";
       const tierTag     = tierUpgraded ? "  ⬆ tier upgrade" : "";
       const amountLabel = result.amountUSD != null ? `$${result.amountUSD}` : "(unknown)";
-      const tokenLabel  = result.token ?? "USDC/USDT";
+      const tokenLabel  = result.token ?? "USDC/USDT/RLUSD";
       const chainLabel  = result.chain ?? "(unknown chain)";
       const txHash      = result.txHash ?? "(unknown tx)";
       const lines = [

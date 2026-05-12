@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts.manifest.schema.json",
-  "version": "1.6.0",
-  "updatedAt": "2026-04-27",
+  "version": "1.7.0",
+  "updatedAt": "2026-05-12",
   "notes": [
     "Single source of truth for Q402 deployed contracts and EIP-712 signing conventions.",
     "If values in this file differ from app/lib/relayer.ts, public/q402-sdk.js, or README.md — this file wins.",
@@ -63,7 +63,8 @@
       },
       "tokens": {
         "USDC": { "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "decimals": 6 },
-        "USDT": { "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "decimals": 6 }
+        "USDT": { "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "decimals": 6 },
+        "RLUSD": { "address": "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", "decimals": 18, "notes": "Ripple USD — NY DFS regulated stablecoin issued by Standard Custody & Trust (Ripple subsidiary). ERC-20 + EIP-2612 permit. UUPS upgradeable proxy; implementation at 0x9747a0d261c2d56eb93f542068e5d1e23170fa9e. Q402 uses the EIP-7702 + EIP-712 TransferAuthorization witness pattern, so RLUSD's permit support is incidental — not required for settlement." }
       },
       "explorer": "https://etherscan.io",
       "verifyUrl": "https://etherscan.io/address/0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD#code"
