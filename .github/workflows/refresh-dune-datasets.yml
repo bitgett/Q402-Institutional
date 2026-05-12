@@ -1,0 +1,29 @@
+name: Refresh Dune datasets
+
+on:
+  schedule:
+    # Every Monday 00:00 UTC — pushes fresh off-chain data
+    # (npm downloads etc.) into the public Q402 Settlement Activity
+    # dashboard. On-chain widgets read live from each chain's tx table
+    # and don't need this; only the offchain rails do.
+    - cron: "0 0 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    name: Push offchain CSVs to Dune
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Refresh datasets
+        run: node scripts/refresh-dune-datasets.mjs
+        env:
+          DUNE_API_KEY: ${{ secrets.DUNE_API_KEY }}
