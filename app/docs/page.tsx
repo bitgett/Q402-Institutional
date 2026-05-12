@@ -329,7 +329,22 @@ const result = await q402.pay({
   token:  "USDT",   // required — USDC not yet supported on Injective
 });`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · That&apos;s it</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Ethereum RLUSD (NY DFS regulated)</h3>
+            <p className="text-white/55 text-sm mb-3">
+              RLUSD (Ripple USD) is a NY DFS-regulated stablecoin issued by Standard Custody &amp; Trust, a Ripple subsidiary. It is supported on Ethereum mainnet only — Ripple has not deployed RLUSD on the XRPL EVM Sidechain yet, and XRPL native is non-EVM. Passing <code className="text-orange-300">token: &quot;RLUSD&quot;</code> with any chain other than <code className="text-orange-300">&quot;eth&quot;</code> throws in the SDK and is rejected 400 by the relay route. Decimals are <strong>18</strong> (not 6 like USDC/USDT), but the SDK handles the conversion via <code className="text-orange-300">ethers.parseUnits</code> — pass the amount as a human-readable decimal string just like any other token.
+            </p>
+            <CodeBlock lang="javascript" code={`const q402 = new Q402Client({
+  apiKey: "q402_live_YOUR_KEY",
+  chain:  "eth",
+});
+
+const result = await q402.pay({
+  to:     recipientAddress,
+  amount: "10.00",
+  token:  "RLUSD",   // Ethereum-only — throws on any other chain
+});`} />
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">5 · That&apos;s it</h3>
             <CodeBlock lang="typescript" code={`// Full result shape:
 // {
 //   success:       true,
