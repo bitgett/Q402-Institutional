@@ -236,7 +236,7 @@ export default function Hero() {
                     <span className="w-3 h-3 rounded-full bg-red-500/60" />
                     <span className="w-3 h-3 rounded-full bg-yellow/50" />
                     <span className="w-3 h-3 rounded-full bg-green-400/50" />
-                    <span className="ml-4 text-white/20 text-xs font-mono">q402-sdk · v1.6.0</span>
+                    <span className="ml-4 text-white/20 text-xs font-mono">q402-sdk · v1.7.0</span>
                     <div className="ml-auto flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
                       <span className="text-[10px] text-white/25 font-mono">connected</span>
@@ -292,6 +292,7 @@ export default function Hero() {
                       <span className="text-white/40">: </span>
                       <span className="text-orange-300">&quot;USDC&quot;</span>
                       <span className="text-white/40"> {"});"}</span>
+                      <span className="text-white/20 ml-2">{"// or USDT / RLUSD (eth-only)"}</span>
                     </div>
 
                     <div className="border-t pt-3 space-y-0.5" style={{ borderColor: "rgba(255,255,255,0.06)" }}>

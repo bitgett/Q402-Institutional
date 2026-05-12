@@ -1,4 +1,4 @@
-// Chain order: BNB → Ethereum → Mantle → Avalanche → Injective → X Layer → Stable → USDC → USDT → Arbitrum → Scroll
+// Chain order: BNB → Ethereum → Mantle → Avalanche → Injective → X Layer → Stable → USDC → USDT → RLUSD → Arbitrum → Scroll
 const chains = [
   {
     name: "BNB Chain",
@@ -89,6 +89,18 @@ const chains = [
       <svg viewBox="0 0 32 32" className="w-6 h-6" fill="none">
         <circle cx="16" cy="16" r="14" fill="#26A17B"/>
         <path d="M17.5 17.2C17.4 17.2 16.8 17.3 16 17.3C15.2 17.3 14.6 17.2 14.5 17.2C11.5 17 9.3 16.3 9.3 15.5C9.3 14.7 11.5 14 14.5 13.8V15.9C14.7 15.9 15.2 16 16 16C16.8 16 17.3 15.9 17.5 15.9V13.8C20.5 14 22.7 14.7 22.7 15.5C22.7 16.3 20.5 17 17.5 17.2ZM17.5 13.4V11.5H21.5V9H10.5V11.5H14.5V13.4C11.1 13.6 8.5 14.5 8.5 15.5C8.5 16.5 11.1 17.4 14.5 17.6V23H17.5V17.6C20.9 17.4 23.5 16.5 23.5 15.5C23.5 14.5 20.9 13.6 17.5 13.4Z" fill="white"/>
+      </svg>
+    ),
+  },
+  {
+    // Ripple USD (RLUSD) — NY DFS regulated, Ethereum-only (decimals 18).
+    name: "RLUSD",
+    color: "#0085FF",
+    status: "stable",
+    icon: (
+      <svg viewBox="0 0 32 32" className="w-6 h-6" fill="none">
+        <circle cx="16" cy="16" r="14" fill="#0085FF"/>
+        <text x="16" y="20" textAnchor="middle" fontSize="9" fontWeight="700" fill="white" fontFamily="ui-sans-serif, system-ui">RLUSD</text>
       </svg>
     ),
   },
