@@ -26,13 +26,14 @@ export default function TermsPage() {
             <h2 className="text-white font-semibold text-base mb-3">2. Description of Service</h2>
             <p className="mb-3">
               Q402 provides a gasless ERC-20 payment relay infrastructure. Customers integrate the Q402
-              SDK or API to allow their end-users to transfer USDC/USDT on supported EVM chains without
-              holding native gas tokens. Q402&apos;s relayer wallet pays all on-chain transaction fees
-              on the customer&apos;s behalf.
+              SDK or API to allow their end-users to transfer USDC, USDT, or RLUSD on supported EVM chains
+              without holding native gas tokens. Q402&apos;s relayer wallet pays all on-chain transaction
+              fees on the customer&apos;s behalf.
             </p>
             <p>
-              Supported chains include Avalanche, BNB Chain, Ethereum, X Layer, and Stable (subject to
-              change). Q402 does not custody, hold, or control any customer or end-user funds at any time.
+              Supported chains include Avalanche, BNB Chain, Ethereum, X Layer, Stable, Mantle, and Injective
+              EVM (subject to change). RLUSD is supported only on Ethereum mainnet. Q402 does not custody,
+              hold, or control any customer or end-user funds at any time.
             </p>
           </section>
 
@@ -50,7 +51,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">4. Subscription &amp; Payment</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li>Subscriptions are activated via on-chain USDC/USDT payment to the Q402 payment address.</li>
+              <li>Subscriptions are activated via on-chain USDC, USDT, or RLUSD payment to the Q402 payment address (RLUSD on Ethereum mainnet only).</li>
               <li>All payments are final and non-refundable once on-chain confirmation is received.</li>
               <li>Each paid purchase grants a 30-day access window plus the transaction credits listed for the selected tier. Credits accumulate across renewals; access days stack if you renew before expiry.</li>
               <li>Your plan level is determined by cumulative paid amount within an active 30-day window, normalized to BNB Chain base pricing (Ethereum and Avalanche payments are converted at the published chain multiplier). When cumulative spend crosses a higher tier&apos;s threshold, your plan upgrades automatically. Plans never downgrade while the window is active. If the window lapses (no payment for 30 days after the last renewal), cumulative resets and the next payment establishes a new window.</li>

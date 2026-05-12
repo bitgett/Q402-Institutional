@@ -1,5 +1,10 @@
 /**
  * Q402 Client SDK (browser-compatible)
+ * v1.7.0 — RLUSD (Ripple USD, NY DFS regulated stablecoin, decimals 18) added
+ *          on Ethereum mainnet. RLUSD is Ethereum-only; the other 6 chains
+ *          reject token:"RLUSD" via the supportedTokens allowlist. All chains
+ *          now declare an explicit supportedTokens list so per-chain token
+ *          policy is the single SDK source of truth.
  * v1.6.0 — Injective EVM (chainId 1776) added as the 7th supported chain.
  *          USDT only on Injective for now; native USDC via Circle CCTP is
  *          announced for Q2 2026 and will be added then. The IBC-bridged
@@ -60,6 +65,7 @@ const Q402_CHAIN_CONFIG = {
     implContract: "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
     usdc: { address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6 },
     usdt: { address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", decimals: 6 },
+    supportedTokens: ["USDC", "USDT"],
   },
   bnb: {
     name:         "BNB Chain",
@@ -69,6 +75,7 @@ const Q402_CHAIN_CONFIG = {
     implContract: "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
     usdc: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
     usdt: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
+    supportedTokens: ["USDC", "USDT"],
   },
   eth: {
     name:         "Ethereum",
@@ -78,6 +85,11 @@ const Q402_CHAIN_CONFIG = {
     implContract: "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
     usdc: { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
     usdt: { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
+    // Ripple USD (RLUSD) — NY DFS regulated, ERC-20 + EIP-2612 permit, decimals 18.
+    // UUPS proxy; implementation at 0x9747a0d261c2d56eb93f542068e5d1e23170fa9e.
+    // Ethereum-only. Other 6 chains reject token:"RLUSD" via supportedTokens absence.
+    rlusd: { address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", decimals: 18 },
+    supportedTokens: ["USDC", "USDT", "RLUSD"],
   },
   xlayer: {
     name:         "X Layer",
@@ -87,6 +99,7 @@ const Q402_CHAIN_CONFIG = {
     implContract: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     usdc: { address: "0x74b7F16337b8972027F6196A17a631aC6dE26d22", decimals: 6 },
     usdt: { address: "0x1E4a5963aBFD975d8c9021ce480b42188849D41D", decimals: 6 },
+    supportedTokens: ["USDC", "USDT"],
   },
   stable: {
     name:         "Stable",
@@ -97,6 +110,7 @@ const Q402_CHAIN_CONFIG = {
     // USDT0 is the only token on Stable (gas token + transfer token)
     usdc: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
     usdt: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
+    supportedTokens: ["USDC", "USDT"],
   },
   mantle: {
     name:         "Mantle",
@@ -108,6 +122,7 @@ const Q402_CHAIN_CONFIG = {
     // USDT0 (LayerZero OFT) — Mantle ecosystem default since the 2025-11-27 migration.
     // Legacy bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) sunset 2026-02-03.
     usdt: { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
+    supportedTokens: ["USDC", "USDT"],
   },
   injective: {
     name:         "Injective",
@@ -201,7 +216,10 @@ class Q402Client {
    *                               and scientific notation are rejected — never pass a
    *                               JS Number, since IEEE-754 loses precision for
    *                               18-decimal tokens.
-   * @param {"USDC"|"USDT"} opts.token
+   * @param {"USDC"|"USDT"|"RLUSD"} opts.token
+   *   - USDC / USDT: supported on all chains except where the per-chain
+   *     supportedTokens list excludes them (e.g. Injective is USDT-only).
+   *   - RLUSD: Ripple USD, NY DFS regulated, decimals 18 — Ethereum mainnet only.
    * @returns {Promise<{success, txHash, blockNumber, tokenAmount, token, chain, method}>}
    * @throws  When amount is empty, malformed, negative, zero, or has more
    *          decimal places than the target token supports.
@@ -210,13 +228,17 @@ class Q402Client {
     // Per-chain token gating. Injective only supports USDT until Circle CCTP
     // native USDC ships (Q2 2026); rejecting "USDC" here surfaces the constraint
     // immediately instead of routing the call to a non-existent contract.
+    // RLUSD is Ethereum-only — other chains' supportedTokens list omits it,
+    // so this same guard catches `chain="bnb", token="RLUSD"` etc.
     if (this.chainCfg.supportedTokens && !this.chainCfg.supportedTokens.includes(token)) {
       throw new Error(
         `Token "${token}" is not supported on chain "${this.chain}". ` +
         `Supported tokens for ${this.chain}: ${this.chainCfg.supportedTokens.join(", ")}.` +
         (this.chain === "injective" && token === "USDC"
           ? " Native USDC via Circle CCTP is announced for Q2 2026; until then, use USDT on Injective."
-          : "")
+          : token === "RLUSD"
+            ? " RLUSD is only supported on Ethereum mainnet — pass `chain: \"eth\"`."
+            : "")
       );
     }
     const ethereum = window.ethereum || window.okxwallet;

@@ -24,7 +24,7 @@ interface ChainRow {
   chainId: number;
   gas: string;
   approxGasCostUsd: number;
-  tokens: ReadonlyArray<"USDC" | "USDT">;
+  tokens: ReadonlyArray<"USDC" | "USDT" | "RLUSD">;
   note?: string;
 }
 
@@ -35,7 +35,7 @@ const CHAINS: ChainRow[] = [
   { key: "mantle",    name: "Mantle",            chainId: 5000,  gas: "MNT",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
   { key: "avax",      name: "Avalanche C-Chain", chainId: 43114, gas: "AVAX",  approxGasCostUsd: 0.003,  tokens: ["USDC", "USDT"] },
   { key: "injective", name: "Injective EVM",     chainId: 1776,  gas: "INJ",   approxGasCostUsd: 0.004,  tokens: ["USDT"], note: "USDT only — Circle CCTP USDC announced for Q2 2026" },
-  { key: "eth",       name: "Ethereum Mainnet",  chainId: 1,     gas: "ETH",   approxGasCostUsd: 1.2,    tokens: ["USDC", "USDT"], note: "L1 — gas is volatile" },
+  { key: "eth",       name: "Ethereum Mainnet",  chainId: 1,     gas: "ETH",   approxGasCostUsd: 1.2,    tokens: ["USDC", "USDT", "RLUSD"], note: "L1 — gas is volatile. RLUSD (Ripple USD, NY DFS regulated) Ethereum-only." },
 ];
 
 function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
@@ -61,7 +61,7 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
 
 export default function ClaudePage() {
   const [amount, setAmount] = useState("50");
-  const [tokenFilter, setTokenFilter] = useState<"USDC" | "USDT" | "ANY">("ANY");
+  const [tokenFilter, setTokenFilter] = useState<"USDC" | "USDT" | "RLUSD" | "ANY">("ANY");
 
   const ranked = useMemo(() => {
     const filtered = CHAINS.filter(c =>
@@ -274,7 +274,7 @@ export default function ClaudePage() {
               </div>
             </div>
             <div className="flex items-center gap-1 ml-auto">
-              {(["ANY", "USDC", "USDT"] as const).map(t => (
+              {(["ANY", "USDC", "USDT", "RLUSD"] as const).map(t => (
                 <button
                   key={t}
                   type="button"
@@ -363,7 +363,7 @@ export default function ClaudePage() {
               className="px-5 py-3 text-[11px] text-white/30 border-t"
               style={{ borderColor: "rgba(255,255,255,0.04)" }}
             >
-              {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC or USDT" : tokenFilter}` +
+              {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC, USDT, or RLUSD" : tokenFilter}` +
                 ` — Claude picks ${ranked[0]?.name ?? "—"} by default. Sender always pays $0;` +
                 " gas comes from the developer's pre-funded gas tank."}
             </div>
@@ -409,7 +409,7 @@ export default function ClaudePage() {
                 color: "rgba(245,158,11,0.32)",
                 bg: "rgba(245,158,11,0.06)",
                 description:
-                  "Send a gasless USDC or USDT payment. Sandbox by default — three env vars must align before a single wei moves.",
+                  "Send a gasless USDC, USDT, or RLUSD payment. Sandbox by default — three env vars must align before a single wei moves.",
               },
               {
                 name: "q402_receipt",
