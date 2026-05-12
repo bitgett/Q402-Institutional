@@ -98,10 +98,8 @@ const chains = [
     color: "#0085FF",
     status: "stable",
     icon: (
-      <svg viewBox="0 0 32 32" className="w-6 h-6" fill="none">
-        <circle cx="16" cy="16" r="14" fill="#0085FF"/>
-        <text x="16" y="20" textAnchor="middle" fontSize="9" fontWeight="700" fill="white" fontFamily="ui-sans-serif, system-ui">RLUSD</text>
-      </svg>
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/rlusd.png" alt="RLUSD" className="w-6 h-6 rounded-full" />
     ),
   },
   {
