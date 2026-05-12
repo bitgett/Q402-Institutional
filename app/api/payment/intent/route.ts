@@ -42,12 +42,16 @@ const INTENT_TTL = 2 * 60 * 60; // 2 hours
 const VALID_CHAINS: ReadonlyArray<string> = SUBSCRIPTION_DEPLOYED_CHAINS;
 
 // Subscription tokens the BNB/ETH on-chain scanner actually recognizes —
-// USDC and USDT only. USDT0 is a Mantle/Stable-chain alias for relay/gas
-// contexts and intentionally NOT a subscription rail (no USDT0 contract on
-// BNB or ETH for the user to send from). Including it here would let a
-// direct API caller create a payment intent that the scanner can never
+// USDC, USDT, RLUSD (Ethereum-only). USDT0 is a Mantle/Stable-chain alias for
+// relay/gas contexts and intentionally NOT a subscription rail (no USDT0
+// contract on BNB or ETH for the user to send from). Including it here would
+// let a direct API caller create a payment intent that the scanner can never
 // match, leaving the user's payment in limbo.
-const VALID_TOKENS = ["USDC", "USDT"];
+//
+// RLUSD (Ripple USD, NY DFS regulated, decimals 18) is supported only when
+// the payment chain is "eth" — the cross-chain guard below mirrors the relay
+// route's CHAIN_TOKEN_ALLOWLIST.
+const VALID_TOKENS = ["USDC", "USDT", "RLUSD"];
 
 
 export async function POST(req: NextRequest) {
@@ -98,6 +102,15 @@ export async function POST(req: NextRequest) {
   if (token !== undefined && !VALID_TOKENS.includes(token)) {
     return NextResponse.json(
       { error: `token must be one of: ${VALID_TOKENS.join(", ")}` },
+      { status: 400 },
+    );
+  }
+
+  // RLUSD is Ethereum-only — reject any non-eth payment chain attempting RLUSD
+  // before reserving an intent. Mirrors app/api/relay/route.ts CHAIN_TOKEN_ALLOWLIST.
+  if (token === "RLUSD" && chain !== "eth") {
+    return NextResponse.json(
+      { error: 'RLUSD is only supported on Ethereum mainnet (chain="eth")' },
       { status: 400 },
     );
   }
