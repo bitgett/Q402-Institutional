@@ -174,8 +174,12 @@ describe("BNB-focus sprint — SDK (browser, no module imports)", () => {
 
 describe("BNB-focus sprint — UI surfaces import the shared flag", () => {
   it("Hero.tsx imports BNB_FOCUS_MODE from feature-flags", () => {
+    // Allow either inline ({ BNB_FOCUS_MODE }) or multi-name import
+    // ({ BNB_FOCUS_MODE, TRIAL_CREDITS, ... }) — A2 added trial constants
+    // to the same import. The drift signal we care about is "BNB_FOCUS_MODE
+    // is sourced from @/app/lib/feature-flags", not the brace shape.
     expect(heroSource).toMatch(
-      /import\s*\{\s*BNB_FOCUS_MODE\s*\}\s*from\s*["']@\/app\/lib\/feature-flags["']/,
+      /import\s*\{[\s\S]*?BNB_FOCUS_MODE[\s\S]*?\}\s*from\s*["']@\/app\/lib\/feature-flags["']/,
     );
   });
 

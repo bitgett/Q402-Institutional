@@ -54,3 +54,20 @@ export function getSprintAllowedTokens(chain: string): readonly string[] {
   if (chain === "bnb") return ["USDC", "USDT"];
   return [];
 }
+
+/**
+ * Free-trial parameters — also sprint-scoped (BNB-focus sprint kicked off
+ * the trial onboarding system). Constants live here, not on the relay/db
+ * paths, so both the UI CTA copy and the /api/trial/activate route read
+ * the same authoritative value.
+ *
+ * 30 days × 2,000 TX matches the plan's "no-friction onboarding" pitch:
+ *   - 30d is the same window as paid subscriptions (so `paidAt + 30d`
+ *     expiry logic in db.ts isSubscriptionActive applies without a fork)
+ *   - 2,000 TX is 4× the entry-paid tier (500) — enough to ship a small
+ *     integration end-to-end without paying, not enough to host a real
+ *     dApp on the trial alone (intentional: drives conversion).
+ */
+export const TRIAL_DURATION_DAYS = 30;
+export const TRIAL_CREDITS = 2_000;
+export const TRIAL_PLAN_NAME = "trial";

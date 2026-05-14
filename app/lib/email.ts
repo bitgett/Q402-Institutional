@@ -113,3 +113,53 @@ export function renderUsageAlertHtml(opts: {
 
   return { subject, html, text };
 }
+
+/**
+ * Render the email magic-link confirmation message. Used by the
+ * /api/auth/email/start route to confirm a user's email address before
+ * binding it to a wallet's trial subscription record.
+ *
+ * The link target is /api/auth/email/callback?token=... — the token is a
+ * 32-byte random opaque string with a 15-minute TTL. We render the URL
+ * directly (no shortener / tracker) so the recipient can audit it.
+ */
+export function renderMagicLinkHtml(opts: {
+  email: string;
+  magicLinkUrl: string;
+  ttlMinutes: number;
+}): { subject: string; html: string; text: string } {
+  const subject = "Q402 — confirm your email";
+  const text = [
+    `Q402 — confirm your email`,
+    ``,
+    `Click the link below to confirm ${opts.email} as your Q402 contact.`,
+    `The link expires in ${opts.ttlMinutes} minutes and can be used once.`,
+    ``,
+    opts.magicLinkUrl,
+    ``,
+    `If you didn't request this email, you can safely ignore it — no account`,
+    `was created and no further messages will be sent to this address.`,
+  ].join("\n");
+
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a;max-width:560px;margin:0 auto;padding:24px;">
+  <h2 style="font-size:18px;margin:0 0 8px;">Confirm your email</h2>
+  <p style="font-size:14px;color:#555;margin:0 0 16px;">
+    Click the button below to confirm <strong>${opts.email}</strong> as your Q402 contact address.
+    The link expires in ${opts.ttlMinutes} minutes and can only be used once.
+  </p>
+  <p>
+    <a href="${opts.magicLinkUrl}" style="background:#F5C518;color:#0d1422;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Confirm email →</a>
+  </p>
+  <p style="font-size:12px;color:#888;margin-top:24px;">
+    If the button doesn't work, copy this URL into your browser:<br/>
+    <span style="font-family:monospace;font-size:11px;word-break:break-all;">${opts.magicLinkUrl}</span>
+  </p>
+  <p style="font-size:12px;color:#888;margin-top:16px;">
+    If you didn't request this email, you can safely ignore it — no account was created and no further messages will be sent to this address.
+  </p>
+</div>
+`.trim();
+
+  return { subject, html, text };
+}

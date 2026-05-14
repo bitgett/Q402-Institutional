@@ -52,9 +52,21 @@ export async function POST(req: NextRequest) {
       existing.sandboxApiKey = sandboxApiKey;
     }
 
-    const isPaid = (existing.amountUSD ?? 0) > 0 && !!existing.apiKey;
+    // Trial subscribers are treated like paying users for hasPaid (their live
+    // key is gated by trial credits, not amountUSD), but the relay route still
+    // sees plan==="trial" so it can apply per-plan rate limits independently.
+    const isTrialActive =
+      existing.plan === "trial" &&
+      !!existing.trialExpiresAt &&
+      new Date(existing.trialExpiresAt) > new Date();
+    const isPaid =
+      (existing.amountUSD ?? 0) > 0 && !!existing.apiKey
+        ? true
+        : isTrialActive && !!existing.apiKey;
     return NextResponse.json({
-      // Live key only returned for accounts that have actually paid
+      // Live key only returned for accounts that have actually paid or are
+      // mid-trial. An expired trial wallet stops receiving the live key
+      // automatically — same UX as a lapsed paid subscription.
       apiKey:         isPaid ? existing.apiKey : null,
       sandboxApiKey:  existing.sandboxApiKey,
       plan:           existing.plan,

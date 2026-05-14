@@ -3,12 +3,18 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import RegisterModal from "./RegisterModal";
+import TrialActivationModal from "./TrialActivationModal";
 import { SDK_VERSION } from "@/app/lib/version";
-import { BNB_FOCUS_MODE } from "@/app/lib/feature-flags";
+import {
+  BNB_FOCUS_MODE,
+  TRIAL_CREDITS,
+  TRIAL_DURATION_DAYS,
+} from "@/app/lib/feature-flags";
 
 
 export default function Hero() {
   const [showModal, setShowModal] = useState(false);
+  const [showTrialModal, setShowTrialModal] = useState(false);
 
   return (
     <>
@@ -196,13 +202,23 @@ export default function Hero() {
                 transition={{ duration: 0.6, delay: 0.45 }}
                 className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-10"
               >
-                <button
-                  onClick={() => setShowModal(true)}
-                  className="group relative bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/25 animate-glow"
-                >
-                  Start Gasless
-                  <span className="ml-2 group-hover:translate-x-1 inline-block transition-transform">→</span>
-                </button>
+                {BNB_FOCUS_MODE ? (
+                  <button
+                    onClick={() => setShowTrialModal(true)}
+                    className="group relative bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/25 animate-glow"
+                  >
+                    Start Free Trial · {TRIAL_DURATION_DAYS}d / {TRIAL_CREDITS.toLocaleString()} TX
+                    <span className="ml-2 group-hover:translate-x-1 inline-block transition-transform">→</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowModal(true)}
+                    className="group relative bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/25 animate-glow"
+                  >
+                    Start Gasless
+                    <span className="ml-2 group-hover:translate-x-1 inline-block transition-transform">→</span>
+                  </button>
+                )}
                 <a
                   href="#how-it-works"
                   className="flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors"
@@ -359,6 +375,7 @@ export default function Hero() {
       </section>
 
       {showModal && <RegisterModal onClose={() => setShowModal(false)} />}
+      {showTrialModal && <TrialActivationModal onClose={() => setShowTrialModal(false)} />}
     </>
   );
 }

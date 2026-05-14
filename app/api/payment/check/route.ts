@@ -28,6 +28,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ status: "not_found" });
   }
 
+  // Trial subscriptions: amountUSD is 0 but trialExpiresAt is authoritative.
+  // Surface as "trial" so the dashboard expiry banner can branch on it; the
+  // /payment page still treats trial as "not paid" (handled below).
+  if (existing.plan === "trial" && existing.trialExpiresAt) {
+    const trialExp = new Date(existing.trialExpiresAt);
+    const trialExpired = new Date() >= trialExp;
+    return NextResponse.json({
+      status: trialExpired ? "trial_expired" : "trial",
+      plan: existing.plan,
+      expiresAt: trialExp.toISOString(),
+      isExpired: trialExpired,
+    });
+  }
+
   // Provisioned (free) accounts have paidAt="" and amountUSD=0 — treat as unpaid
   if (!existing.paidAt || (existing.amountUSD ?? 0) === 0) {
     return NextResponse.json({ status: "not_found" });

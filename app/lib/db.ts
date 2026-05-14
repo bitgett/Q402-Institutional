@@ -22,6 +22,12 @@ interface Subscription {
   // payment arrives. Optional to keep the type backwards compatible — any
   // undefined value is lazily bootstrapped from amountUSD on read.
   windowPaidBnbUSD?: number;
+  // Trial-only fields. When `plan === "trial"`, `trialExpiresAt` is the
+  // canonical expiry (paidAt + TRIAL_DURATION_DAYS, materialized at activation
+  // so the dashboard can display it without recomputing). `email` is set when
+  // the user pairs their wallet with a verified email via the magic-link flow.
+  trialExpiresAt?: string;
+  email?: string;
 }
 
 interface ApiKeyRecord {
@@ -603,14 +609,25 @@ export function getPlanQuota(plan: string): number {
 
 export async function isSubscriptionActive(address: string): Promise<boolean> {
   const sub = await getSubscription(address);
-  if (!sub || !sub.paidAt || (sub.amountUSD ?? 0) === 0) return false;
+  if (!sub || !sub.paidAt) return false;
+  // Trial: amountUSD is 0 but trialExpiresAt is the authoritative window. The
+  // legacy `amountUSD > 0` gate would have rejected every trial otherwise.
+  if (sub.plan === "trial") {
+    if (!sub.trialExpiresAt) return false;
+    return new Date() < new Date(sub.trialExpiresAt);
+  }
+  if ((sub.amountUSD ?? 0) === 0) return false;
   const expiresAt = new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
   return new Date() < expiresAt;
 }
 
 export async function getSubscriptionExpiry(address: string): Promise<Date | null> {
   const sub = await getSubscription(address);
-  if (!sub || !sub.paidAt || (sub.amountUSD ?? 0) === 0) return null;
+  if (!sub || !sub.paidAt) return null;
+  if (sub.plan === "trial") {
+    return sub.trialExpiresAt ? new Date(sub.trialExpiresAt) : null;
+  }
+  if ((sub.amountUSD ?? 0) === 0) return null;
   return new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
 }
 

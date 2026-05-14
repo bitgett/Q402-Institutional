@@ -23,6 +23,7 @@ const DEPOSIT_ADDRESS = GASTANK_ADDRESS;
 // Must mirror TIER_CREDITS / TIER_PLANS in app/lib/blockchain.ts — the server
 // grants these values, so the UI display must match to the tx count.
 const PLAN_QUOTA: Record<string, number> = {
+  trial:          2_000,
   starter:          500,
   basic:          1_000,
   growth:         5_000,
@@ -51,7 +52,7 @@ const STEPS = [
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; sandboxApiKey?: string; }
+interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; sandboxApiKey?: string; trialExpiresAt?: string; email?: string; }
 interface RelayedTx {
   apiKey: string; address: string; chain: string;
   fromUser: string; toUser: string; tokenAmount: number | string; tokenSymbol: string;
@@ -757,6 +758,25 @@ export default function DashboardPage() {
           <WalletButton />
         </div>
       </header>
+
+      {/* Trial banner — surfaces when subscription.plan === "trial".
+          Shown above the paying-user warning so a trial user about to
+          expire still sees the upgrade CTA, not the renewal CTA. */}
+      {plan === "trial" && (
+        <div className="border-b px-6 py-3 flex items-center justify-between gap-4"
+          style={{ background: "rgba(74,222,128,0.06)", borderColor: "rgba(74,222,128,0.25)" }}>
+          <p className="text-green-400 text-sm font-medium">
+            Free trial active{daysLeft !== null ? <> · <span className="font-bold">{daysLeft} day{daysLeft !== 1 ? "s" : ""} left</span></> : null}
+            <span className="text-white/40 text-xs ml-2">
+              {remainingCredits.toLocaleString()} / {(PLAN_QUOTA.trial).toLocaleString()} TX remaining
+            </span>
+          </p>
+          <button onClick={() => router.push("/payment")}
+            className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-1.5 rounded-full hover:bg-yellow-hover transition-colors">
+            Upgrade
+          </button>
+        </div>
+      )}
 
       {/* Expiry warning banner — only for paying users */}
       {hasPaid && daysLeft !== null && daysLeft <= 7 && !isExpired && (
