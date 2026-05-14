@@ -768,7 +768,7 @@ export default function DashboardPage() {
           <p className="text-green-400 text-sm font-medium">
             Free trial active{daysLeft !== null ? <> · <span className="font-bold">{daysLeft} day{daysLeft !== 1 ? "s" : ""} left</span></> : null}
             <span className="text-white/40 text-xs ml-2">
-              {remainingCredits.toLocaleString()} / {(PLAN_QUOTA.trial).toLocaleString()} TX remaining
+              {remainingCredits.toLocaleString()} / {(PLAN_QUOTA.trial).toLocaleString()} TX remaining · Q402 covers gas
             </span>
           </p>
           <button onClick={() => router.push("/payment")}
@@ -902,9 +902,12 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tabs — Gas Tank tab is hidden for trial users since Q402 covers
+            their gas during the sprint window. Trial users can still click
+            into the underlying API endpoints (no auth bypass) — this is a
+            display-only filter so the UI matches the user's actual needs. */}
         <div className="flex gap-1 bg-white/4 border border-white/7 rounded-2xl p-1 w-fit mb-8 flex-wrap">
-          {TABS.map(t => (
+          {TABS.filter(t => !(t === "gas-tank" && plan === "trial")).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${tab === t ? "bg-yellow text-navy shadow-lg shadow-yellow/15" : "text-white/40 hover:text-white"}`}>
               {tabLabel[t]}
@@ -919,7 +922,12 @@ export default function DashboardPage() {
               {[
                 { label: "Sponsored TXs Left", value: remainingCredits.toLocaleString(), sub: `${plan} plan` },
                 { label: "Total Relayed",  value: relayedTxs.length.toLocaleString(), sub: "all time" },
-                { label: "My Gas Tank",    value: `$${totalUserUSD.toFixed(2)}`, sub: "deposited balance", accent: true },
+                // Trial users don't fund a gas tank — replace the deposited-balance
+                // card with a "Q402 covers gas" badge so the dashboard doesn't beg
+                // the user to deposit BNB they don't need.
+                plan === "trial"
+                  ? { label: "Gas",        value: "Covered",                       sub: "Q402 pays during trial", accent: true }
+                  : { label: "My Gas Tank", value: `$${totalUserUSD.toFixed(2)}`,  sub: "deposited balance", accent: true },
                 { label: "Today's Txs",    value: dailyData[13].toLocaleString(), sub: "today", green: true },
               ].map((s, i) => (
                 <div key={i} className="card-glow rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>

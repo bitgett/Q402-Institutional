@@ -55,6 +55,10 @@ const paymentCheckSource = readFileSync(
   resolve(ROOT, "app", "api", "payment", "check", "route.ts"),
   "utf8",
 );
+const relaySource = readFileSync(
+  resolve(ROOT, "app", "api", "relay", "route.ts"),
+  "utf8",
+);
 
 describe("trial — feature-flags constants", () => {
   it("TRIAL_CREDITS is 2,000 (matches sprint plan + Hero CTA copy)", () => {
@@ -141,6 +145,36 @@ describe("trial — /api/keys/provision treats active trial as hasPaid", () => {
 describe("trial — /api/payment/check surfaces trial status", () => {
   it('returns status: "trial" with trial expiry when trial is active', () => {
     expect(paymentCheckSource).toMatch(/status:\s*trialExpired\s*\?\s*["']trial_expired["']\s*:\s*["']trial["']/);
+  });
+});
+
+describe("trial — relay route covers gas for active trials", () => {
+  it("computes isActiveTrial from subscription.plan + trialExpiresAt + now", () => {
+    expect(relaySource).toMatch(
+      /isActiveTrial\s*=\s*\n?\s*subscription\?\.plan\s*===\s*["']trial["']/,
+    );
+    expect(relaySource).toMatch(/new Date\(subscription\.trialExpiresAt\)\s*>\s*new Date\(\)/);
+  });
+
+  it("skips the per-user gas tank balance check for active trials", () => {
+    // The gating expression must include !isActiveTrial — otherwise trial
+    // users still get the "Insufficient gas tank" rejection they have no
+    // way to satisfy (they never deposited because Q402 covers their gas).
+    expect(relaySource).toMatch(/if\s*\(\s*!isSandbox\s*&&\s*!isActiveTrial\s*\)/);
+  });
+
+  it("zeros gasCostNative in the trial user's per-user TX record (dashboard cleanliness)", () => {
+    expect(relaySource).toMatch(
+      /gasCostNative:\s*isActiveTrial\s*\?\s*0\s*:\s*gasCostNative/,
+    );
+  });
+
+  it("increments the trial_gas_burned:{chain} platform counter when gas is consumed", () => {
+    // Ops needs visibility into how much native gas Q402 is eating on
+    // behalf of trial users — without this HINCRBYFLOAT, the cost is
+    // invisible.
+    expect(relaySource).toMatch(/trial_gas_burned/);
+    expect(relaySource).toMatch(/hincrbyfloat\(\s*["']trial_gas_burned["']/);
   });
 });
 

@@ -145,7 +145,8 @@ export default function TrialActivationModal({ onClose }: Props) {
                 <h2 className="text-2xl font-bold mb-2">Connect your wallet</h2>
                 <p className="text-white/45 text-sm mb-6">
                   The trial issues an API key bound to your wallet. {TRIAL_CREDITS.toLocaleString()} gasless
-                  transactions on BNB Chain (USDC + USDT), good for {TRIAL_DURATION_DAYS} days. One trial per wallet.
+                  transactions on BNB Chain (USDC + USDT), good for {TRIAL_DURATION_DAYS} days. <span className="text-green-400 font-semibold">Q402 covers the gas</span> —
+                  you do not fund a Gas Tank. One trial per wallet.
                 </p>
                 <button
                   onClick={() => setShowWalletPicker(true)}
@@ -165,8 +166,8 @@ export default function TrialActivationModal({ onClose }: Props) {
                   Activate {TRIAL_CREDITS.toLocaleString()} free transactions
                 </h2>
                 <p className="text-white/45 text-sm mb-6">
-                  {TRIAL_DURATION_DAYS} days of gasless USDC + USDT on BNB Chain. No card, no upfront payment.
-                  Your wallet signs once to prove ownership.
+                  {TRIAL_DURATION_DAYS} days of gasless USDC + USDT on BNB Chain. <span className="text-green-400 font-semibold">Q402 covers the gas</span> —
+                  no card, no upfront payment, no Gas Tank to fund. Your wallet signs once to prove ownership.
                 </p>
 
                 <div className="bg-white/4 border border-white/6 rounded-xl px-4 py-3 mb-5 font-mono text-xs">

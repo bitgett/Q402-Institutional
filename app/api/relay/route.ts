@@ -334,8 +334,21 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 6. Gas Tank balance check (sandbox skips this) ───────────────────────
-  if (!isSandbox) {
+  // ── 6. Gas Tank balance check (sandbox + active trial skip this) ─────────
+  // Trial users don't fund their own gas tank — Q402 covers the gas during
+  // the sprint window. The relayer hot wallet still pays gas on-chain, but
+  // we don't debit a per-user balance the user never deposited into.
+  //
+  // Defence in depth: we re-check trialExpiresAt here (not just plan ===
+  // "trial") because subscription state could have drifted between the
+  // verify call at /api/keys/verify and this point. An expired trial falls
+  // through to the same insufficient-gas-tank rejection as paid users —
+  // they have to either upgrade or fund a tank.
+  const isActiveTrial =
+    subscription?.plan === "trial" &&
+    !!subscription.trialExpiresAt &&
+    new Date(subscription.trialExpiresAt) > new Date();
+  if (!isSandbox && !isActiveTrial) {
     const gasBalance   = await getGasBalance(keyRecord.address);
     const chainBalance = gasBalance[chain] ?? 0;
     if (chainBalance <= MIN_GAS_BALANCE[chain]) {
@@ -622,6 +635,12 @@ export async function POST(req: NextRequest) {
 
   // ── 11. Record the TX (including receipt id for dashboard link) ──────────
   // Fire-and-forget — on-chain TX already succeeded; don't block response on KV write
+  //
+  // Trial users: gasCostNative is zeroed in the per-user record so the dashboard
+  // doesn't show negative gas-tank balance against their $0 deposit. The actual
+  // gas is paid by Q402's relayer wallet; aggregate trial-gas burn is tracked
+  // separately via the trial_gas_burned:{chain} HINCRBYFLOAT counter below so
+  // ops still has visibility into platform spend.
   recordRelayedTx(keyRecord.address, {
     apiKey,
     address:      keyRecord.address,
@@ -630,11 +649,26 @@ export async function POST(req: NextRequest) {
     toUser:       to,
     tokenAmount,
     tokenSymbol:  token,
-    gasCostNative,
+    gasCostNative: isActiveTrial ? 0 : gasCostNative,
     relayTxHash:  result.txHash ?? "",
     relayedAt,
     receiptId:    receiptId ?? undefined,
   }).catch(e => console.error("[relay] TX record failed (non-fatal):", e));
+
+  // Platform trial-gas burn counter — tracks how much native gas Q402 is
+  // covering on behalf of trial users, broken down by chain. Pure ops metric,
+  // not user-facing. Read with `HGETALL trial_gas_burned` from the Vercel KV
+  // dashboard to see "X BNB burned for trial users this sprint".
+  if (isActiveTrial && gasCostNative > 0) {
+    void (async () => {
+      try {
+        const { kv } = await import("@vercel/kv");
+        await kv.hincrbyfloat("trial_gas_burned", chain, gasCostNative);
+      } catch (e) {
+        console.error("[relay] trial_gas_burned counter failed (non-fatal):", e);
+      }
+    })();
+  }
 
   // Sync subscription.quotaBonus for dashboard display (fire-and-forget, non-critical).
   // The authoritative counter is quota:{addr} (atomically decremented above).
