@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { SDK_VERSION, MCP_VERSION } from "@/app/lib/version";
+import { BNB_FOCUS_MODE } from "@/app/lib/feature-flags";
 
 const NAV = [
   { id: "overview",       label: "Overview",        icon: "○" },
@@ -151,6 +152,20 @@ export default function DocsPage() {
             <p className="text-white/50 text-sm leading-relaxed max-w-xl">
               Everything you need to add gasless USDC payments to your product. One API. Any EVM chain. Zero gas for your users.
             </p>
+            {BNB_FOCUS_MODE && (
+              <div className="mt-5 rounded-xl border border-yellow/30 bg-yellow/[0.05] px-4 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-yellow text-[10px] font-bold uppercase tracking-widest">BNB-focus sprint</span>
+                  <span className="text-white/30 text-xs">·</span>
+                  <span className="text-white/45 text-xs">2026-05-13 → 2026-05-20</span>
+                </div>
+                <p className="text-white/55 text-xs leading-relaxed">
+                  Live calls are currently routed to <span className="text-yellow font-semibold">BNB Chain · USDC + USDT</span> only.
+                  Avalanche, Ethereum, X Layer, Stable, Mantle, Injective EVM, and RLUSD remain documented below for the
+                  multi-chain SDK contract and will resume routing after the sprint window — no code or addresses change.
+                </p>
+              </div>
+            )}
             <div className="flex items-center gap-6 mt-6">
               <a href="#quickstart" className="inline-flex items-center gap-2 bg-yellow text-navy text-xs font-bold px-5 py-2.5 rounded-full hover:bg-yellow-hover transition-colors">
                 Quick Start →

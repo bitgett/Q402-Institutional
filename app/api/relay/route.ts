@@ -38,6 +38,7 @@ import {
   type EIP3009PayParams,
   type XLayerEIP7702PayParams,
 } from "@/app/lib/relayer";
+import { BNB_FOCUS_MODE, BNB_FOCUS_REJECTION_MESSAGE } from "@/app/lib/feature-flags";
 import type { Hex, Address } from "viem";
 
 // Valid Ethereum address pattern
@@ -120,13 +121,19 @@ export async function POST(req: NextRequest) {
   // Mirror the SDK's supportedTokens guard here so the server is the source
   // of truth and the asymmetric defense (SDK strict, server tolerant) is closed.
   //
+  // The full multi-chain matrix below is what the protocol shipped on v1.27.
+  // During a sprint window the feature flag BNB_FOCUS_MODE collapses the
+  // matrix to a single chain/token pair (see app/lib/feature-flags.ts) — the
+  // 7-chain entries remain in this file so removing the flag (or pointing
+  // Vercel back at main) restores the full surface with zero code churn.
+  //
   //   - Injective: USDT only. Native USDC via Circle CCTP is announced for Q2 2026.
   //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18).
   //   - RLUSD is intentionally Ethereum-only — Ripple has not deployed RLUSD on
   //     the XRPL EVM Sidechain yet, and Q402 is EVM-only so XRPL native is
   //     out of scope. Other 6 chains reject RLUSD via the absence of the token
   //     from their allowlist entry.
-  const CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
+  const FULL_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
     injective: ["USDT"],
     eth:       ["USDC", "USDT", "RLUSD"],
     bnb:       ["USDC", "USDT"],
@@ -135,16 +142,24 @@ export async function POST(req: NextRequest) {
     mantle:    ["USDC", "USDT"],
     stable:    ["USDC", "USDT"],
   };
+  const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
+    bnb: ["USDC", "USDT"],
+  };
+  const CHAIN_TOKEN_ALLOWLIST = BNB_FOCUS_MODE
+    ? SPRINT_CHAIN_TOKEN_ALLOWLIST
+    : FULL_CHAIN_TOKEN_ALLOWLIST;
   const allowedTokens = CHAIN_TOKEN_ALLOWLIST[chain];
-  if (allowedTokens && !allowedTokens.includes(token)) {
+  if (!allowedTokens || !allowedTokens.includes(token)) {
     return NextResponse.json(
       {
         error:
-          chain === "injective" && token === "USDC"
-            ? "USDC is not yet supported on Injective. Native USDC via Circle CCTP is announced for Q2 2026; until then use USDT on Injective."
-            : token === "RLUSD"
-              ? `RLUSD is only supported on Ethereum mainnet. Tried chain="${chain}".`
-              : `Token "${token}" is not supported on chain "${chain}". Supported: ${allowedTokens.join(", ")}.`,
+          BNB_FOCUS_MODE && (chain !== "bnb" || !["USDC", "USDT"].includes(token))
+            ? BNB_FOCUS_REJECTION_MESSAGE
+            : chain === "injective" && token === "USDC"
+              ? "USDC is not yet supported on Injective. Native USDC via Circle CCTP is announced for Q2 2026; until then use USDT on Injective."
+              : token === "RLUSD"
+                ? `RLUSD is only supported on Ethereum mainnet. Tried chain="${chain}".`
+                : `Token "${token}" is not supported on chain "${chain}".${allowedTokens ? ` Supported: ${allowedTokens.join(", ")}.` : ""}`,
         code: "TOKEN_NOT_SUPPORTED_ON_CHAIN",
       },
       { status: 400 }

@@ -11,6 +11,7 @@ import ClaudeMcpCard from "../components/ClaudeMcpCard";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
 import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
+import { BNB_FOCUS_MODE } from "../lib/feature-flags";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
@@ -282,7 +283,7 @@ function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
 
 // ── Playground ────────────────────────────────────────────────────────────────
 function Playground({ apiKey }: { apiKey: string }) {
-  const [chain, setChain] = useState("avax");
+  const [chain, setChain] = useState(BNB_FOCUS_MODE ? "bnb" : "avax");
   const [token, setToken] = useState<"USDC" | "USDT" | "RLUSD">("USDC");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("5");
@@ -293,9 +294,12 @@ function Playground({ apiKey }: { apiKey: string }) {
   //   - Injective: USDT only (Circle CCTP native USDC announced for Q2 2026)
   //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18)
   //   - Others:    USDC / USDT
-  // Keep the preview snippet aligned so a copy-paste never hits a 400.
-  const availableTokens: ("USDC" | "USDT" | "RLUSD")[] =
-    chain === "injective" ? ["USDT"]
+  // BNB-focus sprint collapses every chain except bnb to []; the playground
+  // hides them in the picker below, so this branch only matters once the flag
+  // flips back.
+  const availableTokens: ("USDC" | "USDT" | "RLUSD")[] = BNB_FOCUS_MODE
+    ? ["USDC", "USDT"]
+    : chain === "injective" ? ["USDT"]
       : chain === "eth"    ? ["USDC", "USDT", "RLUSD"]
       :                       ["USDC", "USDT"];
 
@@ -323,13 +327,19 @@ function Playground({ apiKey }: { apiKey: string }) {
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Chain</label>
           <div className="relative">
             <select value={chain} onChange={e => setChain(e.target.value)} className="w-full appearance-none border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30 cursor-pointer" style={{ background: "#0d1422" }}>
-              <option value="avax" style={{ background: "#0d1422" }}>Avalanche ✓</option>
-              <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓</option>
-              <option value="eth" style={{ background: "#0d1422" }}>Ethereum ✓</option>
-              <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
-              <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
-              <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
-              <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
+              {BNB_FOCUS_MODE ? (
+                <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓ (sprint)</option>
+              ) : (
+                <>
+                  <option value="avax" style={{ background: "#0d1422" }}>Avalanche ✓</option>
+                  <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓</option>
+                  <option value="eth" style={{ background: "#0d1422" }}>Ethereum ✓</option>
+                  <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
+                  <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
+                  <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
+                  <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
+                </>
+              )}
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
           </div></div>
@@ -1233,7 +1243,7 @@ export default function DashboardPage() {
                 What ships in the package
               </div>
               <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
-                <li>• <code className="text-yellow text-xs">q402_quote</code> — compare gas across all 7 chains. Read-only, no auth.</li>
+                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-focus sprint: shows BNB Chain + USDC/USDT." : "compare gas across all 7 chains."} Read-only, no auth.</li>
                 <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
                 <li>• <code className="text-yellow text-xs">q402_pay</code> — send a gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
               </ul>

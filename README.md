@@ -3,10 +3,29 @@
 > Multi-chain ERC-20 gasless payment relay for DeFi applications and AI agents.  
 > Users pay USDC, USDT, or RLUSD with zero gas — Q402 relayer covers all transaction fees.
 
-**Version: v1.27** · **SDK: v1.7.0** · **Manifest: v1.7.0** · **MCP: @quackai/q402-mcp v0.3.2** · **Last updated: 2026-05-12**  
+**Version: v1.27.1-bnbfocus** · **SDK: v1.7.1-bnbfocus** · **Manifest: v1.7.0** · **MCP: @quackai/q402-mcp v0.3.4** · **Last updated: 2026-05-13**  
 **GitHub:** https://github.com/bitgett/Q402-Institutional  
 **Live:** https://q402.quackai.ai  
 **Contact:** business@quackai.ai
+
+---
+
+## ⚡ BNB-Focus Sprint (2026-05-13 → 2026-05-20)
+
+This branch (`feat/bnb-focus-sprint`) narrows the live Q402 product to **BNB Chain · USDC + USDT only** for a 1-week growth sprint. The other six chains (Ethereum, Avalanche, X Layer, Stable, Mantle, Injective EVM) and RLUSD remain fully wired in code — every contract, manifest entry, and SDK code-path is preserved verbatim — but a single feature flag (`BNB_FOCUS_MODE` in [`app/lib/feature-flags.ts`](app/lib/feature-flags.ts)) gates the relay route, SDK, MCP server, and UI down to BNB-only.
+
+**Rollback** is one of two actions:
+
+1. (Recommended) Switch Vercel's production branch back to `main` — zero code changes.
+2. Flip `BNB_FOCUS_MODE` to `false` and merge to `main` — restores the full 7-chain matrix.
+
+The `v1.27-multichain` git tag freezes the 7-chain state (372 settled TX cumulative, RLUSD integration, Round 1–4 reviews closed, Dune dashboard live) as the rollback anchor.
+
+During the sprint:
+
+- `q402_pay({ chain: "bnb", token: "USDC" | "USDT" })` works.
+- Any other chain or RLUSD returns: *"BNB-focus sprint: this chain/token is temporarily hidden. Full multi-chain support returns after the sprint window."*
+- Dune dashboard, npm download counter, MCP Registry listing, and Trust Receipt verification remain on the full multi-chain footprint — only the live routing layer is narrowed.
 
 ---
 

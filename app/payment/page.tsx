@@ -8,6 +8,7 @@ import WalletModal from "@/app/components/WalletModal";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "@/app/lib/auth-client";
 import { SUBSCRIPTION_ADDRESS } from "@/app/lib/wallets";
 import { sendErc20Transfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "@/app/lib/wallet";
+import { BNB_FOCUS_MODE } from "@/app/lib/feature-flags";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -15,7 +16,7 @@ import { sendErc20Transfer, waitForWalletReceipt, walletErrorMessage, type Walle
 
 const PAYMENT_ADDRESS = SUBSCRIPTION_ADDRESS;
 
-const PAY_TOKENS = [
+const ALL_PAY_TOKENS = [
   { id: "bnb-usdc",  label: "BNB USDC",  chain: "BNB Chain", chainId: "bnb", token: "USDC",  decimals: 18, address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", color: "#F0B90B", img: "/bnb.png"  },
   { id: "bnb-usdt",  label: "BNB USDT",  chain: "BNB Chain", chainId: "bnb", token: "USDT",  decimals: 18, address: "0x55d398326f99059fF775485246999027B3197955", color: "#F0B90B", img: "/bnb.png"  },
   { id: "eth-usdc",  label: "ETH USDC",  chain: "Ethereum",  chainId: "eth", token: "USDC",  decimals: 6,  address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", color: "#627EEA", img: "/eth.png"  },
@@ -25,10 +26,17 @@ const PAY_TOKENS = [
   { id: "eth-rlusd", label: "ETH RLUSD", chain: "Ethereum",  chainId: "eth", token: "RLUSD", decimals: 18, address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", color: "#627EEA", img: "/eth.png"  },
 ];
 
+// During the BNB-focus sprint, payment options collapse to BNB USDC + BNB USDT.
+// The full list is preserved above (no rows removed) so flipping BNB_FOCUS_MODE
+// off restores the multichain tiles unchanged.
+const PAY_TOKENS = BNB_FOCUS_MODE
+  ? ALL_PAY_TOKENS.filter(t => t.chainId === "bnb")
+  : ALL_PAY_TOKENS;
+
 // `multiplier` is display-only for the "+X% rate" badge and must mirror
 // CHAIN_MULTIPLIERS in app/lib/blockchain.ts (used for cumulative-tier
 // normalization). Actual per-tier USD prices live in CHAIN_PRICES below.
-const CHAINS = [
+const ALL_CHAINS = [
   { id: "bnb",      name: "BNB Chain", color: "#F0B90B", img: "/bnb.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "eth",      name: "Ethereum",  color: "#627EEA", img: "/eth.png",      rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
   { id: "mantle",   name: "Mantle",    color: "#FFFFFF", img: "/mantle.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
@@ -39,6 +47,14 @@ const CHAINS = [
   { id: "arbitrum", name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
   { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
 ];
+
+// BNB-focus sprint: every non-BNB tile is force-flagged comingSoon so the
+// existing disabled CSS handles styling and the click handler refuses
+// selection. Restoring is a one-flag flip; the underlying CHAIN_PRICES
+// table is left intact so the comparison still works once the flag drops.
+const CHAINS = BNB_FOCUS_MODE
+  ? ALL_CHAINS.map(c => (c.id === "bnb" ? c : { ...c, comingSoon: true }))
+  : ALL_CHAINS;
 
 // value = credits granted at that price tier. Must stay in sync with
 // TIER_CREDITS in app/lib/blockchain.ts — the server grants `value` credits
@@ -580,7 +596,9 @@ export default function PaymentPage() {
                 <div className="mt-5 pt-4 border-t border-white/6 flex gap-2">
                   <span className="text-yellow/40 text-xs flex-shrink-0">🔒</span>
                   <p className="text-white/20 text-[10px] leading-relaxed">
-                    API key tied to your wallet. Pay in USDC / USDT / RLUSD on BNB Chain or Ethereum (RLUSD is Ethereum-only) — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable · Mantle · Injective).
+                    {BNB_FOCUS_MODE
+                      ? "API key tied to your wallet. BNB-focus sprint: pay in USDC or USDT on BNB Chain — credits apply to BNB Chain only. Full multi-chain + RLUSD returns after the sprint window."
+                      : "API key tied to your wallet. Pay in USDC / USDT / RLUSD on BNB Chain or Ethereum (RLUSD is Ethereum-only) — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable · Mantle · Injective)."}
                   </p>
                 </div>
               </div>

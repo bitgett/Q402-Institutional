@@ -1,5 +1,12 @@
 /**
  * Q402 Client SDK (browser-compatible)
+ * v1.7.1-bnbfocus — BNB-focus sprint (2026-05-13 → 2026-05-20). While
+ *          Q402_BNB_FOCUS_MODE is true, the SDK collapses to BNB Chain +
+ *          USDC/USDT only. The other 6 chains and RLUSD are still defined
+ *          below (zero code removed) but `supportedTokens` is rewritten to
+ *          [] at module load, so every non-BNB call surfaces a sprint-aware
+ *          error instead of signing. Flip the flag back to false to restore
+ *          the full v1.7.0 7-chain matrix without further edits.
  * v1.7.0 — RLUSD (Ripple USD, NY DFS regulated stablecoin, decimals 18) added
  *          on Ethereum mainnet. RLUSD is Ethereum-only; the other 6 chains
  *          reject token:"RLUSD" via the supportedTokens allowlist. All chains
@@ -55,6 +62,18 @@
  *   const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
  *   const result = await q402s.pay({ to: "0x...", amount: "1.00", token: "USDT" });
  */
+
+// ─── BNB-focus sprint flag ────────────────────────────────────────────────────
+// Mirrors app/lib/feature-flags.ts BNB_FOCUS_MODE. The two must move together —
+// drift would let server reject calls the SDK happily signed (worst UX) or
+// vice versa. The post-config rewrite block at the bottom of this section is
+// what actually enforces the gate; flipping this constant to false restores
+// the v1.7.0 7-chain `supportedTokens` lists exactly as defined below.
+const Q402_BNB_FOCUS_MODE = true;
+const Q402_BNB_FOCUS_REJECTION_MESSAGE =
+  "BNB-focus sprint: this chain/token is temporarily hidden. " +
+  "Full multi-chain support returns after the sprint window. " +
+  "Pass chain: \"bnb\" with token \"USDC\" or \"USDT\".";
 
 const Q402_CHAIN_CONFIG = {
   avax: {
@@ -136,6 +155,19 @@ const Q402_CHAIN_CONFIG = {
     supportedTokens: ["USDT"],
   },
 };
+
+// ─── Apply BNB-focus sprint narrowing ─────────────────────────────────────────
+// During the sprint, every non-BNB chain's supportedTokens is rewritten to [].
+// The runtime check in `pay()` already rejects any token not in supportedTokens,
+// so this single mutation cascades to RLUSD on Ethereum, USDC/USDT on the other
+// 5 chains, and any chain a future caller might try. BNB itself keeps its
+// original ["USDC","USDT"]. The original arrays are intentionally written in
+// the config above (not deleted) so the sprint is a one-flag revert.
+if (Q402_BNB_FOCUS_MODE) {
+  for (const c of Object.keys(Q402_CHAIN_CONFIG)) {
+    if (c !== "bnb") Q402_CHAIN_CONFIG[c].supportedTokens = [];
+  }
+}
 
 // EIP-7702 witness type — shared by all 7 chains (avax/bnb/eth/xlayer/stable/mantle/injective).
 // All Q402PaymentImplementation* contracts use the identical TransferAuthorization
@@ -231,6 +263,9 @@ class Q402Client {
     // RLUSD is Ethereum-only — other chains' supportedTokens list omits it,
     // so this same guard catches `chain="bnb", token="RLUSD"` etc.
     if (this.chainCfg.supportedTokens && !this.chainCfg.supportedTokens.includes(token)) {
+      if (Q402_BNB_FOCUS_MODE) {
+        throw new Error(Q402_BNB_FOCUS_REJECTION_MESSAGE);
+      }
       throw new Error(
         `Token "${token}" is not supported on chain "${this.chain}". ` +
         `Supported tokens for ${this.chain}: ${this.chainCfg.supportedTokens.join(", ")}.` +
