@@ -433,10 +433,68 @@ export default function DashboardPage() {
   const [webhookTestResult, setWebhookTestResult] = useState<null | { ok: boolean; msg: string }>(null);
   const [rotatingKey, setRotatingKey] = useState(false);
   const [rotateConfirm, setRotateConfirm] = useState(false);
+  // Email session (Google OAuth or magic-link signup). When the user signed
+  // in via /api/auth/google or clicked an email magic link, /api/auth/me
+  // returns { authenticated: true, email, address? }. We surface a
+  // separate sandbox-only view for sessions that have no paired wallet yet,
+  // so "API key 받으러 온" users can grab their sandbox key in one click.
+  const [emailSession, setEmailSession] = useState<{
+    email: string;
+    address: string | null;
+  } | null>(null);
+  const [sessionSandboxKey, setSessionSandboxKey] = useState<string>("");
+  const [sessionSandboxCopied, setSessionSandboxCopied] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSession() {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.authenticated && typeof data.email === "string") {
+          setEmailSession({ email: data.email, address: data.address ?? null });
+        }
+      } catch {
+        /* no session — silent */
+      }
+    }
+    loadSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // When the user is email-only (session active, no wallet connected), fetch
+  // the sandbox key bound to their email account. Lookup is via the email
+  // pseudo-address index that /api/auth/google + /api/auth/email/callback
+  // both populate. We POST to /api/keys/provision-by-email so the path stays
+  // unauthenticated-by-email — server reads the session cookie, never trusts
+  // a client-supplied email.
+  useEffect(() => {
+    if (!emailSession || emailSession.address || isConnected) return;
+    let cancelled = false;
+    async function loadSandbox() {
+      try {
+        const res = await fetch("/api/keys/email-sandbox", {
+          credentials: "include",
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.sandboxApiKey) setSessionSandboxKey(data.sandboxApiKey);
+      } catch {
+        /* leave blank; UI shows "—" */
+      }
+    }
+    loadSandbox();
+    return () => {
+      cancelled = true;
+    };
+  }, [emailSession, isConnected]);
 
   useEffect(() => {
     if (!address) return;
@@ -583,6 +641,83 @@ export default function DashboardPage() {
       if (data.balances) setWalletBalances(data.balances);
     }).catch(() => {});
   }, [address, refreshUserBalance]);
+
+  // Email-only view: user signed in via Google/magic-link but no wallet
+  // is connected. Show their sandbox API key (the thing they came for) +
+  // a single CTA to upgrade to the live trial by connecting a wallet.
+  if (mounted && emailSession && !isConnected) {
+    return (
+      <div className="min-h-screen text-white px-6 py-12" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
+        <div className="max-w-2xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <Link href="/" className="text-yellow font-bold text-base">Q402</Link>
+            <div className="flex items-center gap-3 text-xs text-white/45">
+              <span>{emailSession.email}</span>
+              <button
+                onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+                  router.push("/");
+                }}
+                className="text-white/35 hover:text-white transition-colors"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+
+          <h1 className="text-2xl font-bold mb-2">Welcome, {emailSession.email.split("@")[0]}</h1>
+          <p className="text-white/45 text-sm mb-8">
+            Your sandbox API key is ready below. Sandbox calls return mock results — no funds move, no on-chain TX.
+            Connect a wallet to activate the live 30-day / 2,000-TX trial (Q402 covers the gas).
+          </p>
+
+          <div className="rounded-2xl border border-white/8 p-6 mb-6" style={{ background: "rgba(255,255,255,0.03)" }}>
+            <div className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-2">Sandbox API key</div>
+            <div className="flex items-center gap-3">
+              <code className="flex-1 font-mono text-sm text-yellow break-all">
+                {sessionSandboxKey || "—"}
+              </code>
+              <button
+                onClick={() => {
+                  if (!sessionSandboxKey) return;
+                  navigator.clipboard.writeText(sessionSandboxKey);
+                  setSessionSandboxCopied(true);
+                  setTimeout(() => setSessionSandboxCopied(false), 2000);
+                }}
+                disabled={!sessionSandboxKey}
+                className="text-xs px-3 py-1.5 rounded-md bg-white/5 hover:bg-yellow/15 hover:text-yellow text-white/60 transition-colors disabled:opacity-40"
+              >
+                {sessionSandboxCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <p className="text-white/30 text-xs mt-3">
+              Use this key with the SDK (chain: <code className="text-white/55">&quot;bnb&quot;</code>, token:{" "}
+              <code className="text-white/55">&quot;USDC&quot;</code> or <code className="text-white/55">&quot;USDT&quot;</code>) to test integration end-to-end.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-yellow/20 p-6 mb-6" style={{ background: "rgba(245,197,24,0.04)" }}>
+            <h2 className="text-base font-bold mb-2">Activate the live trial</h2>
+            <p className="text-white/55 text-sm mb-4">
+              Live transactions require a wallet signature (EIP-712) — we can&apos;t sign on your behalf.
+              Connect a wallet once to unlock 2,000 free gasless transactions over 30 days. We cover the gas.
+            </p>
+            <Link
+              href="/?activate=trial"
+              className="inline-block bg-yellow text-navy font-bold text-sm px-6 py-2.5 rounded-full hover:bg-yellow-hover transition-colors"
+            >
+              Connect wallet to activate →
+            </Link>
+          </div>
+
+          <div className="text-white/35 text-xs">
+            Docs: <Link href="/docs" className="hover:text-white/60 underline-offset-2 hover:underline">/docs</Link>{" · "}
+            Claude MCP: <Link href="/claude" className="hover:text-white/60 underline-offset-2 hover:underline">/claude</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!mounted || !isConnected || !address) return null;
 

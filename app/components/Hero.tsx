@@ -1,9 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import RegisterModal from "./RegisterModal";
 import TrialActivationModal from "./TrialActivationModal";
+import EmailSignupModal from "./EmailSignupModal";
+import GoogleSigninButton from "./GoogleSigninButton";
 import { SDK_VERSION } from "@/app/lib/version";
 import {
   BNB_FOCUS_MODE,
@@ -13,8 +16,11 @@ import {
 
 
 export default function Hero() {
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [showTrialModal, setShowTrialModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [signinError, setSigninError] = useState<string | null>(null);
 
   return (
     <>
@@ -203,13 +209,35 @@ export default function Hero() {
                 className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-10"
               >
                 {BNB_FOCUS_MODE ? (
-                  <button
-                    onClick={() => setShowTrialModal(true)}
-                    className="group relative bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/25 animate-glow"
-                  >
-                    Start Free Trial · {TRIAL_DURATION_DAYS}d / {TRIAL_CREDITS.toLocaleString()} TX
-                    <span className="ml-2 group-hover:translate-x-1 inline-block transition-transform">→</span>
-                  </button>
+                  // Sprint stack: Google (instant API key) → Email (link)
+                  // → Wallet (skip straight to live trial activation).
+                  // Each row is its own commitment level; the user picks
+                  // theirs and never has to backtrack.
+                  <div className="flex flex-col items-start gap-2.5 w-full sm:w-auto">
+                    <GoogleSigninButton
+                      width={320}
+                      onSuccess={() => router.push("/dashboard?signin=google")}
+                      onError={msg => setSigninError(msg)}
+                    />
+                    <button
+                      onClick={() => setShowEmailModal(true)}
+                      className="text-sm text-white/55 hover:text-white transition-colors underline-offset-2 hover:underline"
+                    >
+                      Sign in with email instead
+                    </button>
+                    <button
+                      onClick={() => setShowTrialModal(true)}
+                      className="text-sm text-white/40 hover:text-white/80 transition-colors"
+                    >
+                      Or connect wallet to activate trial directly →
+                    </button>
+                    <p className="text-[11px] text-white/30 mt-1">
+                      Free trial: {TRIAL_DURATION_DAYS}d · {TRIAL_CREDITS.toLocaleString()} TX · BNB Chain · Q402 covers gas
+                    </p>
+                    {signinError && (
+                      <p className="text-red-400 text-xs">{signinError}</p>
+                    )}
+                  </div>
                 ) : (
                   <button
                     onClick={() => setShowModal(true)}
@@ -376,6 +404,7 @@ export default function Hero() {
 
       {showModal && <RegisterModal onClose={() => setShowModal(false)} />}
       {showTrialModal && <TrialActivationModal onClose={() => setShowTrialModal(false)} />}
+      {showEmailModal && <EmailSignupModal onClose={() => setShowEmailModal(false)} />}
     </>
   );
 }
