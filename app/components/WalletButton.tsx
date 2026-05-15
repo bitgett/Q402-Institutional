@@ -9,7 +9,7 @@
  * Four UI states depending on which of {wallet, email} is active:
  *
  *   (none)          → "Connect" CTA → WalletModal
- *   (wallet only)   → MY Page + addr chip + "+ Email" → EmailSignupModal
+ *   (wallet only)   → MY Page + addr chip (no nudge to add email)
  *   (email only)    → MY Page + email chip + "+ Wallet" → WalletModal
  *   (both)          → MY Page + email chip + addr chip + sign-out
  *
@@ -23,7 +23,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import WalletModal from "./WalletModal";
-import EmailSignupModal from "./EmailSignupModal";
 import ConnectModal from "./ConnectModal";
 
 function shortAddr(addr: string) {
@@ -39,7 +38,6 @@ export default function WalletButton() {
   const { address, isConnected, disconnect } = useWallet();
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(false);
   const [session, setSession] = useState<EmailSession | null>(null);
 
   useEffect(() => {
@@ -136,8 +134,9 @@ export default function WalletButton() {
         {hasEmail && emailChip}
         {hasWallet && walletChip}
 
-        {/* Add the missing auth method, if any. Pills are intentionally small
-            so they don't compete with the active chips for attention. */}
+        {/* "+ Wallet" pill — only shown to email-only users. Wallet-only
+            users see no "+ Email" prompt; email pairing is optional and
+            we don't push it after a wallet sign-in. */}
         {hasEmail && !hasWallet && (
           <button
             onClick={() => setShowWalletModal(true)}
@@ -147,21 +146,11 @@ export default function WalletButton() {
             + Wallet
           </button>
         )}
-        {hasWallet && !hasEmail && (
-          <button
-            onClick={() => setShowEmailModal(true)}
-            className="text-[11px] font-semibold px-3 py-2 rounded-full border border-white/15 text-white/70 hover:text-white hover:border-white/30 hover:bg-white/[0.04] transition-colors whitespace-nowrap"
-            title="Add an email to this account"
-          >
-            + Email
-          </button>
-        )}
 
         {signOutBtn}
       </div>
 
       {showWalletModal && <WalletModal onClose={() => setShowWalletModal(false)} />}
-      {showEmailModal && <EmailSignupModal onClose={() => setShowEmailModal(false)} />}
     </>
   );
 }

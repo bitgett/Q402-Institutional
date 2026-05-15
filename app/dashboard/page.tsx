@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
@@ -283,8 +283,8 @@ function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
 }
 
 // ── Playground ────────────────────────────────────────────────────────────────
-function Playground({ apiKey }: { apiKey: string }) {
-  const [chain, setChain] = useState(BNB_FOCUS_MODE ? "bnb" : "avax");
+function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean }) {
+  const [chain, setChain] = useState(trialView ? "bnb" : "avax");
   const [token, setToken] = useState<"USDC" | "USDT" | "RLUSD">("USDC");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("5");
@@ -298,7 +298,7 @@ function Playground({ apiKey }: { apiKey: string }) {
   // BNB-focus sprint collapses every chain except bnb to []; the playground
   // hides them in the picker below, so this branch only matters once the flag
   // flips back.
-  const availableTokens: ("USDC" | "USDT" | "RLUSD")[] = BNB_FOCUS_MODE
+  const availableTokens: ("USDC" | "USDT" | "RLUSD")[] = trialView
     ? ["USDC", "USDT"]
     : chain === "injective" ? ["USDT"]
       : chain === "eth"    ? ["USDC", "USDT", "RLUSD"]
@@ -312,6 +312,15 @@ function Playground({ apiKey }: { apiKey: string }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain]);
+
+  // Snap chain to BNB when the user flips into trial view (and they were
+  // previously on a chain that's no longer in the dropdown). Avoids a
+  // stale dropdown showing "Avalanche" while the playground only renders
+  // the BNB option after the trial-view re-render.
+  useEffect(() => {
+    if (trialView && chain !== "bnb") setChain("bnb");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trialView]);
 
   const previewToken = token;
 
@@ -328,8 +337,8 @@ function Playground({ apiKey }: { apiKey: string }) {
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Chain</label>
           <div className="relative">
             <select value={chain} onChange={e => setChain(e.target.value)} className="w-full appearance-none border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30 cursor-pointer" style={{ background: "#0d1422" }}>
-              {BNB_FOCUS_MODE ? (
-                <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓ (sprint)</option>
+              {trialView ? (
+                <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓ (trial)</option>
               ) : (
                 <>
                   <option value="avax" style={{ background: "#0d1422" }}>Avalanche ✓</option>
@@ -420,6 +429,11 @@ export default function DashboardPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // Top-level view toggle: trial-flavored (BNB-only · 2k credits · no Gas
+  // Tank · trial key) vs the original Multichain dashboard. Defaulted to
+  // trial for plan === "trial" wallets so first-touch lands on what they
+  // just signed up for.
+  const [trialViewActive, setTrialViewActive] = useState(false);
   const [hasPaid, setHasPaid] = useState<boolean | null>(null);
   // Server-computed paywall bypass flag — see /api/keys/provision. The list
   // of owner EOAs lives in OWNER_WALLETS (server-only env) and never reaches
@@ -455,6 +469,20 @@ export default function DashboardPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Auto-flip to trial view on first load when the subscription's plan is
+  // "trial" (Google / email signup grants this). Users can toggle back any
+  // time; we don't override their explicit choice on subsequent renders.
+  const initialViewMatched = useRef(false);
+  useEffect(() => {
+    if (initialViewMatched.current) return;
+    if (subscription?.plan === "trial") {
+      setTrialViewActive(true);
+      initialViewMatched.current = true;
+    } else if (subscription) {
+      initialViewMatched.current = true;
+    }
+  }, [subscription]);
 
   useEffect(() => {
     let cancelled = false;
@@ -813,6 +841,12 @@ export default function DashboardPage() {
 
   const API_KEY = subscription?.apiKey ?? "—";
   const plan = subscription?.plan ?? "starter";
+
+  // View mode — top-level toggle between Free-trial flavoring and the
+  // original Multichain dashboard. State lives on a query param so a
+  // refresh / share-link keeps the user in the same view.
+  const isTrialAccount = plan === "trial";
+  const viewMode: "trial" | "multichain" = trialViewActive ? "trial" : "multichain";
   // Internal key "enterprise_flex" is shown to users as just "Enterprise".
   const planDisplayKey = plan === "enterprise_flex" ? "enterprise" : plan;
   const planName = planDisplayKey.charAt(0).toUpperCase() + planDisplayKey.slice(1);
@@ -1028,14 +1062,55 @@ export default function DashboardPage() {
       )}
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* View toggle — Free Trial vs Multichain. Default lands on the
+            user's natural side (trial signup → Trial; otherwise →
+            Multichain). The toggle is persistent for the session so a user
+            who chose Multichain doesn't keep getting bounced back to Trial
+            after a re-render. */}
+        <div className="mb-6 inline-flex items-center gap-1 bg-white/4 border border-white/10 rounded-full p-1">
+          <button
+            onClick={() => setTrialViewActive(true)}
+            className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${
+              trialViewActive
+                ? "bg-yellow text-navy shadow-lg shadow-yellow/15"
+                : "text-white/45 hover:text-white"
+            }`}
+          >
+            ✦ Free Trial
+            {isTrialAccount && !trialViewActive && (
+              <span className="ml-1.5 text-[9px] text-green-400">●</span>
+            )}
+          </button>
+          <button
+            onClick={() => setTrialViewActive(false)}
+            className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${
+              !trialViewActive
+                ? "bg-white text-navy shadow-lg shadow-white/15"
+                : "text-white/45 hover:text-white"
+            }`}
+          >
+            Multichain
+          </button>
+        </div>
+
         <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold">My Dashboard</h1>
-            <p className="text-white/35 text-sm mt-0.5">Manage your Q402 plan, gas tank, and API access.</p>
+            <h1 className="text-2xl font-bold">
+              {viewMode === "trial" ? "Free Trial" : "My Dashboard"}
+            </h1>
+            <p className="text-white/35 text-sm mt-0.5">
+              {viewMode === "trial"
+                ? "2,000 sponsored TX · BNB Chain only · Q402 covers gas."
+                : "Manage your Q402 plan, gas tank, and API access."}
+            </p>
           </div>
           <div className="flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-2">
-            <span className="text-yellow font-bold text-sm">{planName} Plan</span>
-            {subscription && subscription.amountUSD > 0 && <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>}
+            <span className="text-yellow font-bold text-sm">
+              {viewMode === "trial" ? "Trial" : `${planName} Plan`}
+            </span>
+            {viewMode === "multichain" && subscription && subscription.amountUSD > 0 && (
+              <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>
+            )}
           </div>
         </div>
 
@@ -1130,7 +1205,7 @@ export default function DashboardPage() {
             into the underlying API endpoints (no auth bypass) — this is a
             display-only filter so the UI matches the user's actual needs. */}
         <div className="flex gap-1 bg-white/4 border border-white/7 rounded-2xl p-1 w-fit mb-8 flex-wrap">
-          {TABS.filter(t => !(t === "gas-tank" && plan === "trial")).map(t => (
+          {TABS.filter(t => !(t === "gas-tank" && viewMode === "trial")).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${tab === t ? "bg-yellow text-navy shadow-lg shadow-yellow/15" : "text-white/40 hover:text-white"}`}>
               {tabLabel[t]}
@@ -1143,15 +1218,19 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Sponsored TXs Left", value: remainingCredits.toLocaleString(), sub: `${plan} plan` },
-                { label: "Total Relayed",  value: relayedTxs.length.toLocaleString(), sub: "all time" },
-                // Trial users don't fund a gas tank — replace the deposited-balance
-                // card with a "Q402 covers gas" badge so the dashboard doesn't beg
-                // the user to deposit BNB they don't need.
-                plan === "trial"
-                  ? { label: "Gas",        value: "Covered",                       sub: "Q402 pays during trial", accent: true }
-                  : { label: "My Gas Tank", value: `$${totalUserUSD.toFixed(2)}`,  sub: "deposited balance", accent: true },
-                { label: "Today's Txs",    value: dailyData[13].toLocaleString(), sub: "today", green: true },
+                {
+                  label: "Sponsored TXs Left",
+                  value: remainingCredits.toLocaleString(),
+                  sub: viewMode === "trial" ? "trial · BNB only" : `${plan} plan`,
+                },
+                { label: "Total Relayed", value: relayedTxs.length.toLocaleString(), sub: "all time" },
+                // Trial view: no per-user gas tank — Q402 covers it. Multichain
+                // view: surface the deposited balance card so paid users can
+                // top up.
+                viewMode === "trial"
+                  ? { label: "Gas",         value: "Covered",                      sub: "Q402 pays during trial", accent: true }
+                  : { label: "My Gas Tank", value: `$${totalUserUSD.toFixed(2)}`, sub: "deposited balance",       accent: true },
+                { label: "Today's Txs", value: dailyData[13].toLocaleString(), sub: "today", green: true },
               ].map((s, i) => (
                 <div key={i} className="card-glow rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                   <div className="text-white/35 text-xs mb-2">{s.label}</div>
@@ -1404,7 +1483,7 @@ export default function DashboardPage() {
                 <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest mb-4">API Playground</h3>
                 <div className="rounded-2xl border p-6" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                   <p className="text-white/40 text-sm mb-5">Test a simulated transaction using your API key.</p>
-                  <Playground apiKey={API_KEY} />
+                  <Playground apiKey={API_KEY} trialView={viewMode === "trial"} />
                 </div>
               </div>
             </div>

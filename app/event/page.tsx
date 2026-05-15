@@ -20,7 +20,6 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
-import TrialActivationModal from "@/app/components/TrialActivationModal";
 import GoogleSigninButton from "@/app/components/GoogleSigninButton";
 import {
   EVENT_MODE,
@@ -30,7 +29,6 @@ import {
 
 export default function EventPage() {
   const router = useRouter();
-  const [showTrialModal, setShowTrialModal] = useState(false);
   const [signinError, setSigninError] = useState<string | null>(null);
 
   if (!EVENT_MODE) {
@@ -154,12 +152,9 @@ export default function EventPage() {
                   onSuccess={() => router.push("/dashboard?signin=google")}
                   onError={msg => setSigninError(msg)}
                 />
-                <button
-                  onClick={() => setShowTrialModal(true)}
-                  className="w-full bg-yellow/8 border border-yellow/30 text-yellow font-medium text-sm py-3 rounded-full hover:bg-yellow/15 transition-colors"
-                >
-                  Continue with wallet (activate live trial)
-                </button>
+                <p className="text-white/30 text-[11px] text-center">
+                  Prefer a wallet? Click <span className="text-yellow font-semibold">Connect</span> in the top nav.
+                </p>
               </div>
 
               {signinError && (
@@ -247,7 +242,6 @@ export default function EventPage() {
       </main>
       <Footer />
 
-      {showTrialModal && <TrialActivationModal onClose={() => setShowTrialModal(false)} />}
     </>
   );
 }
