@@ -11,6 +11,8 @@ import WalletModal from "../components/WalletModal";
 import TrialActivationModal from "../components/TrialActivationModal";
 import DashboardSidebar, { type DashboardTab } from "./Sidebar";
 import ClaudeMcpCard from "../components/ClaudeMcpCard";
+import ClaimWalletPrompt from "./ClaimWalletPrompt";
+import WrongWalletHardBlock from "./WrongWalletHardBlock";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
 import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
@@ -464,10 +466,20 @@ export default function DashboardPage() {
   // returns { authenticated: true, email, address? }. We surface a
   // separate sandbox-only view for sessions that have no paired wallet yet,
   // so "API key 받으러 온" users can grab their sandbox key in one click.
+  // Email session — populated from /api/auth/me. `address` here is the
+  // CANONICAL BOUND wallet (session.address on the server), set ONLY by an
+  // explicit signed POST to /api/auth/wallet-bind. A wallet connected in
+  // the browser that doesn't match this field triggers WrongWalletHardBlock
+  // (State G); a wallet connected with this field still null triggers
+  // ClaimWalletPrompt (State D). See docs/sprint-bnb-focus.md §10.
   const [emailSession, setEmailSession] = useState<{
     email: string;
     address: string | null;
   } | null>(null);
+  // "Skip for now" toggle on ClaimWalletPrompt — session-scoped only, no
+  // persistence. Resets on every page-load so the bind decision stays
+  // visible until the user makes it.
+  const [skipClaimPrompt, setSkipClaimPrompt] = useState(false);
   const [sessionTrial, setSessionTrial] = useState<{
     apiKey: string | null;
     sandboxApiKey: string | null;
@@ -510,38 +522,13 @@ export default function DashboardPage() {
     }
   }, [subscription, emailSession]);
 
-  // Wallet auto-pair: when wallet connects AND email session exists AND
-  // session.address isn't already set, POST to /api/auth/wallet-bind so
-  // the server knows these two identities go together. Skipped on
-  // ALREADY_PAIRED conflicts (the session is bound to a different
-  // wallet — we don't silently overwrite). Fired once per (sid, address)
-  // pair via a ref to avoid re-binding on each re-render.
-  const walletBoundRef = useRef<string | null>(null);
-  const [bindConflict, setBindConflict] = useState<{ paired: string } | null>(null);
-  useEffect(() => {
-    if (!isConnected || !address || !emailSession) return;
-    if (emailSession.address === address) return; // already paired
-    if (walletBoundRef.current === address) return; // already attempted
-    walletBoundRef.current = address;
-    void (async () => {
-      try {
-        const res = await fetch("/api/auth/wallet-bind", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ address }),
-        });
-        const data = await res.json();
-        if (data.ok) {
-          setEmailSession(prev => (prev ? { ...prev, address } : prev));
-        } else if (data.code === "ALREADY_PAIRED") {
-          setBindConflict({ paired: data.pairedAddress ?? "" });
-        }
-      } catch {
-        /* silent — pairing is a UX nicety, not a security gate */
-      }
-    })();
-  }, [isConnected, address, emailSession]);
+  // Phase 1 identity model: wallet binding is no longer auto-fired. The
+  // ClaimWalletPrompt component (State D) handles binding via an explicit
+  // user click + fresh signed challenge through /api/auth/wallet-bind.
+  // The old silent unsigned auto-bind was removed in favour of the
+  // bind-once semantics documented in docs/sprint-bnb-focus.md §10 — a
+  // user shouldn't get permanently bound to a wallet just by having
+  // MetaMask connected at dashboard load time.
 
   // Wallet-only auto-trial: when a wallet is connected but the address has
   // no subscription (or only a provisioned stub with amountUSD=0 and no
@@ -572,7 +559,12 @@ export default function DashboardPage() {
         const data = await res.json();
         if (cancelled) return;
         if (data.authenticated && typeof data.email === "string") {
-          setEmailSession({ email: data.email, address: data.address ?? null });
+          // Prefer the explicit boundAddress field; fall back to the legacy
+          // `address` alias for older /api/auth/me responses (pre-Phase 1).
+          const bound = (typeof data.boundAddress === "string" && data.boundAddress)
+            || (typeof data.address === "string" && data.address)
+            || null;
+          setEmailSession({ email: data.email, address: bound });
         }
       } catch {
         /* no session — silent */
@@ -683,6 +675,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
+    // Phase 1 gate — refuse to provision when the email session has a
+    // canonical bound wallet that doesn't match the currently-connected
+    // wallet. Prevents the dashboard from quietly pulling another
+    // wallet's subscription record onto the screen. State G renders an
+    // early-return hard block above this point, but this belt-and-
+    // suspenders guard also covers the brief window between wallet
+    // connection and the early-return paint.
+    if (
+      emailSession &&
+      emailSession.address &&
+      address.toLowerCase() !== emailSession.address.toLowerCase()
+    ) {
+      return;
+    }
     const addr = address; // narrow to string for async closures
 
     async function provision() {
@@ -747,6 +753,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
+    // Same Phase 1 gate as provision — don't pull tx history for a wallet
+    // that isn't the canonical bound wallet for this email session.
+    if (
+      emailSession &&
+      emailSession.address &&
+      address.toLowerCase() !== emailSession.address.toLowerCase()
+    ) {
+      return;
+    }
     const addr = address;
     async function fetchTxs() {
       const auth = await getAuthCreds(addr, signMessage);
@@ -780,6 +795,87 @@ export default function DashboardPage() {
       if (data.balances) setWalletBalances(data.balances);
     }).catch(() => {});
   }, [address, refreshUserBalance]);
+
+  // ── Phase 1 identity-model early returns ──────────────────────────────
+  // The 4-state machine routes the user before any multichain data is
+  // fetched. See docs/sprint-bnb-focus.md §10 for the full table; the two
+  // branches below cover the cases where an email session + browser-
+  // connected wallet exist together but in a state that must NOT render
+  // the regular dashboard:
+  //
+  //   State D — wallet connected, session not yet claimed by any wallet
+  //             → ClaimWalletPrompt (signed bind via /api/auth/wallet-bind)
+  //   State G — session bound to wallet X, browser connected to wallet Y
+  //             → WrongWalletHardBlock (no data fetched from Y)
+  //
+  // skipClaimPrompt is a session-scoped escape hatch for State D only.
+  const walletMatches =
+    !!emailSession?.address &&
+    !!address &&
+    address.toLowerCase() === emailSession.address.toLowerCase();
+
+  // Lazy sign-out closure shared by the State D / State G screens — same
+  // semantics as the main dashboard's handleSignOut (defined later in
+  // render scope, so we inline it here).
+  async function earlyReturnSignOut() {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+    if (isConnected) {
+      try { disconnect(); } catch { /* best-effort */ }
+    }
+    if (typeof window !== "undefined") window.location.reload();
+  }
+
+  // State D — email signed in, wallet connected, session has NEVER been
+  // claimed. Require explicit signed bind before any multichain data
+  // fetch. Skippable per-session via the prompt's own button.
+  if (
+    mounted &&
+    authChecked &&
+    emailSession &&
+    isConnected &&
+    address &&
+    !emailSession.address &&
+    !skipClaimPrompt
+  ) {
+    return (
+      <ClaimWalletPrompt
+        email={emailSession.email}
+        connectedAddress={address}
+        onBound={(boundAddr) => {
+          // Local optimistic update — server already persisted via the
+          // /api/auth/wallet-bind call inside ClaimWalletPrompt.
+          setEmailSession(prev => prev ? { ...prev, address: boundAddr } : prev);
+        }}
+        onSkip={() => setSkipClaimPrompt(true)}
+        onSignOut={earlyReturnSignOut}
+      />
+    );
+  }
+
+  // State G — email signed in, wallet connected, session is bound but the
+  // connected wallet doesn't match. Full-screen non-dismissable block, NO
+  // multichain data fetch (the provision useEffect's address dep would
+  // otherwise pull the wrong wallet's subscription). The wallet match
+  // gate inside that useEffect (added below) is the belt-and-suspenders
+  // — this early return is the actual UX.
+  if (
+    mounted &&
+    authChecked &&
+    emailSession &&
+    isConnected &&
+    address &&
+    emailSession.address &&
+    !walletMatches
+  ) {
+    return (
+      <WrongWalletHardBlock
+        email={emailSession.email}
+        boundAddress={emailSession.address}
+        connectedAddress={address}
+        onSignOut={earlyReturnSignOut}
+      />
+    );
+  }
 
   // Email-only view: user signed in via Google / magic-link, no wallet
   // connected yet. Trial is already active (Google/email callback grants
@@ -1240,6 +1336,12 @@ export default function DashboardPage() {
           setShowAlertModal(true);
         }}
         signOut={handleSignOut}
+        // Lock Multichain section when the email session exists but
+        // hasn't been claimed by any wallet yet (skipClaimPrompt path).
+        // We're past State D's hard return so any "in this view" here
+        // means the user deferred the bind decision — keep the surface
+        // visible but uninteractive until they commit.
+        multichainLocked={!!emailSession && !emailSession.address}
       />
 
       <div className="flex-1 min-w-0">
@@ -1346,34 +1448,11 @@ export default function DashboardPage() {
             sidebar Account section, which opens the dashboard's alert modal
             on click. */}
 
-        {/* Wallet ↔ email pairing conflict: this email session is bound to
-            a different wallet than the one currently connected. Don't
-            silently switch identities — surface a one-time banner so the
-            user knows. They can sign out + sign back in to re-pair. */}
-        {bindConflict && (
-          <div className="mb-6 flex items-start justify-between gap-4 rounded-2xl px-5 py-4 border bg-yellow/6 border-yellow/25">
-            <div className="flex items-start gap-3">
-              <span className="text-lg text-yellow">⚠</span>
-              <div>
-                <p className="font-semibold text-sm text-yellow">Different wallet detected</p>
-                <p className="text-white/55 text-xs mt-1 leading-relaxed">
-                  Your email <span className="font-mono text-white/75">{emailSession?.email}</span> is paired with
-                  <span className="font-mono text-white/75"> {bindConflict.paired.slice(0, 8)}…{bindConflict.paired.slice(-6)}</span>,
-                  but you&apos;re currently connected via <span className="font-mono text-white/75">{address ? `${address.slice(0, 8)}…${address.slice(-6)}` : "—"}</span>.
-                  Trial view shows your email account; Multichain shows the connected wallet — they&apos;re NOT the same identity.
-                  Sign out and back in with the paired wallet to merge.
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setBindConflict(null)}
-              className="text-white/35 hover:text-white text-lg leading-none flex-shrink-0"
-              aria-label="Dismiss"
-            >
-              ×
-            </button>
-          </div>
-        )}
+        {/* The legacy "Different wallet detected" dismissable banner was
+            removed when the Phase 1 identity model landed — mismatched
+            wallets now hit the WrongWalletHardBlock full-screen early
+            return above, which is non-dismissable and prevents any
+            multichain data fetch. See docs/sprint-bnb-focus.md §10. */}
 
         {/* Quota usage warning banner — only for paying users */}
         {hasPaid && subscription && pct >= 80 && (

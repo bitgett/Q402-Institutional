@@ -108,6 +108,79 @@ export async function getAuthCreds(
 }
 
 /**
+ * Bind a wallet to the caller's email session — Phase 1 of the identity
+ * model (see docs/sprint-bnb-focus.md §10). Mints a fresh challenge,
+ * prompts the wallet for a signature, POSTs the signed payload to
+ * /api/auth/wallet-bind. Returns a tagged result so the caller can render
+ * the right UX for each failure mode without parsing error strings.
+ *
+ *   { ok: true, address }                          — bound, idempotent or first-time
+ *   { ok: false, code: "WALLET_ALREADY_BOUND",
+ *     boundAddress }                               — different wallet already claimed
+ *                                                    (UI should show hard-block / recovery)
+ *   { ok: false, code: "SIGNATURE_CANCELLED" }     — user rejected wallet prompt
+ *   { ok: false, code: "NETWORK", error }          — fetch / parse failed
+ *   { ok: false, code: "REJECTED", error }         — server returned non-ok with no
+ *                                                    bind-specific code (rate limit etc.)
+ */
+export type BindWalletResult =
+  | { ok: true; address: string; idempotent?: boolean }
+  | { ok: false; code: "WALLET_ALREADY_BOUND"; boundAddress: string }
+  | { ok: false; code: "SIGNATURE_CANCELLED"; error: string }
+  | { ok: false; code: "NETWORK"; error: string }
+  | { ok: false; code: "REJECTED"; error: string };
+
+export async function bindWallet(
+  address: string,
+  signMessage: (msg: string) => Promise<string | null>,
+): Promise<BindWalletResult> {
+  const chal = await getFreshChallenge(address, signMessage);
+  if (!chal) {
+    return {
+      ok: false,
+      code: "SIGNATURE_CANCELLED",
+      error: "Wallet signature was cancelled.",
+    };
+  }
+
+  try {
+    const res = await fetch("/api/auth/wallet-bind", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        address,
+        challenge: chal.challenge,
+        signature: chal.signature,
+      }),
+    });
+    const data = await res.json();
+
+    if (res.status === 409 && data.code === "WALLET_ALREADY_BOUND") {
+      return {
+        ok: false,
+        code: "WALLET_ALREADY_BOUND",
+        boundAddress: typeof data.boundAddress === "string" ? data.boundAddress : "",
+      };
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        code: "REJECTED",
+        error: typeof data.error === "string" ? data.error : "Wallet bind rejected.",
+      };
+    }
+    return {
+      ok: true,
+      address: typeof data.address === "string" ? data.address : address.toLowerCase(),
+      idempotent: data.idempotent === true,
+    };
+  } catch {
+    return { ok: false, code: "NETWORK", error: "Network error." };
+  }
+}
+
+/**
  * Obtain and sign a fresh one-time challenge for high-risk operations.
  * Always prompts the wallet (no caching).
  * Returns { challenge, signature } or null if the user rejects / network error.

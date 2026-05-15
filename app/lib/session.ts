@@ -34,6 +34,20 @@ import type { NextRequest, NextResponse } from "next/server";
 
 export interface SessionRecord {
   email: string;
+  /**
+   * Canonical BOUND wallet for this email session. Set ONLY by
+   * /api/auth/wallet-bind (which requires a fresh signed challenge) and
+   * NEVER overwritten silently — a second bind attempt with a different
+   * address returns 409 WALLET_ALREADY_BOUND. See docs/sprint-bnb-focus.md
+   * §10 "Identity model".
+   *
+   * Front-end consumers MUST treat this field as the source-of-truth for
+   * "which wallet's data should this account see" — not whatever wallet
+   * happens to be connected in the browser. A connected-but-not-bound
+   * wallet triggers the dashboard's Claim prompt (State D); a
+   * connected-but-mismatched wallet triggers the Wrong-Wallet hard block
+   * (State G), which intentionally hides all multichain data.
+   */
   address?: string;
   createdAt: string;
   expiresAt: string;

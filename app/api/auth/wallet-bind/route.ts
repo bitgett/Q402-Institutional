@@ -1,81 +1,126 @@
 /**
  * POST /api/auth/wallet-bind
  *
- * Attaches a wallet address to the caller's email session record. Called
- * from the dashboard immediately after the WalletContext reports a fresh
- * connection so that:
+ * Permanently binds a wallet to the caller's email session — this is the
+ * "first wallet claim" gate in the Phase 1 identity model (see
+ * docs/sprint-bnb-focus.md §10). Once a session has session.address set,
+ * it never changes silently: a different wallet posting here returns 409
+ * WALLET_ALREADY_BOUND. Re-binding the SAME wallet is idempotent (200 OK).
  *
- *   - Subsequent /api/auth/me calls return { authenticated, email, address }
- *   - pairSessionWithWallet keeps the email pseudo-account aware of the
- *     wallet the user actually transacts from
- *   - When the user later activates a trial via wallet, /api/trial/activate
- *     can see this pairing and skip re-prompting
+ * Why fresh signed challenge (not the old nonce-cached path):
+ *   Wallet binding is now an irreversible-from-the-UI action (Phase 2 will
+ *   add a support-only recovery flow). Treating it as a high-risk operation
+ *   means we require a single-use, server-issued challenge — same gate as
+ *   /api/payment/activate and /api/keys/rotate. This stops a hijacked
+ *   sessionStorage signature from being replayed to bind a wallet the user
+ *   never intended to claim.
  *
- * The wallet binding requires no on-chain signature — connecting a wallet
- * (window.ethereum.request) already proves browser-level control, and the
- * server only stores it as a hint on the cookie-bound session. No
- * subscription credits move; this is a navigation/UX helper.
+ * Body: { address, challenge, signature }
+ *   challenge from GET /api/auth/challenge?address={addr}
+ *   signature = personal_sign("Q402 Institutional\n...\nChallenge: {c}")
  *
- * Conflict policy:
- *   - If the session already has a different `address` paired, RETURN
- *     200 with `{ ok: false, code: "ALREADY_PAIRED" }` and DO NOT
- *     overwrite. Re-pairing would let a stale cookie quietly hop to a
- *     new wallet identity; we prefer the explicit sign-out / sign-in
- *     path for that.
- *   - If no session at all, 401.
- *
- * Body: { address }
- *   - 0x-prefixed lowercase EVM address. Server normalizes case.
+ * Responses:
+ *   200 { ok: true,  bound: true, address, idempotent?: true }
+ *   401 { error: "Not signed in" }                    — no session cookie
+ *   400 { error }                                     — bad payload / auth failed
+ *   409 { ok: false, code: "WALLET_ALREADY_BOUND",
+ *         boundAddress }                              — different wallet already claimed
+ *   429 { error: "Too many requests" }
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, pairSessionWithWallet, SESSION_COOKIE } from "@/app/lib/session";
+import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
-
-const ETH_ADDR = /^0x[0-9a-fA-F]{40}$/;
 
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
-  if (!(await rateLimit(ip, "wallet-bind", 30, 60))) {
+  if (!(await rateLimit(ip, "wallet-bind", 10, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string };
+  let body: { address?: string; challenge?: string; signature?: string };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const raw = (body.address ?? "").trim();
-  if (!ETH_ADDR.test(raw)) {
-    return NextResponse.json({ error: "Valid 0x EVM address required" }, { status: 400 });
+  // SECURITY: verify ownership via fresh single-use challenge BEFORE looking
+  // at the session. requireFreshAuth normalises addr to lowercase on success.
+  const authResult = await requireFreshAuth(body.address, body.challenge, body.signature);
+  if (typeof authResult !== "string") {
+    return NextResponse.json(
+      { error: authResult.error, code: authResult.code },
+      { status: authResult.status },
+    );
   }
-  const address = raw.toLowerCase();
+  const verifiedAddr = authResult;
 
   const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  // Conflict: the cookie already points at a different wallet. Don't
-  // overwrite silently — surface a code the client can react to (e.g.
-  // dashboard shows "this email is paired with 0xAAA; sign out to
-  // pair a different wallet").
-  if (session.address && session.address !== address) {
-    return NextResponse.json({
-      ok: false,
-      code: "ALREADY_PAIRED",
-      pairedAddress: session.address,
-    });
-  }
-
-  // No prior binding (or same wallet re-connecting) — pair via the
-  // existing session helper.
   const sid = req.cookies.get(SESSION_COOKIE)?.value;
   if (!sid) {
     return NextResponse.json({ error: "Session cookie missing" }, { status: 401 });
   }
-  await pairSessionWithWallet(sid, address);
 
-  return NextResponse.json({ ok: true, email: session.email, address });
+  // Idempotent re-bind — same wallet reconnecting after a refresh shouldn't
+  // need to re-prove. Returns 200 so the client doesn't show an error toast.
+  if (session.address && session.address === verifiedAddr) {
+    return NextResponse.json({
+      ok: true,
+      bound: true,
+      address: verifiedAddr,
+      idempotent: true,
+    });
+  }
+
+  // Bind-once enforcement: a session that's already claimed by wallet X
+  // CANNOT silently flip to wallet Y. The recovery path (Phase 2) lives at
+  // a separate endpoint with OTP gating; here we just refuse and surface
+  // the bound address so the UI can render the hard-block screen.
+  if (session.address && session.address !== verifiedAddr) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "WALLET_ALREADY_BOUND",
+        boundAddress: session.address,
+      },
+      { status: 409 },
+    );
+  }
+
+  // First bind — promote the session from "unbound" to "bound". Persists
+  // verifiedAddr as session.address (the canonical bound wallet).
+  await pairSessionWithWallet(sid, verifiedAddr);
+
+  // Best-effort operator alert. Same fail-soft pattern as payment-activate.
+  // Phase 2's migration job triggers off this event downstream.
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (botToken && chatId) {
+    const lines = [
+      "🔗 *Wallet bound to email account*",
+      "",
+      `*Email:* ${session.email}`,
+      `*Wallet:* \`${verifiedAddr}\``,
+    ].join("\n");
+    try {
+      await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text: lines, parse_mode: "Markdown" }),
+      });
+    } catch {
+      /* non-critical — bind is already committed */
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    bound: true,
+    address: verifiedAddr,
+  });
 }

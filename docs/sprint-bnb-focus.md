@@ -210,3 +210,74 @@ request with a forged email from poisoning the reminder cron.
 
 Sprint commits live on `feat/bnb-focus-sprint`; not merged into `main`.
 Vercel branch swap is the rollback lever.
+
+---
+
+## 10 · Identity model — Phase 1 (bind-once)
+
+The dashboard used to route by "whichever wallet is connected in the
+browser right now," which created the dual-identity sharp edge the
+external audit flagged ("Trial view = email pseudo, Multichain view =
+arbitrary connected wallet, banner says they're NOT the same"). Phase 1
+closes that. Phase 2 (in a separate PR after sprint launch) will add
+account migration + a recovery flow.
+
+### Principle
+Email account is a TEMPORARY identity. The first wallet that signs
+`/api/auth/wallet-bind` becomes the account's permanent canonical
+wallet. After that point the dashboard always renders based on the
+bound wallet — never on whatever wallet happens to be connected.
+
+### Server contracts
+
+`POST /api/auth/wallet-bind`
+- Body: `{ address, challenge, signature }` — fresh single-use
+  challenge, same gate as `/api/payment/activate`
+- 200 `{ ok: true, bound: true, address }` — first bind or idempotent
+  re-bind
+- 409 `{ ok: false, code: "WALLET_ALREADY_BOUND", boundAddress }` —
+  different wallet attempted. NEVER silently overwrites session.address
+- 401 if no session cookie
+
+`GET /api/auth/me`
+- `{ authenticated, email, boundAddress, bindState: "bound" | "unbound",
+   address (legacy alias of boundAddress), expiresAt }`
+- Front-end MUST read `boundAddress` / `bindState` for routing
+  decisions — `address` is preserved only for old clients
+
+### Dashboard 4-state machine
+
+| State | emailSession | bound | connected | match | UI |
+|---|---|---|---|---|---|
+| A | no | — | no | — | bounce to `/` |
+| B | no | — | yes | — | regular wallet-only dashboard |
+| C | yes | unbound | no | — | email-only view — "Connect a wallet to claim" |
+| D | yes | unbound | yes | — | **ClaimWalletPrompt** — signed bind |
+| E | yes | bound | no | — | email-only view + "Reconnect 0x…X" |
+| F | yes | bound | yes | ✓ | regular Multichain dashboard |
+| G | yes | bound | yes | ✗ | **WrongWalletHardBlock** — no data fetch |
+
+States D + G are the new ones. The provision + transactions useEffects
+also bail when `walletMatches` is false — belt-and-suspenders against a
+brief flash between mount and the early-return paint.
+
+### What Phase 1 explicitly does NOT do
+- Migrate trial credits / API key owner / tx history from the email
+  pseudo-account onto the wallet subscription — Phase 2
+- Provide a UI for re-pairing after wallet loss — Phase 2 (support
+  email only today; WrongWalletHardBlock surfaces the support address)
+- Tombstone the email pseudo-account on bind — Phase 2
+
+### Migration safety
+Pre-Phase-1 sessions that already had `session.address` populated by the
+legacy unsigned auto-bind path continue to work — `/api/auth/me` reads
+`session.address` as `boundAddress` and the bind-once gate treats it as
+"already bound." A user who connects a different wallet to such a
+session will hit State G immediately rather than the old
+"Different wallet detected" banner. There is no schema migration.
+
+### Tests
+- `__tests__/wallet-bind.test.ts` — signed-bind ordering, 409 mismatch,
+  idempotent re-bind, no silent overwrite
+- `__tests__/dashboard-state-machine.test.ts` — State D / G early
+  returns, provision + tx useEffect gating, Sidebar lock, no auto-bind
