@@ -506,21 +506,31 @@ export default function DashboardPage() {
     setMounted(true);
   }, []);
 
-  // Auto-flip to trial view on first load when ANY trial signal is present:
-  //   - wallet sub on plan="trial"  (wallet trial activated)
-  //   - email session exists        (email/Google signup grants trial)
-  // Users can toggle back to Multichain any time; we don't override their
-  // explicit choice on subsequent renders.
+  // Auto-flip to Trial view on first load ONLY when there's a verifiable
+  // active trial:
+  //   - wallet sub on plan="trial" (wallet trial still in window), OR
+  //   - email session has trial keys (canonical email-pseudo trial)
+  // A paying user with an email session but no active trial defaults to
+  // Multichain — landing them on Trial view would surface "0 / 2000" or
+  // their paid credits in the wrong scope. Users can still toggle to
+  // Trial manually from the sidebar.
   const initialViewMatched = useRef(false);
   useEffect(() => {
     if (initialViewMatched.current) return;
-    if (subscription?.plan === "trial" || emailSession) {
+    if (!subscription && !emailSession) return; // still loading
+    const walletHasTrialSignal =
+      subscription?.plan === "trial" &&
+      !!subscription?.trialExpiresAt &&
+      new Date(subscription.trialExpiresAt) > new Date();
+    const emailHasTrialSignal =
+      !!emailSession && (!!sessionTrial.apiKey || !!sessionTrial.trialExpiresAt);
+    if (walletHasTrialSignal || emailHasTrialSignal) {
       setTrialViewActive(true);
-      initialViewMatched.current = true;
-    } else if (subscription) {
-      initialViewMatched.current = true;
     }
-  }, [subscription, emailSession]);
+    // Otherwise keep the default (multichain). Either way, lock the flip
+    // so we don't override the user's subsequent manual choice.
+    initialViewMatched.current = true;
+  }, [subscription, emailSession, sessionTrial]);
 
   // Phase 1 identity model: wallet binding is no longer auto-fired. The
   // ClaimWalletPrompt component (State D) handles binding via an explicit
@@ -675,13 +685,17 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
+    // Wait for /api/auth/me to resolve before issuing /api/keys/provision
+    // — without this, a localStorage-rehydrated wallet can race the
+    // session fetch and pull its own subscription before we know the
+    // session is bound to a different wallet. The State G early-return
+    // would then replace the rendered view but the KV read already
+    // happened on a wallet we shouldn't have queried.
+    if (!authChecked) return;
     // Phase 1 gate — refuse to provision when the email session has a
     // canonical bound wallet that doesn't match the currently-connected
     // wallet. Prevents the dashboard from quietly pulling another
-    // wallet's subscription record onto the screen. State G renders an
-    // early-return hard block above this point, but this belt-and-
-    // suspenders guard also covers the brief window between wallet
-    // connection and the early-return paint.
+    // wallet's subscription record onto the screen.
     if (
       emailSession &&
       emailSession.address &&
@@ -748,11 +762,15 @@ export default function DashboardPage() {
     }
 
     provision();
+  // emailSession + authChecked are read inside the Phase 1 wallet-match
+  // gate above — include them in the deps so a late session resolution
+  // re-evaluates whether this address should still be provisioned.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address]);
+  }, [address, authChecked, emailSession]);
 
   useEffect(() => {
     if (!address) return;
+    if (!authChecked) return; // same race-avoidance as provision useEffect
     // Same Phase 1 gate as provision — don't pull tx history for a wallet
     // that isn't the canonical bound wallet for this email session.
     if (
@@ -775,7 +793,7 @@ export default function DashboardPage() {
     }
     fetchTxs().catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, subscription]);
+  }, [address, subscription, authChecked, emailSession]);
 
   useEffect(() => {
     setTankLoading(true);
@@ -1150,14 +1168,24 @@ export default function DashboardPage() {
   const walletCredits = subscription?.quotaBonus ?? 0;
   const isTrialOnlySub = subscription?.plan === "trial";
   const hasEmailTrial = !!emailSession && !!sessionTrial.apiKey;
+  // A paid wallet's credit counter (`quota:{addr}`) is unified per address
+  // and rolls forward across plan changes — a user who used part of their
+  // trial and then paid sees ONE remaining count that mixes both sources.
+  // For surface accounting (Trial view vs Multichain view), only show
+  // trial credits when the account is verifiably ON a trial right now:
+  // either the email pseudo has an active trial key (hasEmailTrial) or
+  // the wallet sub's current plan is "trial" (isTrialOnlySub). Otherwise
+  // the credits belong to the paid scope and surface in Multichain.
   // Trial-side raw values prefer email pseudo when present (canonical),
-  // else wallet sub's trialApiKey (plan==="trial" or post-upgrade), with a
-  // last-resort fallback to apiKey for pre-migration accounts that haven't
-  // been rewritten yet.
+  // else wallet sub's trialApiKey (plan==="trial" or post-upgrade). The
+  // last-resort fallback to apiKey only fires for trial-only subs — a
+  // paid user's apiKey is NOT a trial key and must not be surfaced here.
   const trialApiKey = hasEmailTrial
     ? (sessionTrial.apiKey ?? "")
     : (walletTrialApiKey || (isTrialOnlySub ? walletApiKey : ""));
-  const trialCredits = hasEmailTrial ? sessionTrial.credits : walletCredits;
+  const trialCredits = hasEmailTrial
+    ? sessionTrial.credits
+    : (isTrialOnlySub ? walletCredits : 0);
   // Multichain side: only render real values for paying users (amountUSD > 0
   // AND non-trial plan). The Locked placeholder is rendered inside the card
   // itself when this is false — the card shell still mounts.
@@ -1362,12 +1390,6 @@ export default function DashboardPage() {
           setShowAlertModal(true);
         }}
         signOut={handleSignOut}
-        // Lock Multichain section when the email session exists but
-        // hasn't been claimed by any wallet yet (skipClaimPrompt path).
-        // We're past State D's hard return so any "in this view" here
-        // means the user deferred the bind decision — keep the surface
-        // visible but uninteractive until they commit.
-        multichainLocked={!!emailSession && !emailSession.address}
       />
 
       <div className="flex-1 min-w-0">

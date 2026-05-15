@@ -134,15 +134,28 @@ export default function ClaimWalletPrompt({
             <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
               <li className="flex items-start gap-2">
                 <span className="text-yellow flex-shrink-0">·</span>
-                <span>This wallet becomes the <strong>only</strong> wallet that can sign in to this account</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-yellow flex-shrink-0">·</span>
-                <span>Your trial credits + API keys stay with this wallet</span>
+                <span>This wallet becomes the <strong>only</strong> wallet that can sign in to this account from now on</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-yellow flex-shrink-0">·</span>
                 <span>Connecting a different wallet later will be blocked, not silently merged</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-yellow flex-shrink-0">·</span>
+                <span>
+                  Your trial credits + API keys <strong>stay reachable</strong> through
+                  this email session — sign in via the email OR the wallet
+                  alone
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-white/40 flex-shrink-0">·</span>
+                <span className="text-white/45">
+                  <em>Note:</em> a future update will migrate the trial data
+                  onto the wallet so the wallet-alone sign-in surfaces it
+                  directly. Today, wallet-alone sign-in shows the wallet&apos;s
+                  own account (which may be empty if this is its first time)
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-400/85 flex-shrink-0">!</span>

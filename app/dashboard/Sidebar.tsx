@@ -50,17 +50,6 @@ interface Props {
   onOpenAlerts: () => void;
 
   signOut: () => void;
-
-  /**
-   * Phase 1 identity model lock. When true, the Multichain section is
-   * visually disabled — the user is in an email session that hasn't yet
-   * been bound to a wallet, so multichain data is intentionally
-   * unavailable until they claim the account (see ClaimWalletPrompt). We
-   * keep the section visible (so users discover the surface exists) but
-   * the tab list is non-interactive with a lock icon + small "Bind to
-   * unlock" hint. See docs/sprint-bnb-focus.md §10.
-   */
-  multichainLocked?: boolean;
 }
 
 interface TabDef {
@@ -127,7 +116,6 @@ export default function DashboardSidebar({
   alertEmail,
   onOpenAlerts,
   signOut,
-  multichainLocked = false,
 }: Props) {
   const { view, tab } = selection;
 
@@ -204,41 +192,25 @@ export default function DashboardSidebar({
         )}
       </div>
 
-      {/* Multichain section — same always-expanded pattern. When the
-          Phase 1 lock is on (unbound email session) the section header
-          shows a lock icon + "Bind to unlock" hint and the tab list is
-          made non-interactive. We keep it visible so users discover the
-          surface exists and understand the bind step gates it. */}
+      {/* Multichain section — same always-expanded pattern. */}
       <div className="px-3 pt-3">
         <button
-          onClick={() => { if (!multichainLocked) onSelect({ view: "multichain", tab: "overview" }); }}
-          disabled={multichainLocked}
+          onClick={() => onSelect({ view: "multichain", tab: "overview" })}
           className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-md text-sm font-semibold transition-colors ${
-            multichainLocked
-              ? "text-white/35 cursor-not-allowed"
-              : view === "multichain"
-                ? "text-white bg-white/[0.06]"
-                : "text-white/65 hover:text-white"
+            view === "multichain"
+              ? "text-white bg-white/[0.06]"
+              : "text-white/65 hover:text-white"
           }`}
-          title={multichainLocked ? "Bind a wallet to unlock Multichain" : undefined}
         >
-          <span className="flex items-center gap-2">
-            {multichainLocked && <span className="text-white/35 text-xs">🔒</span>}
-            Multichain
-          </span>
-          {multichainLocked && (
-            <span className="text-[9px] font-bold uppercase tracking-widest text-white/30">
-              Bind to unlock
-            </span>
-          )}
+          <span>Multichain</span>
         </button>
-        <ul className={`ml-2 mt-1 space-y-0.5 ${multichainLocked ? "opacity-40 pointer-events-none" : ""}`}>
+        <ul className="ml-2 mt-1 space-y-0.5">
           {MULTICHAIN_TABS.map(t => (
             <li key={t.id}>
               <TabItem
                 tab={t}
                 active={view === "multichain" && tab === t.id}
-                onClick={() => { if (!multichainLocked) onSelect({ view: "multichain", tab: t.id }); }}
+                onClick={() => onSelect({ view: "multichain", tab: t.id })}
               />
             </li>
           ))}

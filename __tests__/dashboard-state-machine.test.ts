@@ -67,6 +67,21 @@ describe("dashboard — 4-state machine early returns", () => {
 });
 
 describe("dashboard — data fetch gating (no leak from mismatched wallets)", () => {
+  it("provision + tx useEffects wait for authChecked (no race with /api/auth/me)", () => {
+    // The /api/auth/me fetch resolves async on mount. If provision fires
+    // before that, a localStorage-rehydrated wallet can pull its own
+    // subscription milliseconds before we learn the session is bound to
+    // a DIFFERENT wallet. State G would then replace the rendered output
+    // but the KV read already happened on the wrong wallet. Gating both
+    // useEffects on authChecked closes the window.
+    expect(dashboardSource).toMatch(
+      /if\s*\(\s*!authChecked\s*\)\s*return;[\s\S]+?provision/,
+    );
+    expect(dashboardSource).toMatch(
+      /if\s*\(\s*!authChecked\s*\)\s*return;[\s\S]+?fetchTxs/,
+    );
+  });
+
   it("provision useEffect refuses to run when bound wallet doesn't match connected", () => {
     // Belt-and-suspenders alongside the State G early return — the
     // useEffect must explicitly bail before any /api/keys/provision call.
@@ -99,22 +114,42 @@ describe("dashboard — data fetch gating (no leak from mismatched wallets)", ()
   });
 });
 
-describe("Sidebar — Multichain section lock when unbound", () => {
-  it("accepts multichainLocked prop", () => {
-    expect(sidebarSource).toMatch(/multichainLocked\?:\s*boolean/);
+describe("Sidebar — Phase 1 routing keeps the lock UI unreachable", () => {
+  // The sidebar is only ever rendered when the dashboard reaches State F
+  // (email session present, wallet bound, wallet matches). In that state
+  // emailSession.address is always set, so any `multichainLocked` prop we
+  // could pass would always be false. The prop was dead code on Phase 1
+  // routing and was removed — these assertions catch a regression that
+  // re-introduces it without re-thinking when it should fire.
+  it("Sidebar does not accept a multichainLocked prop", () => {
+    expect(sidebarSource).not.toMatch(/multichainLocked/);
   });
 
-  it("disables the section header button when locked", () => {
-    expect(sidebarSource).toMatch(/disabled=\{multichainLocked\}/);
+  it("dashboard does not pass a multichainLocked prop to Sidebar", () => {
+    expect(dashboardSource).not.toMatch(/multichainLocked=/);
   });
+});
 
-  it("makes tab list non-interactive (pointer-events-none) when locked", () => {
-    expect(sidebarSource).toMatch(/multichainLocked\s*\?\s*["']opacity-40 pointer-events-none["']/);
-  });
-
-  it("dashboard passes multichainLocked = email session has no bound wallet", () => {
+describe("trial-credits scope hygiene", () => {
+  it("trialCredits falls back to 0 (not walletCredits) when no active trial", () => {
+    // Regression catch: a paid user with no email trial used to see their
+    // 491-remaining paid credits surfaced in the Trial view because
+    // trialCredits naively defaulted to walletCredits. The fix gates the
+    // fallback on isTrialOnlySub.
     expect(dashboardSource).toMatch(
-      /multichainLocked=\{!!emailSession\s*&&\s*!emailSession\.address\}/,
+      /trialCredits\s*=[\s\S]+?isTrialOnlySub\s*\?\s*walletCredits\s*:\s*0/,
+    );
+  });
+
+  it("auto-flip uses an explicit active-trial signal, not just emailSession existence", () => {
+    // Old auto-flip put any user with an email session into Trial view —
+    // even paid users whose trial had expired. Now we require an active
+    // trial signal (wallet plan=trial within expiry, OR email pseudo has
+    // a trial key / expiry).
+    expect(dashboardSource).toMatch(/walletHasTrialSignal/);
+    expect(dashboardSource).toMatch(/emailHasTrialSignal/);
+    expect(dashboardSource).toMatch(
+      /walletHasTrialSignal\s*\|\|\s*emailHasTrialSignal/,
     );
   });
 });
