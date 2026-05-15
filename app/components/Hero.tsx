@@ -172,8 +172,11 @@ export default function Hero() {
               </motion.p>
             </div>
 
-            {/* Bottom: CTAs + stats row */}
-            <div className="mt-12 lg:mt-0 flex flex-col gap-8">
+            {/* Bottom: CTAs + stats grid. Explicit mt-* on the wrapper
+                pushes the bottom block visibly below the subtitle even
+                when the card is tall (justify-between alone made the
+                gap too tight at certain viewport heights). */}
+            <div className="mt-16 lg:mt-24 flex flex-col gap-10">
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -195,31 +198,75 @@ export default function Hero() {
                 </a>
               </motion.div>
 
+              {/* Stats grid — 2-col on phones, 4-col from sm+. Each tile is
+                  a small glass card with a colored top accent stripe that
+                  brightens on hover; live metrics (uptime, inclusion) get
+                  a pulsing green dot, capability metrics (1 tx, chains)
+                  get a static dot. */}
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.55 }}
-                className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm"
+                className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl"
               >
-                <div className="flex items-baseline gap-2">
-                  <span className="text-yellow font-bold font-mono">99.99%</span>
-                  <span className="text-white/35 text-xs">uptime</span>
-                </div>
-                <span className="w-px h-4 bg-white/10" />
-                <div className="flex items-baseline gap-2">
-                  <span className="text-yellow font-bold font-mono">&lt;0.9 sec</span>
-                  <span className="text-white/35 text-xs">inclusion</span>
-                </div>
-                <span className="w-px h-4 bg-white/10" />
-                <div className="flex items-baseline gap-2">
-                  <span className="text-white font-bold">1 tx</span>
-                  <span className="text-white/35 text-xs">full payment flow</span>
-                </div>
-                <span className="w-px h-4 bg-white/10" />
-                <div className="flex items-baseline gap-2">
-                  <span className="text-white font-bold">7 chains</span>
-                  <span className="text-white/35 text-xs">mainnet live</span>
-                </div>
+                {[
+                  { value: "99.99%",  label: "Uptime",            sub: "180-day rolling",  live: true,  accent: "yellow" },
+                  { value: "<0.9 s",  label: "Inclusion time",    sub: "median, all chains", live: true,  accent: "yellow" },
+                  { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "green" },
+                  { value: "7",       label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
+                ].map((s, i) => {
+                  const stripeColor =
+                    s.accent === "yellow" ? "rgba(245,197,24,0.55)"
+                    : s.accent === "green" ? "rgba(74,229,74,0.55)"
+                    : "rgba(255,255,255,0.35)";
+                  const dotColor =
+                    s.accent === "yellow" ? "#F5C518"
+                    : s.accent === "green" ? "#4ade80"
+                    : "rgba(255,255,255,0.5)";
+                  return (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.4, delay: 0.6 + i * 0.08 }}
+                      className="group relative rounded-xl border border-white/10 backdrop-blur-sm px-5 py-4 overflow-hidden transition-all hover:border-yellow/30 hover:bg-white/[0.05] hover:-translate-y-0.5"
+                      style={{ background: "rgba(255,255,255,0.03)" }}
+                    >
+                      {/* Top accent stripe — brightens on hover. */}
+                      <span
+                        aria-hidden
+                        className="absolute top-0 left-0 right-0 h-[2px] opacity-70 group-hover:opacity-100 transition-opacity"
+                        style={{ background: `linear-gradient(90deg, transparent, ${stripeColor}, transparent)` }}
+                      />
+                      {/* Live / static indicator dot. */}
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.live ? "animate-pulse" : ""}`}
+                          style={{
+                            backgroundColor: dotColor,
+                            boxShadow: s.live ? `0 0 6px ${dotColor}` : "none",
+                          }}
+                        />
+                        <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/35 group-hover:text-white/55 transition-colors">
+                          {s.live ? "Live" : "Spec"}
+                        </span>
+                      </div>
+                      <div
+                        className={`font-display font-extrabold text-3xl leading-none mb-2 tracking-[-0.02em] ${
+                          s.accent === "yellow" ? "text-yellow"
+                          : s.accent === "green" ? "text-green-400"
+                          : "text-white"
+                        }`}
+                      >
+                        {s.value}
+                      </div>
+                      <div className="text-[11px] font-semibold text-white/70 group-hover:text-white transition-colors">
+                        {s.label}
+                      </div>
+                      <div className="text-[10px] text-white/30 mt-0.5">{s.sub}</div>
+                    </motion.div>
+                  );
+                })}
               </motion.div>
             </div>
           </div>
