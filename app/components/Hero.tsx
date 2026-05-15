@@ -164,19 +164,17 @@ export default function Hero() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.3 }}
-                className="mt-7 max-w-2xl text-base sm:text-lg lg:text-xl text-white/65 font-light leading-relaxed"
+                className="mt-7 text-base sm:text-lg lg:text-xl text-white/65 font-light leading-relaxed max-w-[64rem]"
               >
                 <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains.{" "}
-                <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay
-                in USDC, USDT, or RLUSD, we cover the rest.
+                <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
               </motion.p>
             </div>
 
-            {/* Bottom: CTAs + stats grid. Explicit mt-* on the wrapper
-                pushes the bottom block visibly below the subtitle even
-                when the card is tall (justify-between alone made the
-                gap too tight at certain viewport heights). */}
-            <div className="mt-16 lg:mt-24 flex flex-col gap-10">
+            {/* Bottom: CTAs + stats grid. Tight gap to subtitle now that
+                the subtitle is a single line on wide screens — too much
+                whitespace was making the card feel hollow. */}
+            <div className="mt-8 lg:mt-10 flex flex-col gap-6">
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
