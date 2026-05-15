@@ -108,11 +108,7 @@ export default function ConnectModal({ onClose }: Props) {
                 <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
                   Connect
                 </div>
-                <h2 className="text-2xl font-bold mb-2">Welcome to Q402</h2>
-                <p className="text-white/45 text-sm mb-6">
-                  Pick a method. New users get 2,000 sponsored TX + a BNB-only
-                  API key on the spot.
-                </p>
+                <h2 className="text-2xl font-bold mb-6">Welcome to Q402</h2>
 
                 {/* All three buttons share a 392-px width — the modal is
                     max-w-md (448) minus p-7 padding (56) so inner width is

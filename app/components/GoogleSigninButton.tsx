@@ -55,7 +55,11 @@ declare global {
   }
 }
 
-const GIS_SCRIPT = "https://accounts.google.com/gsi/client";
+// Force English copy on the Google-rendered button regardless of the
+// visitor's browser language. The `hl` query param is the documented hook
+// for GIS i18n; without it Korean visitors see "Google 계정으로 계속하기"
+// in mid-flow English UI, which reads as broken locale.
+const GIS_SCRIPT = "https://accounts.google.com/gsi/client?hl=en";
 
 interface Props {
   /** Called after successful POST /api/auth/google. */
