@@ -1388,39 +1388,31 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* API Key card — only shown when the active view has a key
+                  to show. Trial view: render whenever we have any key.
+                  Multichain view: only when the user has actually paid
+                  (showPaidScope), so trial-only users see a clean empty
+                  state instead of an "upgrade" placeholder card. */}
+              {(trialViewActive ? !!trialApiKey : showPaidScope) && (
               <div className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-medium">API Key</span>
                   <span className={`text-xs px-2.5 py-0.5 rounded-full border ${
-                    !trialViewActive && isTrialOnlySub
-                      ? "text-white/40 bg-white/5 border-white/10"
-                      : isExpired
-                        ? "text-red-400 bg-red-400/8 border-red-400/20"
-                        : "text-green-400 bg-green-400/8 border-green-400/20"
+                    isExpired
+                      ? "text-red-400 bg-red-400/8 border-red-400/20"
+                      : "text-green-400 bg-green-400/8 border-green-400/20"
                   }`}>
-                    {!trialViewActive && isTrialOnlySub ? "Locked" : isExpired ? "Expired" : "Active"}
+                    {isExpired ? "Expired" : "Active"}
                   </span>
                 </div>
-                {!trialViewActive && isTrialOnlySub ? (
-                  <div className="flex items-center justify-between gap-2 bg-navy border border-white/7 rounded-xl px-3 py-3">
-                    <span className="text-xs text-white/45">
-                      Upgrade to use multichain — your trial key stays under
-                      the <button onClick={() => setTrialViewActive(true)} className="text-yellow underline-offset-2 hover:underline">Free Trial</button> tab.
-                    </span>
-                    <a href="/payment" className="flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold bg-yellow/10 text-yellow hover:bg-yellow/20 transition-all">
-                      Upgrade →
-                    </a>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
-                    <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
-                    {API_KEY !== "—" && (
-                      <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
-                        {keyCopied ? "Copied!" : "Copy"}
-                      </button>
-                    )}
-                  </div>
-                )}
+                <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
+                  <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
+                  {API_KEY !== "—" && (
+                    <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
+                      {keyCopied ? "Copied!" : "Copy"}
+                    </button>
+                  )}
+                </div>
                 {subscription?.paidAt && expiresAt && (
                   <p className="text-white/20 text-xs mt-2">
                     Paid {new Date(subscription.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
@@ -1441,6 +1433,7 @@ export default function DashboardPage() {
                   </div>
                 )}
               </div>
+              )}
             </div>
           </motion.div>
         )}
