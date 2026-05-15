@@ -1,296 +1,227 @@
 "use client";
 
+/**
+ * Hero — Arbitrum-style full-bleed rounded card.
+ *
+ * Layout reference: arbitrum.foundation hero — a single rounded card filling
+ * the viewport below the navbar, big ALL-CAPS headline on the left, two pill
+ * CTAs at the bottom, and a radiating stripe pattern on the right. We swap
+ * the brand from Arbitrum blue/cyan to Q402 navy/yellow but keep the shape.
+ *
+ * The stripes are pure CSS — repeating linear gradients origin-anchored at
+ * the lower-right corner, then rotated. No SVG/asset cost, no extra HTTP.
+ */
+
 import { useState } from "react";
 import { motion } from "framer-motion";
 import RegisterModal from "./RegisterModal";
-import { SDK_VERSION } from "@/app/lib/version";
-
 
 export default function Hero() {
   const [showModal, setShowModal] = useState(false);
 
   return (
     <>
-      <section className="min-h-screen flex flex-col justify-center px-6 pt-20 pb-16 relative overflow-hidden" style={{ background: "radial-gradient(ellipse at 20% 10%, #1A1530 0%, transparent 55%), radial-gradient(ellipse at 85% 90%, #0E1A2E 0%, transparent 60%), linear-gradient(160deg, #06060C 0%, #0A0E1C 45%, #10142A 100%)" }}>
-        {/* Background glows */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {/* Warm yellow core */}
-          <motion.div
-            className="absolute top-1/2 left-[22%] -translate-y-1/2 w-[640px] h-[640px] rounded-full blur-[160px]"
-            animate={{ opacity: [0.55, 0.9, 0.55], scale: [1, 1.08, 1] }}
-            transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
-            style={{ background: "rgba(245,197,24,0.07)" }}
-          />
-          {/* Violet accent top-right */}
-          <motion.div
-            className="absolute -top-10 right-[12%] w-[440px] h-[440px] rounded-full blur-[130px]"
-            animate={{ opacity: [0.5, 0.85, 0.5] }}
-            transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
-            style={{ background: "rgba(139,92,246,0.09)" }}
-          />
-          {/* Cyan accent bottom-right */}
-          <motion.div
-            className="absolute bottom-[8%] right-[28%] w-[360px] h-[360px] rounded-full blur-[120px]"
-            animate={{ opacity: [0.4, 0.75, 0.4] }}
-            transition={{ duration: 13, repeat: Infinity, ease: "easeInOut", delay: 3 }}
-            style={{ background: "rgba(56,189,248,0.06)" }}
-          />
-          {/* Deep red-orange ember bottom-left */}
-          <motion.div
-            className="absolute bottom-[4%] left-[8%] w-[320px] h-[320px] rounded-full blur-[110px]"
-            animate={{ opacity: [0.35, 0.65, 0.35] }}
-            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-            style={{ background: "rgba(232,65,66,0.05)" }}
-          />
-          {/* Diagonal light sweep */}
+      <section className="px-3 sm:px-5 pt-[84px] pb-6">
+        {/* The card — fills the viewport minus the navbar and a small outer
+            gutter, so the rounded corners are visible top-to-bottom. */}
+        <div
+          className="relative rounded-3xl overflow-hidden"
+          style={{
+            minHeight: "calc(100vh - 100px)",
+            background:
+              "radial-gradient(ellipse at 90% 90%, #1B2540 0%, #0E1A2E 45%, #06060C 100%)",
+          }}
+        >
+          {/* Radiating stripes — anchored bottom-right, rotated to fan out
+              toward the upper-left. Two layers of repeating-linear-gradient
+              with slightly different angles + opacities give the depth Arbitrum's
+              SVG rays have without shipping an SVG. */}
           <div
-            className="absolute -top-[20%] -left-[10%] w-[120%] h-[60%] blur-[80px] rotate-[-12deg] pointer-events-none"
-            style={{ background: "linear-gradient(90deg, transparent 0%, rgba(255,235,180,0.035) 50%, transparent 100%)" }}
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage: `
+                repeating-linear-gradient(
+                  from 218deg,
+                  rgba(245,197,24,0)   0deg,
+                  rgba(245,197,24,0)   3deg,
+                  rgba(245,197,24,0.06) 3.4deg,
+                  rgba(245,197,24,0.06) 4.6deg,
+                  rgba(245,197,24,0)   5deg,
+                  rgba(245,197,24,0)   8deg
+                )
+              `,
+              backgroundPosition: "100% 100%",
+            }}
           />
-          {/* Grid overlay — covers the whole hero, softly fades at edges */}
-          <div className="absolute inset-0 opacity-[0.09]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)", backgroundSize: "56px 56px", maskImage: "radial-gradient(ellipse at center, black 55%, transparent 100%)", WebkitMaskImage: "radial-gradient(ellipse at center, black 55%, transparent 100%)" }} />
-        </div>
+          {/* Conic ray fan — the visible darker wedges fanning out from the
+              bottom-right vanishing point, like Arbitrum's striped background. */}
+          <div
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: `
+                conic-gradient(
+                  from 218deg at 95% 95%,
+                  rgba(245,197,24,0.00) 0deg,
+                  rgba(245,197,24,0.00) 4deg,
+                  rgba(255,200,40,0.10) 6deg,
+                  rgba(245,197,24,0.00) 9deg,
+                  rgba(245,197,24,0.00) 14deg,
+                  rgba(255,200,40,0.07) 17deg,
+                  rgba(245,197,24,0.00) 22deg,
+                  rgba(245,197,24,0.00) 28deg,
+                  rgba(255,200,40,0.05) 32deg,
+                  rgba(245,197,24,0.00) 38deg,
+                  rgba(245,197,24,0.00) 360deg
+                )
+              `,
+            }}
+          />
+          {/* Warm yellow corner glow — anchors the rays. */}
+          <motion.div
+            aria-hidden
+            className="absolute -bottom-32 -right-32 w-[720px] h-[720px] rounded-full blur-[150px] pointer-events-none"
+            animate={{ opacity: [0.5, 0.85, 0.5], scale: [1, 1.08, 1] }}
+            transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
+            style={{ background: "rgba(245,197,24,0.18)" }}
+          />
+          {/* Cool violet counter-glow on the upper-left so the card isn't
+              monochrome — keeps Q402's existing palette. */}
+          <motion.div
+            aria-hidden
+            className="absolute -top-24 -left-24 w-[520px] h-[520px] rounded-full blur-[140px] pointer-events-none"
+            animate={{ opacity: [0.35, 0.6, 0.35] }}
+            transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
+            style={{ background: "rgba(139,92,246,0.10)" }}
+          />
+          {/* Subtle grid overlay — same trick as the old hero, masked to the
+              center so the rays stay clean on the right. */}
+          <div
+            aria-hidden
+            className="absolute inset-0 opacity-[0.05] pointer-events-none"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
+              backgroundSize: "64px 64px",
+              maskImage: "radial-gradient(ellipse at 30% 40%, black 30%, transparent 80%)",
+              WebkitMaskImage: "radial-gradient(ellipse at 30% 40%, black 30%, transparent 80%)",
+            }}
+          />
 
-        <div className="relative z-10 w-full max-w-6xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-
-            {/* LEFT */}
-            <div>
-              {/* Chain logos */}
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.1 }}
-                className="flex items-center gap-5 mb-8"
-              >
+          {/* CONTENT */}
+          <div className="relative h-full flex flex-col justify-between px-7 sm:px-12 lg:px-20 py-12 lg:py-16">
+            {/* Top: status pill + chain logos */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="flex items-center gap-3 flex-wrap"
+            >
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow/30 bg-yellow/[0.06]">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-yellow/95">
+                  Mainnet · 7 chains live
+                </span>
+              </span>
+              <div className="flex items-center gap-2">
                 {[
-                  { img: "/bnb.png",       color: "#F0B90B", label: "BNB"  },
-                  { img: "/eth.png",       color: "#627EEA", label: "ETH"  },
-                  { img: "/mantle.png",    color: "#FFFFFF", label: "MNT"  },
-                  { img: "/avax.png",      color: "#E84142", label: "AVAX" },
-                  { img: "/injective.png", color: "#0082FA", label: "INJ"  },
-                  { img: "/xlayer.png",    color: "#CCCCCC", label: "X"    },
-                  { img: "/stable.jpg",    color: "#4AE54A", label: "STB"  },
+                  { img: "/bnb.png",       label: "BNB"  },
+                  { img: "/eth.png",       label: "ETH"  },
+                  { img: "/mantle.png",    label: "MNT"  },
+                  { img: "/avax.png",      label: "AVAX" },
+                  { img: "/injective.png", label: "INJ"  },
+                  { img: "/xlayer.png",    label: "X"    },
+                  { img: "/stable.jpg",    label: "STB"  },
                 ].map((c, i) => (
-                  <motion.div
+                  <motion.span
                     key={c.label}
                     initial={{ opacity: 0, scale: 0.7 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.4, delay: 0.15 + i * 0.07 }}
-                    className="relative flex-shrink-0"
+                    transition={{ duration: 0.4, delay: 0.15 + i * 0.06 }}
+                    className="w-6 h-6 rounded-full overflow-hidden border border-white/10 flex-shrink-0"
                   >
-                    {/* Pulse ring */}
-                    <motion.div
-                      className="absolute inset-0 rounded-full"
-                      animate={{ scale: [1, 1.55, 1], opacity: [0.5, 0, 0.5] }}
-                      transition={{ duration: 2.4, delay: i * 0.48, repeat: Infinity, ease: "easeInOut" }}
-                      style={{ background: `radial-gradient(circle, ${c.color}40 0%, transparent 70%)` }}
-                    />
-                    {/* Logo */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={c.img}
-                      alt={c.label}
-                      className="w-8 h-8 rounded-full object-cover relative z-10"
-                      style={{ boxShadow: `0 0 10px ${c.color}50` }}
-                    />
-                  </motion.div>
+                    <img src={c.img} alt={c.label} className="w-full h-full object-cover" />
+                  </motion.span>
                 ))}
-                <span className="text-white/20 text-xs ml-1">7 chains live</span>
-              </motion.div>
+              </div>
+            </motion.div>
 
-              {/* Headline */}
-              <motion.div
+            {/* Middle: HEADLINE + subtitle. Pushed up a touch with margin-top:auto
+                so the CTAs sit naturally at the bottom on tall viewports. */}
+            <div className="mt-10 lg:mt-0">
+              <motion.h1
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.2 }}
+                transition={{ duration: 0.7, delay: 0.15 }}
+                className="font-display uppercase font-extrabold tracking-[-0.03em] leading-[0.92] text-[3.4rem] sm:text-[5rem] md:text-[6.4rem] lg:text-[8.2rem] xl:text-[9rem] max-w-[14ch]"
               >
-                <h1 className="font-display text-5xl md:text-[4.2rem] font-extrabold leading-[1.02] mb-4 tracking-[-0.02em]">
-                  The final layer for{" "}
-                  <span className="text-shimmer">stablecoin rails.</span>
-                </h1>
-                <p className="font-display text-xl text-white/55 font-light tracking-tight mb-6">
-                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
-                </p>
-              </motion.div>
-
-              {/* Feature list */}
-              <motion.ul
-                initial={{ opacity: 0, y: 20 }}
+                <span className="block text-white">The final layer for</span>
+                <span className="block text-shimmer">stablecoin rails.</span>
+              </motion.h1>
+              <motion.p
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.35 }}
-                className="space-y-3 mb-9 text-sm text-white/50"
+                transition={{ duration: 0.6, delay: 0.3 }}
+                className="mt-7 max-w-2xl text-base sm:text-lg lg:text-xl text-white/65 font-light leading-relaxed"
               >
-                {[
-                  "EIP-712 off-chain — users never hold a gas token",
-                  "One relay call — we cover micro-gas on every chain",
-                  "USDC / USDT / RLUSD settle in seconds, every tx auditable on-chain",
-                ].map((item, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <span className="text-yellow font-bold text-xs mt-0.5 flex-shrink-0">0{i + 1}</span>
-                    {item}
-                  </li>
-                ))}
-              </motion.ul>
+                <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains.{" "}
+                <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay
+                in USDC, USDT, or RLUSD, we cover the rest.
+              </motion.p>
+            </div>
 
-              {/* CTAs */}
+            {/* Bottom: CTAs + stats row */}
+            <div className="mt-12 lg:mt-0 flex flex-col gap-8">
               <motion.div
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.45 }}
-                className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-10"
+                className="flex flex-wrap items-center gap-3"
               >
                 <button
                   onClick={() => setShowModal(true)}
-                  className="group relative bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/25 animate-glow"
+                  className="group bg-yellow text-navy font-bold text-sm px-7 py-3.5 rounded-full hover:bg-yellow-hover transition-all hover:scale-[1.02] shadow-lg shadow-yellow/25"
                 >
                   Start Gasless
-                  <span className="ml-2 group-hover:translate-x-1 inline-block transition-transform">→</span>
+                  <span className="ml-2 inline-block group-hover:translate-x-1 transition-transform">→</span>
                 </button>
                 <a
                   href="#how-it-works"
-                  className="flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors"
+                  className="border border-white/15 text-white text-sm font-semibold px-7 py-3.5 rounded-full hover:bg-white/[0.04] transition-colors"
                 >
-                  <span className="w-8 h-8 rounded-full border border-white/12 flex items-center justify-center text-xs">↓</span>
                   See how it works
                 </a>
               </motion.div>
 
-              {/* Stats — verifiable infra metrics. Sized to fit four data points
-                  on a single row at the lg breakpoint; wraps on narrower screens. */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.55 }}
-                className="flex flex-wrap lg:flex-nowrap items-center gap-3 lg:gap-4"
+                className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm"
               >
-                <div className="text-center">
-                  <div className="text-lg font-bold font-mono text-yellow whitespace-nowrap">99.99%</div>
-                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">Uptime</div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-yellow font-bold font-mono">99.99%</span>
+                  <span className="text-white/35 text-xs">uptime</span>
                 </div>
-                <div className="w-px h-9 bg-white/8" />
-                <div className="text-center">
-                  <div className="text-lg font-bold font-mono text-yellow whitespace-nowrap">&lt;0.9 sec</div>
-                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">Inclusion time</div>
+                <span className="w-px h-4 bg-white/10" />
+                <div className="flex items-baseline gap-2">
+                  <span className="text-yellow font-bold font-mono">&lt;0.9 sec</span>
+                  <span className="text-white/35 text-xs">inclusion</span>
                 </div>
-                <div className="w-px h-9 bg-white/8" />
-                <div className="text-center">
-                  <div className="text-lg font-bold whitespace-nowrap">1 tx</div>
-                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">full payment flow</div>
+                <span className="w-px h-4 bg-white/10" />
+                <div className="flex items-baseline gap-2">
+                  <span className="text-white font-bold">1 tx</span>
+                  <span className="text-white/35 text-xs">full payment flow</span>
                 </div>
-                <div className="w-px h-9 bg-white/8" />
-                <div className="text-center">
-                  <div className="text-lg font-bold whitespace-nowrap">7 chains</div>
-                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">mainnet live</div>
+                <span className="w-px h-4 bg-white/10" />
+                <div className="flex items-baseline gap-2">
+                  <span className="text-white font-bold">7 chains</span>
+                  <span className="text-white/35 text-xs">mainnet live</span>
                 </div>
               </motion.div>
             </div>
-
-            {/* RIGHT: terminal */}
-            <motion.div
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-              className="animate-float"
-            >
-              <div className="relative">
-                <div className="absolute -inset-4 rounded-3xl blur-2xl opacity-20" style={{ background: "radial-gradient(ellipse, #F5C518 0%, transparent 70%)" }} />
-
-                <div className="relative bg-[#060C14] border rounded-2xl overflow-hidden shadow-2xl shadow-black/70" style={{ borderColor: "rgba(245,197,24,0.12)" }}>
-                  {/* Titlebar */}
-                  <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ background: "rgba(255,255,255,0.025)", borderColor: "rgba(255,255,255,0.06)" }}>
-                    <span className="w-3 h-3 rounded-full bg-red-500/60" />
-                    <span className="w-3 h-3 rounded-full bg-yellow/50" />
-                    <span className="w-3 h-3 rounded-full bg-green-400/50" />
-                    <span className="ml-4 text-white/20 text-xs font-mono">q402-sdk · v{SDK_VERSION}</span>
-                    <div className="ml-auto flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-                      <span className="text-[10px] text-white/25 font-mono">connected</span>
-                    </div>
-                  </div>
-
-                  {/* Code */}
-                  <div className="p-5 font-mono text-xs leading-[1.7]">
-                    <div className="text-white/20 mb-3">{"// Drop the SDK into any page"}</div>
-                    <div className="mb-3">
-                      <span className="text-white/40">&lt;</span>
-                      <span className="text-blue-300">script</span>
-                      <span className="text-green-300"> src</span>
-                      <span className="text-white/40">=</span>
-                      <span className="text-orange-300">&quot;https://q402.quackai.ai/q402-sdk.js&quot;</span>
-                      <span className="text-white/40">&gt;&lt;/</span>
-                      <span className="text-blue-300">script</span>
-                      <span className="text-white/40">&gt;</span>
-                    </div>
-
-                    <div className="text-white/20 mb-1">{"// Initialize once"}</div>
-                    <div>
-                      <span className="text-purple-400">const</span>
-                      <span className="text-blue-300"> q402 </span>
-                      <span className="text-white/40">= </span>
-                      <span className="text-yellow">new</span>
-                      <span className="text-blue-300"> Q402Client</span>
-                      <span className="text-white/40">{"({"}</span>
-                    </div>
-                    <div className="pl-5">
-                      <div><span className="text-green-300">apiKey</span><span className="text-white/40">: </span><span className="text-orange-300">&quot;q402_live_...&quot;</span><span className="text-white/40">,</span></div>
-                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avax | eth | mantle | injective | xlayer | stable"}</span></div>
-                    </div>
-                    <div className="text-white/40 mb-4">{"});"}</div>
-
-                    <div className="text-white/20 mb-1">{"// User signs — zero gas, one call"}</div>
-                    <div className="mb-4">
-                      <span className="text-purple-400">const</span>
-                      <span className="text-white"> result </span>
-                      <span className="text-white/40">= </span>
-                      <span className="text-yellow">await</span>
-                      <span className="text-blue-300"> q402</span>
-                      <span className="text-white/40">.</span>
-                      <span className="text-blue-300">pay</span>
-                      <span className="text-white/40">{"({ "}</span>
-                      <span className="text-green-300">to</span>
-                      <span className="text-white/40">, </span>
-                      <span className="text-green-300">amount</span>
-                      <span className="text-white/40">: </span>
-                      <span className="text-orange-300">&quot;50.00&quot;</span>
-                      <span className="text-white/40">, </span>
-                      <span className="text-green-300">token</span>
-                      <span className="text-white/40">: </span>
-                      <span className="text-orange-300">&quot;USDC&quot;</span>
-                      <span className="text-white/40"> {"});"}</span>
-                      <span className="text-white/20 ml-2">{"// or USDT / RLUSD (eth-only)"}</span>
-                    </div>
-
-                    <div className="border-t pt-3 space-y-0.5" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-                      <div><span className="text-white/20">{"// ✓ "}</span><span className="text-green-400">result.success</span><span className="text-white/30">: true</span></div>
-                      <div><span className="text-white/20">{"// ✓ "}</span><span className="text-green-400">gas paid by user</span><span className="text-white/30">: </span><span className="text-yellow font-bold">$0.000000</span><span className="cursor" /></div>
-                    </div>
-                  </div>
-
-                  {/* Chain status bar */}
-                  <div className="px-5 py-2.5 border-t flex items-center justify-between" style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}>
-                    <div className="flex items-center gap-4">
-                      {[
-                        { label: "BNB",  img: "/bnb.png",       rounded: "rounded-full" },
-                        { label: "ETH",  img: "/eth.png",       rounded: "rounded-full" },
-                        { label: "MNT",  img: "/mantle.png",    rounded: "rounded-full" },
-                        { label: "AVAX", img: "/avax.png",      rounded: "rounded-full" },
-                        { label: "INJ",  img: "/injective.png", rounded: "rounded-full" },
-                        { label: "X",    img: "/xlayer.png",    rounded: "rounded-full" },
-                        { label: "STB",  img: "/stable.jpg",    rounded: "rounded-full" },
-                      ].map((c) => (
-                        <span key={c.label} className="flex items-center gap-1 text-[10px] font-mono text-white/30">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={c.img} alt={c.label} className={`w-3 h-3 ${c.rounded} opacity-80`} />
-                          {c.label}
-                        </span>
-                      ))}
-                    </div>
-                    <span className="text-[10px] text-white/20 font-mono">EIP-712 + EIP-7702</span>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
           </div>
         </div>
       </section>
