@@ -1,10 +1,5 @@
 // Chain order: BNB → Ethereum → Mantle → Avalanche → Injective → X Layer → Stable → USDC → USDT → RLUSD → Arbitrum → Scroll
-// BNB-focus sprint: when BNB_FOCUS_MODE is true the chains array is filtered
-// below to BNB Chain + USDC/USDT only. The full data set is retained so the
-// marquee restores untouched when the flag flips back.
-import { BNB_FOCUS_MODE } from "@/app/lib/feature-flags";
-
-const allChains = [
+const chains = [
   {
     name: "BNB Chain",
     color: "#F0B90B",
@@ -127,23 +122,13 @@ const allChains = [
   },
 ];
 
-// During the sprint, restrict the marquee to BNB + USDC + USDT. Other chain
-// cards and RLUSD remain in `allChains` (code preserved) but are filtered out
-// here. After the sprint, flipping BNB_FOCUS_MODE off restores the full list.
-const SPRINT_ALLOWED = new Set(["BNB Chain", "USDC", "USDT"]);
-const chains = BNB_FOCUS_MODE
-  ? allChains.filter(c => SPRINT_ALLOWED.has(c.name))
-  : allChains;
-
 const doubled = [...chains, ...chains];
 
 export default function TrustedBy() {
   return (
     <section className="py-14 overflow-hidden" style={{ borderTop: "1px solid rgba(255,255,255,0.06)", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(5,7,10,0.5)" }}>
       <p className="text-center text-white/20 text-xs uppercase tracking-[0.25em] font-semibold mb-8 px-6">
-        {BNB_FOCUS_MODE
-          ? "BNB Chain Sprint · USDC + USDT"
-          : "Mainnet Live · Multi-chain EVM"}
+        Mainnet Live · Multi-chain EVM
       </p>
 
       <div className="marquee-track">

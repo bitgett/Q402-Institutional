@@ -703,7 +703,7 @@ export default function DashboardPage() {
               Connect a wallet once to unlock 2,000 free gasless transactions over 30 days. We cover the gas.
             </p>
             <Link
-              href="/?activate=trial"
+              href="/event"
               className="inline-block bg-yellow text-navy font-bold text-sm px-6 py-2.5 rounded-full hover:bg-yellow-hover transition-colors"
             >
               Connect wallet to activate →

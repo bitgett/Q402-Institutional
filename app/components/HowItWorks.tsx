@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { BNB_FOCUS_MODE } from "@/app/lib/feature-flags";
 
 const steps = [
   {
@@ -101,9 +100,7 @@ export default function HowItWorks() {
         >
           <h2 className="text-3xl md:text-4xl font-bold mb-4">How Q402 works</h2>
           <p className="text-white/40 max-w-lg mx-auto text-sm leading-relaxed">
-            {BNB_FOCUS_MODE
-              ? "Three addresses. One transaction. BNB Chain · USDC + USDT — six more EVM chains return after the sprint window."
-              : "Three addresses. One transaction. Works on any EVM chain — BNB, Ethereum, Avalanche, Mantle, Injective, X Layer, Stable."}
+            Three addresses. One transaction. Works on any EVM chain — BNB, Ethereum, Avalanche, Mantle, Injective, X Layer, Stable.
           </p>
         </motion.div>
 
@@ -149,18 +146,15 @@ export default function HowItWorks() {
               className="flex items-center gap-4"
             >
               <div className="flex gap-2">
-                {(BNB_FOCUS_MODE
-                  ? [{ label: "BNB", img: "/bnb.png", bg: "#F0B90B" }]
-                  : [
-                      { label: "BNB",    img: "/bnb.png",       bg: "#F0B90B" },
-                      { label: "ETH",    img: "/eth.png",       bg: "#1A1F36" },
-                      { label: "MANTLE", img: "/mantle.png",    bg: "#000000" },
-                      { label: "AVAX",   img: "/avax.png",      bg: "#E84142" },
-                      { label: "INJ",    img: "/injective.png", bg: "#031E3F" },
-                      { label: "X",      img: "/xlayer.png",    bg: "#1A1A1A" },
-                      { label: "STABLE", img: "/stable.jpg",    bg: "#0F2010" },
-                    ]
-                ).map((c) => (
+                {[
+                  { label: "BNB",    img: "/bnb.png",       bg: "#F0B90B" },
+                  { label: "ETH",    img: "/eth.png",       bg: "#1A1F36" },
+                  { label: "MANTLE", img: "/mantle.png",    bg: "#000000" },
+                  { label: "AVAX",   img: "/avax.png",      bg: "#E84142" },
+                  { label: "INJ",    img: "/injective.png", bg: "#031E3F" },
+                  { label: "X",      img: "/xlayer.png",    bg: "#1A1A1A" },
+                  { label: "STABLE", img: "/stable.jpg",    bg: "#0F2010" },
+                ].map((c) => (
                   <div key={c.label} className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.bg }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={c.img} alt={c.label} className="w-7 h-7 object-cover" />
@@ -168,10 +162,7 @@ export default function HowItWorks() {
                 ))}
               </div>
               <p className="text-white/40 text-xs">
-                <span className="text-white/70 font-medium">
-                  {BNB_FOCUS_MODE ? "BNB Chain · sprint focus." : "Same protocol, any EVM chain."}
-                </span>{" "}
-                {BNB_FOCUS_MODE ? "Multichain returns after the sprint window." : "Switch with one parameter."}
+                <span className="text-white/70 font-medium">Same protocol, any EVM chain.</span> Switch with one parameter.
               </p>
             </motion.div>
           </div>

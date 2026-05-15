@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import WalletButton from "./WalletButton";
+import { EVENT_MODE } from "@/app/lib/feature-flags";
 
 export default function Navbar() {
 
@@ -23,6 +24,12 @@ export default function Navbar() {
             <Link href="/#how-it-works" className="hover:text-white transition-colors">How it works</Link>
             <Link href="/#use-cases"    className="hover:text-white transition-colors">Use cases</Link>
             <Link href="/#pricing"      className="hover:text-white transition-colors">Pricing</Link>
+            {EVENT_MODE && (
+              <Link href="/event" className="inline-flex items-center gap-1.5 hover:text-yellow transition-colors text-yellow/85 font-medium">
+                Event
+                <span className="text-[8px] font-extrabold tracking-[0.14em] text-yellow bg-yellow/15 border border-yellow/40 rounded-sm px-1 leading-[1.4]">FREE</span>
+              </Link>
+            )}
             <a href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</a>
             <a href="/claude" className="inline-flex items-center gap-1.5 hover:text-orange-200 transition-colors text-orange-300/85 font-medium">
               Claude

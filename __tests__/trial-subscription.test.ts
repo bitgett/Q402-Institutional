@@ -59,10 +59,6 @@ const relaySource = readFileSync(
   resolve(ROOT, "app", "api", "relay", "route.ts"),
   "utf8",
 );
-const heroSource = readFileSync(
-  resolve(ROOT, "app", "components", "Hero.tsx"),
-  "utf8",
-);
 const cronUsageAlertSource = readFileSync(
   resolve(ROOT, "app", "api", "cron", "usage-alert", "route.ts"),
   "utf8",
@@ -219,20 +215,6 @@ describe("trial — email session merges into wallet activation", () => {
 
   it("registers the wallet in the trial-expiry index when an email is bound", () => {
     expect(trialRouteSource).toMatch(/addTrialSubscriptionToIndex\(addr\)/);
-  });
-});
-
-describe("trial — Hero deep-link handler", () => {
-  it("auto-opens the TrialActivationModal when ?activate=trial is present", () => {
-    // We read window.location.search lazily (not via useSearchParams) so
-    // the page stays prerenderable as a static route. The assertion locks
-    // down both the param key and the URLSearchParams parse path.
-    expect(heroSource).toMatch(/new URLSearchParams\(window\.location\.search\)/);
-    expect(heroSource).toMatch(/\.get\(\s*["']activate["']\s*\)\s*===\s*["']trial["']/);
-  });
-
-  it("strips ?activate=trial from the URL after auto-opening (back-button safety)", () => {
-    expect(heroSource).toMatch(/window\.history\.replaceState/);
   });
 });
 

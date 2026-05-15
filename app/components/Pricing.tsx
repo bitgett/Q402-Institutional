@@ -1,43 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import TrialActivationModal from "./TrialActivationModal";
-import {
-  BNB_FOCUS_MODE,
-  TRIAL_CREDITS,
-  TRIAL_DURATION_DAYS,
-} from "@/app/lib/feature-flags";
-
-// Tier copy is BNB-focus-aware: while the sprint flag is on, the chain row
-// changes from "All 7 EVM chains" to "BNB Chain · USDC + USDT" so the pricing
-// promise matches what the relay route actually accepts (see A1). Off-sprint
-// flips it back to the multichain row with zero code edits.
-const chainsLine = BNB_FOCUS_MODE
-  ? "BNB Chain · USDC + USDT (sprint)"
-  : "All 7 EVM chains";
-
-const trialTier = BNB_FOCUS_MODE
-  ? [
-      {
-        name: "Free trial",
-        price: "$0",
-        period: `/${TRIAL_DURATION_DAYS}-day access`,
-        description: "One signature, no card. Sprint launch promo.",
-        features: [
-          `${TRIAL_CREDITS.toLocaleString()} sponsored transactions`,
-          chainsLine,
-          "Full API + sandbox keys",
-          "Auto-converts to paid only on opt-in",
-        ],
-        badge: "BNB-focus sprint",
-        cta: "Start free trial",
-        href: "#hero",
-        highlight: false,
-      },
-    ]
-  : [];
-
-const paidTiers = [
+const tiers = [
   {
     name: "Starter",
     price: "$29",
@@ -45,7 +8,7 @@ const paidTiers = [
     description: "For indie developers and early-stage projects.",
     features: [
       "500 sponsored transactions",
-      chainsLine,
+      "All 7 EVM chains",
       "Full API access",
       "Community support",
     ],
@@ -61,7 +24,7 @@ const paidTiers = [
     description: "For growing products with real users.",
     features: [
       "10,000 sponsored transactions",
-      chainsLine,
+      "All 7 EVM chains",
       "Full API access",
       "Email support",
     ],
@@ -77,7 +40,7 @@ const paidTiers = [
     description: "For high-throughput DeFi applications.",
     features: [
       "50,000 sponsored transactions",
-      chainsLine,
+      "All 7 EVM chains",
       "API access + webhooks",
       "Priority support",
     ],
@@ -93,7 +56,7 @@ const paidTiers = [
     description: "For mission-critical apps at any scale.",
     features: [
       "500,000 sponsored transactions",
-      chainsLine,
+      "All 7 EVM chains",
       "SLA guarantee (99.9% uptime)",
       "Dedicated account manager",
     ],
@@ -104,33 +67,16 @@ const paidTiers = [
   },
 ];
 
-// Final tier list — trial first when the sprint flag is on, paid tiers
-// otherwise. Keeping these arrays separate (rather than splicing) means
-// the visual ordering is obvious and the post-sprint state has zero diff.
-const tiers = [...trialTier, ...paidTiers];
-
 export default function Pricing() {
-  const [showTrialModal, setShowTrialModal] = useState(false);
   return (
     <section id="pricing" className="py-24 px-6">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold mb-3">
-            {BNB_FOCUS_MODE ? "Try free for 30 days. Upgrade only if you ship." : "Pick a plan. Ship today."}
-          </h2>
-          <p className="text-white/40 text-sm max-w-2xl mx-auto">
-            {BNB_FOCUS_MODE ? (
-              <>
-                Sprint launch — start with {TRIAL_CREDITS.toLocaleString()} free transactions on BNB Chain (USDC + USDT).
-                One wallet signature, no card. Convert to a paid tier inside {TRIAL_DURATION_DAYS} days to keep credits flowing.
-              </>
-            ) : (
-              <>Each purchase = credits + 30-day access. Top up within the window and your tier upgrades automatically. No gas, no friction — plug in the SDK and you&apos;re live.</>
-            )}
-          </p>
+          <h2 className="text-3xl md:text-4xl font-bold mb-3">Pick a plan. Ship today.</h2>
+          <p className="text-white/40 text-sm max-w-2xl mx-auto">Each purchase = credits + 30-day access. Top up within the window and your tier upgrades automatically. No gas, no friction — plug in the SDK and you&apos;re live.</p>
         </div>
 
-        <div className={`grid md:grid-cols-2 gap-5 ${BNB_FOCUS_MODE ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
           {tiers.map((tier, i) => (
             <div
               key={i}
@@ -163,25 +109,16 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              {tier.name === "Free trial" ? (
-                <button
-                  onClick={() => setShowTrialModal(true)}
-                  className="text-center text-sm font-semibold py-3 rounded-full transition-all bg-green-400/15 text-green-400 hover:bg-green-400/25 border border-green-400/30"
-                >
-                  {tier.cta}
-                </button>
-              ) : (
-                <a
-                  href={tier.href!}
-                  className={`text-center text-sm font-semibold py-3 rounded-full transition-all ${
-                    tier.highlight
-                      ? "bg-yellow text-navy hover:bg-yellow-hover"
-                      : "border border-white/20 text-white hover:bg-white/5"
-                  }`}
-                >
-                  {tier.cta}
-                </a>
-              )}
+              <a
+                href={tier.href!}
+                className={`text-center text-sm font-semibold py-3 rounded-full transition-all ${
+                  tier.highlight
+                    ? "bg-yellow text-navy hover:bg-yellow-hover"
+                    : "border border-white/20 text-white hover:bg-white/5"
+                }`}
+              >
+                {tier.cta}
+              </a>
             </div>
           ))}
         </div>
@@ -190,9 +127,7 @@ export default function Pricing() {
         <div className="mt-8 rounded-2xl border border-white/8 px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4" style={{ background: "linear-gradient(135deg, rgba(74,229,74,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}>
           <div>
             <p className="text-sm font-semibold text-white/80">Running AI agents at scale?</p>
-            <p className="text-xs text-white/35 mt-0.5">
-              Unlimited TX, Gas Tank pre-pay, {BNB_FOCUS_MODE ? "BNB Chain · USDC + USDT (sprint focus)" : "all 7 chains"}. Built for autonomous agent pipelines.
-            </p>
+            <p className="text-xs text-white/35 mt-0.5">Unlimited TX, Gas Tank pre-pay, all 7 chains. Built for autonomous agent pipelines.</p>
           </div>
           <a href="/agents" className="flex-shrink-0 border border-green-400/40 text-green-400 hover:bg-green-400/10 text-sm font-semibold px-5 py-2.5 rounded-full transition-all whitespace-nowrap">
             Agent Plan →
@@ -209,7 +144,6 @@ export default function Pricing() {
           </p>
         </div>
       </div>
-      {showTrialModal && <TrialActivationModal onClose={() => setShowTrialModal(false)} />}
     </section>
   );
 }

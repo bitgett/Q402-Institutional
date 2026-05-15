@@ -1,50 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import RegisterModal from "./RegisterModal";
-import TrialActivationModal from "./TrialActivationModal";
-import EmailSignupModal from "./EmailSignupModal";
-import GoogleSigninButton from "./GoogleSigninButton";
 import { SDK_VERSION } from "@/app/lib/version";
-import {
-  BNB_FOCUS_MODE,
-  TRIAL_CREDITS,
-  TRIAL_DURATION_DAYS,
-} from "@/app/lib/feature-flags";
 
-
-// Deep-link sentinel — when the email-only dashboard view sends a user back
-// here with ?activate=trial, the Hero auto-opens the TrialActivationModal.
-// We read window.location lazily on mount (not via useSearchParams) so the
-// page can prerender as a static route without a Suspense boundary.
-function shouldAutoOpenTrial(): boolean {
-  if (typeof window === "undefined") return false;
-  return new URLSearchParams(window.location.search).get("activate") === "trial";
-}
 
 export default function Hero() {
-  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
-  // Lazy initializer reads the URL exactly once on mount — no useEffect
-  // setState, no re-render, no Suspense gymnastics. After this initial
-  // read the modal state is managed by the user clicking the CTA / X.
-  const [showTrialModal, setShowTrialModal] = useState<boolean>(shouldAutoOpenTrial);
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [signinError, setSigninError] = useState<string | null>(null);
-
-  // Strip the ?activate=trial param after the modal opens so a back-button
-  // navigation doesn't re-trigger the auto-open. Best-effort — browsers
-  // without history.replaceState are vanishingly rare.
-  useEffect(() => {
-    if (!showTrialModal || typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("activate") === "trial") {
-      url.searchParams.delete("activate");
-      window.history.replaceState({}, "", url.toString());
-    }
-  }, [showTrialModal]);
 
   return (
     <>
@@ -135,18 +98,15 @@ export default function Hero() {
                 transition={{ duration: 0.6, delay: 0.1 }}
                 className="flex items-center gap-5 mb-8"
               >
-                {(BNB_FOCUS_MODE
-                  ? [{ img: "/bnb.png", color: "#F0B90B", label: "BNB" }]
-                  : [
-                      { img: "/bnb.png",       color: "#F0B90B", label: "BNB"  },
-                      { img: "/eth.png",       color: "#627EEA", label: "ETH"  },
-                      { img: "/mantle.png",    color: "#FFFFFF", label: "MNT"  },
-                      { img: "/avax.png",      color: "#E84142", label: "AVAX" },
-                      { img: "/injective.png", color: "#0082FA", label: "INJ"  },
-                      { img: "/xlayer.png",    color: "#CCCCCC", label: "X"    },
-                      { img: "/stable.jpg",    color: "#4AE54A", label: "STB"  },
-                    ]
-                ).map((c, i) => (
+                {[
+                  { img: "/bnb.png",       color: "#F0B90B", label: "BNB"  },
+                  { img: "/eth.png",       color: "#627EEA", label: "ETH"  },
+                  { img: "/mantle.png",    color: "#FFFFFF", label: "MNT"  },
+                  { img: "/avax.png",      color: "#E84142", label: "AVAX" },
+                  { img: "/injective.png", color: "#0082FA", label: "INJ"  },
+                  { img: "/xlayer.png",    color: "#CCCCCC", label: "X"    },
+                  { img: "/stable.jpg",    color: "#4AE54A", label: "STB"  },
+                ].map((c, i) => (
                   <motion.div
                     key={c.label}
                     initial={{ opacity: 0, scale: 0.7 }}
@@ -171,9 +131,7 @@ export default function Hero() {
                     />
                   </motion.div>
                 ))}
-                <span className="text-white/20 text-xs ml-1">
-                  {BNB_FOCUS_MODE ? "BNB Chain · sprint focus" : "7 chains live"}
-                </span>
+                <span className="text-white/20 text-xs ml-1">7 chains live</span>
               </motion.div>
 
               {/* Headline */}
@@ -187,15 +145,7 @@ export default function Hero() {
                   <span className="text-shimmer">stablecoin rails.</span>
                 </h1>
                 <p className="text-xl text-white/45 font-light tracking-wide mb-6">
-                  {BNB_FOCUS_MODE ? (
-                    <>
-                      <span className="text-[#4AE54A] font-semibold">Zero gas.</span> BNB Chain. <span className="text-[#F0B90B] font-semibold">Pure stablecoin flow</span> — users pay in USDC or USDT, we cover the rest.
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
-                    </>
-                  )}
+                  <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
                 </p>
               </motion.div>
 
@@ -206,18 +156,11 @@ export default function Hero() {
                 transition={{ duration: 0.6, delay: 0.35 }}
                 className="space-y-3 mb-9 text-sm text-white/50"
               >
-                {(BNB_FOCUS_MODE
-                  ? [
-                      "EIP-712 off-chain — users never hold a gas token",
-                      "One relay call — we cover BNB micro-gas on every tx",
-                      "USDC / USDT settle in seconds, every tx auditable on BscScan",
-                    ]
-                  : [
-                      "EIP-712 off-chain — users never hold a gas token",
-                      "One relay call — we cover micro-gas on every chain",
-                      "USDC / USDT / RLUSD settle in seconds, every tx auditable on-chain",
-                    ]
-                ).map((item, i) => (
+                {[
+                  "EIP-712 off-chain — users never hold a gas token",
+                  "One relay call — we cover micro-gas on every chain",
+                  "USDC / USDT / RLUSD settle in seconds, every tx auditable on-chain",
+                ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3">
                     <span className="text-yellow font-bold text-xs mt-0.5 flex-shrink-0">0{i + 1}</span>
                     {item}
@@ -232,45 +175,13 @@ export default function Hero() {
                 transition={{ duration: 0.6, delay: 0.45 }}
                 className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-10"
               >
-                {BNB_FOCUS_MODE ? (
-                  // Sprint stack: Google (instant API key) → Email (link)
-                  // → Wallet (skip straight to live trial activation).
-                  // Each row is its own commitment level; the user picks
-                  // theirs and never has to backtrack.
-                  <div className="flex flex-col items-start gap-2.5 w-full sm:w-auto">
-                    <GoogleSigninButton
-                      width={320}
-                      onSuccess={() => router.push("/dashboard?signin=google")}
-                      onError={msg => setSigninError(msg)}
-                    />
-                    <button
-                      onClick={() => setShowEmailModal(true)}
-                      className="text-sm text-white/55 hover:text-white transition-colors underline-offset-2 hover:underline"
-                    >
-                      Sign in with email instead
-                    </button>
-                    <button
-                      onClick={() => setShowTrialModal(true)}
-                      className="text-sm text-white/40 hover:text-white/80 transition-colors"
-                    >
-                      Or connect wallet to activate trial directly →
-                    </button>
-                    <p className="text-[11px] text-white/30 mt-1">
-                      Free trial: {TRIAL_DURATION_DAYS}d · {TRIAL_CREDITS.toLocaleString()} TX · BNB Chain · Q402 covers gas
-                    </p>
-                    {signinError && (
-                      <p className="text-red-400 text-xs">{signinError}</p>
-                    )}
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowModal(true)}
-                    className="group relative bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/25 animate-glow"
-                  >
-                    Start Gasless
-                    <span className="ml-2 group-hover:translate-x-1 inline-block transition-transform">→</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => setShowModal(true)}
+                  className="group relative bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/25 animate-glow"
+                >
+                  Start Gasless
+                  <span className="ml-2 group-hover:translate-x-1 inline-block transition-transform">→</span>
+                </button>
                 <a
                   href="#how-it-works"
                   className="flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors"
@@ -304,12 +215,8 @@ export default function Hero() {
                 </div>
                 <div className="w-px h-9 bg-white/8" />
                 <div className="text-center">
-                  <div className="text-lg font-bold whitespace-nowrap">
-                    {BNB_FOCUS_MODE ? "BNB Chain" : "7 chains"}
-                  </div>
-                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">
-                    {BNB_FOCUS_MODE ? "sprint focus" : "mainnet live"}
-                  </div>
+                  <div className="text-lg font-bold whitespace-nowrap">7 chains</div>
+                  <div className="text-[10px] text-white/30 mt-0.5 whitespace-nowrap">mainnet live</div>
                 </div>
               </motion.div>
             </div>
@@ -362,7 +269,7 @@ export default function Hero() {
                     </div>
                     <div className="pl-5">
                       <div><span className="text-green-300">apiKey</span><span className="text-white/40">: </span><span className="text-orange-300">&quot;q402_live_...&quot;</span><span className="text-white/40">,</span></div>
-                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30">{BNB_FOCUS_MODE ? " // BNB Chain · sprint focus" : " // or avax | eth | mantle | injective | xlayer | stable"}</span></div>
+                      <div><span className="text-green-300">chain</span><span className="text-white/40">:  </span><span className="text-orange-300">&quot;bnb&quot;</span><span className="text-white/30"> {"// or avax | eth | mantle | injective | xlayer | stable"}</span></div>
                     </div>
                     <div className="text-white/40 mb-4">{"});"}</div>
 
@@ -386,7 +293,7 @@ export default function Hero() {
                       <span className="text-white/40">: </span>
                       <span className="text-orange-300">&quot;USDC&quot;</span>
                       <span className="text-white/40"> {"});"}</span>
-                      <span className="text-white/20 ml-2">{BNB_FOCUS_MODE ? "// or USDT" : "// or USDT / RLUSD (eth-only)"}</span>
+                      <span className="text-white/20 ml-2">{"// or USDT / RLUSD (eth-only)"}</span>
                     </div>
 
                     <div className="border-t pt-3 space-y-0.5" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
@@ -398,18 +305,15 @@ export default function Hero() {
                   {/* Chain status bar */}
                   <div className="px-5 py-2.5 border-t flex items-center justify-between" style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}>
                     <div className="flex items-center gap-4">
-                      {(BNB_FOCUS_MODE
-                        ? [{ label: "BNB", img: "/bnb.png", rounded: "rounded-full" }]
-                        : [
-                            { label: "BNB",  img: "/bnb.png",       rounded: "rounded-full" },
-                            { label: "ETH",  img: "/eth.png",       rounded: "rounded-full" },
-                            { label: "MNT",  img: "/mantle.png",    rounded: "rounded-full" },
-                            { label: "AVAX", img: "/avax.png",      rounded: "rounded-full" },
-                            { label: "INJ",  img: "/injective.png", rounded: "rounded-full" },
-                            { label: "X",    img: "/xlayer.png",    rounded: "rounded-full" },
-                            { label: "STB",  img: "/stable.jpg",    rounded: "rounded-full" },
-                          ]
-                      ).map((c) => (
+                      {[
+                        { label: "BNB",  img: "/bnb.png",       rounded: "rounded-full" },
+                        { label: "ETH",  img: "/eth.png",       rounded: "rounded-full" },
+                        { label: "MNT",  img: "/mantle.png",    rounded: "rounded-full" },
+                        { label: "AVAX", img: "/avax.png",      rounded: "rounded-full" },
+                        { label: "INJ",  img: "/injective.png", rounded: "rounded-full" },
+                        { label: "X",    img: "/xlayer.png",    rounded: "rounded-full" },
+                        { label: "STB",  img: "/stable.jpg",    rounded: "rounded-full" },
+                      ].map((c) => (
                         <span key={c.label} className="flex items-center gap-1 text-[10px] font-mono text-white/30">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={c.img} alt={c.label} className={`w-3 h-3 ${c.rounded} opacity-80`} />
@@ -427,8 +331,6 @@ export default function Hero() {
       </section>
 
       {showModal && <RegisterModal onClose={() => setShowModal(false)} />}
-      {showTrialModal && <TrialActivationModal onClose={() => setShowTrialModal(false)} />}
-      {showEmailModal && <EmailSignupModal onClose={() => setShowEmailModal(false)} />}
     </>
   );
 }

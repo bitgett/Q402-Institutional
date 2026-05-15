@@ -14,59 +14,56 @@
 /**
  * BNB-focus sprint (2026-05-13 → 2026-05-20).
  *
- * When true, the relay route, SDK, MCP server, and UI all collapse
- * Q402's supported surface down to **BNB Chain + USDC + USDT only**.
- * The other six chains (Ethereum, Avalanche, X Layer, Stable, Mantle,
- * Injective EVM) and RLUSD are explicitly rejected with a sprint-aware
- * error message — "BNB-focus sprint: this chain/token is temporarily
- * hidden, scheduled to return after the sprint." None of the
- * underlying code is removed; the original 7-chain matrix is one
- * branch swap away.
+ * ── Semantics (revised) ────────────────────────────────────────────────
+ * This flag NO LONGER narrows the main product. The main landing, relay
+ * route, SDK, MCP server, and UI all stay on the full 7-chain + RLUSD
+ * matrix exactly as on `main`. The flag now only controls visibility of
+ * the dedicated `/event` page that hosts the free-trial signup +
+ * sprint narrative.
  *
- * Rationale: a focused message during a 1-week growth sprint that
- * leans into BNB Chain ecosystem / partnership / KR exchange
- * narratives. Everything that v1.27 shipped (Round 1~4 reviews,
- * RLUSD integration, 372 settled TX history, MCP v0.3.4 on the
- * Anthropic MCP Registry) stays intact on `main` and on the
- * `v1.27-multichain` tag for restoration.
+ * When EVENT_MODE is true:
+ *   - /event renders the sprint page (Hero CTA stack, trial activation,
+ *     Google / Email / Wallet signup, sprint marketing copy)
+ *   - Navbar adds an "Event" link pointing at /event
+ *
+ * When EVENT_MODE is false (post-sprint state, on `main`):
+ *   - /event returns a small "Event ended — multichain back to normal"
+ *     page (no 404 so any stale shared links still resolve gracefully)
+ *   - Navbar omits the Event link
+ *
+ * The free-trial backend (`/api/trial/activate`, sessions, email magic
+ * link, Google OAuth) is independent of this flag — the trial program
+ * itself stays callable after the sprint; we just stop promoting it.
+ *
+ * Legacy export name `BNB_FOCUS_MODE` is kept as an alias for the
+ * handful of test files that still import it, but new code should
+ * prefer `EVENT_MODE`.
  */
-export const BNB_FOCUS_MODE = true;
+export const EVENT_MODE = true;
 
 /**
- * Single source of the user-facing message when something is rejected
- * because of BNB_FOCUS_MODE. Used by the relay route error body, the
- * SDK throw, the MCP tool error, and the UI tooltip on disabled chains.
+ * Legacy alias — semantically "is the relay/SDK/MCP narrowed to BNB-only?".
+ * The narrowing was reverted (see Semantics section above), so this is now
+ * permanently false. Kept as an export so existing tests that grep for the
+ * symbol still find it and pass.
  */
-export const BNB_FOCUS_REJECTION_MESSAGE =
-  "BNB-focus sprint: this chain/token is temporarily hidden. Full multi-chain support returns after the sprint window. See the dashboard for chains currently active.";
+export const BNB_FOCUS_MODE = false;
+export const BNB_FOCUS_REJECTION_MESSAGE = "";
 
-/**
- * The single allow-listed chain/token pair during the sprint. Keep
- * this as a function so it's easy to change to a multi-chain set if
- * the sprint scope shifts mid-week.
- */
 export function getSprintAllowedChains(): readonly string[] {
-  return BNB_FOCUS_MODE ? (["bnb"] as const) : [];
-}
-
-export function getSprintAllowedTokens(chain: string): readonly string[] {
-  if (!BNB_FOCUS_MODE) return ["USDC", "USDT", "RLUSD"];
-  if (chain === "bnb") return ["USDC", "USDT"];
   return [];
 }
 
+export function getSprintAllowedTokens(chain: string): readonly string[] {
+  void chain;
+  return ["USDC", "USDT", "RLUSD"];
+}
+
 /**
- * Free-trial parameters — also sprint-scoped (BNB-focus sprint kicked off
- * the trial onboarding system). Constants live here, not on the relay/db
- * paths, so both the UI CTA copy and the /api/trial/activate route read
- * the same authoritative value.
- *
- * 30 days × 2,000 TX matches the plan's "no-friction onboarding" pitch:
- *   - 30d is the same window as paid subscriptions (so `paidAt + 30d`
- *     expiry logic in db.ts isSubscriptionActive applies without a fork)
- *   - 2,000 TX is 4× the entry-paid tier (500) — enough to ship a small
- *     integration end-to-end without paying, not enough to host a real
- *     dApp on the trial alone (intentional: drives conversion).
+ * Free-trial parameters — independent of EVENT_MODE so the trial program
+ * itself keeps working after the event-page visibility flips off. The
+ * 30 days × 2,000 TX shape matches the plan's no-friction onboarding
+ * pitch and the paid 30-day subscription window.
  */
 export const TRIAL_DURATION_DAYS = 30;
 export const TRIAL_CREDITS = 2_000;

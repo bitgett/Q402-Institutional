@@ -4,7 +4,6 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMemo, useState } from "react";
 import { MCP_VERSION } from "@/app/lib/version";
-import { BNB_FOCUS_MODE } from "@/app/lib/feature-flags";
 
 /**
  * /claude — landing page for the @quackai/q402-mcp Claude integration.
@@ -30,7 +29,7 @@ interface ChainRow {
   note?: string;
 }
 
-const ALL_CHAINS: ChainRow[] = [
+const CHAINS: ChainRow[] = [
   { key: "stable",    name: "Stable",            chainId: 988,   gas: "USDT0", approxGasCostUsd: 0.0005, tokens: ["USDC", "USDT"], note: "USDC and USDT both alias to USDT0" },
   { key: "bnb",       name: "BNB Chain",         chainId: 56,    gas: "BNB",   approxGasCostUsd: 0.001,  tokens: ["USDC", "USDT"] },
   { key: "xlayer",    name: "X Layer",           chainId: 196,   gas: "OKB",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
@@ -39,12 +38,6 @@ const ALL_CHAINS: ChainRow[] = [
   { key: "injective", name: "Injective EVM",     chainId: 1776,  gas: "INJ",   approxGasCostUsd: 0.004,  tokens: ["USDT"], note: "USDT only — Circle CCTP USDC announced for Q2 2026" },
   { key: "eth",       name: "Ethereum Mainnet",  chainId: 1,     gas: "ETH",   approxGasCostUsd: 1.2,    tokens: ["USDC", "USDT", "RLUSD"], note: "L1 — gas is volatile. RLUSD (Ripple USD, NY DFS regulated) Ethereum-only." },
 ];
-
-// Sprint narrowing: the live q402_quote simulation collapses to BNB-only so
-// what the visitor sees here matches what the MCP server actually returns.
-const CHAINS: ChainRow[] = BNB_FOCUS_MODE
-  ? ALL_CHAINS.filter(c => c.key === "bnb")
-  : ALL_CHAINS;
 
 function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -192,9 +185,7 @@ export default function ClaudePage() {
             className="text-base md:text-lg text-white/55 mt-6 max-w-2xl leading-relaxed"
           >
             Q402 ships as a Model Context Protocol server. One install and Claude can quote
-            stablecoin transfers across {BNB_FOCUS_MODE
-              ? <span className="text-white/85 font-semibold">BNB Chain — USDC + USDT (sprint focus)</span>
-              : <span className="text-white/85 font-semibold">7 EVM chains</span>},
+            stablecoin transfers across <span className="text-white/85 font-semibold">7 EVM chains</span>,
             settle them gaslessly, and confirm on-chain — all from a single prompt. The recipient
             gets the full amount. The sender pays $0 in gas. The agent never holds a key it
             shouldn&apos;t.
@@ -284,10 +275,7 @@ export default function ClaudePage() {
               </div>
             </div>
             <div className="flex items-center gap-1 ml-auto">
-              {(BNB_FOCUS_MODE
-                ? (["ANY", "USDC", "USDT"] as const)
-                : (["ANY", "USDC", "USDT", "RLUSD"] as const)
-              ).map(t => (
+              {(["ANY", "USDC", "USDT", "RLUSD"] as const).map(t => (
                 <button
                   key={t}
                   type="button"
@@ -376,11 +364,7 @@ export default function ClaudePage() {
               className="px-5 py-3 text-[11px] text-white/30 border-t"
               style={{ borderColor: "rgba(255,255,255,0.04)" }}
             >
-              {`Sending $${amount || "0"} ${
-                tokenFilter === "ANY"
-                  ? BNB_FOCUS_MODE ? "USDC or USDT" : "USDC, USDT, or RLUSD"
-                  : tokenFilter
-              }` +
+              {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC, USDT, or RLUSD" : tokenFilter}` +
                 ` — Claude picks ${ranked[0]?.name ?? "—"} by default. Sender always pays $0;` +
                 " gas comes from the developer's pre-funded gas tank."}
             </div>
@@ -409,9 +393,8 @@ export default function ClaudePage() {
                 auth: "no auth",
                 color: "rgba(74,222,128,0.30)",
                 bg: "rgba(74,222,128,0.05)",
-                description: BNB_FOCUS_MODE
-                  ? "BNB-focus sprint: shows BNB Chain + USDC/USDT. Read-only, no key. Perfect first call before anything signs."
-                  : "Compare gas + supported tokens across all 7 chains. Read-only, no key. Perfect first call before anything signs.",
+                description:
+                  "Compare gas + supported tokens across all 7 chains. Read-only, no key. Perfect first call before anything signs.",
               },
               {
                 name: "q402_balance",
@@ -426,9 +409,8 @@ export default function ClaudePage() {
                 auth: "live mode",
                 color: "rgba(245,158,11,0.32)",
                 bg: "rgba(245,158,11,0.06)",
-                description: BNB_FOCUS_MODE
-                  ? 'BNB-focus sprint: only chain "bnb" with USDC or USDT goes through; others return a sprint-aware error. Sandbox by default — three env vars must align before a single wei moves.'
-                  : "Send a gasless USDC, USDT, or RLUSD payment. Sandbox by default — three env vars must align before a single wei moves.",
+                description:
+                  "Send a gasless USDC, USDT, or RLUSD payment. Sandbox by default — three env vars must align before a single wei moves.",
               },
               {
                 name: "q402_receipt",

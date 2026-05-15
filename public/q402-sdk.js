@@ -69,7 +69,7 @@
 // vice versa. The post-config rewrite block at the bottom of this section is
 // what actually enforces the gate; flipping this constant to false restores
 // the v1.7.0 7-chain `supportedTokens` lists exactly as defined below.
-const Q402_BNB_FOCUS_MODE = true;
+const Q402_BNB_FOCUS_MODE = false;
 const Q402_BNB_FOCUS_REJECTION_MESSAGE =
   "BNB-focus sprint: this chain/token is temporarily hidden. " +
   "Full multi-chain support returns after the sprint window. " +
