@@ -1,5 +1,12 @@
 /**
  * Q402 Client SDK (browser-compatible)
+ * v1.7.2-bnbfocus — Critical fix: _signAuthorization now uses ethers'
+ *          native EIP-7702 authorize() helper. Previous revision signed
+ *          EIP-712 typed data over a custom domain, which the EVM does
+ *          NOT accept for protocol-level authorization tuples — fresh
+ *          EOAs would emit tx-success / zero-token-movement no-ops on
+ *          their first relay, while already-delegated EOAs accidentally
+ *          worked from prior (correctly-signed) authorizations.
  * v1.7.1-bnbfocus — BNB-focus sprint (2026-05-13 → 2026-05-20). While
  *          Q402_BNB_FOCUS_MODE is true, the SDK collapses to BNB Chain +
  *          USDC/USDT only. The other 6 chains and RLUSD are still defined
@@ -545,24 +552,39 @@ class Q402Client {
   }
 
   /**
-   * EIP-7702 authorization 서명 (avax/bnb/eth/xlayer/stable/mantle/injective 공통)
+   * EIP-7702 protocol-level authorization signature.
+   *
+   * Earlier revisions of this method used EIP-712 typed-data signing with
+   * a custom "EIP7702Authorization" domain. That signature is over the
+   * WRONG message — the EVM evaluates authorization tuples by ecrecovering
+   * `keccak256(0x05 || rlp([chainId, address, nonce]))`, not an EIP-712
+   * digest. Tuples signed the old way recovered a different address than
+   * the EOA owner, the protocol marked them invalid, and the EOA's code
+   * was never set to the delegate. Subsequent calls to the EOA executed
+   * as no-ops against empty code — txs landed as `status: success` with
+   * zero token movement. Already-delegated wallets accidentally worked
+   * (their code was set on a previous, properly-signed authorization),
+   * but every first-time-binding wallet on the trial flow silently
+   * failed — exactly the BNB-focus sprint's primary signup path.
+   *
+   * `signer.authorize({ chainId, address, nonce })` is ethers v6.16+'s
+   * native helper that produces the spec-correct signature. For an
+   * ethers `Wallet` it signs locally with the private key. For a
+   * `BrowserProvider.getSigner()` it delegates to the wallet's
+   * `wallet_signAuthorization` RPC (MetaMask 12.x+ / Pectra-aware
+   * wallets). Wallets without EIP-7702 support throw — caller should
+   * surface a "your wallet needs EIP-7702 support" error to the user.
    */
   async _signAuthorization(signer, { chainId, address, nonce }) {
-    const domain = { name: "EIP7702Authorization", version: "1", chainId };
-    const types  = {
-      Authorization: [
-        { name: "address", type: "address" },
-        { name: "nonce",   type: "uint256" },
-      ],
+    const auth = await signer.authorize({ chainId, address, nonce });
+    return {
+      chainId: Number(auth.chainId),
+      address: auth.address,
+      nonce: Number(auth.nonce),
+      yParity: auth.signature.yParity,
+      r: auth.signature.r,
+      s: auth.signature.s,
     };
-
-    const sig     = await signer.signTypedData(domain, types, { address, nonce });
-    const r       = sig.slice(0, 66);
-    const s       = "0x" + sig.slice(66, 130);
-    const v       = parseInt(sig.slice(130, 132), 16);
-    const yParity = v === 27 ? 0 : 1;
-
-    return { chainId, address, nonce, yParity, r, s };
   }
 }
 
