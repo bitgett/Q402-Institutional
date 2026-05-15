@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
 import WalletModal from "../components/WalletModal";
 import TrialActivationModal from "../components/TrialActivationModal";
+import DashboardSidebar, { type DashboardTab } from "./Sidebar";
 import ClaudeMcpCard from "../components/ClaudeMcpCard";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
@@ -404,11 +405,14 @@ function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean 
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-const TABS = ["overview", "gas-tank", "developer", "transactions", "claude"] as const;
-type Tab = typeof TABS[number];
+// Legacy tab type — Sidebar.tsx exports DashboardTab as the canonical union
+// (includes "webhooks" too, which the Multichain dashboard renders inside
+// Developer for now). Kept here as an alias so the existing internal
+// references compile without touching every call site.
+type Tab = DashboardTab;
 
 export default function DashboardPage() {
-  const { address, isConnected, signMessage } = useWallet();
+  const { address, isConnected, signMessage, disconnect } = useWallet();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [keyCopied, setKeyCopied] = useState(false);
@@ -956,7 +960,6 @@ export default function DashboardPage() {
   // View mode — top-level toggle between Free-trial flavoring and the
   // original Multichain dashboard. State lives on a query param so a
   // refresh / share-link keeps the user in the same view.
-  const isTrialAccount = plan === "trial";
   const viewMode: "trial" | "multichain" = trialViewActive ? "trial" : "multichain";
   // Internal key "enterprise_flex" is shown to users as just "Enterprise".
   const planDisplayKey = plan === "enterprise_flex" ? "enterprise" : plan;
@@ -1063,16 +1066,47 @@ export default function DashboardPage() {
     } catch { setWebhookTestResult({ ok: false, msg: "Network error" }); } finally { setWebhookTesting(false); }
   }
 
-  const tabLabel: Record<Tab, string> = {
-    "overview": "Overview",
-    "gas-tank": "Gas Tank",
-    "developer": "Developer",
-    "transactions": `Transactions${relayedTxs.length > 0 ? ` (${relayedTxs.length})` : ""}`,
-    "claude": "Claude",
-  };
+  // Sidebar handles tab labels + section visibility now; the old top-row
+  // tabLabel map was inlined here for the deleted nav row.
+  const trialCreditsLeft = trialViewActive ? trialCredits : 0;
+  const trialDaysLeftDerived = (() => {
+    const expiry = sessionTrial.trialExpiresAt ?? subscription?.trialExpiresAt ?? null;
+    if (!expiry) return null;
+    return Math.max(0, Math.ceil((new Date(expiry).getTime() - Date.now()) / 86_400_000));
+  })();
+
+  function handleSignOut() {
+    void (async () => {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+      if (isConnected) {
+        try {
+          disconnect();
+        } catch {
+          /* best-effort */
+        }
+      }
+      if (typeof window !== "undefined") window.location.reload();
+    })();
+  }
 
   return (
-    <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
+    <div className="min-h-screen text-white flex" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
+      <DashboardSidebar
+        selection={{ view: trialViewActive ? "trial" : "multichain", tab: tab as DashboardTab }}
+        onSelect={({ view, tab: nextTab }) => {
+          setTrialViewActive(view === "trial");
+          setTab(nextTab as Tab);
+        }}
+        identity={{ email: emailSession?.email ?? null, address }}
+        trial={{
+          creditsLeft: trialCreditsLeft,
+          totalCredits: sessionTrial.totalCredits || 2000,
+          daysLeft: trialDaysLeftDerived,
+        }}
+        signOut={handleSignOut}
+      />
+
+      <div className="flex-1 min-w-0">
       {/* Paywall gate — shown to connected-but-unpaid users */}
       {isGated && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
@@ -1115,38 +1149,19 @@ export default function DashboardPage() {
           onDepositVerified={balances => { setUserGasBalance(balances); setDepositChain(null); }} />
       )}
 
-      <header className="border-b px-6 h-16 flex items-center justify-between max-w-7xl mx-auto sticky top-0 z-40 backdrop-blur-md"
+      {/* Compact top bar — sidebar carries logo + sections, so we only need
+          a slim wallet/auth strip here. Hidden on md+ since the sidebar
+          already shows identity; visible on mobile as a fallback. */}
+      <header className="md:hidden border-b px-5 h-14 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md"
         style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(5,7,10,0.85)" }}>
         <Link href="/" className="flex items-baseline gap-2">
           <span className="text-yellow font-bold text-base">Q402</span>
-          <span className="text-white/25 text-xs hidden sm:block">Dashboard</span>
         </Link>
-        <div className="flex items-center gap-4">
-          {/* WalletButton already surfaces MY Page + email + addr chip + sign-out,
-              so the redundant inline addr chip that used to live here would
-              show the wallet address twice in the dashboard header. */}
-          <WalletButton />
-        </div>
+        <WalletButton />
       </header>
 
-      {/* Trial banner — surfaces when subscription.plan === "trial".
-          Shown above the paying-user warning so a trial user about to
-          expire still sees the upgrade CTA, not the renewal CTA. */}
-      {plan === "trial" && (
-        <div className="border-b px-6 py-3 flex items-center justify-between gap-4"
-          style={{ background: "rgba(74,222,128,0.06)", borderColor: "rgba(74,222,128,0.25)" }}>
-          <p className="text-green-400 text-sm font-medium">
-            Free trial active{daysLeft !== null ? <> · <span className="font-bold">{daysLeft} day{daysLeft !== 1 ? "s" : ""} left</span></> : null}
-            <span className="text-white/40 text-xs ml-2">
-              {remainingCredits.toLocaleString()} / {(PLAN_QUOTA.trial).toLocaleString()} TX remaining · Q402 covers gas
-            </span>
-          </p>
-          <button onClick={() => router.push("/payment")}
-            className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-1.5 rounded-full hover:bg-yellow-hover transition-colors">
-            Upgrade
-          </button>
-        </div>
-      )}
+      {/* Top trial banner moved into the sidebar (credits gauge + days-left
+          chip). One status surface instead of two stacked. */}
 
       {/* Expiry warning banner — only for paying users */}
       {hasPaid && daysLeft !== null && daysLeft <= 7 && !isExpired && (
@@ -1174,38 +1189,9 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* View toggle — Free Trial vs Multichain. Default lands on the
-            user's natural side (trial signup → Trial; otherwise →
-            Multichain). The toggle is persistent for the session so a user
-            who chose Multichain doesn't keep getting bounced back to Trial
-            after a re-render. */}
-        <div className="mb-6 inline-flex items-center gap-1 bg-white/4 border border-white/10 rounded-full p-1">
-          <button
-            onClick={() => setTrialViewActive(true)}
-            className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${
-              trialViewActive
-                ? "bg-yellow text-navy shadow-lg shadow-yellow/15"
-                : "text-white/45 hover:text-white"
-            }`}
-          >
-            ✦ Free Trial
-            {isTrialAccount && !trialViewActive && (
-              <span className="ml-1.5 text-[9px] text-green-400">●</span>
-            )}
-          </button>
-          <button
-            onClick={() => setTrialViewActive(false)}
-            className={`px-5 py-2 rounded-full text-xs font-bold transition-all ${
-              !trialViewActive
-                ? "bg-white text-navy shadow-lg shadow-white/15"
-                : "text-white/45 hover:text-white"
-            }`}
-          >
-            Multichain
-          </button>
-        </div>
-
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {/* Title row — view toggle + tab nav now live in the sidebar. The
+            page title doubles as the active view + tab context. */}
         <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-bold">
@@ -1217,14 +1203,12 @@ export default function DashboardPage() {
                 : "Manage your Q402 plan, gas tank, and API access."}
             </p>
           </div>
-          <div className="flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-2">
-            <span className="text-yellow font-bold text-sm">
-              {viewMode === "trial" ? "Trial" : `${planName} Plan`}
-            </span>
-            {viewMode === "multichain" && subscription && subscription.amountUSD > 0 && (
+          {viewMode === "multichain" && subscription && subscription.amountUSD > 0 && (
+            <div className="flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-2">
+              <span className="text-yellow font-bold text-sm">{planName} Plan</span>
               <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Expiry banner — only for genuinely paying users (amountUSD > 0)
@@ -1266,8 +1250,10 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Email alert setup banner */}
-        {showEmailSetup && !alertEmail && (
+        {/* Email alert setup banner — only relevant for Multichain (paid)
+            users, since trial users get expiry reminders automatically via
+            the existing /api/cron/usage-alert trial leg. */}
+        {showEmailSetup && !alertEmail && !trialViewActive && !isTrialOnlySub && (
           <div className="mb-6 rounded-2xl px-5 py-4 border bg-white/4 border-white/10">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="flex items-start gap-3">
@@ -1316,18 +1302,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Tabs — Gas Tank tab is hidden for trial users since Q402 covers
-            their gas during the sprint window. Trial users can still click
-            into the underlying API endpoints (no auth bypass) — this is a
-            display-only filter so the UI matches the user's actual needs. */}
-        <div className="flex gap-1 bg-white/4 border border-white/7 rounded-2xl p-1 w-fit mb-8 flex-wrap">
-          {TABS.filter(t => !(t === "gas-tank" && viewMode === "trial")).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${tab === t ? "bg-yellow text-navy shadow-lg shadow-yellow/15" : "text-white/40 hover:text-white"}`}>
-              {tabLabel[t]}
-            </button>
-          ))}
-        </div>
+        {/* Tabs moved into the left sidebar — see DashboardSidebar.tsx.
+            Removed here; tab content rendering continues unchanged below. */}
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (
@@ -1732,6 +1708,7 @@ export default function DashboardPage() {
           }}
         />
       )}
+      </div>
     </div>
   );
 }
