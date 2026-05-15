@@ -281,3 +281,58 @@ session will hit State G immediately rather than the old
   idempotent re-bind, no silent overwrite
 - `__tests__/dashboard-state-machine.test.ts` — State D / G early
   returns, provision + tx useEffect gating, Sidebar lock, no auto-bind
+
+---
+
+## 11 · Identity model — Phase 2 (account merge)
+
+Phase 1 stopped the dual-identity UI bleed. Phase 2 finishes the model
+by merging the email pseudo-account into the wallet principal on bind /
+first-paid-activation.
+
+### Why this still matters
+
+After Phase 1:
+- Email signup creates `email:<sub>` pseudo-subscription (trial + keys)
+- Wallet bind sets `session.address` and persists the binding
+- BUT the email pseudo and the wallet sub stay as TWO separate records
+- A user who signs in via wallet-only later sees their wallet's own
+  (likely empty) account, not the trial they got via email — operations
+  + support + analytics now reason about one human as two records
+
+### Phase 2 scope (deferred to v1.28)
+
+When `/api/auth/wallet-bind` succeeds OR `/api/payment/activate` runs
+for a wallet that has a paired email session, migrate the email pseudo
+onto the wallet principal:
+
+| Field / KV | Source (email pseudo) | Target (wallet) | Policy |
+|---|---|---|---|
+| `subscription` | `sub:email:<sub>` | `sub:0xabc...` | Merge trial keys + credits into wallet sub; preserve any pre-existing wallet sub fields (paid plan etc.) |
+| `quota:{addr}` | counter | counter | INCRBY by pseudo's remaining credits, then delete pseudo's counter |
+| `apikey:{key}.address` | `email:<sub>` | `0xabc...` | Reassign owner — existing keys keep working, dashboard surfaces them under the wallet |
+| `relaytx:{pseudo}:{YYYY-MM}` | per-month lists | append into `relaytx:0xabc...:{YYYY-MM}` | Concat trial history into wallet history so Transactions tab shows unified scope |
+| `email_to_addr:{email}` | `email:<sub>` | `0xabc...` | Repoint so future signup with same email arrives at the wallet |
+| `account_alias:email:<sub>` | (new) | `0xabc...` | 30d tombstone for debugging / rollback |
+
+### Recovery flow (also deferred)
+
+The Phase 1 hard-block surfaces a support email for users who lost
+access to the bound wallet. Phase 2 adds a deliberate OTP-gated
+re-pair endpoint:
+- User clicks "I lost my wallet" in WrongWalletHardBlock
+- Server emails a magic-link OTP to the verified address
+- 7-day cooldown enforced + alert email to the old wallet owner via
+  reverse-lookup (best-effort, since `wallet_to_email` index doesn't
+  exist pre-Phase-2)
+- On confirm: clear `session.address`, allow a fresh signed bind to a
+  new wallet, repeat the migration steps above
+
+### What doesn't change
+
+- `/api/auth/wallet-bind` 's bind-once contract stays. Phase 2 only
+  changes what happens AFTER bind succeeds — the bind itself remains
+  signed + single-attempt + 409 on mismatch.
+- The dashboard's 4-state machine keeps its early-return shape. After
+  migration, State F still renders for bound+matching wallets — the
+  difference is the wallet sub now carries the trial data.

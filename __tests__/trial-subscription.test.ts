@@ -178,9 +178,12 @@ describe("trial — /api/payment/check surfaces trial status", () => {
 });
 
 describe("trial — relay route covers gas for active trials", () => {
-  it("computes isActiveTrial from subscription.plan + trialExpiresAt + now", () => {
+  it("computes isActiveTrial from key scope (isTrialScopedKey) + trialExpiresAt + now", () => {
+    // After the Phase 1 + scope fix, trial gating is keyed on the KEY's
+    // own plan (keyRecord.plan === "trial"), not on subscription.plan.
+    // This correctly handles paid users with legacy active trial keys.
     expect(relaySource).toMatch(
-      /isActiveTrial\s*=\s*\n?\s*subscription\?\.plan\s*===\s*["']trial["']/,
+      /isActiveTrial\s*=\s*\n?\s*isTrialScopedKey\s*&&/,
     );
     expect(relaySource).toMatch(/new Date\(subscription\.trialExpiresAt\)\s*>\s*new Date\(\)/);
   });

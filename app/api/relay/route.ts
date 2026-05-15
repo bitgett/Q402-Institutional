@@ -274,40 +274,57 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 4. Key matches current subscription + not expired ────────────────────
+  // After the Phase 1 trial/paid key separation, a subscription may carry
+  // FOUR key slots (apiKey + sandboxApiKey for paid scope, trialApiKey +
+  // trialSandboxApiKey for trial scope). The incoming key is "current" if
+  // it matches any of those four. We also derive `isTrialScopedKey` from
+  // the key record's plan so a paid user who still has an active trial
+  // key from before they upgraded gets TRIAL-scope semantics for that
+  // key (BNB-only, trial expiry) — NOT paid-scope. Source-of-truth for
+  // the key's scope is keyRecord.plan, set at generation time and
+  // immutable except via updateApiKeyPlan (which payment-activate only
+  // calls on the paid slots).
   const subscription = await getSubscription(keyRecord.address);
+  const isTrialScopedKey = keyRecord.plan === "trial";
   if (subscription) {
-    // Allow both the live key and the sandbox key
-    const isCurrentKey = subscription.apiKey === apiKey || subscription.sandboxApiKey === apiKey;
+    const isCurrentKey =
+      subscription.apiKey === apiKey ||
+      subscription.sandboxApiKey === apiKey ||
+      subscription.trialApiKey === apiKey ||
+      subscription.trialSandboxApiKey === apiKey;
     if (!isCurrentKey) {
       return NextResponse.json({ error: "API key has been rotated. Please use your current key." }, { status: 401 });
     }
-    // Expiry check: only for paid accounts (amountUSD > 0) with a real paidAt timestamp.
-    // Provisioned free accounts have paidAt="" — skip to avoid false "expired" errors.
-    // Sandbox requests also bypass expiry (they don't consume the paid quota).
+    // Paid-scope expiry: only fires for non-trial keys on accounts that
+    // actually paid (amountUSD > 0 + real paidAt). Trial keys hit the
+    // trial-scope expiry below regardless of whether the subscription
+    // has since upgraded to a paid plan.
     const isPaidAccount = (subscription.amountUSD ?? 0) > 0 && !!subscription.paidAt;
-    if (!isSandbox && isPaidAccount) {
+    if (!isSandbox && !isTrialScopedKey && isPaidAccount) {
       const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
       if (new Date() >= expiresAt) {
         return NextResponse.json({ error: "Subscription expired. Please renew to continue." }, { status: 403 });
       }
     }
-    // Trial expiry — separate gate keyed on trialExpiresAt, not paidAt+30d,
-    // since trial subscriptions write paidAt for analytics but the real
-    // window is the trialExpiresAt field set by /api/auth/google +
-    // /api/auth/email/callback + /api/trial/activate.
-    if (!isSandbox && subscription.plan === "trial") {
+    // Trial-scope expiry — keyed on trialExpiresAt. Fires for any key
+    // generated with plan="trial" (legacy trial subs that wrote into
+    // apiKey/sandboxApiKey AND post-Phase-1 trial subs in trialApiKey /
+    // trialSandboxApiKey both go through this gate).
+    if (!isSandbox && isTrialScopedKey) {
       if (!subscription.trialExpiresAt || new Date() >= new Date(subscription.trialExpiresAt)) {
         return NextResponse.json({ error: "Trial expired. Upgrade at /pricing to continue." }, { status: 403 });
       }
     }
   }
 
-  // ── 4b. Trial plan → BNB-only enforcement ────────────────────────────────
-  // Trial accounts can only relay on BNB Chain regardless of the global
+  // ── 4b. Trial-scope keys → BNB-only enforcement ──────────────────────────
+  // Trial-scoped keys can only relay on BNB Chain regardless of the global
   // BNB_FOCUS_MODE flag. Free credits + Q402-covered gas only make economic
   // sense on the cheapest chain; anything else, the user should be on a
-  // paid plan. Sandbox keys bypass (they don't move funds).
-  if (!isSandbox && subscription?.plan === "trial" && chain !== "bnb") {
+  // paid plan. Sandbox keys bypass (they don't move funds). Scoped on the
+  // KEY's plan, not the subscription's — a paid user using an old trial
+  // key still sees BNB-only on that key.
+  if (!isSandbox && isTrialScopedKey && chain !== "bnb") {
     return NextResponse.json(
       {
         error: "Trial accounts are restricted to BNB Chain. Upgrade at /pricing for multi-chain access.",
@@ -363,14 +380,12 @@ export async function POST(req: NextRequest) {
   // the sprint window. The relayer hot wallet still pays gas on-chain, but
   // we don't debit a per-user balance the user never deposited into.
   //
-  // Defence in depth: we re-check trialExpiresAt here (not just plan ===
-  // "trial") because subscription state could have drifted between the
-  // verify call at /api/keys/verify and this point. An expired trial falls
-  // through to the same insufficient-gas-tank rejection as paid users —
-  // they have to either upgrade or fund a tank.
+  // Scoped on the KEY's plan, not the subscription's — a paid user using
+  // their old trial key still hits trial-scope gas behaviour for that key
+  // (and the trial-expiry gate above already rejected it if past window).
   const isActiveTrial =
-    subscription?.plan === "trial" &&
-    !!subscription.trialExpiresAt &&
+    isTrialScopedKey &&
+    !!subscription?.trialExpiresAt &&
     new Date(subscription.trialExpiresAt) > new Date();
   if (!isSandbox && !isActiveTrial) {
     const gasBalance   = await getGasBalance(keyRecord.address);
