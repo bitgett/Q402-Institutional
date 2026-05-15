@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import WalletModal from "./WalletModal";
 import EmailSignupModal from "./EmailSignupModal";
+import ConnectModal from "./ConnectModal";
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -36,6 +37,7 @@ interface EmailSession {
 
 export default function WalletButton() {
   const { address, isConnected, disconnect } = useWallet();
+  const [showConnectModal, setShowConnectModal] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [session, setSession] = useState<EmailSession | null>(null);
@@ -80,12 +82,12 @@ export default function WalletButton() {
     return (
       <>
         <button
-          onClick={() => setShowWalletModal(true)}
+          onClick={() => setShowConnectModal(true)}
           className="bg-yellow text-navy font-semibold text-sm px-5 py-2 rounded-full hover:bg-yellow-hover transition-colors"
         >
           Connect
         </button>
-        {showWalletModal && <WalletModal onClose={() => setShowWalletModal(false)} />}
+        {showConnectModal && <ConnectModal onClose={() => setShowConnectModal(false)} />}
       </>
     );
   }
