@@ -28,6 +28,7 @@ interface GoogleAccountsId {
     callback: (resp: { credential: string }) => void;
     auto_select?: boolean;
     cancel_on_tap_outside?: boolean;
+    locale?: string;
   }) => void;
   renderButton: (
     el: HTMLElement,
@@ -39,6 +40,7 @@ interface GoogleAccountsId {
       shape?: "rectangular" | "pill";
       logo_alignment?: "left" | "center";
       width?: number;
+      locale?: string;
     },
   ) => void;
   prompt: () => void;
@@ -137,6 +139,11 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
       },
       auto_select: false,
       cancel_on_tap_outside: true,
+      // Force English regardless of browser language. ?hl=en on the script
+      // URL is the official hook but doesn't always override the auto-
+      // detected locale once the runtime is loaded; the IdConfiguration
+      // locale field is the second belt that actually wins.
+      locale: "en",
     });
     window.google.accounts.id.renderButton(ref.current, {
       type: "standard",
@@ -146,6 +153,7 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
       shape: "pill",
       logo_alignment: "center",
       width,
+      locale: "en",
     });
   }, [loaded, clientId, onSuccess, onError, width]);
 
