@@ -115,6 +115,64 @@ export function renderUsageAlertHtml(opts: {
 }
 
 /**
+ * Trial-expiry reminder body. Fires at 7d / 3d / 1d remaining. Tier-aware
+ * copy so a 7d email reads "wind-down" while a 1d email reads "act now"
+ * without flipping templates per tier.
+ */
+export function renderTrialExpiryHtml(opts: {
+  email: string;
+  daysLeft: number;
+  trialExpiresAt: string;
+  paymentUrl: string;
+  dashboardUrl: string;
+}): { subject: string; html: string; text: string } {
+  const urgent = opts.daysLeft <= 1;
+  const subject =
+    opts.daysLeft <= 1
+      ? `Q402 — last day of your free trial`
+      : opts.daysLeft <= 3
+        ? `Q402 — only ${opts.daysLeft} days left on your free trial`
+        : `Q402 — your free trial ends in ${opts.daysLeft} days`;
+
+  const expiryLine = new Date(opts.trialExpiresAt).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  const text = [
+    `Q402 — free trial reminder`,
+    ``,
+    `${opts.daysLeft} day${opts.daysLeft !== 1 ? "s" : ""} left on your trial (ends ${expiryLine}).`,
+    ``,
+    `Upgrade to a paid plan to keep your live API key and gasless transactions flowing:`,
+    opts.paymentUrl,
+    ``,
+    `Dashboard: ${opts.dashboardUrl}`,
+  ].join("\n");
+
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a;max-width:560px;margin:0 auto;padding:24px;">
+  <h2 style="font-size:18px;margin:0 0 8px;color:${urgent ? "#B45309" : "#1a1a1a"};">
+    ${urgent ? "Your trial ends tomorrow" : `${opts.daysLeft} days left on your free trial`}
+  </h2>
+  <p style="font-size:14px;color:#555;margin:0 0 16px;">
+    Your Q402 free trial expires on <strong>${expiryLine}</strong>. Upgrade to a paid plan to keep your live API key + gasless transactions running without interruption.
+  </p>
+  <p>
+    <a href="${opts.paymentUrl}" style="background:#F5C518;color:#0d1422;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Upgrade now →</a>
+  </p>
+  <p style="font-size:12px;color:#888;margin-top:24px;">
+    Dashboard: <a href="${opts.dashboardUrl}" style="color:#888;">${opts.dashboardUrl}</a><br/>
+    If you don't upgrade, your trial API key will simply stop signing on the expiry date — no charges, no surprises.
+  </p>
+</div>
+`.trim();
+
+  return { subject, html, text };
+}
+
+/**
  * Render the email magic-link confirmation message. Used by the
  * /api/auth/email/start route to confirm a user's email address before
  * binding it to a wallet's trial subscription record.

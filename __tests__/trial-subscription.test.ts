@@ -59,6 +59,15 @@ const relaySource = readFileSync(
   resolve(ROOT, "app", "api", "relay", "route.ts"),
   "utf8",
 );
+const heroSource = readFileSync(
+  resolve(ROOT, "app", "components", "Hero.tsx"),
+  "utf8",
+);
+const cronUsageAlertSource = readFileSync(
+  resolve(ROOT, "app", "api", "cron", "usage-alert", "route.ts"),
+  "utf8",
+);
+const emailLibSource = readFileSync(resolve(ROOT, "app", "lib", "email.ts"), "utf8");
 
 describe("trial — feature-flags constants", () => {
   it("TRIAL_CREDITS is 2,000 (matches sprint plan + Hero CTA copy)", () => {
@@ -175,6 +184,78 @@ describe("trial — relay route covers gas for active trials", () => {
     // invisible.
     expect(relaySource).toMatch(/trial_gas_burned/);
     expect(relaySource).toMatch(/hincrbyfloat\(\s*["']trial_gas_burned["']/);
+  });
+});
+
+describe("trial — email session merges into wallet activation", () => {
+  it("reads the session cookie BEFORE the trial_used wallet check", () => {
+    // Order matters: we want the email available so the by-email Sybil
+    // block can fire at the same gate as the by-wallet sentinel.
+    const sessionIdx = trialRouteSource.indexOf("getSession(req)");
+    const usedIdx = trialRouteSource.indexOf("trialUsedKey(addr)");
+    expect(sessionIdx).toBeGreaterThan(0);
+    expect(usedIdx).toBeGreaterThan(0);
+    expect(sessionIdx).toBeLessThan(usedIdx);
+  });
+
+  it("rejects with TRIAL_ALREADY_USED_EMAIL when an email session has already claimed a trial", () => {
+    expect(trialRouteSource).toMatch(/trial_used_by_email:/);
+    expect(trialRouteSource).toMatch(/code:\s*["']TRIAL_ALREADY_USED_EMAIL["']/);
+  });
+
+  it("falls back to body.email when no session is present (legacy wallet-first flow)", () => {
+    expect(trialRouteSource).toMatch(
+      /finalEmail\s*=\s*\n?\s*body\.email[\s\S]*?body\.email\.toLowerCase\(\)\s*:\s*adoptedEmail/,
+    );
+  });
+
+  it("pairs the session with the wallet on successful activation (so /api/auth/me reflects it)", () => {
+    expect(trialRouteSource).toMatch(/pairSessionWithWallet\(sid,\s*addr\)/);
+  });
+
+  it("writes trial_used_by_email:{email} permanent sentinel when an email is adopted", () => {
+    expect(trialRouteSource).toMatch(/kv\.set\(\s*`trial_used_by_email:\$\{adoptedEmail\}`/);
+  });
+
+  it("registers the wallet in the trial-expiry index when an email is bound", () => {
+    expect(trialRouteSource).toMatch(/addTrialSubscriptionToIndex\(addr\)/);
+  });
+});
+
+describe("trial — Hero deep-link handler", () => {
+  it("auto-opens the TrialActivationModal when ?activate=trial is present", () => {
+    // We read window.location.search lazily (not via useSearchParams) so
+    // the page stays prerenderable as a static route. The assertion locks
+    // down both the param key and the URLSearchParams parse path.
+    expect(heroSource).toMatch(/new URLSearchParams\(window\.location\.search\)/);
+    expect(heroSource).toMatch(/\.get\(\s*["']activate["']\s*\)\s*===\s*["']trial["']/);
+  });
+
+  it("strips ?activate=trial from the URL after auto-opening (back-button safety)", () => {
+    expect(heroSource).toMatch(/window\.history\.replaceState/);
+  });
+});
+
+describe("trial — expiry-reminder cron leg", () => {
+  it("iterates listTrialSubscriptionAddresses (no full-KV scan)", () => {
+    expect(cronUsageAlertSource).toMatch(/listTrialSubscriptionAddresses\(\)/);
+  });
+
+  it("declares 7d / 3d / 1d reminder tiers", () => {
+    expect(cronUsageAlertSource).toMatch(/TRIAL_ALERT_TIERS\s*=\s*\[\s*7,\s*3,\s*1\s*\]/);
+  });
+
+  it("prunes expired or non-trial index entries via removeTrialSubscriptionFromIndex", () => {
+    expect(cronUsageAlertSource).toMatch(/removeTrialSubscriptionFromIndex\(addr\)/);
+  });
+
+  it("records the alerted tier via recordTrialAlertSent (downward-only hysteresis)", () => {
+    expect(cronUsageAlertSource).toMatch(/recordTrialAlertSent\(addr,\s*tier\)/);
+  });
+
+  it("uses renderTrialExpiryHtml template", () => {
+    expect(cronUsageAlertSource).toMatch(/renderTrialExpiryHtml\(/);
+    expect(emailLibSource).toMatch(/export function renderTrialExpiryHtml/);
   });
 });
 

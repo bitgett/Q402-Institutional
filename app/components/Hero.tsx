@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import RegisterModal from "./RegisterModal";
 import TrialActivationModal from "./TrialActivationModal";
@@ -15,12 +15,36 @@ import {
 } from "@/app/lib/feature-flags";
 
 
+// Deep-link sentinel — when the email-only dashboard view sends a user back
+// here with ?activate=trial, the Hero auto-opens the TrialActivationModal.
+// We read window.location lazily on mount (not via useSearchParams) so the
+// page can prerender as a static route without a Suspense boundary.
+function shouldAutoOpenTrial(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("activate") === "trial";
+}
+
 export default function Hero() {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
-  const [showTrialModal, setShowTrialModal] = useState(false);
+  // Lazy initializer reads the URL exactly once on mount — no useEffect
+  // setState, no re-render, no Suspense gymnastics. After this initial
+  // read the modal state is managed by the user clicking the CTA / X.
+  const [showTrialModal, setShowTrialModal] = useState<boolean>(shouldAutoOpenTrial);
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [signinError, setSigninError] = useState<string | null>(null);
+
+  // Strip the ?activate=trial param after the modal opens so a back-button
+  // navigation doesn't re-trigger the auto-open. Best-effort — browsers
+  // without history.replaceState are vanishingly rare.
+  useEffect(() => {
+    if (!showTrialModal || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("activate") === "trial") {
+      url.searchParams.delete("activate");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [showTrialModal]);
 
   return (
     <>

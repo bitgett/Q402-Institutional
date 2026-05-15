@@ -702,3 +702,52 @@ export async function listUsageAlertAddresses(): Promise<string[]> {
   const members = await kv.smembers(ALERT_INDEX_SET);
   return Array.isArray(members) ? members.map(String) : [];
 }
+
+// ── Trial expiration reminders ────────────────────────────────────────────────
+// Parallel to the usage-alert index above. /api/trial/activate adds wallets
+// to TRIAL_INDEX_SET on activation; the cron fans out across this set so
+// expiry reminders cost O(trial users), not O(all KV keys).
+//
+// Hysteresis lives in `trial_alert:{addr}.lastDaysAlerted` — a downward
+// crossing of 7d / 3d / 1d fires one email per tier. The index entry is
+// auto-pruned by the cron once a trial expires (no record → no reminder).
+
+export interface TrialAlertState {
+  /** Lowest days-left tier we've already mailed for. 7 → 3 → 1 → null. */
+  lastDaysAlerted: number | null;
+}
+
+const TRIAL_INDEX_SET = "trial_alert:_index";
+const trialAlertKey = (addr: string) => `trial_alert:${addr.toLowerCase()}`;
+
+export async function addTrialSubscriptionToIndex(address: string): Promise<void> {
+  await kv.sadd(TRIAL_INDEX_SET, address.toLowerCase());
+}
+
+export async function removeTrialSubscriptionFromIndex(address: string): Promise<void> {
+  await Promise.all([
+    kv.srem(TRIAL_INDEX_SET, address.toLowerCase()),
+    kv.del(trialAlertKey(address)),
+  ]);
+}
+
+export async function listTrialSubscriptionAddresses(): Promise<string[]> {
+  const members = await kv.smembers(TRIAL_INDEX_SET);
+  return Array.isArray(members) ? members.map(String) : [];
+}
+
+export async function getTrialAlertState(address: string): Promise<TrialAlertState | null> {
+  return kv.get<TrialAlertState>(trialAlertKey(address));
+}
+
+/**
+ * Mark `daysTier` as the lowest expiry tier we've alerted for. Idempotent —
+ * only advances downward (1 < 3 < 7) so cron re-runs on the same day don't
+ * double-mail. Mirrors recordAlertSent for usage alerts.
+ */
+export async function recordTrialAlertSent(address: string, daysTier: number): Promise<void> {
+  const cur = (await getTrialAlertState(address)) ?? { lastDaysAlerted: null };
+  const prev = cur.lastDaysAlerted ?? Number.POSITIVE_INFINITY;
+  if (daysTier >= prev) return;
+  await kv.set(trialAlertKey(address), { lastDaysAlerted: daysTier });
+}

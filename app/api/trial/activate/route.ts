@@ -31,6 +31,7 @@ import {
   generateSandboxKey,
   getQuotaCredits,
   addCredits,
+  addTrialSubscriptionToIndex,
 } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -39,6 +40,7 @@ import {
   TRIAL_DURATION_DAYS,
   TRIAL_PLAN_NAME,
 } from "@/app/lib/feature-flags";
+import { getSession, pairSessionWithWallet, SESSION_COOKIE } from "@/app/lib/session";
 import { kv } from "@vercel/kv";
 
 const TRIAL_USED_TTL = 10 * 365 * 24 * 60 * 60; // 10y — same horizon as used_txhash
@@ -75,6 +77,22 @@ export async function POST(req: NextRequest) {
   }
   const addr = authResult;
 
+  // Adopt the email session up front. Read here (not later) so the
+  // trial_used_by_email block can be enforced at the same gate as the
+  // wallet sentinel — a single Google account can't claim multiple trials
+  // by rotating wallets.
+  let adoptedEmail: string | null = null;
+  if (req.cookies.get(SESSION_COOKIE)) {
+    const session = await getSession(req);
+    if (session?.email) {
+      adoptedEmail = session.email;
+    }
+  }
+  const finalEmail =
+    body.email && /.+@.+\..+/.test(body.email)
+      ? body.email.toLowerCase()
+      : adoptedEmail;
+
   // One-shot per wallet — permanent sentinel survives expiry, so an
   // already-used wallet can't claim a second free trial after the first one
   // ended. The intended upgrade path is /api/payment/activate.
@@ -87,6 +105,23 @@ export async function POST(req: NextRequest) {
       },
       { status: 409 },
     );
+  }
+
+  // Sybil cap by email — paired with the wallet sentinel above, this stops
+  // one Google identity from harvesting multiple trials via fresh wallets.
+  // Only fires when the user actually signed in with email/Google first;
+  // pure wallet-flow users skip this check (no email to key against).
+  if (adoptedEmail) {
+    const alreadyUsedByEmail = await kv.get(`trial_used_by_email:${adoptedEmail}`);
+    if (alreadyUsedByEmail) {
+      return NextResponse.json(
+        {
+          error: "This email has already claimed a free trial. Upgrade at /pricing.",
+          code: "TRIAL_ALREADY_USED_EMAIL",
+        },
+        { status: 409 },
+      );
+    }
   }
 
   // If the wallet already has a paid subscription, free trial is moot.
@@ -158,12 +193,36 @@ export async function POST(req: NextRequest) {
       amountUSD: 0,
       quotaBonus: totalTxs,
       trialExpiresAt: trialExpiresAt.toISOString(),
-      ...(body.email && /.+@.+\..+/.test(body.email) ? { email: body.email.toLowerCase() } : {}),
+      ...(finalEmail ? { email: finalEmail } : {}),
     });
 
     // Permanent used marker — released only by the next paid activation
     // (which still works because activate doesn't check this key).
     await kv.set(trialUsedKey(addr), addr, { ex: TRIAL_USED_TTL });
+
+    // If we adopted an email session, also block this email from claiming
+    // another trial via a different wallet — caps the Sybil ceiling per
+    // verified email. Same 10y TTL as the wallet sentinel.
+    if (adoptedEmail) {
+      await kv.set(`trial_used_by_email:${adoptedEmail}`, addr, { ex: TRIAL_USED_TTL });
+      // Pair the session to the wallet so /api/auth/me reflects the binding
+      // on the next dashboard load (the email-only view will swap out for
+      // the full wallet view without requiring a session refresh).
+      const sid = req.cookies.get(SESSION_COOKIE)?.value;
+      if (sid) {
+        await pairSessionWithWallet(sid, addr).catch(() => {});
+      }
+    }
+
+    // Register this wallet for the trial-expiry cron (best-effort; missing
+    // index entry just means no reminder email — trial still works fine).
+    // Only register when an email is actually available, since the cron's
+    // only output is email; an emailless trial doesn't need indexing.
+    if (finalEmail) {
+      addTrialSubscriptionToIndex(addr).catch(e =>
+        console.error("[trial/activate] trial-index add failed (non-fatal):", e),
+      );
+    }
 
     // Best-effort operator alert. Same fail-soft pattern as /api/payment/activate.
     const botToken = process.env.TELEGRAM_BOT_TOKEN;

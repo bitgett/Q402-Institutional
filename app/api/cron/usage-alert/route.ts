@@ -7,9 +7,31 @@ import {
   getQuotaCredits,
   recordAlertSent,
   clearUsageAlert,
+  listTrialSubscriptionAddresses,
+  getTrialAlertState,
+  recordTrialAlertSent,
+  removeTrialSubscriptionFromIndex,
 } from "@/app/lib/db";
-import { sendEmail, renderUsageAlertHtml } from "@/app/lib/email";
+import {
+  sendEmail,
+  renderUsageAlertHtml,
+  renderTrialExpiryHtml,
+} from "@/app/lib/email";
 import { pickAlertTier } from "@/app/lib/alert-tier";
+
+// Trial-expiry reminder tiers (in days). Mirror the 20%/10% downward
+// hysteresis used by the credit-low alerts: a tier fires exactly once when
+// daysLeft first crosses below the threshold.
+const TRIAL_ALERT_TIERS = [7, 3, 1] as const;
+
+function pickTrialTier(daysLeft: number, lastAlerted: number | null): number | null {
+  for (const tier of TRIAL_ALERT_TIERS) {
+    if (daysLeft <= tier) {
+      if (lastAlerted == null || lastAlerted > tier) return tier;
+    }
+  }
+  return null;
+}
 
 /**
  * GET /api/cron/usage-alert
@@ -106,11 +128,73 @@ export async function GET(req: Request) {
     }
   }
 
+  // ── Trial expiration reminders (7d / 3d / 1d) ───────────────────────────
+  // Separate index from usage_alert because trial users don't opt-in via the
+  // dashboard email settings — their email is captured at signup. The index
+  // is populated by /api/trial/activate when finalEmail is present.
+  const trialAddrs = await listTrialSubscriptionAddresses();
+  let trialChecked = 0;
+  let trialAlerted = 0;
+  let trialPruned = 0;
+  let trialFailed = 0;
+
+  for (const addrRaw of trialAddrs) {
+    const addr = (addrRaw ?? "").toLowerCase();
+    if (!addr) continue;
+    trialChecked++;
+
+    const sub = await getSubscription(addr);
+    if (!sub || sub.plan !== "trial" || !sub.trialExpiresAt || !sub.email) {
+      // Subscription was upgraded to paid, expired and was overwritten, or
+      // never had an email. Drop the index entry so future runs skip it.
+      await removeTrialSubscriptionFromIndex(addr).catch(() => {});
+      trialPruned++;
+      continue;
+    }
+
+    const msLeft = new Date(sub.trialExpiresAt).getTime() - Date.now();
+    const daysLeft = Math.ceil(msLeft / 86_400_000);
+
+    // Expired: clean up and skip. The trial's effects (revoked live key,
+    // blocked relays) are enforced at request time elsewhere — the cron's
+    // only responsibility is the reminder email.
+    if (daysLeft <= 0) {
+      await removeTrialSubscriptionFromIndex(addr).catch(() => {});
+      trialPruned++;
+      continue;
+    }
+
+    const state = await getTrialAlertState(addr);
+    const tier = pickTrialTier(daysLeft, state?.lastDaysAlerted ?? null);
+    if (!tier) continue;
+
+    const { subject, html, text } = renderTrialExpiryHtml({
+      email: sub.email,
+      daysLeft,
+      trialExpiresAt: sub.trialExpiresAt,
+      paymentUrl,
+      dashboardUrl,
+    });
+    const res = await sendEmail({ to: sub.email, subject, html, text });
+    if (res.ok) {
+      await recordTrialAlertSent(addr, tier).catch(() => {});
+      trialAlerted++;
+    } else {
+      trialFailed++;
+    }
+  }
+
   return NextResponse.json({
     checked,
     alerted,
     cleaned,
     failed,
+    trial: {
+      checked: trialChecked,
+      alerted: trialAlerted,
+      pruned: trialPruned,
+      failed: trialFailed,
+    },
     timestamp: new Date().toISOString(),
   });
 }

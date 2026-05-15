@@ -16,7 +16,7 @@
  *   from here means the next release is a one-line change.
  */
 
-export const SDK_VERSION = "1.7.0" as const;
+export const SDK_VERSION = "1.7.1-bnbfocus" as const;
 
 /**
  * The npm-published @quackai/q402-mcp version. Kept in lockstep with
