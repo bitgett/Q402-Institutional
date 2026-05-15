@@ -367,7 +367,7 @@ function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean 
           </div></div>
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Recipient</label>
           <input value={to} onChange={e => setTo(e.target.value)} placeholder="0x..." className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-yellow/30 placeholder-white/20" /></div>
-        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount ({previewToken})</label>
+        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount</label>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30" /></div>
       </div>
       <div className="bg-[#060C14] border border-white/8 rounded-xl p-4 font-mono text-xs text-white/50 leading-6">
@@ -509,6 +509,39 @@ export default function DashboardPage() {
       initialViewMatched.current = true;
     }
   }, [subscription, emailSession]);
+
+  // Wallet auto-pair: when wallet connects AND email session exists AND
+  // session.address isn't already set, POST to /api/auth/wallet-bind so
+  // the server knows these two identities go together. Skipped on
+  // ALREADY_PAIRED conflicts (the session is bound to a different
+  // wallet — we don't silently overwrite). Fired once per (sid, address)
+  // pair via a ref to avoid re-binding on each re-render.
+  const walletBoundRef = useRef<string | null>(null);
+  const [bindConflict, setBindConflict] = useState<{ paired: string } | null>(null);
+  useEffect(() => {
+    if (!isConnected || !address || !emailSession) return;
+    if (emailSession.address === address) return; // already paired
+    if (walletBoundRef.current === address) return; // already attempted
+    walletBoundRef.current = address;
+    void (async () => {
+      try {
+        const res = await fetch("/api/auth/wallet-bind", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ address }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setEmailSession(prev => (prev ? { ...prev, address } : prev));
+        } else if (data.code === "ALREADY_PAIRED") {
+          setBindConflict({ paired: data.pairedAddress ?? "" });
+        }
+      } catch {
+        /* silent — pairing is a UX nicety, not a security gate */
+      }
+    })();
+  }, [isConnected, address, emailSession]);
 
   // Wallet-only auto-trial: when a wallet is connected but the address has
   // no subscription (or only a provisioned stub with amountUSD=0 and no
@@ -1264,6 +1297,35 @@ export default function DashboardPage() {
         {/* In-content email-alert banners removed — config moved into the
             sidebar Account section, which opens the dashboard's alert modal
             on click. */}
+
+        {/* Wallet ↔ email pairing conflict: this email session is bound to
+            a different wallet than the one currently connected. Don't
+            silently switch identities — surface a one-time banner so the
+            user knows. They can sign out + sign back in to re-pair. */}
+        {bindConflict && (
+          <div className="mb-6 flex items-start justify-between gap-4 rounded-2xl px-5 py-4 border bg-yellow/6 border-yellow/25">
+            <div className="flex items-start gap-3">
+              <span className="text-lg text-yellow">⚠</span>
+              <div>
+                <p className="font-semibold text-sm text-yellow">Different wallet detected</p>
+                <p className="text-white/55 text-xs mt-1 leading-relaxed">
+                  Your email <span className="font-mono text-white/75">{emailSession?.email}</span> is paired with
+                  <span className="font-mono text-white/75"> {bindConflict.paired.slice(0, 8)}…{bindConflict.paired.slice(-6)}</span>,
+                  but you&apos;re currently connected via <span className="font-mono text-white/75">{address ? `${address.slice(0, 8)}…${address.slice(-6)}` : "—"}</span>.
+                  Trial view shows your email account; Multichain shows the connected wallet — they&apos;re NOT the same identity.
+                  Sign out and back in with the paired wallet to merge.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setBindConflict(null)}
+              className="text-white/35 hover:text-white text-lg leading-none flex-shrink-0"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
 
         {/* Quota usage warning banner — only for paying users */}
         {hasPaid && subscription && pct >= 80 && (
