@@ -82,22 +82,42 @@ Two views via toggle in the left sidebar:
 
 ### Free Trial view
 - Source of truth: email pseudo-account when an email session exists,
-  else the wallet's `plan="trial"` sub.
+  else the wallet's `subscription.trialApiKey` (+ `trialSandboxApiKey`).
 - Cards: Sponsored TX (2k gauge) · Gas: Covered · Today's TX · Total
   Relayed
 - API Key card: live key with `BNB only` badge
 - Playground: chain dropdown locked to BNB; tokens USDC / USDT only
 - Gas Tank tab: hidden (Q402 covers gas)
-- Sidebar: credits gauge + days-left chip
+- Sidebar: credits gauge + days-left chip + ALL multichain tabs always
+  visible (no view-gating on the tab list itself)
 
 ### Multichain view
-- Source of truth: wallet subscription (paid plan)
-- Trial-only / unpaid users see 0 / empty state with no API Key card
-  (no "upgrade" placeholder, just clean empty)
+- Source of truth: wallet subscription's `apiKey` slot (paid only).
+- API Key card ALWAYS renders. Trial-only / unpaid users see a Locked
+  placeholder with a Pricing CTA (the card shell stays so the surface
+  feels complete; only the key value is hidden).
 - Gas Tank tab: visible (user funds in BNB / ETH / etc.)
 - Subscription banner: only renders when `amountUSD > 0` (no fake
   "Subscription Active" for trial-only users)
 - Sidebar: same view sections, Multichain selected
+
+### Trial vs paid key isolation
+
+The two scopes live in separate `Subscription` slots so a paid upgrade
+never touches the trial keys:
+
+| Slot                  | Written by                                  | Read by                                  |
+|-----------------------|---------------------------------------------|------------------------------------------|
+| `apiKey`              | `/api/payment/activate` only                | Multichain view, paid relay scope        |
+| `sandboxApiKey`       | provision / payment-activate                | Multichain view sandbox                  |
+| `trialApiKey`         | `/api/trial/activate`, Google/email signup  | Trial view, trial relay scope            |
+| `trialSandboxApiKey`  | trial activate, Google/email signup         | Trial view sandbox                       |
+
+The Transactions tab filters by which key was used (`tx.apiKey ∈ view's
+key set`), so flipping views shows only the history that scope produced.
+Pre-migration trial accounts (where the trial key lived in `apiKey`) are
+caught by a fallback path in `/api/keys/provision` and the dashboard's
+`trialKeySet` builder.
 
 ### Auto-prompt rules
 
@@ -120,9 +140,19 @@ Two views via toggle in the left sidebar:
 
 ### Email-sandbox (`/api/keys/email-sandbox`)
 
-Session-gated read of trial state: returns `apiKey`, `sandboxApiKey`,
-`credits`, `totalCredits`, `trialExpiresAt`, `hasWallet`. Provisioning
-happens at signup; this endpoint is pure read.
+Session-gated read of trial state: returns `apiKey`, `sandboxApiKey`
+(legacy fields, populated from `trialApiKey`/`trialSandboxApiKey`),
+`trialApiKey`, `trialSandboxApiKey`, `credits`, `totalCredits`,
+`trialExpiresAt`, `hasWallet`. Provisioning happens at signup; this
+endpoint is pure read.
+
+### Trial activate email handling (`/api/trial/activate`)
+
+`body.email` is a hint, never a credential. The route only writes
+`subscription.email` when the session cookie resolves to a verified
+email AND (no `body.email` was sent OR `body.email` matches the
+session email). Otherwise the value is dropped — stops a wallet-signed
+request with a forged email from poisoning the reminder cron.
 
 ### Expiry reminder cron
 

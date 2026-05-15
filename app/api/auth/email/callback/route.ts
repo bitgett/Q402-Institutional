@@ -105,16 +105,20 @@ export async function GET(req: NextRequest) {
     const existing = await getSubscription(pseudoAddr);
     const trialAlreadyClaimed = await kv.get(trialUsedByEmailKey(email));
 
-    let apiKey = existing?.apiKey ?? "";
-    let sandboxApiKey = existing?.sandboxApiKey ?? "";
+    // Trial keys live in their own slot — see note in /api/auth/google.
+    // Fall back to legacy apiKey/sandboxApiKey for pre-migration accounts so
+    // existing email signups don't get re-minted on second sign-in.
+    let trialApiKey = existing?.trialApiKey ?? existing?.apiKey ?? "";
+    let trialSandboxApiKey =
+      existing?.trialSandboxApiKey ?? existing?.sandboxApiKey ?? "";
 
     const eligibleForFirstGrant =
       !trialAlreadyClaimed &&
-      (!existing || existing.plan !== TRIAL_PLAN_NAME || !existing.apiKey);
+      (!existing || existing.plan !== TRIAL_PLAN_NAME || !trialApiKey);
 
     if (eligibleForFirstGrant) {
-      if (!apiKey) apiKey = await generateApiKey(pseudoAddr, TRIAL_PLAN_NAME);
-      if (!sandboxApiKey) sandboxApiKey = await generateSandboxKey(pseudoAddr, TRIAL_PLAN_NAME);
+      if (!trialApiKey) trialApiKey = await generateApiKey(pseudoAddr, TRIAL_PLAN_NAME);
+      if (!trialSandboxApiKey) trialSandboxApiKey = await generateSandboxKey(pseudoAddr, TRIAL_PLAN_NAME);
 
       const grantKey = `credit_grant:trial:${pseudoAddr}`;
       const canGrant = await kv.set(grantKey, TRIAL_CREDITS, { nx: true, ex: TRIAL_USED_TTL });
@@ -131,10 +135,10 @@ export async function GET(req: NextRequest) {
       const now = new Date();
       const expiry = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
       await setSubscription(pseudoAddr, {
-        ...(existing ?? {}),
+        ...(existing ?? { apiKey: "" }),
         paidAt: now.toISOString(),
-        apiKey,
-        sandboxApiKey,
+        trialApiKey,
+        trialSandboxApiKey,
         plan: TRIAL_PLAN_NAME,
         txHash: "email-signup",
         amountUSD: 0,

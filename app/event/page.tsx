@@ -150,8 +150,8 @@ export default function EventPage() {
           >
             {TRIAL_CREDITS.toLocaleString()} gasless transactions on BNB Chain (USDC + USDT) for
             the next {TRIAL_DURATION_DAYS} days. <span className="text-green-400 font-semibold">Q402 covers the gas</span> —
-            you don&apos;t fund a gas tank. Sandbox API key in 30 seconds with Google or email;
-            wallet connect unlocks live payments.
+            no card, no gas tank. Sign up with Google, email, or wallet to get your live
+            and sandbox API&nbsp;keys in 30&nbsp;seconds.
           </motion.p>
 
           {/* Two-column: CTA stack + benefits */}
@@ -205,10 +205,10 @@ export default function EventPage() {
               )}
 
               <p className="text-white/30 text-[11px] mt-5 leading-relaxed">
-                Google &amp; email give you the API key + 2,000 sponsored TX
-                instantly. Wallet connect also auto-activates the trial — same
-                cap, real on-chain settlements, gasless for the payer. One
-                identity, one trial (ever).
+                Google, email, and wallet all activate the same 2,000-TX trial
+                immediately — live key (real on-chain settlements, gasless for
+                the payer) and sandbox key issued in one shot. One identity,
+                one trial (ever).
               </p>
             </motion.div>
 

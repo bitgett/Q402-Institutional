@@ -88,11 +88,12 @@ export default function EmailSignupModal({ onClose }: Props) {
               <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
                 Sign in with email
               </div>
-              <h2 className="text-2xl font-bold mb-2">Get your API key</h2>
+              <h2 className="text-2xl font-bold mb-2">Start your free trial</h2>
               <p className="text-white/45 text-sm mb-6">
-                We&apos;ll send a one-time sign-in link. Click it and your sandbox API key is
-                ready to use. Connecting a wallet to activate the 30-day / 2,000-TX live
-                trial is optional.
+                We&apos;ll send a one-time sign-in link. Click it and the 30-day / 2,000-TX
+                trial activates immediately on the email account — live + sandbox API keys
+                ready to use. Connecting a wallet later is optional, only needed if you
+                want the trial to follow a wallet identity too.
               </p>
               <label className="block text-[11px] uppercase tracking-widest text-white/35 font-semibold mb-2">
                 Email

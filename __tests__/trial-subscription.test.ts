@@ -136,14 +136,38 @@ describe("trial — db.ts trial fields + isSubscriptionActive branch", () => {
   });
 });
 
-describe("trial — /api/keys/provision treats active trial as hasPaid", () => {
+describe("trial — /api/keys/provision exposes trial + paid keys separately", () => {
   it("computes isTrialActive from plan + trialExpiresAt + now", () => {
     expect(provisionSource).toMatch(/isTrialActive\s*=\s*\n?\s*existing\.plan\s*===\s*["']trial["']/);
     expect(provisionSource).toMatch(/new Date\(existing\.trialExpiresAt\)\s*>\s*new Date\(\)/);
   });
 
-  it("returns hasPaid: true for active trial wallets (so live key is exposed)", () => {
-    expect(provisionSource).toMatch(/isTrialActive\s*&&\s*!!existing\.apiKey/);
+  it("surfaces trialApiKey separately from the paid apiKey slot", () => {
+    // The two scopes used to share the apiKey slot — a trial user who
+    // upgraded had no isolation between their trial-scoped traffic and
+    // their paid-scoped traffic. Now trial keys live in trialApiKey, paid
+    // keys in apiKey, and provision returns both.
+    expect(provisionSource).toMatch(/trialApiKey:\s*trialApiKey/);
+    expect(provisionSource).toMatch(/trialSandboxApiKey:\s*trialSandboxApiKey/);
+    expect(provisionSource).toMatch(/isTrialActive,/);
+  });
+
+  it("falls back to legacy existing.apiKey for pre-migration trial accounts", () => {
+    // Legacy trial activations wrote into existing.apiKey/sandboxApiKey
+    // when plan==="trial". provision keeps surfacing those through
+    // trialApiKey so the dashboard's trial view doesn't lose its key for
+    // accounts that haven't been re-activated since the schema split.
+    expect(provisionSource).toMatch(
+      /existing\.trialApiKey[\s\S]*?isTrialActive\s*\?\s*existing\.apiKey/,
+    );
+  });
+
+  it("only marks hasPaid true when amountUSD > 0 AND a paid apiKey is set", () => {
+    // Active trials are NOT counted as paid — the dashboard's Multichain
+    // card relies on hasPaid to decide unlocked vs Locked state.
+    expect(provisionSource).toMatch(
+      /isPaid\s*=\s*\(existing\.amountUSD\s*\?\?\s*0\)\s*>\s*0\s*&&\s*!!paidApiKey/,
+    );
   });
 });
 
@@ -199,9 +223,16 @@ describe("trial — email session merges into wallet activation", () => {
     expect(trialRouteSource).toMatch(/code:\s*["']TRIAL_ALREADY_USED_EMAIL["']/);
   });
 
-  it("falls back to body.email when no session is present (legacy wallet-first flow)", () => {
+  it("drops body.email when it does not match the session-verified email (Q402-SEC-004)", () => {
+    // body.email is a HINT for the UI, never a credential. The trial route
+    // only writes subscription.email when the session cookie resolves to a
+    // verified email AND (either no body.email is supplied OR body.email
+    // matches the session email). Otherwise finalEmail is null so an
+    // attacker can't poison subscription.email by sending an unverified
+    // body.email alongside their own wallet signature.
+    expect(trialRouteSource).toMatch(/claimedEmail/);
     expect(trialRouteSource).toMatch(
-      /finalEmail\s*=\s*\n?\s*body\.email[\s\S]*?body\.email\.toLowerCase\(\)\s*:\s*adoptedEmail/,
+      /finalEmail\s*=\s*\n?\s*adoptedEmail\s*&&\s*\(!claimedEmail\s*\|\|\s*claimedEmail\s*===\s*adoptedEmail\)/,
     );
   });
 

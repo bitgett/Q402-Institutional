@@ -20,8 +20,15 @@
  *
  * Body: { address, challenge, signature, email? }
  *   - challenge from GET /api/auth/challenge?address={addr}
- *   - email optional; when present and not yet associated, the magic-link
- *     flow runs separately at /api/auth/email/start
+ *   - `email` in the body is treated as a CLAIM — the trial is activated
+ *     immediately, but the email field on the subscription record is only
+ *     persisted when the session cookie also resolves to that same verified
+ *     email (i.e. the magic-link flow has already completed). Otherwise the
+ *     email is silently dropped from the subscription record so an attacker
+ *     can't pre-poison `subscription.email` (which gates reminder emails)
+ *     by sending an unverified `body.email` together with their own wallet
+ *     signature. The verified email also gates trial_used_by_email Sybil
+ *     accounting — only verified emails consume the per-email trial slot.
  */
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -81,17 +88,32 @@ export async function POST(req: NextRequest) {
   // trial_used_by_email block can be enforced at the same gate as the
   // wallet sentinel — a single Google account can't claim multiple trials
   // by rotating wallets.
+  //
+  // SECURITY: `body.email` is a hint, not a credential. We accept it ONLY
+  // when it matches the session cookie's verified email (case-insensitive).
+  // Any other value is dropped — never written to subscription.email and
+  // never used as a Sybil sentinel key. This stops a wallet-signed request
+  // with a forged email from quietly attaching that email to the wallet's
+  // subscription (which the reminder cron would then mail).
   let adoptedEmail: string | null = null;
   if (req.cookies.get(SESSION_COOKIE)) {
     const session = await getSession(req);
     if (session?.email) {
-      adoptedEmail = session.email;
+      adoptedEmail = session.email.toLowerCase();
     }
   }
-  const finalEmail =
+  const claimedEmail =
     body.email && /.+@.+\..+/.test(body.email)
       ? body.email.toLowerCase()
-      : adoptedEmail;
+      : null;
+  // finalEmail is whichever email we trust to write to subscription.email.
+  // Only the session email is verified; a claimed body.email is honored only
+  // when it equals the session email (UI fills it from the session for
+  // display, so a match is the expected happy path).
+  const finalEmail =
+    adoptedEmail && (!claimedEmail || claimedEmail === adoptedEmail)
+      ? adoptedEmail
+      : null;
 
   // One-shot per wallet — permanent sentinel survives expiry, so an
   // already-used wallet can't claim a second free trial after the first one
@@ -174,20 +196,26 @@ export async function POST(req: NextRequest) {
 
     const totalTxs = await getQuotaCredits(addr);
 
-    // Reuse the wallet's existing keys if the user previously interacted
-    // with /api/keys/generate. Otherwise mint fresh ones — both live and
-    // sandbox, same as the paid path, so the developer can start in
-    // sandbox without a second activation flow.
-    let apiKey = existing?.apiKey ?? null;
-    if (!apiKey) apiKey = await generateApiKey(addr, TRIAL_PLAN_NAME);
-    let sandboxApiKey = existing?.sandboxApiKey ?? null;
-    if (!sandboxApiKey) sandboxApiKey = await generateSandboxKey(addr, TRIAL_PLAN_NAME);
+    // Trial keys live in their own slot (trialApiKey / trialSandboxApiKey) so
+    // a later paid activation can mint fresh paid keys into apiKey without
+    // touching anything trial-scoped. Reuse if the user already activated
+    // (idempotent retry); otherwise mint with plan=trial so the relay
+    // route's per-plan gates see the right scope. The paid apiKey slot is
+    // left alone — we only set it to "" on brand-new accounts where there's
+    // no prior provision stub to preserve.
+    let trialApiKey = existing?.trialApiKey ?? null;
+    if (!trialApiKey) trialApiKey = await generateApiKey(addr, TRIAL_PLAN_NAME);
+    let trialSandboxApiKey = existing?.trialSandboxApiKey ?? null;
+    if (!trialSandboxApiKey) trialSandboxApiKey = await generateSandboxKey(addr, TRIAL_PLAN_NAME);
 
     await setSubscription(addr, {
-      ...(existing ?? {}),
+      ...(existing ?? {
+        apiKey: "",
+        sandboxApiKey: undefined,
+      }),
       paidAt: now.toISOString(),
-      apiKey,
-      sandboxApiKey,
+      trialApiKey,
+      trialSandboxApiKey,
       plan: TRIAL_PLAN_NAME,
       txHash: "trial", // sentinel — no on-chain TX backs a trial activation
       amountUSD: 0,
@@ -233,7 +261,7 @@ export async function POST(req: NextRequest) {
         "",
         `*Address:* \`${addr}\``,
         `*Credits:* ${TRIAL_CREDITS.toLocaleString()} TX over ${TRIAL_DURATION_DAYS} days`,
-        `*Email:* ${body.email ?? "(not provided)"}`,
+        `*Email:* ${finalEmail ?? (claimedEmail ? `${claimedEmail} (unverified — dropped)` : "(not provided)")}`,
         `*Expires:* ${trialExpiresAt.toISOString().slice(0, 10)}`,
       ].join("\n");
       try {
@@ -253,8 +281,13 @@ export async function POST(req: NextRequest) {
       credits: TRIAL_CREDITS,
       totalTxs,
       trialExpiresAt: trialExpiresAt.toISOString(),
-      apiKey,
-      sandboxApiKey,
+      // Surface under both legacy + new names: callers that have not yet
+      // adopted the trialApiKey field (older dashboard build, scripts) keep
+      // working; new callers should prefer the trial* fields.
+      apiKey: trialApiKey,
+      sandboxApiKey: trialSandboxApiKey,
+      trialApiKey,
+      trialSandboxApiKey,
     });
   } catch (e) {
     console.error(`[trial/activate] write failure addr=${addr}:`, e);

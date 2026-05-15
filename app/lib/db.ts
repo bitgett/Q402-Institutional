@@ -11,6 +11,11 @@ import { TIER_CREDITS, TIER_PLANS } from "@/app/lib/blockchain";
 
 interface Subscription {
   paidAt: string;
+  // Paid-plan live key. Only minted by /api/payment/activate. Empty string
+  // on a freshly provisioned (unpaid) account. NEVER reused as a trial key —
+  // trial activation mints into trialApiKey instead so the two scopes stay
+  // isolated. If a user pays during/after a trial, this slot gets a brand
+  // new key while trialApiKey keeps working until trialExpiresAt.
   apiKey: string;
   plan: string;
   txHash: string;
@@ -28,6 +33,14 @@ interface Subscription {
   // the user pairs their wallet with a verified email via the magic-link flow.
   trialExpiresAt?: string;
   email?: string;
+  // Trial keys — separate slot from apiKey/sandboxApiKey so a paid upgrade
+  // can mint fresh paid keys without invalidating the trial keys (trial keys
+  // expire naturally with trialExpiresAt). Dashboard surfaces these in the
+  // "Free Trial" view; relay route gates by the api-key record's own plan,
+  // so even if both keys exist simultaneously the live one and the trial one
+  // see independent feature gates.
+  trialApiKey?: string;
+  trialSandboxApiKey?: string;
 }
 
 interface ApiKeyRecord {

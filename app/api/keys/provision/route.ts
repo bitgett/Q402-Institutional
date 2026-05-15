@@ -45,36 +45,55 @@ export async function POST(req: NextRequest) {
   // ── Existing account ──────────────────────────────────────────────────────
   const existing = await getSubscription(addr);
   if (existing) {
-    // Ensure sandbox key exists (may be missing on very old accounts)
+    // Ensure sandbox key exists (may be missing on very old accounts).
+    // We provision the paid-side sandbox key here — trial sandbox keys are
+    // minted by the trial-activation paths, not retroactively.
     if (!existing.sandboxApiKey) {
       const sandboxApiKey = await generateSandboxKey(addr, existing.plan);
       await setSubscription(addr, { ...existing, sandboxApiKey });
       existing.sandboxApiKey = sandboxApiKey;
     }
 
-    // Trial subscribers are treated like paying users for hasPaid (their live
-    // key is gated by trial credits, not amountUSD), but the relay route still
-    // sees plan==="trial" so it can apply per-plan rate limits independently.
+    // Trial scope: live whenever trialExpiresAt is in the future, regardless
+    // of whether the user has also paid. A user mid-trial who pays gets BOTH
+    // keys back so the dashboard can show them side-by-side until the trial
+    // expires. Legacy accounts that only have `apiKey`/`sandboxApiKey` set
+    // (pre-migration) fall back through to those slots.
     const isTrialActive =
       existing.plan === "trial" &&
       !!existing.trialExpiresAt &&
       new Date(existing.trialExpiresAt) > new Date();
-    const isPaid =
-      (existing.amountUSD ?? 0) > 0 && !!existing.apiKey
-        ? true
-        : isTrialActive && !!existing.apiKey;
+    const trialApiKey = existing.trialApiKey
+      ?? (isTrialActive ? existing.apiKey : "")
+      ?? "";
+    const trialSandboxApiKey = existing.trialSandboxApiKey
+      ?? (isTrialActive ? existing.sandboxApiKey : "")
+      ?? "";
+    const paidApiKey =
+      (existing.amountUSD ?? 0) > 0
+        ? existing.apiKey || ""
+        : "";
+
+    // hasPaid means "paid plan active" — independent of trial. The dashboard
+    // uses this to decide whether the Multichain card shows the unlocked
+    // state or the Locked placeholder.
+    const isPaid = (existing.amountUSD ?? 0) > 0 && !!paidApiKey;
+
     return NextResponse.json({
-      // Live key only returned for accounts that have actually paid or are
-      // mid-trial. An expired trial wallet stops receiving the live key
-      // automatically — same UX as a lapsed paid subscription.
-      apiKey:         isPaid ? existing.apiKey : null,
-      sandboxApiKey:  existing.sandboxApiKey,
-      plan:           existing.plan,
-      hasPaid:        isPaid,
-      isOwner:        isOwnerWallet(addr),
-      quotaBonus:     existing.quotaBonus ?? 0,
-      paidAt:         existing.paidAt,
-      isNew:          false,
+      // Legacy field — prefers paid key, falls back to trial key so older
+      // dashboard builds keep working until they pull in the explicit
+      // trialApiKey field below.
+      apiKey:           paidApiKey || (isTrialActive ? trialApiKey : null),
+      sandboxApiKey:    existing.sandboxApiKey || null,
+      trialApiKey:      trialApiKey || null,
+      trialSandboxApiKey: trialSandboxApiKey || null,
+      isTrialActive,
+      plan:             existing.plan,
+      hasPaid:          isPaid,
+      isOwner:          isOwnerWallet(addr),
+      quotaBonus:       existing.quotaBonus ?? 0,
+      paidAt:           existing.paidAt,
+      isNew:            false,
     });
   }
 
@@ -93,13 +112,16 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({
-    apiKey:        null,
+    apiKey:             null,
     sandboxApiKey,
-    plan:          "starter",
-    hasPaid:       false,
-    isOwner:       isOwnerWallet(addr),
-    isNew:         true,
-    quotaBonus:    0,
-    paidAt:        "",
+    trialApiKey:        null,
+    trialSandboxApiKey: null,
+    isTrialActive:      false,
+    plan:               "starter",
+    hasPaid:            false,
+    isOwner:            isOwnerWallet(addr),
+    isNew:              true,
+    quotaBonus:         0,
+    paidAt:             "",
   });
 }

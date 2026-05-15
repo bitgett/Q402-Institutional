@@ -135,7 +135,9 @@ export default function DashboardSidebar({
         </Link>
       </div>
 
-      {/* Free Trial section */}
+      {/* Free Trial section — header is the view-switcher, tab list is
+          ALWAYS rendered so the user sees every available destination at
+          a glance regardless of which view they're currently in. */}
       <div className="px-3 pt-4">
         <button
           onClick={() => onSelect({ view: "trial", tab: "overview" })}
@@ -155,22 +157,20 @@ export default function DashboardSidebar({
             </span>
           )}
         </button>
-        {view === "trial" && (
-          <ul className="ml-2 mt-1 space-y-0.5">
-            {TRIAL_TABS.map(t => (
-              <li key={t.id}>
-                <TabItem
-                  tab={t}
-                  active={tab === t.id}
-                  onClick={() => onSelect({ view: "trial", tab: t.id })}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="ml-2 mt-1 space-y-0.5">
+          {TRIAL_TABS.map(t => (
+            <li key={t.id}>
+              <TabItem
+                tab={t}
+                active={view === "trial" && tab === t.id}
+                onClick={() => onSelect({ view: "trial", tab: t.id })}
+              />
+            </li>
+          ))}
+        </ul>
 
-        {/* Trial credit mini-gauge — surfaces the 2k/2k status without
-            stealing top-of-page real estate. */}
+        {/* Trial credit mini-gauge — only when actually on the trial view
+            so it doesn't add noise to the multichain workspace. */}
         {view === "trial" && (
           <div className="mx-3 mt-3 mb-2 p-2.5 rounded-lg border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
             <div className="flex items-baseline justify-between mb-1.5">
@@ -192,7 +192,7 @@ export default function DashboardSidebar({
         )}
       </div>
 
-      {/* Multichain section */}
+      {/* Multichain section — same always-expanded pattern. */}
       <div className="px-3 pt-3">
         <button
           onClick={() => onSelect({ view: "multichain", tab: "overview" })}
@@ -204,19 +204,17 @@ export default function DashboardSidebar({
         >
           <span>Multichain</span>
         </button>
-        {view === "multichain" && (
-          <ul className="ml-2 mt-1 space-y-0.5">
-            {MULTICHAIN_TABS.map(t => (
-              <li key={t.id}>
-                <TabItem
-                  tab={t}
-                  active={tab === t.id}
-                  onClick={() => onSelect({ view: "multichain", tab: t.id })}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
+        <ul className="ml-2 mt-1 space-y-0.5">
+          {MULTICHAIN_TABS.map(t => (
+            <li key={t.id}>
+              <TabItem
+                tab={t}
+                active={view === "multichain" && tab === t.id}
+                onClick={() => onSelect({ view: "multichain", tab: t.id })}
+              />
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Account section */}

@@ -85,8 +85,11 @@ export default function GrantPage() {
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-navy/80 backdrop-blur-md border-b border-white/10">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-baseline gap-1.5">
-            <span className="text-yellow font-bold text-lg">Q402</span>
+          <Link href="/" className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
+              <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
+            </span>
+            <span className="text-yellow font-bold text-lg tracking-tight leading-none">Q402</span>
             <span className="text-white/30 text-xs hidden sm:block">by Quack AI</span>
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-white/50">

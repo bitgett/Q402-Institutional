@@ -196,8 +196,15 @@ describe("/api/keys/email-sandbox — session-gated trial account read", () => {
   });
 
   it("returns live + sandbox + credits + trialExpiresAt + hasWallet", () => {
-    expect(emailSandboxSource).toMatch(/apiKey:\s*subscription\.apiKey/);
-    expect(emailSandboxSource).toMatch(/sandboxApiKey:\s*subscription\.sandboxApiKey/);
+    // After the trial/paid key separation, email pseudos carry their trial
+    // key in trialApiKey/trialSandboxApiKey. The endpoint surfaces it as
+    // both `apiKey` (legacy field) and `trialApiKey` (explicit). Falls
+    // back to subscription.apiKey for pre-migration accounts.
+    expect(emailSandboxSource).toMatch(
+      /trialApiKey\s*=\s*subscription\.trialApiKey\s*\|\|\s*subscription\.apiKey/,
+    );
+    expect(emailSandboxSource).toMatch(/apiKey:\s*trialApiKey/);
+    expect(emailSandboxSource).toMatch(/sandboxApiKey:\s*trialSandboxApiKey/);
     expect(emailSandboxSource).toMatch(/credits,/);
     expect(emailSandboxSource).toMatch(/trialExpiresAt:\s*subscription\.trialExpiresAt/);
     expect(emailSandboxSource).toMatch(/hasWallet:\s*!!session\.address/);

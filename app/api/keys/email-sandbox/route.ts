@@ -48,11 +48,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Account not provisioned. Please sign in again." }, { status: 404 });
   }
 
+  // Surface trial keys explicitly. Legacy callers reading `apiKey` keep
+  // working because we fall back to the paid-side apiKey when trialApiKey
+  // is missing — covers pre-migration email accounts that minted before
+  // the trialApiKey slot existed.
+  const trialApiKey = subscription.trialApiKey || subscription.apiKey || null;
+  const trialSandboxApiKey =
+    subscription.trialSandboxApiKey || subscription.sandboxApiKey || null;
+
   return NextResponse.json({
     email: session.email,
     plan: subscription.plan,
-    apiKey: subscription.apiKey || null,
-    sandboxApiKey: subscription.sandboxApiKey || null,
+    apiKey: trialApiKey,
+    sandboxApiKey: trialSandboxApiKey,
+    trialApiKey,
+    trialSandboxApiKey,
     credits,
     totalCredits: TRIAL_CREDITS,
     trialExpiresAt: subscription.trialExpiresAt ?? null,

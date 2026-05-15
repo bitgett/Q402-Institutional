@@ -41,7 +41,17 @@ export default function TrialActivationModal({ onClose }: Props) {
   const [email, setEmail] = useState("");
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  // Magic-link send status. We track each state so the success screen never
+  // sticks at "Sending…" when the POST actually errored out (server outage,
+  // user rejected the second signature, etc.).
+  //   idle    — no email provided, nothing to send
+  //   sending — POST in flight
+  //   sent    — server returned ok
+  //   failed  — POST returned non-ok, network error, or user cancelled the
+  //             second wallet signature
+  type MagicLinkState = "idle" | "sending" | "sent" | "failed";
+  const [magicLinkState, setMagicLinkState] = useState<MagicLinkState>("idle");
+  const [magicLinkError, setMagicLinkError] = useState<string | null>(null);
 
   async function activate() {
     if (!address) {
@@ -76,25 +86,50 @@ export default function TrialActivationModal({ onClose }: Props) {
         return;
       }
 
-      // If the user provided an email, fire-and-forget the magic-link send.
-      // We don't block trial success on email transport: the activation is
-      // already committed server-side.
+      // The trial itself is already committed at this point — we move to
+      // the success screen synchronously and let the magic-link send race in
+      // the background. But we track its real status (sending / sent /
+      // failed) so the success screen never lies about transport state.
       if (email.trim()) {
-        const chal2 = await getFreshChallenge(address, signMessage).catch(() => null);
-        if (chal2) {
-          fetch("/api/auth/email/start", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              address,
-              challenge: chal2.challenge,
-              signature: chal2.signature,
-              email: email.trim(),
-            }),
-          })
-            .then(() => setMagicLinkSent(true))
-            .catch(() => {});
-        }
+        setMagicLinkState("sending");
+        setMagicLinkError(null);
+        // Don't await — we don't block the success screen on email
+        // transport. The .then/.catch chain mutates state when the request
+        // resolves.
+        void (async () => {
+          try {
+            const chal2 = await getFreshChallenge(address, signMessage);
+            if (!chal2) {
+              setMagicLinkState("failed");
+              setMagicLinkError("Signature cancelled — request a new link from the dashboard.");
+              return;
+            }
+            const res = await fetch("/api/auth/email/start", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                address,
+                challenge: chal2.challenge,
+                signature: chal2.signature,
+                email: email.trim(),
+              }),
+            });
+            if (!res.ok) {
+              const data = await res.json().catch(() => ({}));
+              setMagicLinkState("failed");
+              setMagicLinkError(
+                typeof data.error === "string"
+                  ? data.error
+                  : "Couldn't send the magic-link — retry from the dashboard.",
+              );
+              return;
+            }
+            setMagicLinkState("sent");
+          } catch {
+            setMagicLinkState("failed");
+            setMagicLinkError("Network error — retry from the dashboard.");
+          }
+        })();
       }
 
       setStep("success");
@@ -218,11 +253,27 @@ export default function TrialActivationModal({ onClose }: Props) {
                   the next {TRIAL_DURATION_DAYS} days. Your API key is available on the dashboard.
                 </p>
                 {email && (
-                  <p className="text-white/40 text-xs mb-5">
-                    {magicLinkSent
-                      ? `Magic-link sent to ${email} — click to confirm your email for trial reminders.`
-                      : `Sending magic-link to ${email}…`}
-                  </p>
+                  <div className="text-xs mb-5">
+                    {magicLinkState === "sending" && (
+                      <p className="text-white/40">Sending magic-link to {email}…</p>
+                    )}
+                    {magicLinkState === "sent" && (
+                      <p className="text-green-400/80">
+                        Magic-link sent to {email} — click to confirm your email for trial reminders.
+                      </p>
+                    )}
+                    {magicLinkState === "failed" && (
+                      <p className="text-red-400/85">
+                        Couldn&apos;t send to {email}: {magicLinkError ?? "unknown error"}.
+                        You can resend from the dashboard.
+                      </p>
+                    )}
+                    {magicLinkState === "idle" && (
+                      <p className="text-white/40">
+                        Email skipped — request a magic-link later from the dashboard.
+                      </p>
+                    )}
+                  </div>
                 )}
                 <button
                   onClick={() => {

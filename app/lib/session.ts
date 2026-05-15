@@ -19,8 +19,13 @@
  *     (existing flow) or signs in via wallet on the same browser
  *   - Session never stores secrets; key rotation simply destroys the session
  *
- * Renewal: every getSession() refreshes the cookie expiry so an active user
- * stays logged in indefinitely. Stale sessions evict themselves via KV TTL.
+ * Renewal: sessions are NOT sliding. The cookie + KV record both expire
+ * exactly SESSION_TTL_SEC (30d) after createSession(); getSession() is a
+ * pure read and does not refresh either. A user who has not signed in for
+ * 30d will be silently logged out on the next request, regardless of how
+ * recently they accessed the site. If you ever want sliding behaviour,
+ * write back the cookie + KV TTL inside getSession() — and accept that
+ * every authenticated request now does a KV write.
  */
 
 import { kv } from "@vercel/kv";

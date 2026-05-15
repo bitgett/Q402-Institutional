@@ -87,21 +87,26 @@ export async function POST(req: NextRequest) {
 
   // First-time signup AND no prior trial on this email → grant the trial.
   // Existing accounts just refresh the session cookie + return current state.
-  let apiKey = existing?.apiKey ?? "";
-  let sandboxApiKey = existing?.sandboxApiKey ?? "";
+  // Trial keys live in trialApiKey/trialSandboxApiKey so a future paid
+  // activation can mint into apiKey/sandboxApiKey without disturbing them.
+  // Legacy pre-migration accounts that only have `apiKey` set are surfaced
+  // through that field as a fallback.
+  let trialApiKey = existing?.trialApiKey ?? existing?.apiKey ?? "";
+  let trialSandboxApiKey =
+    existing?.trialSandboxApiKey ?? existing?.sandboxApiKey ?? "";
   let credits = await getQuotaCredits(pseudoAddr);
   let trialExpiresAt: string = existing?.trialExpiresAt ?? "";
   let isNew = false;
 
   const eligibleForFirstGrant =
     !trialAlreadyClaimed &&
-    (!existing || existing.plan !== TRIAL_PLAN_NAME || !existing.apiKey);
+    (!existing || existing.plan !== TRIAL_PLAN_NAME || !trialApiKey);
 
   if (eligibleForFirstGrant) {
     isNew = true;
     // Mint keys if missing (idempotent against partial-failure retry).
-    if (!apiKey) apiKey = await generateApiKey(pseudoAddr, TRIAL_PLAN_NAME);
-    if (!sandboxApiKey) sandboxApiKey = await generateSandboxKey(pseudoAddr, TRIAL_PLAN_NAME);
+    if (!trialApiKey) trialApiKey = await generateApiKey(pseudoAddr, TRIAL_PLAN_NAME);
+    if (!trialSandboxApiKey) trialSandboxApiKey = await generateSandboxKey(pseudoAddr, TRIAL_PLAN_NAME);
 
     // Grant credits via SET NX so a retried POST can't double-grant.
     const grantKey = `credit_grant:trial:${pseudoAddr}`;
@@ -121,10 +126,10 @@ export async function POST(req: NextRequest) {
     trialExpiresAt = expiry.toISOString();
 
     await setSubscription(pseudoAddr, {
-      ...(existing ?? {}),
+      ...(existing ?? { apiKey: "" }),
       paidAt: now.toISOString(),
-      apiKey,
-      sandboxApiKey,
+      trialApiKey,
+      trialSandboxApiKey,
       plan: TRIAL_PLAN_NAME,
       txHash: "google-signup",
       amountUSD: 0,
@@ -152,8 +157,11 @@ export async function POST(req: NextRequest) {
     email,
     name,
     picture,
-    apiKey,
-    sandboxApiKey,
+    // Legacy fields preserved for older clients reading apiKey/sandboxApiKey.
+    apiKey: trialApiKey,
+    sandboxApiKey: trialSandboxApiKey,
+    trialApiKey,
+    trialSandboxApiKey,
     credits,
     trialExpiresAt,
     isNew,

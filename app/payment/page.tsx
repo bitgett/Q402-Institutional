@@ -227,7 +227,10 @@ export default function PaymentPage() {
       {/* ── Nav ────────────────────────────────────────────────────────────── */}
       <nav className="border-b border-white/8 px-6 h-16 flex items-center justify-between max-w-6xl mx-auto">
         <Link href="/" className="flex items-center gap-2">
-          <span className="text-yellow font-bold text-lg">Q402</span>
+          <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
+            <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
+          </span>
+          <span className="text-yellow font-bold text-lg tracking-tight leading-none">Q402</span>
           <span className="text-white/30 text-sm">by Quack AI</span>
         </Link>
         <div className="flex items-center gap-4">
