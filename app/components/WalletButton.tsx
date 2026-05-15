@@ -1,9 +1,29 @@
 "use client";
 
+/**
+ * WalletButton — Navbar identity chip. Two auth methods can coexist:
+ *
+ *   - Wallet  : ethers-context connection (MetaMask / OKX)
+ *   - Email   : Q402 session cookie set by Google / magic-link signup
+ *
+ * Four UI states depending on which of {wallet, email} is active:
+ *
+ *   (none)          → "Connect" CTA → WalletModal
+ *   (wallet only)   → MY Page + addr chip + "+ Email" → EmailSignupModal
+ *   (email only)    → MY Page + email chip + "+ Wallet" → WalletModal
+ *   (both)          → MY Page + email chip + addr chip + sign-out
+ *
+ * The "+ Email" / "+ Wallet" pills let an existing user attach the second
+ * method without leaving the page — important now that the dashboard's
+ * email-session view recognises a wallet binding (sets address on the
+ * KV session record via pairSessionWithWallet on trial activation).
+ */
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import WalletModal from "./WalletModal";
+import EmailSignupModal from "./EmailSignupModal";
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -16,12 +36,10 @@ interface EmailSession {
 
 export default function WalletButton() {
   const { address, isConnected, disconnect } = useWallet();
-  const [showModal, setShowModal] = useState(false);
+  const [showWalletModal, setShowWalletModal] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const [session, setSession] = useState<EmailSession | null>(null);
 
-  // Fetch email session once on mount. If the user signed in with Google or
-  // email magic-link, the Navbar should reflect that even without a wallet
-  // connection. Failure is silent — no session is the common case.
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/me", { credentials: "include" })
@@ -38,83 +56,110 @@ export default function WalletButton() {
     };
   }, []);
 
-  async function logout() {
+  async function signOut() {
+    // Log out of BOTH methods so the user is genuinely "signed out". The
+    // email session is server-side; the wallet is browser-side. Logging
+    // out only one leaves a confusing half-state in the navbar.
     await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
     setSession(null);
-    // Reload so any state in WalletContext / dashboards rehydrates cleanly.
+    if (isConnected) {
+      try {
+        disconnect();
+      } catch {
+        /* best-effort */
+      }
+    }
     if (typeof window !== "undefined") window.location.reload();
   }
 
-  // Wallet connected — full UI: MY Page link + address chip + disconnect
-  if (isConnected && address) {
+  const hasWallet = isConnected && !!address;
+  const hasEmail = !!session;
+
+  // ── State 0: nothing connected ────────────────────────────────────────────
+  if (!hasWallet && !hasEmail) {
     return (
-      <div className="flex items-center gap-2">
-        <Link
-          href="/dashboard"
-          className="animate-mypage flex items-center gap-1.5 border text-yellow text-xs font-bold px-3.5 py-2 rounded-full"
-          style={{ borderColor: "rgba(245,197,24,0.6)", background: "rgba(245,197,24,0.08)" }}
-        >
-          <span>✦</span>
-          MY Page
-        </Link>
-
-        <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/12 text-white text-xs font-mono px-3.5 py-2 rounded-full">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" style={{ boxShadow: "0 0 5px #4ade80" }} />
-          {shortAddr(address)}
-        </div>
-
+      <>
         <button
-          onClick={disconnect}
-          aria-label="Disconnect wallet"
-          className="text-white/25 text-sm hover:text-white/60 transition-colors px-1 py-2"
-          title="Disconnect"
+          onClick={() => setShowWalletModal(true)}
+          className="bg-yellow text-navy font-semibold text-sm px-5 py-2 rounded-full hover:bg-yellow-hover transition-colors"
         >
-          ×
+          Connect
         </button>
-      </div>
+        {showWalletModal && <WalletModal onClose={() => setShowWalletModal(false)} />}
+      </>
     );
   }
 
-  // Email session active but no wallet — show email + dashboard link + sign-out
-  if (session) {
-    return (
-      <div className="flex items-center gap-2">
-        <Link
-          href="/dashboard"
-          className="animate-mypage flex items-center gap-1.5 border text-yellow text-xs font-bold px-3.5 py-2 rounded-full"
-          style={{ borderColor: "rgba(245,197,24,0.6)", background: "rgba(245,197,24,0.08)" }}
-        >
-          <span>✦</span>
-          MY Page
-        </Link>
-        <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/12 text-white/80 text-xs px-3.5 py-2 rounded-full max-w-[200px] truncate">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" style={{ boxShadow: "0 0 5px #4ade80" }} />
-          <span className="truncate">{session.email}</span>
-        </div>
-        <button
-          onClick={logout}
-          aria-label="Sign out"
-          className="text-white/25 text-sm hover:text-white/60 transition-colors px-1 py-2"
-          title="Sign out"
-        >
-          ×
-        </button>
-      </div>
-    );
-  }
+  // ── Shared chips: MY Page, email, address ─────────────────────────────────
+  const myPage = (
+    <Link
+      href="/dashboard"
+      className="animate-mypage flex items-center gap-1.5 border text-yellow text-xs font-bold px-3.5 py-2 rounded-full"
+      style={{ borderColor: "rgba(245,197,24,0.6)", background: "rgba(245,197,24,0.08)" }}
+    >
+      <span>✦</span>
+      MY Page
+    </Link>
+  );
 
-  // Nothing — show Connect CTA. Opens the bare wallet picker directly
-  // (MetaMask / OKX). Google + email signup flows live on the /event page;
-  // navbar stays a simple "connect a wallet" entry like before the sprint.
+  const emailChip = session && (
+    <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/12 text-white/85 text-xs px-3 py-2 rounded-full max-w-[180px]">
+      <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" style={{ boxShadow: "0 0 5px #4ade80" }} />
+      <span className="truncate">{session.email}</span>
+    </div>
+  );
+
+  const walletChip = address && (
+    <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/12 text-white text-xs font-mono px-3 py-2 rounded-full">
+      <span className="w-1.5 h-1.5 rounded-full bg-yellow flex-shrink-0" style={{ boxShadow: "0 0 5px #F5C518" }} />
+      {shortAddr(address)}
+    </div>
+  );
+
+  const signOutBtn = (
+    <button
+      onClick={signOut}
+      aria-label="Sign out"
+      className="text-white/25 text-sm hover:text-white/60 transition-colors px-1 py-2"
+      title="Sign out"
+    >
+      ×
+    </button>
+  );
+
   return (
     <>
-      <button
-        onClick={() => setShowModal(true)}
-        className="bg-yellow text-navy font-semibold text-sm px-5 py-2 rounded-full hover:bg-yellow-hover transition-colors"
-      >
-        Connect
-      </button>
-      {showModal && <WalletModal onClose={() => setShowModal(false)} />}
+      <div className="flex items-center gap-2">
+        {myPage}
+        {hasEmail && emailChip}
+        {hasWallet && walletChip}
+
+        {/* Add the missing auth method, if any. Pills are intentionally small
+            so they don't compete with the active chips for attention. */}
+        {hasEmail && !hasWallet && (
+          <button
+            onClick={() => setShowWalletModal(true)}
+            className="text-[11px] font-semibold px-3 py-2 rounded-full border border-white/15 text-white/70 hover:text-white hover:border-white/30 hover:bg-white/[0.04] transition-colors whitespace-nowrap"
+            title="Connect a wallet to this account"
+          >
+            + Wallet
+          </button>
+        )}
+        {hasWallet && !hasEmail && (
+          <button
+            onClick={() => setShowEmailModal(true)}
+            className="text-[11px] font-semibold px-3 py-2 rounded-full border border-white/15 text-white/70 hover:text-white hover:border-white/30 hover:bg-white/[0.04] transition-colors whitespace-nowrap"
+            title="Add an email to this account"
+          >
+            + Email
+          </button>
+        )}
+
+        {signOutBtn}
+      </div>
+
+      {showWalletModal && <WalletModal onClose={() => setShowWalletModal(false)} />}
+      {showEmailModal && <EmailSignupModal onClose={() => setShowEmailModal(false)} />}
     </>
   );
 }
