@@ -442,7 +442,14 @@ export default function DashboardPage() {
     email: string;
     address: string | null;
   } | null>(null);
-  const [sessionSandboxKey, setSessionSandboxKey] = useState<string>("");
+  const [sessionTrial, setSessionTrial] = useState<{
+    apiKey: string | null;
+    sandboxApiKey: string | null;
+    credits: number;
+    totalCredits: number;
+    trialExpiresAt: string | null;
+  }>({ apiKey: null, sandboxApiKey: null, credits: 0, totalCredits: 2000, trialExpiresAt: null });
+  const [sessionLiveCopied, setSessionLiveCopied] = useState(false);
   const [sessionSandboxCopied, setSessionSandboxCopied] = useState(false);
 
   useEffect(() => {
@@ -478,19 +485,23 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!emailSession || emailSession.address || isConnected) return;
     let cancelled = false;
-    async function loadSandbox() {
+    async function loadTrial() {
       try {
-        const res = await fetch("/api/keys/email-sandbox", {
-          credentials: "include",
-        });
+        const res = await fetch("/api/keys/email-sandbox", { credentials: "include" });
         const data = await res.json();
-        if (cancelled) return;
-        if (data.sandboxApiKey) setSessionSandboxKey(data.sandboxApiKey);
+        if (cancelled || !res.ok) return;
+        setSessionTrial({
+          apiKey: data.apiKey ?? null,
+          sandboxApiKey: data.sandboxApiKey ?? null,
+          credits: typeof data.credits === "number" ? data.credits : 0,
+          totalCredits: typeof data.totalCredits === "number" ? data.totalCredits : 2000,
+          trialExpiresAt: data.trialExpiresAt ?? null,
+        });
       } catch {
-        /* leave blank; UI shows "—" */
+        /* leave blanks; UI falls back to "—" */
       }
     }
-    loadSandbox();
+    loadTrial();
     return () => {
       cancelled = true;
     };
@@ -642,13 +653,19 @@ export default function DashboardPage() {
     }).catch(() => {});
   }, [address, refreshUserBalance]);
 
-  // Email-only view: user signed in via Google/magic-link but no wallet
-  // is connected. Show their sandbox API key (the thing they came for) +
-  // a single CTA to upgrade to the live trial by connecting a wallet.
+  // Email-only view: user signed in via Google / magic-link, no wallet
+  // connected yet. Trial is already active (Google/email callback grants
+  // 2,000 sponsored TX + live key on first signup) — surface everything
+  // they need in one screen.
   if (mounted && emailSession && !isConnected) {
+    const trialDaysLeft = sessionTrial.trialExpiresAt
+      ? Math.max(0, Math.ceil((new Date(sessionTrial.trialExpiresAt).getTime() - Date.now()) / 86_400_000))
+      : null;
+    const creditsPct = Math.min(100, Math.max(0, Math.round((sessionTrial.credits / Math.max(1, sessionTrial.totalCredits)) * 100)));
+
     return (
       <div className="min-h-screen text-white px-6 py-12" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <Link href="/" className="text-yellow font-bold text-base">Q402</Link>
             <div className="flex items-center gap-3 text-xs text-white/45">
@@ -665,48 +682,119 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold mb-2">Welcome, {emailSession.email.split("@")[0]}</h1>
+          <h1 className="text-2xl font-bold mb-1">Welcome, {emailSession.email.split("@")[0]}</h1>
           <p className="text-white/45 text-sm mb-8">
-            Your sandbox API key is ready below. Sandbox calls return mock results — no funds move, no on-chain TX.
-            Connect a wallet to activate the live 30-day / 2,000-TX trial (Q402 covers the gas).
+            Your free trial is active. 2,000 sponsored TX on BNB Chain, Q402 covers the gas.
+            Use the live key from your backend; connect a wallet only when an end user signs an EIP-712.
           </p>
 
-          <div className="rounded-2xl border border-white/8 p-6 mb-6" style={{ background: "rgba(255,255,255,0.03)" }}>
-            <div className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-2">Sandbox API key</div>
+          {/* Trial summary card — sponsored TX gauge + days left + chain badge */}
+          <div className="rounded-2xl border border-yellow/25 p-6 mb-6"
+               style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(74,222,128,0.04) 100%)" }}>
+            <div className="flex items-baseline justify-between mb-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-yellow font-bold mb-1">Sponsored TX</div>
+                <div className="text-3xl font-display font-extrabold text-yellow leading-none">
+                  {sessionTrial.credits.toLocaleString()}
+                  <span className="text-white/30 text-base ml-1">/ {sessionTrial.totalCredits.toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-widest text-white/35 font-bold mb-1">Trial ends in</div>
+                <div className="text-2xl font-display font-extrabold text-white leading-none">
+                  {trialDaysLeft !== null ? `${trialDaysLeft}d` : "—"}
+                </div>
+              </div>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden mb-3">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${creditsPct}%`,
+                  background: "linear-gradient(90deg, #F5C518, #4ade80)",
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-white/45">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
+                Active
+              </span>
+              <span className="text-white/20">·</span>
+              <span>BNB Chain · USDC + USDT</span>
+              <span className="text-white/20">·</span>
+              <span>Q402 covers gas</span>
+            </div>
+          </div>
+
+          {/* Live API key — primary, the key they came for */}
+          <div className="rounded-2xl border border-white/10 p-6 mb-4" style={{ background: "rgba(255,255,255,0.03)" }}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/45 font-semibold">Live API key</div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-yellow bg-yellow/15 border border-yellow/40 rounded-sm px-1.5 py-0.5">
+                BNB only
+              </span>
+            </div>
             <div className="flex items-center gap-3">
               <code className="flex-1 font-mono text-sm text-yellow break-all">
-                {sessionSandboxKey || "—"}
+                {sessionTrial.apiKey || "—"}
               </code>
               <button
                 onClick={() => {
-                  if (!sessionSandboxKey) return;
-                  navigator.clipboard.writeText(sessionSandboxKey);
+                  if (!sessionTrial.apiKey) return;
+                  navigator.clipboard.writeText(sessionTrial.apiKey);
+                  setSessionLiveCopied(true);
+                  setTimeout(() => setSessionLiveCopied(false), 2000);
+                }}
+                disabled={!sessionTrial.apiKey}
+                className="text-xs px-3 py-1.5 rounded-md bg-white/5 hover:bg-yellow/15 hover:text-yellow text-white/60 transition-colors disabled:opacity-40"
+              >
+                {sessionLiveCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <p className="text-white/30 text-xs mt-3">
+              Use with the SDK on <code className="text-white/55">chain: &quot;bnb&quot;</code>, token{" "}
+              <code className="text-white/55">&quot;USDC&quot;</code> or <code className="text-white/55">&quot;USDT&quot;</code>.
+              Each relay consumes one sponsored TX credit.
+            </p>
+          </div>
+
+          {/* Sandbox API key — secondary */}
+          <div className="rounded-2xl border border-white/8 p-6 mb-6" style={{ background: "rgba(255,255,255,0.02)" }}>
+            <div className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-2">Sandbox API key</div>
+            <div className="flex items-center gap-3">
+              <code className="flex-1 font-mono text-sm text-white/70 break-all">
+                {sessionTrial.sandboxApiKey || "—"}
+              </code>
+              <button
+                onClick={() => {
+                  if (!sessionTrial.sandboxApiKey) return;
+                  navigator.clipboard.writeText(sessionTrial.sandboxApiKey);
                   setSessionSandboxCopied(true);
                   setTimeout(() => setSessionSandboxCopied(false), 2000);
                 }}
-                disabled={!sessionSandboxKey}
+                disabled={!sessionTrial.sandboxApiKey}
                 className="text-xs px-3 py-1.5 rounded-md bg-white/5 hover:bg-yellow/15 hover:text-yellow text-white/60 transition-colors disabled:opacity-40"
               >
                 {sessionSandboxCopied ? "Copied!" : "Copy"}
               </button>
             </div>
             <p className="text-white/30 text-xs mt-3">
-              Use this key with the SDK (chain: <code className="text-white/55">&quot;bnb&quot;</code>, token:{" "}
-              <code className="text-white/55">&quot;USDC&quot;</code> or <code className="text-white/55">&quot;USDT&quot;</code>) to test integration end-to-end.
+              Mock-response key for integration testing — no real TX, no credits burned.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-yellow/20 p-6 mb-6" style={{ background: "rgba(245,197,24,0.04)" }}>
-            <h2 className="text-base font-bold mb-2">Activate the live trial</h2>
-            <p className="text-white/55 text-sm mb-4">
-              Live transactions require a wallet signature (EIP-712) — we can&apos;t sign on your behalf.
-              Connect a wallet once to unlock 2,000 free gasless transactions over 30 days. We cover the gas.
+          {/* Wallet-bind nudge */}
+          <div className="rounded-2xl border border-white/8 p-6 mb-6" style={{ background: "rgba(255,255,255,0.02)" }}>
+            <h2 className="text-base font-bold mb-2">Need to test the full flow yourself?</h2>
+            <p className="text-white/45 text-sm mb-4">
+              Connect a wallet to sign EIP-712 from this browser. Trial credits + keys stay attached to your email account.
             </p>
             <Link
               href="/event"
-              className="inline-block bg-yellow text-navy font-bold text-sm px-6 py-2.5 rounded-full hover:bg-yellow-hover transition-colors"
+              className="inline-block bg-white/5 border border-white/15 text-white font-semibold text-sm px-6 py-2.5 rounded-full hover:bg-white/10 transition-colors"
             >
-              Connect wallet to activate →
+              Connect wallet →
             </Link>
           </div>
 

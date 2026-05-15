@@ -291,6 +291,30 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Subscription expired. Please renew to continue." }, { status: 403 });
       }
     }
+    // Trial expiry — separate gate keyed on trialExpiresAt, not paidAt+30d,
+    // since trial subscriptions write paidAt for analytics but the real
+    // window is the trialExpiresAt field set by /api/auth/google +
+    // /api/auth/email/callback + /api/trial/activate.
+    if (!isSandbox && subscription.plan === "trial") {
+      if (!subscription.trialExpiresAt || new Date() >= new Date(subscription.trialExpiresAt)) {
+        return NextResponse.json({ error: "Trial expired. Upgrade at /pricing to continue." }, { status: 403 });
+      }
+    }
+  }
+
+  // ── 4b. Trial plan → BNB-only enforcement ────────────────────────────────
+  // Trial accounts can only relay on BNB Chain regardless of the global
+  // BNB_FOCUS_MODE flag. Free credits + Q402-covered gas only make economic
+  // sense on the cheapest chain; anything else, the user should be on a
+  // paid plan. Sandbox keys bypass (they don't move funds).
+  if (!isSandbox && subscription?.plan === "trial" && chain !== "bnb") {
+    return NextResponse.json(
+      {
+        error: "Trial accounts are restricted to BNB Chain. Upgrade at /pricing for multi-chain access.",
+        code: "TRIAL_BNB_ONLY",
+      },
+      { status: 403 },
+    );
   }
 
   // ── 4a. TX credit quick pre-check (stale OK — real gate is atomic decrement) ──

@@ -18,13 +18,28 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
-import { getSubscription, setSubscription, generateSandboxKey } from "@/app/lib/db";
+import {
+  getSubscription,
+  setSubscription,
+  generateApiKey,
+  generateSandboxKey,
+  addCredits,
+  getQuotaCredits,
+  addTrialSubscriptionToIndex,
+} from "@/app/lib/db";
 import { createSession, attachSessionCookie } from "@/app/lib/session";
+import {
+  TRIAL_CREDITS,
+  TRIAL_DURATION_DAYS,
+  TRIAL_PLAN_NAME,
+} from "@/app/lib/feature-flags";
 
 const TOKEN_TTL_SEC = 15 * 60;
+const TRIAL_USED_TTL = 10 * 365 * 24 * 60 * 60;
 const tokenKvKey = (token: string) => `email_magic:${token}`;
 const consumedKey = (token: string) => `email_magic_consumed:${token}`;
 const emailToAddrKey = (email: string) => `email_to_addr:${email.toLowerCase()}`;
+const trialUsedByEmailKey = (email: string) => `trial_used_by_email:${email.toLowerCase()}`;
 
 function htmlResponse(status: number, message: string): NextResponse {
   // Minimal, framework-free HTML so this endpoint works even if /dashboard
@@ -79,30 +94,62 @@ export async function GET(req: NextRequest) {
   const isEmailOnly = payload.mode === "signup" || typeof payload.address !== "string";
 
   if (isEmailOnly) {
-    // Email-only signup — create or reuse a pseudo-address ("email:<email>")
-    // so the user gets a sandbox API key without a wallet. Live key + trial
-    // credits arrive when they later connect a wallet via /api/trial/activate.
+    // Email-only signup — full parity with /api/auth/google: pseudo-account
+    // gets BOTH live + sandbox keys, 2,000 sponsored TX credits, plan="trial",
+    // 30-day expiry. Server enforces BNB-only at relay time for plan==="trial".
     let pseudoAddr = await kv.get<string>(emailToAddrKey(email));
     if (!pseudoAddr) {
       pseudoAddr = `email:${email}`;
       await kv.set(emailToAddrKey(email), pseudoAddr);
     }
     const existing = await getSubscription(pseudoAddr);
-    let sandboxApiKey = existing?.sandboxApiKey ?? null;
-    if (!sandboxApiKey) sandboxApiKey = await generateSandboxKey(pseudoAddr, "starter");
-    if (!existing) {
+    const trialAlreadyClaimed = await kv.get(trialUsedByEmailKey(email));
+
+    let apiKey = existing?.apiKey ?? "";
+    let sandboxApiKey = existing?.sandboxApiKey ?? "";
+
+    const eligibleForFirstGrant =
+      !trialAlreadyClaimed &&
+      (!existing || existing.plan !== TRIAL_PLAN_NAME || !existing.apiKey);
+
+    if (eligibleForFirstGrant) {
+      if (!apiKey) apiKey = await generateApiKey(pseudoAddr, TRIAL_PLAN_NAME);
+      if (!sandboxApiKey) sandboxApiKey = await generateSandboxKey(pseudoAddr, TRIAL_PLAN_NAME);
+
+      const grantKey = `credit_grant:trial:${pseudoAddr}`;
+      const canGrant = await kv.set(grantKey, TRIAL_CREDITS, { nx: true, ex: TRIAL_USED_TTL });
+      if (canGrant) {
+        try {
+          await addCredits(pseudoAddr, TRIAL_CREDITS);
+        } catch (e) {
+          kv.del(grantKey).catch(() => {});
+          throw e;
+        }
+      }
+      const credits = await getQuotaCredits(pseudoAddr);
+
+      const now = new Date();
+      const expiry = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
       await setSubscription(pseudoAddr, {
-        paidAt: "",
-        apiKey: "",
+        ...(existing ?? {}),
+        paidAt: now.toISOString(),
+        apiKey,
         sandboxApiKey,
-        plan: "starter",
-        txHash: "email",
+        plan: TRIAL_PLAN_NAME,
+        txHash: "email-signup",
         amountUSD: 0,
+        quotaBonus: credits,
+        trialExpiresAt: expiry.toISOString(),
         email,
       });
-    } else if (!existing.email || existing.email !== email || !existing.sandboxApiKey) {
-      await setSubscription(pseudoAddr, { ...existing, email, sandboxApiKey });
+
+      await kv.set(trialUsedByEmailKey(email), pseudoAddr, { ex: TRIAL_USED_TTL });
+      addTrialSubscriptionToIndex(pseudoAddr).catch(() => {});
+    } else if (existing && (!existing.email || existing.email !== email)) {
+      // Returning user — just refresh the email field if missing.
+      await setSubscription(pseudoAddr, { ...existing, email });
     }
+
     const sid = await createSession(email);
     const resp = NextResponse.redirect(`${proto}://${host}/dashboard?signin=email`, 302);
     attachSessionCookie(resp, sid);

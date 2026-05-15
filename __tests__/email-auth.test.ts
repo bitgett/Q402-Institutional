@@ -114,8 +114,17 @@ describe("/api/auth/google — signup ↔ session bridge", () => {
     expect(googleRouteSource).toMatch(/email:\$\{googleSub\}/);
   });
 
-  it("generates a sandbox API key for first-time Google sign-ins", () => {
-    expect(googleRouteSource).toMatch(/generateSandboxKey\(pseudoAddr,\s*["']starter["']\)/);
+  it("grants the trial bundle on first signup (live + sandbox keys + 2k credits)", () => {
+    // First-time Google signup mints both keys at plan=TRIAL_PLAN_NAME and
+    // calls addCredits(TRIAL_CREDITS). Source-level check pins the contract
+    // without standing up a KV mock.
+    expect(googleRouteSource).toMatch(/generateApiKey\(pseudoAddr,\s*TRIAL_PLAN_NAME\)/);
+    expect(googleRouteSource).toMatch(/generateSandboxKey\(pseudoAddr,\s*TRIAL_PLAN_NAME\)/);
+    expect(googleRouteSource).toMatch(/addCredits\(pseudoAddr,\s*TRIAL_CREDITS\)/);
+  });
+
+  it("blocks repeat trials via trial_used_by_email permanent sentinel", () => {
+    expect(googleRouteSource).toMatch(/trial_used_by_email/);
   });
 
   it("sets the session cookie via attachSessionCookie", () => {
@@ -173,17 +182,24 @@ describe("/api/auth/email/callback — dual-mode handling", () => {
   });
 });
 
-describe("/api/keys/email-sandbox — session-gated sandbox key fetch", () => {
+describe("/api/keys/email-sandbox — session-gated trial account read", () => {
   it("requires a session cookie (no client-supplied email)", () => {
     expect(emailSandboxSource).toMatch(/getSession\(req\)/);
     expect(emailSandboxSource).toMatch(/Not signed in/);
   });
 
-  it("falls back to deterministic pseudo-address when KV index is missing", () => {
-    expect(emailSandboxSource).toMatch(/email:\$\{session\.email\}/);
+  it("returns 404 when the account isn't provisioned (no fallback creation)", () => {
+    // After the signup-grants-trial refactor, this endpoint is a pure read.
+    // Provisioning happens at /api/auth/google + /api/auth/email/callback,
+    // not here, so a missing KV index is a real error worth surfacing.
+    expect(emailSandboxSource).toMatch(/Account not provisioned/);
   });
 
-  it("generates a sandbox key if the account doesn't have one yet", () => {
-    expect(emailSandboxSource).toMatch(/generateSandboxKey\(pseudoAddr,\s*["']starter["']\)/);
+  it("returns live + sandbox + credits + trialExpiresAt + hasWallet", () => {
+    expect(emailSandboxSource).toMatch(/apiKey:\s*subscription\.apiKey/);
+    expect(emailSandboxSource).toMatch(/sandboxApiKey:\s*subscription\.sandboxApiKey/);
+    expect(emailSandboxSource).toMatch(/credits,/);
+    expect(emailSandboxSource).toMatch(/trialExpiresAt:\s*subscription\.trialExpiresAt/);
+    expect(emailSandboxSource).toMatch(/hasWallet:\s*!!session\.address/);
   });
 });

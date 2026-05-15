@@ -1,21 +1,23 @@
 /**
  * GET /api/keys/email-sandbox
  *
- * Returns the sandbox API key bound to the caller's email session. Used by
- * the dashboard's email-only view ("you signed in with Google / a magic
- * link but haven't paired a wallet yet") to surface the sandbox key in one
- * click — that's the entire reason most trial users sign up.
+ * Returns the trial account state bound to the caller's email session:
+ * live + sandbox API keys, remaining sponsored TX credits, trial expiry.
+ * Used by the dashboard's email-only view to surface everything the user
+ * needs in one read after Google / magic-link signup.
  *
- * Auth: session cookie only. The email is read from the KV-backed session;
- * no client-supplied email is trusted. If the session has already paired a
- * wallet, the existing /api/keys/provision flow is the right call —
- * surface a 400 directing the caller there so the two paths don't drift.
+ * Auth: session cookie only. The email is read from the KV-backed
+ * session; no client-supplied email is trusted.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 import { getSession } from "@/app/lib/session";
-import { getSubscription, generateSandboxKey, setSubscription } from "@/app/lib/db";
+import {
+  getSubscription,
+  getQuotaCredits,
+} from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { TRIAL_CREDITS } from "@/app/lib/feature-flags";
 
 const emailToAddrKey = (email: string) => `email_to_addr:${email.toLowerCase()}`;
 
@@ -30,36 +32,30 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  // Lookup the pseudo-address that the Google / magic-link sign-in created.
-  // If for some reason it's missing (KV eviction, manual deletion), recreate
-  // it deterministically from the email so subsequent calls land on the same
-  // subscription record.
-  let pseudoAddr = await kv.get<string>(emailToAddrKey(session.email));
+  const pseudoAddr = await kv.get<string>(emailToAddrKey(session.email));
   if (!pseudoAddr) {
-    pseudoAddr = `email:${session.email}`;
-    await kv.set(emailToAddrKey(session.email), pseudoAddr);
+    // Signup flow always writes this index — missing key means a partial
+    // failure or KV eviction. Surface 404 rather than fabricate state.
+    return NextResponse.json({ error: "Account not provisioned. Please sign in again." }, { status: 404 });
   }
 
-  const existing = await getSubscription(pseudoAddr);
-  let sandboxApiKey = existing?.sandboxApiKey ?? null;
-  if (!sandboxApiKey) {
-    sandboxApiKey = await generateSandboxKey(pseudoAddr, "starter");
-    await setSubscription(pseudoAddr, {
-      ...(existing ?? {
-        paidAt: "",
-        apiKey: "",
-        plan: "starter",
-        txHash: "email",
-        amountUSD: 0,
-      }),
-      sandboxApiKey,
-      email: session.email,
-    });
+  const [subscription, credits] = await Promise.all([
+    getSubscription(pseudoAddr),
+    getQuotaCredits(pseudoAddr),
+  ]);
+
+  if (!subscription) {
+    return NextResponse.json({ error: "Account not provisioned. Please sign in again." }, { status: 404 });
   }
 
   return NextResponse.json({
     email: session.email,
-    sandboxApiKey,
+    plan: subscription.plan,
+    apiKey: subscription.apiKey || null,
+    sandboxApiKey: subscription.sandboxApiKey || null,
+    credits,
+    totalCredits: TRIAL_CREDITS,
+    trialExpiresAt: subscription.trialExpiresAt ?? null,
     hasWallet: !!session.address,
   });
 }
