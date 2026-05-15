@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
+import WalletModal from "../components/WalletModal";
 import ClaudeMcpCard from "../components/ClaudeMcpCard";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
@@ -465,6 +466,8 @@ export default function DashboardPage() {
   }>({ apiKey: null, sandboxApiKey: null, credits: 0, totalCredits: 2000, trialExpiresAt: null });
   const [sessionLiveCopied, setSessionLiveCopied] = useState(false);
   const [sessionSandboxCopied, setSessionSandboxCopied] = useState(false);
+  // Email-only users click "Multichain →" → triggers wallet-connect modal.
+  const [showWalletConnectFromEmail, setShowWalletConnectFromEmail] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -694,7 +697,7 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen text-white px-6 py-12" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-6">
             <Link href="/" className="text-yellow font-bold text-base">Q402</Link>
             <div className="flex items-center gap-3 text-xs text-white/45">
               <span>{emailSession.email}</span>
@@ -708,6 +711,27 @@ export default function DashboardPage() {
                 Sign out
               </button>
             </div>
+          </div>
+
+          {/* Trial / Multichain toggle — even though this user has no wallet
+              yet, surface the same toggle as the regular dashboard so they
+              know where the original Multichain view lives. Clicking
+              "Multichain" prompts for wallet connect (since multichain data
+              requires an on-chain signer). */}
+          <div className="mb-8 inline-flex items-center gap-1 bg-white/4 border border-white/10 rounded-full p-1">
+            <button
+              disabled
+              className="px-5 py-2 rounded-full text-xs font-bold bg-yellow text-navy shadow-lg shadow-yellow/15 cursor-default"
+            >
+              ✦ Free Trial
+            </button>
+            <button
+              onClick={() => setShowWalletConnectFromEmail(true)}
+              className="px-5 py-2 rounded-full text-xs font-bold text-white/45 hover:text-white transition-all"
+              title="Connect a wallet to view the original Multichain dashboard"
+            >
+              Multichain →
+            </button>
           </div>
 
           <h1 className="text-2xl font-bold mb-1">Welcome, {emailSession.email.split("@")[0]}</h1>
@@ -831,6 +855,10 @@ export default function DashboardPage() {
             Claude MCP: <Link href="/claude" className="hover:text-white/60 underline-offset-2 hover:underline">/claude</Link>
           </div>
         </div>
+
+        {showWalletConnectFromEmail && (
+          <WalletModal onClose={() => setShowWalletConnectFromEmail(false)} />
+        )}
       </div>
     );
   }
