@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
-import SignInModal from "./SignInModal";
+import WalletModal from "./WalletModal";
 
 function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
@@ -103,16 +103,18 @@ export default function WalletButton() {
     );
   }
 
-  // Nothing — show Sign in / Sign up CTA
+  // Nothing — show Connect CTA. Opens the bare wallet picker directly
+  // (MetaMask / OKX). Google + email signup flows live on the /event page;
+  // navbar stays a simple "connect a wallet" entry like before the sprint.
   return (
     <>
       <button
         onClick={() => setShowModal(true)}
         className="bg-yellow text-navy font-semibold text-sm px-5 py-2 rounded-full hover:bg-yellow-hover transition-colors"
       >
-        Sign in / Sign up
+        Connect
       </button>
-      {showModal && <SignInModal onClose={() => setShowModal(false)} />}
+      {showModal && <WalletModal onClose={() => setShowModal(false)} />}
     </>
   );
 }
