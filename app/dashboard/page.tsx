@@ -14,7 +14,7 @@ import ClaudeMcpCard from "../components/ClaudeMcpCard";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
 import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
-import { BNB_FOCUS_MODE } from "../lib/feature-flags";
+import { BNB_FOCUS_MODE, TRIAL_DURATION_DAYS } from "../lib/feature-flags";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
@@ -1348,6 +1348,48 @@ export default function DashboardPage() {
 
         {/* Tabs moved into the left sidebar — see DashboardSidebar.tsx.
             Removed here; tab content rendering continues unchanged below. */}
+
+        {/* Trial activation CTA — wallet-only user with no trial yet. Lets
+            them retry the activation flow as many times as needed without
+            depending on the auto-prompt firing exactly once. Skipped when
+            an email session exists (email path already granted the trial)
+            or the wallet already has plan="trial" / paid plan. */}
+        {trialViewActive
+          && isConnected
+          && address
+          && !emailSession
+          && !isTrialOnlySub
+          && hasPaid === false
+          && tab === "overview"
+          && (
+          <div className="mb-6 rounded-2xl border p-6"
+            style={{
+              background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(74,222,128,0.04) 100%)",
+              borderColor: "rgba(245,197,24,0.25)",
+            }}>
+            <div className="flex items-start gap-4 flex-wrap">
+              <div className="flex-1 min-w-[260px]">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
+                  Free trial · BNB Chain
+                </div>
+                <h3 className="text-xl font-bold mb-2">Activate 2,000 sponsored TX</h3>
+                <p className="text-white/50 text-sm leading-relaxed">
+                  One wallet signature (no on-chain TX) and you get a live API
+                  key + 2,000 gasless transactions for {TRIAL_DURATION_DAYS} days. Q402 covers the gas.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  trialPromptedRef.current = false; // allow re-fire
+                  setShowAutoTrial(true);
+                }}
+                className="self-center bg-yellow text-navy font-bold text-sm px-6 py-3 rounded-full hover:bg-yellow-hover transition-colors shadow-lg shadow-yellow/20"
+              >
+                Activate Free Trial →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (
