@@ -155,9 +155,9 @@ export default function HowItWorks() {
                   { label: "X",      img: "/xlayer.png",    bg: "#1A1A1A" },
                   { label: "STABLE", img: "/stable.jpg",    bg: "#0F2010" },
                 ].map((c) => (
-                  <div key={c.label} className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.bg }}>
+                  <div key={c.label} className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.bg }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={c.img} alt={c.label} className="w-7 h-7 object-cover" />
+                    <img src={c.img} alt={c.label} className="w-7 h-7 object-cover rounded-full" />
                   </div>
                 ))}
               </div>
