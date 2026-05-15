@@ -594,11 +594,20 @@ export default function DashboardPage() {
     load();
     return () => { cancelled = true; };
   }, [address, signMessage]);
+  // 600 ms grace window for the WalletContext to rehydrate from localStorage
+  // on a fresh page load — if no wallet AND no email session is present
+  // after that, bounce back to the landing. Without the emailSession check
+  // here, an email-signed-in user got kicked to / within a second of
+  // landing on the dashboard.
   useEffect(() => {
     if (!mounted) return;
-    const t = setTimeout(() => { if (!isConnected) router.push("/"); }, 600);
+    if (!authChecked) return;
+    if (emailSession) return;
+    const t = setTimeout(() => {
+      if (!isConnected && !emailSession) router.push("/");
+    }, 600);
     return () => clearTimeout(t);
-  }, [mounted, isConnected, router]);
+  }, [mounted, authChecked, isConnected, emailSession, router]);
 
   const refreshUserBalance = useCallback(async (addr: string) => {
     // Q402-SEC-003: user-balance now requires nonce+signature auth.
