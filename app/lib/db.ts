@@ -289,6 +289,16 @@ export async function getGasDeposits(address: string): Promise<GasDeposit[]> {
  * Appends a deposit atomically using RPUSH.
  * Dedup is enforced via a separate Redis SET (SADD) — O(1) and race-safe.
  * Returns true if added, false if duplicate.
+ *
+ * IMPORTANT — dedup SET has NO TTL on purpose. An earlier version of this
+ * function expired the SET after 90d to bound KV cost, but that opened a
+ * money-loss bug: after expiry, the same historical txHash re-verified
+ * (manual support credit, re-scan job, anything that re-presents an old
+ * deposit) would SADD=1 and RPUSH a duplicate credit. KV cost of the
+ * dedup SET is bounded by the number of deposits a wallet has ever made
+ * — negligible compared to the cost of erroneously double-crediting.
+ * The defence-in-depth `existing.some(...)` check on the duplicate path
+ * below also catches any list↔set drift if the SET ever did get evicted.
  */
 export async function addGasDeposit(address: string, deposit: GasDeposit): Promise<boolean> {
   if (deposit.txHash) {
@@ -304,7 +314,11 @@ export async function addGasDeposit(address: string, deposit: GasDeposit): Promi
         await kv.rpush(gasDepKey(address), deposit);
         return true;
       }
-      kv.expire(gasDepDedupKey(address), 90 * 24 * 60 * 60).catch(() => {});
+      // SET was previously expired? Belt-and-suspenders: scan the deposits
+      // list before RPUSH so a TTL-evicted SET (or migration drift) can't
+      // produce a double-credit even if SADD returned "new".
+      const existing = await getGasDeposits(address);
+      if (existing.some(d => d.txHash === deposit.txHash)) return false;
       await kv.rpush(gasDepKey(address), deposit);
       return true;
     } catch { /* fall through to legacy */ }

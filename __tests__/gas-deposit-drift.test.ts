@@ -77,6 +77,48 @@ describe("addGasDeposit dedup/list drift repair", () => {
     await expect(getGasBalance(ADDR)).resolves.toMatchObject({ bnb: 0.0001 });
   });
 
+  it("never calls kv.expire on the dedup SET (no TTL — money-loss bug if evicted)", async () => {
+    // Earlier versions set a 90d TTL on gasdep_hashes:{addr}. After expiry,
+    // re-verifying the same historical txHash would SADD=1 and RPUSH a
+    // duplicate credit. The fix removes the TTL — KV cost is negligible
+    // vs. the cost of erroneously double-crediting a wallet's gas tank.
+    await addGasDeposit(ADDR, {
+      chain: "bnb",
+      token: "BNB",
+      amount: 0.0001,
+      txHash: TX,
+      depositedAt: "2026-05-07T00:00:00.000Z",
+    });
+    expect(mockKv.expire).not.toHaveBeenCalled();
+  });
+
+  it("does not double-credit even if the dedup SET was previously evicted (drift guard)", async () => {
+    // Simulate the post-eviction state: SET empty but the deposit list
+    // still carries the txHash. A naive impl would SADD=1, RPUSH the
+    // dup. With the belt-and-suspenders list scan, we catch it and
+    // return false instead.
+    listStore.set(`gasdep:${ADDR}`, [{
+      chain: "bnb",
+      token: "BNB",
+      amount: 0.0001,
+      txHash: TX,
+      depositedAt: "2026-05-07T00:00:00.000Z",
+    }]);
+    // setStore intentionally empty — simulates expired/evicted dedup SET.
+
+    const result = await addGasDeposit(ADDR, {
+      chain: "bnb",
+      token: "BNB",
+      amount: 0.0001,
+      txHash: TX,
+      depositedAt: "2026-05-07T00:00:00.000Z",
+    });
+
+    expect(result).toBe(false);
+    // Balance unchanged — single 0.0001 BNB credit, NOT doubled.
+    await expect(getGasBalance(ADDR)).resolves.toMatchObject({ bnb: 0.0001 });
+  });
+
   it("does not deduct sandbox relay gas from the available gas balance", async () => {
     await addGasDeposit(ADDR, {
       chain: "bnb",
