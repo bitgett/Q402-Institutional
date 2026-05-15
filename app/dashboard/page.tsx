@@ -447,10 +447,10 @@ export default function DashboardPage() {
   // just signed up for.
   const [trialViewActive, setTrialViewActive] = useState(false);
   const [hasPaid, setHasPaid] = useState<boolean | null>(null);
-  // Server-computed paywall bypass flag — see /api/keys/provision. The list
-  // of owner EOAs lives in OWNER_WALLETS (server-only env) and never reaches
-  // the client bundle; we receive only the boolean for the connected address.
-  const [isOwner,  setIsOwner]  = useState<boolean>(false);
+  // Server-computed paywall bypass flag from /api/keys/provision. Was used
+  // by the now-retired full-screen paywall gate; the response field is
+  // still read so the API contract stays stable for other callers.
+  const [, setIsOwner] = useState<boolean>(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookUrlInput, setWebhookUrlInput] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
@@ -968,8 +968,6 @@ export default function DashboardPage() {
   }
   if (!isConnected || !address) return null;
 
-  const isGated = hasPaid === false && !isOwner;
-
   // API key + credits are SCOPED to the active view:
   //   - Trial view  → email pseudo's trial data first (when emailSession
   //     exists — that's the canonical trial), falling back to the
@@ -1167,42 +1165,11 @@ export default function DashboardPage() {
       />
 
       <div className="flex-1 min-w-0">
-      {/* Paywall gate — shown to connected-but-unpaid users */}
-      {isGated && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
-          style={{ background: "rgba(5,7,10,0.88)", backdropFilter: "blur(14px)" }}>
-          <div className="w-full max-w-sm rounded-2xl border p-8 text-center shadow-2xl shadow-black"
-            style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }}>
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5"
-              style={{ background: "rgba(245,197,24,0.08)", border: "1px solid rgba(245,197,24,0.2)" }}>
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}
-                style={{ color: "#F5C518" }}>
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-            </div>
-            <h2 className="text-lg font-bold mb-2">Activate My Page</h2>
-            <p className="text-white/40 text-sm mb-7 leading-relaxed">
-              My Page is available to active Q402 subscribers.<br />
-              Make a one-time payment to unlock your API key, Gas Tank, and transaction history — or apply for a grant to get access at no cost.
-            </p>
-            <div className="space-y-3">
-              <button
-                onClick={() => router.push("/payment")}
-                className="block w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-full hover:bg-yellow-hover transition-colors">
-                Activate — from $29 / 30-day access
-              </button>
-              <button
-                onClick={() => router.push("/grant")}
-                className="block w-full border text-sm font-medium py-3.5 rounded-full transition-colors hover:bg-yellow/5"
-                style={{ borderColor: "rgba(245,197,24,0.3)", color: "#F5C518" }}>
-                Apply for a Grant instead
-              </button>
-            </div>
-            <p className="text-white/20 text-xs mt-6">Connected as {shortAddr(address)}</p>
-          </div>
-        </div>
-      )}
+      {/* Paywall gate retired — pre-trial era it forced a paid plan or
+          grant before any dashboard pixel rendered. With the Free Trial
+          path live, an unpaid wallet now lands on Trial view with the
+          "Activate Free Trial" CTA, and Multichain view carries the
+          paid + grant entry points. No full-screen modal needed. */}
 
       {depositChain && (
         <DepositModal chain={depositChain.chain} token={depositChain.token} onClose={() => setDepositChain(null)} address={address}
