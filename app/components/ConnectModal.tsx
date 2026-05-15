@@ -146,10 +146,10 @@ export default function ConnectModal({ onClose }: Props) {
                 <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
                   Email sign-in
                 </div>
-                <h2 className="text-2xl font-bold mb-2">Get your API key</h2>
+                <h2 className="text-2xl font-bold mb-2">Sign in with email</h2>
                 <p className="text-white/45 text-sm mb-6">
-                  One-time sign-in link. Click it from your inbox and your
-                  account + 2,000 sponsored TX + BNB-only API key are ready.
+                  We&apos;ll email you a one-time sign-in link. The link expires
+                  in 15 minutes and works once.
                 </p>
                 <label className="block text-[11px] uppercase tracking-widest text-white/35 font-semibold mb-2">
                   Email

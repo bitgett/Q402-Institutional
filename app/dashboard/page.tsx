@@ -484,36 +484,42 @@ export default function DashboardPage() {
     setMounted(true);
   }, []);
 
-  // Auto-flip to trial view on first load when the subscription's plan is
-  // "trial" (Google / email signup grants this). Users can toggle back any
-  // time; we don't override their explicit choice on subsequent renders.
+  // Auto-flip to trial view on first load when ANY trial signal is present:
+  //   - wallet sub on plan="trial"  (wallet trial activated)
+  //   - email session exists        (email/Google signup grants trial)
+  // Users can toggle back to Multichain any time; we don't override their
+  // explicit choice on subsequent renders.
   const initialViewMatched = useRef(false);
   useEffect(() => {
     if (initialViewMatched.current) return;
-    if (subscription?.plan === "trial") {
+    if (subscription?.plan === "trial" || emailSession) {
       setTrialViewActive(true);
       initialViewMatched.current = true;
     } else if (subscription) {
       initialViewMatched.current = true;
     }
-  }, [subscription]);
+  }, [subscription, emailSession]);
 
   // Wallet-only auto-trial: when a wallet is connected but the address has
   // no subscription (or only a provisioned stub with amountUSD=0 and no
   // trial plan), pop the trial-activation modal automatically so the user
   // gets 2k credits with one signature instead of bouncing between pages.
-  // hasPaid=false === provisioned stub (never paid, no trial); hasPaid=null
-  // === still loading, skip.
+  //
+  // Critical skip: if the user already has an email session, their trial
+  // lives on the email pseudo-account and trial_used_by_email blocks
+  // /api/trial/activate. Firing the prompt anyway would surface a 409
+  // after the user has already signed. Skip — they have a trial elsewhere.
   useEffect(() => {
     if (trialPromptedRef.current) return;
     if (!isConnected || !address) return;
     if (hasPaid === null) return; // still loading
+    if (emailSession) return; // email session already has the trial
     if (subscription?.plan === "trial") return; // already on trial
     if (hasPaid === true) return; // paid user — don't push trial
-    // No trial AND not paid → eligible. Prompt once.
+    // No trial AND not paid AND no email session → eligible. Prompt once.
     trialPromptedRef.current = true;
     setShowAutoTrial(true);
-  }, [isConnected, address, hasPaid, subscription]);
+  }, [isConnected, address, hasPaid, subscription, emailSession]);
 
   useEffect(() => {
     let cancelled = false;
@@ -543,8 +549,13 @@ export default function DashboardPage() {
   // both populate. We POST to /api/keys/provision-by-email so the path stays
   // unauthenticated-by-email — server reads the session cookie, never trusts
   // a client-supplied email.
+  // Always fetch the email pseudo-account's trial data when an email session
+  // exists — wallet-connected users with an email session ALSO need it, so
+  // the Trial view can display the canonical email-side trial (the wallet's
+  // own subscription is a separate "starter" stub when the user signed up
+  // via email first, NOT a trial).
   useEffect(() => {
-    if (!emailSession || emailSession.address || isConnected) return;
+    if (!emailSession) return;
     let cancelled = false;
     async function loadTrial() {
       try {
@@ -566,7 +577,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [emailSession, isConnected]);
+  }, [emailSession]);
 
   useEffect(() => {
     if (!address) return;
@@ -919,15 +930,27 @@ export default function DashboardPage() {
   const isGated = hasPaid === false && !isOwner;
 
   // API key + credits are SCOPED to the active view:
-  //   - Trial view  → trial sub data (the live key + 2k credits, BNB only)
+  //   - Trial view  → email pseudo's trial data first (when emailSession
+  //     exists — that's the canonical trial), falling back to the
+  //     wallet's plan="trial" sub. This makes Trial view show the same
+  //     2k credits whether the user has connected a wallet or not.
   //   - Multichain  → only when the user has paid for multichain. Trial-
   //     only users see "—" / 0 in this scope until they upgrade, so the
   //     dashboard doesn't blur the boundary between the two products.
-  const rawApiKey = subscription?.apiKey ?? "";
-  const rawCredits = subscription?.quotaBonus ?? 0;
+  const walletApiKey = subscription?.apiKey ?? "";
+  const walletCredits = subscription?.quotaBonus ?? 0;
   const isTrialOnlySub = subscription?.plan === "trial";
-  const showPaidScope = !trialViewActive && !isTrialOnlySub;
-  const API_KEY = trialViewActive ? (rawApiKey || "—") : (showPaidScope ? rawApiKey : "—");
+  const hasEmailTrial = !!emailSession && !!sessionTrial.apiKey;
+  // Trial-side raw values prefer email pseudo when present (canonical),
+  // else wallet sub when plan === "trial".
+  const trialApiKey = hasEmailTrial ? (sessionTrial.apiKey ?? "") : walletApiKey;
+  const trialCredits = hasEmailTrial ? sessionTrial.credits : walletCredits;
+  // Multichain side: only render real values for paying users (plan !==
+  // "trial" AND amountUSD > 0). Trial-only / unpaid wallets see "—" / 0.
+  const showPaidScope = !trialViewActive && !isTrialOnlySub && (subscription?.amountUSD ?? 0) > 0;
+  const API_KEY = trialViewActive
+    ? (trialApiKey || "—")
+    : (showPaidScope ? walletApiKey : "—");
   const plan = subscription?.plan ?? "starter";
 
   // View mode — top-level toggle between Free-trial flavoring and the
@@ -939,11 +962,10 @@ export default function DashboardPage() {
   const planDisplayKey = plan === "enterprise_flex" ? "enterprise" : plan;
   const planName = planDisplayKey.charAt(0).toUpperCase() + planDisplayKey.slice(1);
   // TX credits remaining — decrements on each successful relay
-  // Scoped credits — same logic as API_KEY. Trial credits only count under
-  // the Trial view; Multichain view shows 0 until a paid plan is in place.
+  // Scoped credits — same source logic as API_KEY.
   const remainingCredits = trialViewActive
-    ? rawCredits
-    : (showPaidScope ? rawCredits : 0);
+    ? trialCredits
+    : (showPaidScope ? walletCredits : 0);
   // Use plan base quota as reference for the bar (credits start at plan quota per payment)
   const baseCredits = PLAN_QUOTA[plan.toLowerCase()] ?? 500;
   // pct consumed = how far below base we are (capped 0–100)
@@ -1205,8 +1227,11 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Expiry banner — only for paying users */}
-        {hasPaid && expiresAt && (
+        {/* Expiry banner — only for genuinely paying users (amountUSD > 0)
+            in Multichain view. Trial-only subs would otherwise show the
+            "Subscription Active · Renews" copy with the trial date, which
+            misreads as a paid subscription. */}
+        {hasPaid && expiresAt && !isTrialOnlySub && !trialViewActive && (subscription?.amountUSD ?? 0) > 0 && (
           <div className={`mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border ${isExpired ? "bg-red-400/8 border-red-400/20" : daysLeft !== null && daysLeft <= 7 ? "bg-yellow/6 border-yellow/20" : "bg-white/4 border-white/8"}`}>
             <div className="flex items-center gap-3">
               <span className={`text-lg ${isExpired ? "text-red-400" : "text-yellow"}`}>{isExpired ? "⚠" : "📅"}</span>
