@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Poppins, JetBrains_Mono } from "next/font/google";
+import { Poppins, JetBrains_Mono, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
 import Providers from "./components/Providers";
 
@@ -14,6 +14,17 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
   variable: "--font-mono",
+  display: "swap",
+});
+
+// Display font for hero headlines + section headers. Bricolage Grotesque is a
+// modern industrial-grotesque with strong contrast at large sizes — pairs well
+// with Poppins body text without overlap. Loaded on every page via the html
+// className but only opt-in via `font-display` / inline var(--font-display).
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-display",
   display: "swap",
 });
 
@@ -42,7 +53,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${poppins.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${poppins.variable} ${jetbrainsMono.variable} ${bricolage.variable}`}>
       <body className="font-poppins antialiased bg-navy text-white">
         <Providers>
           {children}

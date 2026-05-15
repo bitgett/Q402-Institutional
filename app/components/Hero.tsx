@@ -105,11 +105,11 @@ export default function Hero() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.2 }}
               >
-                <h1 className="text-5xl md:text-[3.8rem] font-extrabold leading-[1.06] mb-4 tracking-tight">
+                <h1 className="font-display text-5xl md:text-[4.2rem] font-extrabold leading-[1.02] mb-4 tracking-[-0.02em]">
                   The final layer for{" "}
                   <span className="text-shimmer">stablecoin rails.</span>
                 </h1>
-                <p className="text-xl text-white/45 font-light tracking-wide mb-6">
+                <p className="font-display text-xl text-white/55 font-light tracking-tight mb-6">
                   <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Seven EVM chains. <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
                 </p>
               </motion.div>
