@@ -36,6 +36,10 @@ const dashboardSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "page.tsx"),
   "utf8",
 );
+const transactionsSource = readFileSync(
+  resolve(ROOT, "app", "api", "transactions", "route.ts"),
+  "utf8",
+);
 
 describe("wallet_email_link write — both bind paths populate the bridge", () => {
   it("/api/auth/wallet-bind writes wallet_email_link on successful bind", () => {
@@ -109,6 +113,61 @@ describe("/api/keys/provision — bridge read into trial union", () => {
     expect(body).not.toMatch(/kv\.del\(/);
     expect(body).not.toMatch(/kv\.set\(/);
     expect(body).not.toMatch(/setSubscription/);
+  });
+});
+
+describe("/api/transactions — pseudo tx history merged into wallet response", () => {
+  // Without this merge, a wallet-only login would see the bridged trial
+  // keys + credits but the TX rows accrued under the pseudo would
+  // appear missing. Half-merge state, very confusing for users.
+
+  it("resolves the bridge via wallet_email_link → email_to_addr (same chain as provision)", () => {
+    expect(transactionsSource).toMatch(/walletEmailLinkKey\(addr\)/);
+    expect(transactionsSource).toMatch(/emailToAddrKey\(linkedEmail\)/);
+  });
+
+  it("loads the pseudo's tx history when bridge resolves to a non-self address", () => {
+    // pseudoAddr !== addr guards against a self-loop if some future
+    // migration ever writes wallet_email_link → email_to_addr → wallet.
+    expect(transactionsSource).toMatch(/pseudoAddr\s*!==\s*addr/);
+    expect(transactionsSource).toMatch(/getRelayedTxs\(pseudoAddr\)/);
+  });
+
+  it("dedups by relayTxHash so a tx recorded under both lists never doubles", () => {
+    // Pseudo and wallet write into different per-address month lists,
+    // so duplicates shouldn't be possible in theory. The Set-based
+    // dedup is belt-and-suspenders for any historical drift.
+    expect(transactionsSource).toMatch(/seen\s*=\s*new Set/);
+    expect(transactionsSource).toMatch(/relayTxHash\?\.\s*toLowerCase\(\)/);
+  });
+
+  it("recomputes thisMonthCount over the MERGED list (not just the wallet's)", () => {
+    // If thisMonthCount stayed wallet-only, the dashboard's credit-used
+    // display would understate by however many trial relays happened
+    // this month. The audit's bug exactly.
+    expect(transactionsSource).toMatch(/mergedTxs\.filter\(tx\s*=>\s*new Date\(tx\.relayedAt\)\s*>=\s*monthStart\)/);
+  });
+
+  it("never throws when the bridge can't be loaded — degrades to wallet-only txs", () => {
+    // The whole bridge load is inside try/catch; the comment in the
+    // catch block explicitly says "fall through with own txs only".
+    expect(transactionsSource).toMatch(
+      /catch\s*\{\s*\/\*[^*]*bridge[^*]*own txs/,
+    );
+  });
+
+  it("does NOT require a second signature from the pseudo (wallet's signed nonce is sufficient)", () => {
+    // The wallet-bind that established the bridge already proved
+    // ownership. Forcing a pseudo-side signature would require the user
+    // to also sign in via email, defeating the wallet-only login UX.
+    const bridgeBlock = transactionsSource.match(/Bridge read[\s\S]+?mergedTxs\s*=/);
+    expect(bridgeBlock).toBeTruthy();
+    expect(bridgeBlock![0]).not.toMatch(/requireAuth/);
+    expect(bridgeBlock![0]).not.toMatch(/requireFreshAuth/);
+  });
+
+  it("surfaces bridgedFromPseudo in the response for client-side labelling", () => {
+    expect(transactionsSource).toMatch(/bridgedFromPseudo/);
   });
 });
 

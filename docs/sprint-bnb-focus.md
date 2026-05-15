@@ -382,6 +382,20 @@ The response then unions the pseudo's trial state into:
 Three null-return guards inside `loadBoundEmailTrial` protect against
 drift — missing link, missing email_to_addr, missing pseudo sub.
 
+### How `/api/transactions` uses it
+
+Same bridge chain, applied to TX history. The route loads the wallet's
+own `relaytx:{wallet}:{YYYY-MM}` lists, then if `wallet_email_link`
+resolves to a pseudo (and the pseudo address differs from the wallet),
+ALSO loads `relaytx:email:<sub>:{YYYY-MM}` and merges. Dedup is by
+`relayTxHash` (Set-based) — guards against historical drift where a
+tx accidentally landed in both lists. The recomputed `thisMonthCount`
+covers the merged list so the dashboard's credit-used display isn't
+understated by trial-era relays. The wallet's signed nonce is the
+only auth — the pseudo doesn't need a separate signature because
+wallet-bind already proved ownership of this bridge (see §13 for the
+1:1 contract that backs that assumption).
+
 ### What this is NOT
 
 - **Not a migration.** The pseudo's data stays on `sub:email:<sub>`.
