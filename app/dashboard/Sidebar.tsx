@@ -44,6 +44,11 @@ interface Props {
     daysLeft: number | null;
   };
 
+  /** Current usage-alert email (if any). Drives the chip label in the
+   *  Account section: "Email alerts → set" vs "→ user@x.com". */
+  alertEmail?: string | null;
+  onOpenAlerts: () => void;
+
   signOut: () => void;
 }
 
@@ -108,6 +113,8 @@ export default function DashboardSidebar({
   onSelect,
   identity,
   trial,
+  alertEmail,
+  onOpenAlerts,
   signOut,
 }: Props) {
   const { view, tab } = selection;
@@ -230,6 +237,24 @@ export default function DashboardSidebar({
               </div>
             )}
           </div>
+
+          {/* Email alerts — moved here from the dashboard's old top banner.
+              Bell icon + status chip. Click opens the alert-config modal. */}
+          <button
+            onClick={onOpenAlerts}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-xs text-white/55 hover:text-white hover:bg-white/[0.04] transition-colors text-left mb-1"
+          >
+            <span className="text-[13px]">🔔</span>
+            <span className="flex-1 truncate">
+              Email alerts
+              {alertEmail ? (
+                <span className="text-white/35 ml-1.5 truncate">→ {alertEmail.split("@")[0]}</span>
+              ) : (
+                <span className="text-white/25 ml-1.5">— off</span>
+              )}
+            </span>
+          </button>
+
           <button
             onClick={signOut}
             className="w-full px-3 py-2 rounded-md text-xs text-white/40 hover:text-white hover:bg-white/[0.04] transition-colors text-left"

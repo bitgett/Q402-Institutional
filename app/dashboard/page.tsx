@@ -419,7 +419,13 @@ export default function DashboardPage() {
   const [depositChain, setDepositChain] = useState<{ chain: string; token: string } | null>(null);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertEmailInput, setAlertEmailInput] = useState("");
-  const [showEmailSetup, setShowEmailSetup] = useState(false);
+  // Sidebar-driven alert config modal — opens when the user clicks the
+  // "🔔 Email alerts" button in the Account section. The legacy
+  // in-content showEmailSetup banner was removed; this modal is the
+  // single config surface now.
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertDeleting, setAlertDeleting] = useState(false);
   const [emailSaved, setEmailSaved] = useState(false);
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -599,12 +605,10 @@ export default function DashboardPage() {
         if (res.status === 401 && d.code === "NONCE_EXPIRED") { clearAuthCache(addr); return; }
         if (d.configured && d.email) {
           setAlertEmail(d.email);
-          setShowEmailSetup(false);
         } else {
           setAlertEmail("");
-          setShowEmailSetup(true);
         }
-      } catch { /* network blip — leave banner open */ }
+      } catch { /* network blip — sidebar Email-alerts entry stays "off" */ }
     }
     load();
     return () => { cancelled = true; };
@@ -1019,6 +1023,7 @@ export default function DashboardPage() {
     const auth = await getAuthCreds(address, signMessage);
     if (!auth) return;
     const { nonce, signature } = auth;
+    setAlertSaving(true);
     try {
       const res = await fetch("/api/usage-alert", {
         method:  "POST",
@@ -1030,8 +1035,25 @@ export default function DashboardPage() {
       if (!res.ok || !data.ok) return;
       setAlertEmail(alertEmailInput);
       setEmailSaved(true);
-      setTimeout(() => { setShowEmailSetup(false); setEmailSaved(false); }, 1500);
-    } catch { /* ignore */ }
+      setTimeout(() => { setShowAlertModal(false); setEmailSaved(false); }, 1200);
+    } catch { /* ignore */ } finally { setAlertSaving(false); }
+  }
+
+  async function deleteAlertEmail() {
+    if (!address) return;
+    const auth = await getAuthCreds(address, signMessage);
+    if (!auth) return;
+    const { nonce, signature } = auth;
+    setAlertDeleting(true);
+    try {
+      const qs = new URLSearchParams({ address, nonce, sig: signature }).toString();
+      const res = await fetch(`/api/usage-alert?${qs}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
+      if (!res.ok) return;
+      setAlertEmail("");
+      setAlertEmailInput("");
+    } catch { /* ignore */ } finally { setAlertDeleting(false); }
   }
 
   async function saveWebhook() {
@@ -1102,6 +1124,11 @@ export default function DashboardPage() {
           creditsLeft: trialCreditsLeft,
           totalCredits: sessionTrial.totalCredits || 2000,
           daysLeft: trialDaysLeftDerived,
+        }}
+        alertEmail={alertEmail || null}
+        onOpenAlerts={() => {
+          setAlertEmailInput(alertEmail || "");
+          setShowAlertModal(true);
         }}
         signOut={handleSignOut}
       />
@@ -1234,54 +1261,9 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Email alert — saved state (always visible, editable) */}
-        {alertEmail && !showEmailSetup && (
-          <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-3 border bg-white/4 border-white/10">
-            <div className="flex items-center gap-2 text-sm text-white/40">
-              <span>🔔</span>
-              <span>Usage alerts → <span className="text-white/70">{alertEmail}</span></span>
-            </div>
-            <button
-              onClick={() => { setAlertEmailInput(alertEmail); setShowEmailSetup(true); setAlertEmail(""); }}
-              className="text-xs text-white/30 hover:text-white transition-colors"
-            >
-              Edit
-            </button>
-          </div>
-        )}
-
-        {/* Email alert setup banner — only relevant for Multichain (paid)
-            users, since trial users get expiry reminders automatically via
-            the existing /api/cron/usage-alert trial leg. */}
-        {showEmailSetup && !alertEmail && !trialViewActive && !isTrialOnlySub && (
-          <div className="mb-6 rounded-2xl px-5 py-4 border bg-white/4 border-white/10">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="flex items-start gap-3">
-                <span className="text-xl mt-0.5">🔔</span>
-                <div>
-                  <p className="font-semibold text-sm text-white">Would you like to receive usage alerts?</p>
-                  <p className="text-white/35 text-xs mt-0.5">We&apos;ll email you when you&apos;re at 20% and 10% of your sponsored TXs remaining.</p>
-                </div>
-              </div>
-              <button onClick={() => setShowEmailSetup(false)} className="text-white/25 hover:text-white text-lg leading-none flex-shrink-0">×</button>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={alertEmailInput}
-                onChange={e => setAlertEmailInput(e.target.value)}
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-yellow/40 transition-colors"
-              />
-              <button
-                onClick={saveAlertEmail}
-                className="bg-yellow text-navy font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-yellow-hover transition-all"
-              >
-                {emailSaved ? "Saved ✓" : "Save"}
-              </button>
-            </div>
-          </div>
-        )}
+        {/* In-content email-alert banners removed — config moved into the
+            sidebar Account section, which opens the dashboard's alert modal
+            on click. */}
 
         {/* Quota usage warning banner — only for paying users */}
         {hasPaid && subscription && pct >= 80 && (
@@ -1707,6 +1689,85 @@ export default function DashboardPage() {
             if (typeof window !== "undefined") window.location.reload();
           }}
         />
+      )}
+
+      {/* Email Alert config modal — opened from the sidebar's Account
+          section. Wraps the existing /api/usage-alert flow (POST to set,
+          DELETE to remove). Only callable when a wallet is connected since
+          the endpoint requires nonce+signature auth from a real EOA. */}
+      {showAlertModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
+          onClick={() => setShowAlertModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/8 p-7 relative"
+            style={{ background: "linear-gradient(180deg, #0F1626 0%, #080E1C 100%)", boxShadow: "0 30px 80px rgba(0,0,0,0.6)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowAlertModal(false)}
+              className="absolute top-4 right-4 text-white/40 hover:text-white/80 text-lg"
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xl">🔔</span>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold">
+                Email alerts
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Usage notifications</h2>
+            <p className="text-white/45 text-sm mb-5">
+              We&apos;ll email you when your sponsored TX balance drops to 20%
+              and then 10% — so you can top up before relay stalls.
+            </p>
+
+            {!address && (
+              <p className="text-red-400 text-xs mb-4">
+                Connect a wallet to configure email alerts (the endpoint
+                requires a wallet signature).
+              </p>
+            )}
+
+            <label className="block text-[11px] uppercase tracking-widest text-white/35 font-semibold mb-2">
+              Send alerts to
+            </label>
+            <input
+              type="email"
+              value={alertEmailInput}
+              onChange={e => setAlertEmailInput(e.target.value)}
+              placeholder="you@company.com"
+              className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-yellow/40 placeholder-white/20 mb-5"
+            />
+
+            <div className="flex flex-wrap gap-2">
+              {alertEmail && (
+                <button
+                  onClick={deleteAlertEmail}
+                  disabled={alertDeleting || !address}
+                  className="bg-red-400/8 border border-red-400/20 text-red-400 text-sm py-3 px-5 rounded-full hover:bg-red-400/15 transition-colors disabled:opacity-50"
+                >
+                  {alertDeleting ? "Removing…" : "Remove"}
+                </button>
+              )}
+              <button
+                onClick={saveAlertEmail}
+                disabled={alertSaving || !address || !alertEmailInput}
+                className="flex-1 bg-yellow text-navy font-bold text-sm py-3 rounded-full hover:bg-yellow-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {alertSaving ? "Saving…" : emailSaved ? "Saved ✓" : alertEmail ? "Update" : "Save"}
+              </button>
+            </div>
+
+            <p className="text-white/30 text-[11px] mt-4 leading-relaxed">
+              Hysteresis: each threshold fires once per top-up window. After
+              you top up, the next 20% / 10% crossing re-arms automatically.
+            </p>
+          </div>
+        </div>
       )}
       </div>
     </div>
