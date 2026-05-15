@@ -21,7 +21,6 @@ import { motion } from "framer-motion";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import TrialActivationModal from "@/app/components/TrialActivationModal";
-import EmailSignupModal from "@/app/components/EmailSignupModal";
 import GoogleSigninButton from "@/app/components/GoogleSigninButton";
 import {
   EVENT_MODE,
@@ -32,7 +31,6 @@ import {
 export default function EventPage() {
   const router = useRouter();
   const [showTrialModal, setShowTrialModal] = useState(false);
-  const [showEmailModal, setShowEmailModal] = useState(false);
   const [signinError, setSigninError] = useState<string | null>(null);
 
   if (!EVENT_MODE) {
@@ -157,12 +155,6 @@ export default function EventPage() {
                   onError={msg => setSigninError(msg)}
                 />
                 <button
-                  onClick={() => setShowEmailModal(true)}
-                  className="w-full bg-white/5 border border-white/10 text-white font-medium text-sm py-3 rounded-full hover:bg-white/10 transition-colors"
-                >
-                  Continue with email
-                </button>
-                <button
                   onClick={() => setShowTrialModal(true)}
                   className="w-full bg-yellow/8 border border-yellow/30 text-yellow font-medium text-sm py-3 rounded-full hover:bg-yellow/15 transition-colors"
                 >
@@ -175,7 +167,7 @@ export default function EventPage() {
               )}
 
               <p className="text-white/30 text-[11px] mt-5 leading-relaxed">
-                Google / email gives you the <span className="text-white/55">sandbox</span> API key
+                Google gives you the <span className="text-white/55">sandbox</span> API key
                 immediately. Connecting a wallet activates the live trial —
                 same 2,000 TX cap, real on-chain settlements, gasless for the
                 payer. One wallet, one live trial (ever).
@@ -256,7 +248,6 @@ export default function EventPage() {
       <Footer />
 
       {showTrialModal && <TrialActivationModal onClose={() => setShowTrialModal(false)} />}
-      {showEmailModal && <EmailSignupModal onClose={() => setShowEmailModal(false)} />}
     </>
   );
 }

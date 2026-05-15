@@ -26,40 +26,8 @@ interface Props {
 
 export default function SignInModal({ onClose }: Props) {
   const router = useRouter();
-  const [showEmailForm, setShowEmailForm] = useState(false);
   const [showWalletPicker, setShowWalletPicker] = useState(false);
-  const [email, setEmail] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [emailSent, setEmailSent] = useState(false);
-  const [devLink, setDevLink] = useState<string | null>(null);
-
-  async function submitEmail() {
-    if (!email.trim()) {
-      setError("Enter your email address.");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/auth/email/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Could not send sign-in link.");
-        return;
-      }
-      setEmailSent(true);
-      if (typeof data.devLink === "string") setDevLink(data.devLink);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not send sign-in link.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
 
   return (
     <>
@@ -68,7 +36,7 @@ export default function SignInModal({ onClose }: Props) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center px-4"
+          className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[18vh] sm:pt-[22vh] overflow-y-auto"
           style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
           onClick={onClose}
         >
@@ -92,121 +60,42 @@ export default function SignInModal({ onClose }: Props) {
               ×
             </button>
 
-            {!showEmailForm && !emailSent && (
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
-                  Sign in / Sign up
-                </div>
-                <h2 className="text-2xl font-bold mb-2">Welcome to Q402</h2>
-                <p className="text-white/45 text-sm mb-6">
-                  Pick how you want to sign in. New users get a sandbox API key
-                  in one click; wallet connect unlocks live gasless transactions.
-                </p>
-
-                <div className="space-y-3 mb-4">
-                  <GoogleSigninButton
-                    width={368}
-                    onSuccess={() => {
-                      onClose();
-                      router.push("/dashboard?signin=google");
-                    }}
-                    onError={msg => setError(msg)}
-                  />
-                  <button
-                    onClick={() => setShowEmailForm(true)}
-                    className="w-full bg-white/5 border border-white/10 text-white font-medium text-sm py-3 rounded-full hover:bg-white/10 transition-colors"
-                  >
-                    Continue with email
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowWalletPicker(true);
-                    }}
-                    className="w-full bg-yellow/8 border border-yellow/30 text-yellow font-medium text-sm py-3 rounded-full hover:bg-yellow/15 transition-colors"
-                  >
-                    Continue with wallet
-                  </button>
-                </div>
-
-                {error && <p className="text-red-400 text-xs">{error}</p>}
-
-                <p className="text-white/30 text-[11px] text-center mt-4">
-                  Wallet is still required to send gasless payments — email /
-                  Google sign-in gives you the sandbox key + dashboard access
-                  first.
-                </p>
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
+                Sign in / Sign up
               </div>
-            )}
+              <h2 className="text-2xl font-bold mb-2">Welcome to Q402</h2>
+              <p className="text-white/45 text-sm mb-6">
+                Pick how you want to sign in. Google delivers a sandbox API key
+                in one click; wallet connect unlocks live gasless transactions.
+              </p>
 
-            {showEmailForm && !emailSent && (
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
-                  Email sign-in
-                </div>
-                <h2 className="text-2xl font-bold mb-2">Get your API key</h2>
-                <p className="text-white/45 text-sm mb-6">
-                  We&apos;ll send a one-time sign-in link to your email. Click it and
-                  your sandbox API key is ready to use.
-                </p>
-                <label className="block text-[11px] uppercase tracking-widest text-white/35 font-semibold mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") submitEmail();
+              <div className="space-y-3 mb-4">
+                <GoogleSigninButton
+                  width={368}
+                  onSuccess={() => {
+                    onClose();
+                    router.push("/dashboard?signin=google");
                   }}
-                  placeholder="you@company.com"
-                  className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-yellow/40 placeholder-white/20 mb-5"
+                  onError={msg => setError(msg)}
                 />
-                {error && <p className="text-red-400 text-xs mb-4">{error}</p>}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowEmailForm(false)}
-                    className="bg-white/5 text-white/55 text-sm py-3 px-5 rounded-full hover:bg-white/10 transition-colors"
-                  >
-                    Back
-                  </button>
-                  <button
-                    onClick={submitEmail}
-                    disabled={submitting}
-                    className="flex-1 bg-yellow text-navy font-bold text-sm py-3 rounded-full hover:bg-yellow-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {submitting ? "Sending…" : "Send sign-in link →"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {emailSent && (
-              <div>
-                <div className="w-14 h-14 rounded-full bg-green-400/15 flex items-center justify-center mb-4">
-                  <span className="text-green-400 text-2xl">✓</span>
-                </div>
-                <h2 className="text-2xl font-bold mb-2">Check your inbox</h2>
-                <p className="text-white/55 text-sm mb-5">
-                  We sent a one-time sign-in link to{" "}
-                  <span className="text-white font-medium">{email}</span>. The
-                  link expires in 15 minutes and works once.
-                </p>
-                {devLink && (
-                  <a
-                    href={devLink}
-                    className="block w-full text-center bg-white/5 border border-white/10 text-white/70 text-xs py-3 rounded-full hover:bg-white/8 transition-colors mb-3"
-                  >
-                    Dev link: continue without email →
-                  </a>
-                )}
                 <button
-                  onClick={onClose}
-                  className="w-full bg-yellow text-navy font-bold text-sm py-3 rounded-full hover:bg-yellow-hover transition-colors"
+                  onClick={() => {
+                    setShowWalletPicker(true);
+                  }}
+                  className="w-full bg-yellow/8 border border-yellow/30 text-yellow font-medium text-sm py-3 rounded-full hover:bg-yellow/15 transition-colors"
                 >
-                  OK
+                  Continue with wallet
                 </button>
               </div>
-            )}
+
+              {error && <p className="text-red-400 text-xs">{error}</p>}
+
+              <p className="text-white/30 text-[11px] text-center mt-4">
+                Wallet is still required to send gasless payments — Google
+                sign-in gives you the sandbox key + dashboard access first.
+              </p>
+            </div>
           </motion.div>
         </motion.div>
       </AnimatePresence>
