@@ -146,10 +146,12 @@ describe("trial — /api/keys/provision exposes trial + paid keys separately", (
     // The two scopes used to share the apiKey slot — a trial user who
     // upgraded had no isolation between their trial-scoped traffic and
     // their paid-scoped traffic. Now trial keys live in trialApiKey, paid
-    // keys in apiKey, and provision returns both.
-    expect(provisionSource).toMatch(/trialApiKey:\s*trialApiKey/);
-    expect(provisionSource).toMatch(/trialSandboxApiKey:\s*trialSandboxApiKey/);
-    expect(provisionSource).toMatch(/isTrialActive,/);
+    // keys in apiKey, and provision returns both. After Phase 1.5 the
+    // trial slots also fall back to the boundEmailTrial bridge for
+    // wallet-only logins.
+    expect(provisionSource).toMatch(/trialApiKey:\s*trialApiKey\s*\|\|\s*boundEmailTrial\?\.apiKey/);
+    expect(provisionSource).toMatch(/trialSandboxApiKey:\s*trialSandboxApiKey\s*\|\|\s*boundEmailTrial\?\.sandboxApiKey/);
+    expect(provisionSource).toMatch(/isTrialActive:/);
   });
 
   it("falls back to legacy existing.apiKey for pre-migration trial accounts", () => {

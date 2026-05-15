@@ -480,6 +480,19 @@ export default function DashboardPage() {
   // persistence. Resets on every page-load so the bind decision stays
   // visible until the user makes it.
   const [skipClaimPrompt, setSkipClaimPrompt] = useState(false);
+  // Read-side bridge to the email pseudo-account when this wallet is the
+  // bound canonical wallet for an email user — populated by
+  // /api/keys/provision via the wallet_email_link KV index. Lets a
+  // wallet-only login (no session cookie) still surface the trial
+  // credits + keys that live on `sub:email:<sub>`. See sprint doc §12.
+  const [boundEmailTrial, setBoundEmailTrial] = useState<{
+    email: string;
+    apiKey: string | null;
+    sandboxApiKey: string | null;
+    credits: number;
+    totalCredits: number;
+    trialExpiresAt: string | null;
+  } | null>(null);
   const [sessionTrial, setSessionTrial] = useState<{
     apiKey: string | null;
     sandboxApiKey: string | null;
@@ -509,11 +522,13 @@ export default function DashboardPage() {
   // Auto-flip to Trial view on first load ONLY when there's a verifiable
   // active trial:
   //   - wallet sub on plan="trial" (wallet trial still in window), OR
-  //   - email session has trial keys (canonical email-pseudo trial)
-  // A paying user with an email session but no active trial defaults to
-  // Multichain — landing them on Trial view would surface "0 / 2000" or
-  // their paid credits in the wrong scope. Users can still toggle to
-  // Trial manually from the sidebar.
+  //   - email session has trial keys (canonical email-pseudo trial), OR
+  //   - wallet is bridged to an email pseudo via boundEmailTrial (the
+  //     wallet-only-login case the read-side bridge was added for)
+  // A paying user with no active trial defaults to Multichain — landing
+  // them on Trial view would surface "0 / 2000" or their paid credits
+  // in the wrong scope. Users can still toggle to Trial manually from
+  // the sidebar.
   const initialViewMatched = useRef(false);
   useEffect(() => {
     if (initialViewMatched.current) return;
@@ -524,13 +539,15 @@ export default function DashboardPage() {
       new Date(subscription.trialExpiresAt) > new Date();
     const emailHasTrialSignal =
       !!emailSession && (!!sessionTrial.apiKey || !!sessionTrial.trialExpiresAt);
-    if (walletHasTrialSignal || emailHasTrialSignal) {
+    const bridgedTrialSignal =
+      !!boundEmailTrial && (!!boundEmailTrial.apiKey || !!boundEmailTrial.trialExpiresAt);
+    if (walletHasTrialSignal || emailHasTrialSignal || bridgedTrialSignal) {
       setTrialViewActive(true);
     }
     // Otherwise keep the default (multichain). Either way, lock the flip
     // so we don't override the user's subsequent manual choice.
     initialViewMatched.current = true;
-  }, [subscription, emailSession, sessionTrial]);
+  }, [subscription, emailSession, sessionTrial, boundEmailTrial]);
 
   // Phase 1 identity model: wallet binding is no longer auto-fired. The
   // ClaimWalletPrompt component (State D) handles binding via an explicit
@@ -730,6 +747,31 @@ export default function DashboardPage() {
       if (provData.sandboxApiKey) setSandboxApiKey(provData.sandboxApiKey as string);
       setHasPaid(provData.hasPaid === true);
       setIsOwner(provData.isOwner === true);
+
+      // Mirror the bound-email-trial bridge into local state so the trial
+      // view can fall back to it when this wallet has no own trial keys
+      // (e.g. wallet-only login of a bound user — pseudo carries the trial).
+      const bet = provData.boundEmailTrial as {
+        email: string;
+        credits: number;
+        totalCredits: number;
+        trialExpiresAt: string | null;
+      } | null | undefined;
+      if (bet) {
+        setBoundEmailTrial({
+          email: bet.email,
+          // Trial keys themselves are surfaced via trialApiKey /
+          // trialSandboxApiKey in the same response, populated from the
+          // bridge when the wallet's own slots were empty.
+          apiKey: (provData.trialApiKey as string | null) ?? null,
+          sandboxApiKey: (provData.trialSandboxApiKey as string | null) ?? null,
+          credits: bet.credits,
+          totalCredits: bet.totalCredits,
+          trialExpiresAt: bet.trialExpiresAt,
+        });
+      } else {
+        setBoundEmailTrial(null);
+      }
 
       setSubscription(prev => ({
         ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0, apiKey: "" }),
@@ -1173,19 +1215,18 @@ export default function DashboardPage() {
   // trial and then paid sees ONE remaining count that mixes both sources.
   // For surface accounting (Trial view vs Multichain view), only show
   // trial credits when the account is verifiably ON a trial right now:
-  // either the email pseudo has an active trial key (hasEmailTrial) or
-  // the wallet sub's current plan is "trial" (isTrialOnlySub). Otherwise
-  // the credits belong to the paid scope and surface in Multichain.
-  // Trial-side raw values prefer email pseudo when present (canonical),
-  // else wallet sub's trialApiKey (plan==="trial" or post-upgrade). The
-  // last-resort fallback to apiKey only fires for trial-only subs — a
-  // paid user's apiKey is NOT a trial key and must not be surfaced here.
+  // either the email pseudo has an active trial key (hasEmailTrial), the
+  // wallet sub's current plan is "trial" (isTrialOnlySub), OR the
+  // wallet's read-side bridge to a bound email pseudo carries trial
+  // data (boundEmailTrial — covers the wallet-only login of a bound
+  // user). Otherwise the credits belong to the paid scope and surface
+  // in Multichain.
   const trialApiKey = hasEmailTrial
     ? (sessionTrial.apiKey ?? "")
-    : (walletTrialApiKey || (isTrialOnlySub ? walletApiKey : ""));
+    : (walletTrialApiKey || (isTrialOnlySub ? walletApiKey : "") || (boundEmailTrial?.apiKey ?? ""));
   const trialCredits = hasEmailTrial
     ? sessionTrial.credits
-    : (isTrialOnlySub ? walletCredits : 0);
+    : (isTrialOnlySub ? walletCredits : (boundEmailTrial?.credits ?? 0));
   // Multichain side: only render real values for paying users (amountUSD > 0
   // AND non-trial plan). The Locked placeholder is rendered inside the card
   // itself when this is false — the card shell still mounts.
@@ -1207,6 +1248,11 @@ export default function DashboardPage() {
       isTrialOnlySub ? subscription?.sandboxApiKey : null,
       hasEmailTrial ? sessionTrial.apiKey : null,
       hasEmailTrial ? sessionTrial.sandboxApiKey : null,
+      // Bound-email bridge: include the pseudo's keys so wallet-only
+      // logins see the trial history that was generated under the
+      // bridged email pseudo.
+      boundEmailTrial?.apiKey ?? null,
+      boundEmailTrial?.sandboxApiKey ?? null,
     ].filter((k): k is string => typeof k === "string" && k.length > 0),
   );
   const paidKeySet = new Set<string>(
@@ -1351,7 +1397,14 @@ export default function DashboardPage() {
   // tabLabel map was inlined here for the deleted nav row.
   const trialCreditsLeft = trialViewActive ? trialCredits : 0;
   const trialDaysLeftDerived = (() => {
-    const expiry = sessionTrial.trialExpiresAt ?? subscription?.trialExpiresAt ?? null;
+    // Prefer email-session pseudo expiry (canonical when user signed in
+    // via email), then wallet sub's own trialExpiresAt, then the bridged
+    // pseudo expiry — covers wallet-only logins of bound users.
+    const expiry =
+      sessionTrial.trialExpiresAt
+      ?? subscription?.trialExpiresAt
+      ?? boundEmailTrial?.trialExpiresAt
+      ?? null;
     if (!expiry) return null;
     return Math.max(0, Math.ceil((new Date(expiry).getTime() - Date.now()) / 86_400_000));
   })();

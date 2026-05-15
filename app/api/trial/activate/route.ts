@@ -240,6 +240,12 @@ export async function POST(req: NextRequest) {
       if (sid) {
         await pairSessionWithWallet(sid, addr).catch(() => {});
       }
+      // Read-side bridge for the wallet-only login case — same pointer the
+      // /api/auth/wallet-bind route writes. Lets /api/keys/provision find
+      // this email pseudo-account when the user later signs in via wallet
+      // only (no email session cookie). Best-effort.
+      kv.set(`wallet_email_link:${addr}`, adoptedEmail, { ex: TRIAL_USED_TTL })
+        .catch(e => console.error("[trial/activate] wallet_email_link write failed (non-fatal):", e));
     }
 
     // Register this wallet for the trial-expiry cron (best-effort; missing

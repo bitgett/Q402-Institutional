@@ -31,6 +31,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession, pairSessionWithWallet, SESSION_COOKIE } from "@/app/lib/session";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { kv } from "@vercel/kv";
+
+// Reverse index: wallet address → bound email. Read by /api/keys/provision
+// for a wallet-only login so the dashboard can union the email pseudo's
+// trial state into the wallet's response (read-side bridge — does NOT
+// migrate any data; pseudo and wallet stay as separate KV records).
+// 10-year TTL mirrors the wallet_used / trial_used sentinels.
+const walletEmailLinkKey = (addr: string) => `wallet_email_link:${addr.toLowerCase()}`;
+const WALLET_EMAIL_LINK_TTL = 10 * 365 * 24 * 60 * 60;
 
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
@@ -95,6 +104,18 @@ export async function POST(req: NextRequest) {
   // First bind — promote the session from "unbound" to "bound". Persists
   // verifiedAddr as session.address (the canonical bound wallet).
   await pairSessionWithWallet(sid, verifiedAddr);
+
+  // Read-side bridge: write the wallet→email reverse pointer so that
+  // /api/keys/provision can find the email pseudo-account when the user
+  // later signs in via wallet only (no email session cookie). Without
+  // this index, a wallet-only login can't see the trial credits/keys
+  // sitting on `sub:email:<sub>` and they appear lost. This is a *read*
+  // bridge — pseudo and wallet stay as separate KV records; Phase 2's
+  // real migration will eventually consolidate them. Best-effort: the
+  // bind itself is already committed and a failed reverse-index write
+  // just leaves the wallet-only view in its pre-bridge state.
+  kv.set(walletEmailLinkKey(verifiedAddr), session.email, { ex: WALLET_EMAIL_LINK_TTL })
+    .catch(e => console.error("[wallet-bind] wallet_email_link write failed (non-fatal):", e));
 
   // Best-effort operator alert. Same fail-soft pattern as payment-activate.
   // Phase 2's migration job triggers off this event downstream.

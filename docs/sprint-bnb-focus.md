@@ -336,3 +336,67 @@ re-pair endpoint:
 - The dashboard's 4-state machine keeps its early-return shape. After
   migration, State F still renders for bound+matching wallets — the
   difference is the wallet sub now carries the trial data.
+
+---
+
+## 12 · Phase 1.5 — Read-side wallet ↔ email bridge
+
+Phase 1 stopped the dual-identity UI bleed. Phase 2 (the real migration)
+is deferred to v1.28. In between, Phase 1.5 closes the most visible UX
+gap from Phase 1: a wallet-only login (no `q402_sid` cookie) couldn't
+see the trial credits + keys that lived on the email pseudo-account
+because the dashboard only read the wallet's own subscription record.
+
+### The bridge
+
+One KV reverse index:
+
+```
+wallet_email_link:{wallet_addr} → "user@x.com"
+```
+
+Written on:
+- `/api/auth/wallet-bind` success (the canonical bind path)
+- `/api/trial/activate` when an email session was adopted (defence in depth)
+
+10-year TTL — mirrors `trial_used:{addr}` and `trial_used_by_email:{email}`
+so the bridge survives subscription churn.
+
+### How `/api/keys/provision` uses it
+
+After loading the wallet's own subscription, provision calls
+`loadBoundEmailTrial(addr)` which:
+
+```
+walletEmailLink[wallet] → email
+  → emailToAddr[email] → pseudoAddr
+  → getSubscription(pseudoAddr) → pseudo sub
+  → getQuotaCredits(pseudoAddr) → trial credit balance
+```
+
+The response then unions the pseudo's trial state into:
+- `trialApiKey` / `trialSandboxApiKey` (when the wallet has no own trial slot)
+- `boundEmailTrial: { email, credits, totalCredits, trialExpiresAt }` (explicit bridge field)
+- `isTrialActive` (true if the bridged trial is still in window)
+
+Three null-return guards inside `loadBoundEmailTrial` protect against
+drift — missing link, missing email_to_addr, missing pseudo sub.
+
+### What this is NOT
+
+- **Not a migration.** The pseudo's data stays on `sub:email:<sub>`.
+  Its quota counter, tx history, API key owners, trial reminder
+  registration all stay pseudo-keyed.
+- **Not a write path.** `loadBoundEmailTrial` is read-only; no
+  `kv.set`, no `kv.del`, no subscription writes.
+- **Not a recovery flow.** A wallet that loses access still falls
+  into WrongWalletHardBlock → support email.
+
+### What Phase 2 will still do
+
+Phase 2 (v1.28) does the actual data merge — moves the pseudo's
+subscription, quota counter, key ownership, tx history, alert/reminder
+registration onto the wallet principal and tombstones the pseudo. After
+Phase 2 lands, `loadBoundEmailTrial` becomes a no-op (the pseudo
+either doesn't exist or its `trialApiKey`/credits are 0). The bridge
+key can either be repurposed as a "merged_from" marker or removed.

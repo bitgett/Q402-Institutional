@@ -135,9 +135,12 @@ describe("trial-credits scope hygiene", () => {
     // Regression catch: a paid user with no email trial used to see their
     // 491-remaining paid credits surfaced in the Trial view because
     // trialCredits naively defaulted to walletCredits. The fix gates the
-    // fallback on isTrialOnlySub.
+    // fallback on isTrialOnlySub. After Phase 1.5 the same fallback also
+    // tries boundEmailTrial?.credits (read-side bridge for wallet-only
+    // logins of bound users) but the final fallback is still 0 — never
+    // walletCredits.
     expect(dashboardSource).toMatch(
-      /trialCredits\s*=[\s\S]+?isTrialOnlySub\s*\?\s*walletCredits\s*:\s*0/,
+      /trialCredits\s*=[\s\S]+?isTrialOnlySub\s*\?\s*walletCredits\s*:\s*\(boundEmailTrial\?\.credits\s*\?\?\s*0\)/,
     );
   });
 
