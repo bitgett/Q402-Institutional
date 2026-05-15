@@ -1,7 +1,7 @@
 # BNB-Focus Sprint — Build Notes
 
 **Branch**: `feat/bnb-focus-sprint`
-**Sprint window**: 2026-05-13 → 2026-05-20
+**Sprint window**: 2026-05-19 → 2026-06-30
 **Rollback anchor**: `v1.27-multichain` git tag
 
 This file is the canonical source-of-truth for what shipped on the sprint

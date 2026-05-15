@@ -12,7 +12,7 @@
  */
 
 /**
- * BNB-focus sprint (2026-05-13 → 2026-05-20).
+ * BNB-focus sprint (2026-05-19 → 2026-06-30).
  *
  * ── Semantics (revised) ────────────────────────────────────────────────
  * This flag NO LONGER narrows the main product. The main landing, relay
