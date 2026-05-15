@@ -15,7 +15,8 @@
  * (z-50); items-center anchors it to the viewport middle.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import GoogleSigninButton from "./GoogleSigninButton";
@@ -33,6 +34,14 @@ export default function ConnectModal({ onClose }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [devLink, setDevLink] = useState<string | null>(null);
+  // Render into document.body via portal so the Navbar's backdrop-filter
+  // doesn't make us a containing block for `position: fixed` — without
+  // this the modal gets trapped in the 72-px navbar area and reads as
+  // "stuck at the top of the viewport".
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function submitEmail() {
     if (!email.trim()) {
@@ -61,7 +70,9 @@ export default function ConnectModal({ onClose }: Props) {
     }
   }
 
-  return (
+  if (!mounted) return null;
+
+  const modal = (
     <>
       <AnimatePresence>
         <motion.div
@@ -103,9 +114,13 @@ export default function ConnectModal({ onClose }: Props) {
                   API key on the spot.
                 </p>
 
-                <div className="space-y-3 mb-2">
+                {/* All three buttons share a 392-px width — the modal is
+                    max-w-md (448) minus p-7 padding (56) so inner width is
+                    392. Google's button takes a pixel width prop; the other
+                    two are w-full of the same parent → identical line. */}
+                <div className="space-y-3 mb-2 flex flex-col items-stretch">
                   <GoogleSigninButton
-                    width={368}
+                    width={392}
                     onSuccess={() => {
                       onClose();
                       router.push("/dashboard?signin=google");
@@ -213,4 +228,6 @@ export default function ConnectModal({ onClose }: Props) {
       )}
     </>
   );
+
+  return createPortal(modal, document.body);
 }
