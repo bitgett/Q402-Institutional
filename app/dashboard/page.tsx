@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
 import WalletModal from "../components/WalletModal";
+import TrialActivationModal from "../components/TrialActivationModal";
 import ClaudeMcpCard from "../components/ClaudeMcpCard";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
@@ -468,6 +469,16 @@ export default function DashboardPage() {
   const [sessionSandboxCopied, setSessionSandboxCopied] = useState(false);
   // Email-only users click "Multichain →" → triggers wallet-connect modal.
   const [showWalletConnectFromEmail, setShowWalletConnectFromEmail] = useState(false);
+  // Auto-prompt trial activation for wallet-only users who have no
+  // subscription yet. Fired exactly once per page-load via the ref below
+  // so a re-render doesn't keep popping the modal after the user closes it.
+  const [showAutoTrial, setShowAutoTrial] = useState(false);
+  const trialPromptedRef = useRef(false);
+  // Tracks whether the /api/auth/me check has resolved. Without it the
+  // dashboard would render null between mount and the cookie fetch returning,
+  // which a signed-in email user reads as "I got kicked back to the
+  // landing page" — the visible flash before the email-only view paints.
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -487,6 +498,23 @@ export default function DashboardPage() {
     }
   }, [subscription]);
 
+  // Wallet-only auto-trial: when a wallet is connected but the address has
+  // no subscription (or only a provisioned stub with amountUSD=0 and no
+  // trial plan), pop the trial-activation modal automatically so the user
+  // gets 2k credits with one signature instead of bouncing between pages.
+  // hasPaid=false === provisioned stub (never paid, no trial); hasPaid=null
+  // === still loading, skip.
+  useEffect(() => {
+    if (trialPromptedRef.current) return;
+    if (!isConnected || !address) return;
+    if (hasPaid === null) return; // still loading
+    if (subscription?.plan === "trial") return; // already on trial
+    if (hasPaid === true) return; // paid user — don't push trial
+    // No trial AND not paid → eligible. Prompt once.
+    trialPromptedRef.current = true;
+    setShowAutoTrial(true);
+  }, [isConnected, address, hasPaid, subscription]);
+
   useEffect(() => {
     let cancelled = false;
     async function loadSession() {
@@ -499,6 +527,8 @@ export default function DashboardPage() {
         }
       } catch {
         /* no session — silent */
+      } finally {
+        if (!cancelled) setAuthChecked(true);
       }
     }
     loadSession();
@@ -863,7 +893,19 @@ export default function DashboardPage() {
     );
   }
 
-  if (!mounted || !isConnected || !address) return null;
+  // Hold rendering until both (a) the mount tick has completed AND (b) the
+  // auth check has resolved — otherwise an email-signed-in user momentarily
+  // sees a blank page on /dashboard, which reads as "I got bounced back to
+  // the landing". Once auth is checked, the email-only branch above renders
+  // first; only after that do we know we genuinely need a wallet.
+  if (!mounted || !authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white/40 text-sm" style={{ background: "#0B1220" }}>
+        Loading dashboard…
+      </div>
+    );
+  }
+  if (!isConnected || !address) return null;
 
   const isGated = hasPaid === false && !isOwner;
 
@@ -1617,6 +1659,17 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </div>
+
+      {showAutoTrial && (
+        <TrialActivationModal
+          onClose={() => {
+            setShowAutoTrial(false);
+            // Re-fetch the subscription so the dashboard reflects the new
+            // 2k credits + plan=trial state without a full page reload.
+            if (typeof window !== "undefined") window.location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }

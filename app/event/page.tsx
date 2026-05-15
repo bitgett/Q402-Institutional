@@ -14,13 +14,13 @@
  * keep working.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
-import GoogleSigninButton from "@/app/components/GoogleSigninButton";
+import ConnectModal from "@/app/components/ConnectModal";
+import { useWallet } from "@/app/context/WalletContext";
 import {
   EVENT_MODE,
   TRIAL_CREDITS,
@@ -28,8 +28,31 @@ import {
 } from "@/app/lib/feature-flags";
 
 export default function EventPage() {
-  const router = useRouter();
-  const [signinError, setSigninError] = useState<string | null>(null);
+  const { address, isConnected } = useWallet();
+  const [showConnect, setShowConnect] = useState(false);
+  // Tracks server-side email session via /api/auth/me so the page can swap
+  // the Connect CTA for "Go to MY Page" once any auth (email OR wallet) lands.
+  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/me", { credentials: "include" })
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return;
+        if (d.authenticated && typeof d.email === "string") {
+          setSignedInEmail(d.email);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [showConnect]); // re-check after the modal closes (user may have just signed in)
+
+  const isSignedIn = isConnected || !!signedInEmail;
+  const identityLabel =
+    signedInEmail ?? (address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "");
 
   if (!EVENT_MODE) {
     return (
@@ -142,30 +165,50 @@ export default function EventPage() {
               style={{ background: "rgba(255,255,255,0.02)" }}
             >
               <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-3">
-                Sign up — pick one
+                Step 1 — sign up
               </div>
-              <h2 className="text-xl font-bold mb-6">Get your API key</h2>
+              <h2 className="text-xl font-bold mb-2">Get your API key</h2>
+              <p className="text-white/45 text-sm mb-6">
+                One click — pick Google, email, or wallet. {TRIAL_CREDITS.toLocaleString()} sponsored
+                TX + a BNB-only API key are waiting on the other side.
+              </p>
 
-              <div className="space-y-3">
-                <GoogleSigninButton
-                  width={368}
-                  onSuccess={() => router.push("/dashboard?signin=google")}
-                  onError={msg => setSigninError(msg)}
-                />
-                <p className="text-white/30 text-[11px] text-center">
-                  Prefer a wallet? Click <span className="text-yellow font-semibold">Connect</span> in the top nav.
-                </p>
-              </div>
-
-              {signinError && (
-                <p className="text-red-400 text-xs mt-4">{signinError}</p>
+              {/* Single Connect CTA before sign-in; swaps for a "Go to MY Page"
+                  callout once /api/auth/me or the wallet context says we're
+                  authenticated. Walks the user through: Connect → MY Page → use API key. */}
+              {!isSignedIn ? (
+                <button
+                  onClick={() => setShowConnect(true)}
+                  className="w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-full hover:bg-yellow-hover transition-all hover:scale-[1.01] shadow-lg shadow-yellow/25"
+                >
+                  Connect →
+                </button>
+              ) : (
+                <div className="rounded-xl border border-green-400/30 bg-green-400/5 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" style={{ boxShadow: "0 0 6px #4ade80" }} />
+                    <span className="text-green-400 text-xs font-bold uppercase tracking-widest">
+                      Signed in
+                    </span>
+                    <span className="text-white/70 text-xs ml-1 truncate">{identityLabel}</span>
+                  </div>
+                  <Link
+                    href="/dashboard"
+                    className="block w-full text-center bg-yellow text-navy font-bold text-sm py-3 rounded-full hover:bg-yellow-hover transition-colors"
+                  >
+                    Go to MY Page →
+                  </Link>
+                  <p className="text-white/35 text-[11px] mt-3 text-center">
+                    Step 2 — Your API key is on the dashboard.
+                  </p>
+                </div>
               )}
 
               <p className="text-white/30 text-[11px] mt-5 leading-relaxed">
-                Google gives you the <span className="text-white/55">sandbox</span> API key
-                immediately. Connecting a wallet activates the live trial —
-                same 2,000 TX cap, real on-chain settlements, gasless for the
-                payer. One wallet, one live trial (ever).
+                Google &amp; email give you the API key + 2,000 sponsored TX
+                instantly. Wallet connect also auto-activates the trial — same
+                cap, real on-chain settlements, gasless for the payer. One
+                identity, one trial (ever).
               </p>
             </motion.div>
 
@@ -242,6 +285,7 @@ export default function EventPage() {
       </main>
       <Footer />
 
+      {showConnect && <ConnectModal onClose={() => setShowConnect(false)} />}
     </>
   );
 }
