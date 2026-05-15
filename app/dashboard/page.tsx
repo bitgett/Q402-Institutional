@@ -918,7 +918,16 @@ export default function DashboardPage() {
 
   const isGated = hasPaid === false && !isOwner;
 
-  const API_KEY = subscription?.apiKey ?? "—";
+  // API key + credits are SCOPED to the active view:
+  //   - Trial view  → trial sub data (the live key + 2k credits, BNB only)
+  //   - Multichain  → only when the user has paid for multichain. Trial-
+  //     only users see "—" / 0 in this scope until they upgrade, so the
+  //     dashboard doesn't blur the boundary between the two products.
+  const rawApiKey = subscription?.apiKey ?? "";
+  const rawCredits = subscription?.quotaBonus ?? 0;
+  const isTrialOnlySub = subscription?.plan === "trial";
+  const showPaidScope = !trialViewActive && !isTrialOnlySub;
+  const API_KEY = trialViewActive ? (rawApiKey || "—") : (showPaidScope ? rawApiKey : "—");
   const plan = subscription?.plan ?? "starter";
 
   // View mode — top-level toggle between Free-trial flavoring and the
@@ -930,7 +939,11 @@ export default function DashboardPage() {
   const planDisplayKey = plan === "enterprise_flex" ? "enterprise" : plan;
   const planName = planDisplayKey.charAt(0).toUpperCase() + planDisplayKey.slice(1);
   // TX credits remaining — decrements on each successful relay
-  const remainingCredits = subscription?.quotaBonus ?? 0;
+  // Scoped credits — same logic as API_KEY. Trial credits only count under
+  // the Trial view; Multichain view shows 0 until a paid plan is in place.
+  const remainingCredits = trialViewActive
+    ? rawCredits
+    : (showPaidScope ? rawCredits : 0);
   // Use plan base quota as reference for the bar (credits start at plan quota per payment)
   const baseCredits = PLAN_QUOTA[plan.toLowerCase()] ?? 500;
   // pct consumed = how far below base we are (capped 0–100)
@@ -1087,10 +1100,9 @@ export default function DashboardPage() {
           <span className="text-white/25 text-xs hidden sm:block">Dashboard</span>
         </Link>
         <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 bg-white/5 border border-white/8 rounded-full px-3 py-1.5">
-            <span className="text-xs text-white/30 font-mono">{shortAddr(address)}</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-          </div>
+          {/* WalletButton already surfaces MY Page + email + addr chip + sign-out,
+              so the redundant inline addr chip that used to live here would
+              show the wallet address twice in the dashboard header. */}
           <WalletButton />
         </div>
       </header>
@@ -1300,7 +1312,12 @@ export default function DashboardPage() {
                 {
                   label: "Sponsored TXs Left",
                   value: remainingCredits.toLocaleString(),
-                  sub: viewMode === "trial" ? "trial · BNB only" : `${plan} plan`,
+                  sub:
+                    viewMode === "trial"
+                      ? "trial · BNB only"
+                      : isTrialOnlySub
+                        ? "no paid plan — upgrade"
+                        : `${plan} plan`,
                 },
                 { label: "Total Relayed", value: relayedTxs.length.toLocaleString(), sub: "all time" },
                 // Trial view: no per-user gas tank — Q402 covers it. Multichain
@@ -1349,18 +1366,36 @@ export default function DashboardPage() {
               <div className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-medium">API Key</span>
-                  <span className={`text-xs px-2.5 py-0.5 rounded-full border ${isExpired ? "text-red-400 bg-red-400/8 border-red-400/20" : "text-green-400 bg-green-400/8 border-green-400/20"}`}>
-                    {isExpired ? "Expired" : "Active"}
+                  <span className={`text-xs px-2.5 py-0.5 rounded-full border ${
+                    !trialViewActive && isTrialOnlySub
+                      ? "text-white/40 bg-white/5 border-white/10"
+                      : isExpired
+                        ? "text-red-400 bg-red-400/8 border-red-400/20"
+                        : "text-green-400 bg-green-400/8 border-green-400/20"
+                  }`}>
+                    {!trialViewActive && isTrialOnlySub ? "Locked" : isExpired ? "Expired" : "Active"}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
-                  <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
-                  {API_KEY !== "—" && (
-                    <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
-                      {keyCopied ? "Copied!" : "Copy"}
-                    </button>
-                  )}
-                </div>
+                {!trialViewActive && isTrialOnlySub ? (
+                  <div className="flex items-center justify-between gap-2 bg-navy border border-white/7 rounded-xl px-3 py-3">
+                    <span className="text-xs text-white/45">
+                      Upgrade to use multichain — your trial key stays under
+                      the <button onClick={() => setTrialViewActive(true)} className="text-yellow underline-offset-2 hover:underline">Free Trial</button> tab.
+                    </span>
+                    <a href="/payment" className="flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold bg-yellow/10 text-yellow hover:bg-yellow/20 transition-all">
+                      Upgrade →
+                    </a>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
+                    <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
+                    {API_KEY !== "—" && (
+                      <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
+                        {keyCopied ? "Copied!" : "Copy"}
+                      </button>
+                    )}
+                  </div>
+                )}
                 {subscription?.paidAt && expiresAt && (
                   <p className="text-white/20 text-xs mt-2">
                     Paid {new Date(subscription.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
