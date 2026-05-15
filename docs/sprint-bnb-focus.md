@@ -400,3 +400,68 @@ registration onto the wallet principal and tombstones the pseudo. After
 Phase 2 lands, `loadBoundEmailTrial` becomes a no-op (the pseudo
 either doesn't exist or its `trialApiKey`/credits are 0). The bridge
 key can either be repurposed as a "merged_from" marker or removed.
+
+---
+
+## 13 · Strict 1:1 wallet ↔ email contract
+
+Phase 1 closed per-session bind-once. Phase 1.5 added the read-side
+bridge (§12). But the bridge introduced a new failure mode: a second
+email session could silently overwrite `wallet_email_link:{wallet}`
+when binding the same wallet. The session-scoped check on
+`session.address` only catches "this session tries to switch wallet"
+— it doesn't see cross-session attacks/mistakes. This §13 closes both
+cross-session directions.
+
+### The 1:1 contract
+
+Strict one-wallet-per-email and one-email-per-wallet, enforced by
+TWO global KV indexes (both 10-year TTL):
+
+```
+wallet_email_link:{wallet}  → email      // wallet-side claim
+email_to_wallet:{email}     → wallet     // email-side claim
+```
+
+### Three-step check in `/api/auth/wallet-bind`
+
+1. **Idempotency** — accept if EITHER `session.address === verifiedAddr`
+   OR both global indexes already point at this exact pair. Lets a
+   user who logged out + back in re-bind the same wallet without
+   re-signing.
+2. **Session direction** — 409 `WALLET_ALREADY_BOUND` (with bound
+   wallet address) when `session.address` is set to a different
+   wallet. Unchanged from Phase 1.
+3. **Wallet direction** — 409 `WALLET_TAKEN` when
+   `wallet_email_link:{wallet}` points at a different email. Response
+   intentionally omits the colliding email to avoid an existence
+   oracle.
+4. **Email direction** — 409 `EMAIL_ALREADY_BOUND` (with bound wallet
+   address) when `email_to_wallet:{email}` points at a different
+   wallet. Catches the cross-session re-bind case.
+
+Only after all three pass does `pairSessionWithWallet` run and BOTH
+indexes get written (Promise.all, best-effort — bind itself is already
+committed).
+
+### Why "leak nothing" on WALLET_TAKEN
+
+Echoing the bound email would let any wallet owner enumerate
+"does this email have a Q402 account?" The reverse case
+(EMAIL_ALREADY_BOUND echoing the bound wallet) is fine: wallet
+addresses are public, the user already knows their own wallets.
+
+### Client UX (`bindWallet` + ClaimWalletPrompt)
+
+The helper's tagged result distinguishes all three 409 paths so the
+prompt can render concrete recovery copy:
+- WALLET_ALREADY_BOUND → "Sign out and back in with that wallet"
+- WALLET_TAKEN → "Sign in with that email, or use a different wallet"
+- EMAIL_ALREADY_BOUND → "Switch your wallet extension to 0x…X"
+
+### Operator notes
+
+If a legitimate user gets stuck (e.g. lost wallet, lost email access),
+recovery is still support-only — Phase 2 will add a dedicated OTP-
+gated re-pair endpoint. The global indexes are deliberately permanent
+so support can deterministically resolve "who claimed what when".

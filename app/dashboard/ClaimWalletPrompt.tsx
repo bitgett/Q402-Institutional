@@ -72,6 +72,26 @@ export default function ClaimWalletPrompt({
       );
       return;
     }
+    if (result.code === "EMAIL_ALREADY_BOUND") {
+      // Cross-session bind: the email was previously bound to a different
+      // wallet from another session that's since logged out. Server
+      // refuses the new wallet — user must reconnect the original one.
+      setError(
+        `Your email is already bound to wallet ${shortAddr(result.boundAddress)}. Switch your wallet extension to that address (or sign out to use a different account).`,
+      );
+      return;
+    }
+    if (result.code === "WALLET_TAKEN") {
+      // The wallet itself is claimed by a different email account. Wallet
+      // ownership was proven (fresh signature passed), but a different
+      // email already holds the bind — likely the same person with two
+      // emails, or two distinct people sharing a wallet. Recovery is
+      // sign-in-with-the-other-email or use a different wallet.
+      setError(
+        `Wallet ${shortAddr(connectedAddress)} is already linked to a different Q402 account. Sign in with that email, or use a different wallet.`,
+      );
+      return;
+    }
     if (result.code === "SIGNATURE_CANCELLED") {
       setError("Signature cancelled. Try again when you're ready to bind.");
       return;

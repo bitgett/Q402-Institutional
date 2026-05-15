@@ -42,14 +42,18 @@ describe("wallet_email_link write — both bind paths populate the bridge", () =
     // The bind path must write the reverse pointer AFTER
     // pairSessionWithWallet succeeds. Skipping this leaves the wallet-
     // only-login view permanently unable to find the email pseudo.
+    //
+    // The route also READS walletEmailLinkKey upfront (for 1:1 uniqueness
+    // — see §13), so we can't compare the FIRST occurrences. Compare
+    // the WRITE call site (kv.set(walletEmailLinkKey(...))) against
+    // pairSessionWithWallet.
     expect(bindSource).toMatch(/walletEmailLinkKey\(verifiedAddr\)/);
     expect(bindSource).toMatch(/kv\.set\(\s*walletEmailLinkKey\(verifiedAddr\),\s*session\.email/);
-    // Order matters: write the bridge AFTER bind succeeds, not before.
     const pairIdx = bindSource.indexOf("pairSessionWithWallet(");
-    const bridgeIdx = bindSource.indexOf("walletEmailLinkKey(verifiedAddr)");
+    const writeIdx = bindSource.indexOf("kv.set(walletEmailLinkKey(verifiedAddr)");
     expect(pairIdx).toBeGreaterThan(0);
-    expect(bridgeIdx).toBeGreaterThan(0);
-    expect(pairIdx).toBeLessThan(bridgeIdx);
+    expect(writeIdx).toBeGreaterThan(0);
+    expect(pairIdx).toBeLessThan(writeIdx);
   });
 
   it("/api/auth/wallet-bind uses a 10y TTL on the bridge (mirrors trial_used sentinels)", () => {

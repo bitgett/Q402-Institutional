@@ -19,12 +19,20 @@
  *   challenge from GET /api/auth/challenge?address={addr}
  *   signature = personal_sign("Q402 Institutional\n...\nChallenge: {c}")
  *
+ * Strictly 1:1 — enforced by THREE checks:
+ *   - session.address (per-session bind-once)
+ *   - wallet_email_link:{wallet}  (wallet-global: one wallet per email)
+ *   - email_to_wallet:{email}     (email-global: one email per wallet)
+ *
  * Responses:
- *   200 { ok: true,  bound: true, address, idempotent?: true }
+ *   200 { ok: true, bound: true, address, idempotent?: true }
  *   401 { error: "Not signed in" }                    — no session cookie
  *   400 { error }                                     — bad payload / auth failed
  *   409 { ok: false, code: "WALLET_ALREADY_BOUND",
- *         boundAddress }                              — different wallet already claimed
+ *         boundAddress }                              — this session is already bound to a different wallet
+ *   409 { ok: false, code: "WALLET_TAKEN" }           — this wallet is claimed by a different email
+ *   409 { ok: false, code: "EMAIL_ALREADY_BOUND",
+ *         boundAddress }                              — this email is already bound to a different wallet
  *   429 { error: "Too many requests" }
  */
 import { NextRequest, NextResponse } from "next/server";
@@ -33,12 +41,22 @@ import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { kv } from "@vercel/kv";
 
-// Reverse index: wallet address → bound email. Read by /api/keys/provision
-// for a wallet-only login so the dashboard can union the email pseudo's
-// trial state into the wallet's response (read-side bridge — does NOT
-// migrate any data; pseudo and wallet stay as separate KV records).
-// 10-year TTL mirrors the wallet_used / trial_used sentinels.
+// Reverse indexes — together enforce strict 1:1 binding between an email
+// session and a wallet address. Without these the per-session bind-once
+// gate could still let:
+//   (a) two different emails bind the same wallet (overwriting each
+//       other in the wallet→email pointer that /api/keys/provision
+//       uses to bridge trial data), or
+//   (b) one email re-bind to a different wallet across logout/login
+//       (session.address starts null on a fresh session, so the
+//       session-scoped check doesn't catch it).
+//
+//   wallet_email_link:{wallet} → email     (read-side bridge + wallet-side claim)
+//   email_to_wallet:{email}    → wallet   (email-side claim, enforces 1:1)
+//
+// 10-year TTL mirrors the trial_used / trial_used_by_email sentinels.
 const walletEmailLinkKey = (addr: string) => `wallet_email_link:${addr.toLowerCase()}`;
+const emailToWalletKey   = (email: string) => `email_to_wallet:${email.toLowerCase()}`;
 const WALLET_EMAIL_LINK_TTL = 10 * 365 * 24 * 60 * 60;
 
 export async function POST(req: NextRequest) {
@@ -75,9 +93,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Session cookie missing" }, { status: 401 });
   }
 
+  // Read both global indexes up front. A truly 1:1 wallet ↔ email contract
+  // can't rely on session.address alone — that only catches "same session
+  // tries to switch wallet". Cross-session attacks/mistakes (a second email
+  // claiming the same wallet; an email logging out and re-binding a
+  // different wallet) need explicit global checks.
+  const emailLc = session.email.toLowerCase();
+  const [existingEmailForWallet, existingWalletForEmail] = await Promise.all([
+    kv.get<string>(walletEmailLinkKey(verifiedAddr)),
+    kv.get<string>(emailToWalletKey(emailLc)),
+  ]);
+  const existingEmailLc = existingEmailForWallet?.toLowerCase() ?? null;
+  const existingWalletLc = existingWalletForEmail?.toLowerCase() ?? null;
+
   // Idempotent re-bind — same wallet reconnecting after a refresh shouldn't
   // need to re-prove. Returns 200 so the client doesn't show an error toast.
-  if (session.address && session.address === verifiedAddr) {
+  // Accept either signal: the session already names this wallet, OR both
+  // global indexes already point at this exact (email, wallet) pair.
+  if (
+    session.address === verifiedAddr ||
+    (existingEmailLc === emailLc && existingWalletLc === verifiedAddr)
+  ) {
     return NextResponse.json({
       ok: true,
       bound: true,
@@ -86,10 +122,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Bind-once enforcement: a session that's already claimed by wallet X
-  // CANNOT silently flip to wallet Y. The recovery path (Phase 2) lives at
-  // a separate endpoint with OTP gating; here we just refuse and surface
-  // the bound address so the UI can render the hard-block screen.
+  // Session-scoped bind-once — same session, different wallet. Surfaces the
+  // bound address for the dashboard's WrongWalletHardBlock to render.
   if (session.address && session.address !== verifiedAddr) {
     return NextResponse.json(
       {
@@ -101,21 +135,54 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Wallet-global uniqueness — this wallet is already claimed by a
+  // different email account. Without this check, two emails could both
+  // bind 0xabc, and the wallet_email_link reverse pointer would silently
+  // overwrite to whoever bound last. /api/keys/provision would then
+  // bridge wallet-only logins to whichever email won the race — the
+  // other email's trial state becomes invisible from the wallet view.
+  if (existingEmailLc && existingEmailLc !== emailLc) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "WALLET_TAKEN",
+        // Don't leak the full bound email to a random caller — the wallet
+        // owner can recover via that email but we don't echo it here.
+        // The hint is enough: someone else has this wallet, not you.
+      },
+      { status: 409 },
+    );
+  }
+
+  // Email-global uniqueness — this email already bound a different wallet
+  // (in a prior session that's since logged out). Fresh sessions start
+  // with session.address = null, so the per-session bind-once doesn't
+  // catch this case. Surface the previously-bound wallet so the UI can
+  // tell the user to reconnect that one instead.
+  if (existingWalletLc && existingWalletLc !== verifiedAddr) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "EMAIL_ALREADY_BOUND",
+        boundAddress: existingWalletLc,
+      },
+      { status: 409 },
+    );
+  }
+
   // First bind — promote the session from "unbound" to "bound". Persists
   // verifiedAddr as session.address (the canonical bound wallet).
   await pairSessionWithWallet(sid, verifiedAddr);
 
-  // Read-side bridge: write the wallet→email reverse pointer so that
-  // /api/keys/provision can find the email pseudo-account when the user
-  // later signs in via wallet only (no email session cookie). Without
-  // this index, a wallet-only login can't see the trial credits/keys
-  // sitting on `sub:email:<sub>` and they appear lost. This is a *read*
-  // bridge — pseudo and wallet stay as separate KV records; Phase 2's
-  // real migration will eventually consolidate them. Best-effort: the
-  // bind itself is already committed and a failed reverse-index write
-  // just leaves the wallet-only view in its pre-bridge state.
-  kv.set(walletEmailLinkKey(verifiedAddr), session.email, { ex: WALLET_EMAIL_LINK_TTL })
-    .catch(e => console.error("[wallet-bind] wallet_email_link write failed (non-fatal):", e));
+  // Write BOTH global indexes so future binds are checked against this
+  // claim from either direction. Best-effort: the bind itself is already
+  // committed and a failed index write just leaves the wallet-only view
+  // in its pre-bridge state (Phase 1.5 visibility degrades to "no bridge"
+  // rather than corrupting state).
+  Promise.all([
+    kv.set(walletEmailLinkKey(verifiedAddr), session.email, { ex: WALLET_EMAIL_LINK_TTL }),
+    kv.set(emailToWalletKey(emailLc), verifiedAddr, { ex: WALLET_EMAIL_LINK_TTL }),
+  ]).catch(e => console.error("[wallet-bind] bridge index write failed (non-fatal):", e));
 
   // Best-effort operator alert. Same fail-soft pattern as payment-activate.
   // Phase 2's migration job triggers off this event downstream.

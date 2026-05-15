@@ -98,9 +98,92 @@ describe("/api/auth/me — bind state exposed to client", () => {
   });
 });
 
-describe("auth-client bindWallet helper", () => {
+describe("wallet-bind — global 1:1 uniqueness (cross-session)", () => {
+  // Phase 1 closed per-session bind-once (same session can't switch wallet).
+  // These tests cover the cross-session attacks/mistakes that needed the
+  // wallet_email_link + email_to_wallet reverse indexes to actually
+  // enforce a 1:1 contract.
+
+  it("reads BOTH global indexes before committing the bind", () => {
+    // Two-direction check — wallet→email AND email→wallet. Either alone
+    // leaves a hole: missing wallet→email lets two emails bind the same
+    // wallet; missing email→wallet lets one email re-bind after logout
+    // to a different wallet (fresh sessions reset session.address).
+    expect(bindSource).toMatch(/walletEmailLinkKey\(verifiedAddr\)/);
+    expect(bindSource).toMatch(/emailToWalletKey\(/);
+    // Reads happen up front (Promise.all) so the policy decision uses a
+    // consistent KV snapshot rather than racing in between writes.
+    expect(bindSource).toMatch(
+      /Promise\.all\(\[[\s\S]+?walletEmailLinkKey\(verifiedAddr\)[\s\S]+?emailToWalletKey\(/,
+    );
+  });
+
+  it("returns 409 WALLET_TAKEN when this wallet is claimed by a different email", () => {
+    expect(bindSource).toMatch(/code:\s*["']WALLET_TAKEN["']/);
+    // The check is "existing wallet→email entry differs from this session's email".
+    expect(bindSource).toMatch(
+      /existingEmailLc\s*&&\s*existingEmailLc\s*!==\s*emailLc/,
+    );
+  });
+
+  it("does NOT leak the bound email in the WALLET_TAKEN response", () => {
+    // Surfacing the colliding email would be a free email-existence
+    // oracle for an attacker who controls a wallet — keep the response
+    // information-light. The owner can recover via support; the prompt
+    // says "linked to a different Q402 account" without naming it.
+    //
+    // Narrow the regex to JUST the NextResponse.json object literal
+    // for the WALLET_TAKEN code so we don't false-trip on surrounding
+    // comments / variable names.
+    const takenResponse = bindSource.match(
+      /NextResponse\.json\(\s*\{[^}]*code:\s*["']WALLET_TAKEN["'][^}]*\}/,
+    );
+    expect(takenResponse).toBeTruthy();
+    expect(takenResponse![0]).not.toMatch(/existingEmailLc/);
+    expect(takenResponse![0]).not.toMatch(/session\.email/);
+    expect(takenResponse![0]).not.toMatch(/email:/);
+  });
+
+  it("returns 409 EMAIL_ALREADY_BOUND when this email already claimed a different wallet (cross-session)", () => {
+    expect(bindSource).toMatch(/code:\s*["']EMAIL_ALREADY_BOUND["']/);
+    expect(bindSource).toMatch(
+      /existingWalletLc\s*&&\s*existingWalletLc\s*!==\s*verifiedAddr/,
+    );
+    // Echo back the bound wallet so the dashboard can render "switch your
+    // wallet extension to 0x...X".
+    expect(bindSource).toMatch(/boundAddress:\s*existingWalletLc/);
+  });
+
+  it("idempotent re-bind accepts EITHER session.address match OR existing indexes match", () => {
+    // Cross-session legitimate case: user signs out, signs back in with
+    // the same email, reconnects the same wallet. session.address starts
+    // null but BOTH indexes already point at this pair. Treat as
+    // idempotent rather than rejecting with EMAIL_ALREADY_BOUND.
+    expect(bindSource).toMatch(
+      /session\.address\s*===\s*verifiedAddr\s*\|\|\s*\(\s*existingEmailLc\s*===\s*emailLc\s*&&\s*existingWalletLc\s*===\s*verifiedAddr/,
+    );
+  });
+
+  it("writes BOTH indexes on successful first bind (not just one direction)", () => {
+    // After bind success, both indexes get written so the next bind
+    // attempt from any direction sees the claim. Missing either write
+    // leaves a half-closed gate that future attempts can exploit.
+    const writeBlock = bindSource.match(/Promise\.all\(\[[\s\S]+?walletEmailLinkKey[\s\S]+?emailToWalletKey[\s\S]+?\]\)/);
+    expect(writeBlock).toBeTruthy();
+  });
+});
+
+describe("auth-client bindWallet helper — full tagged result", () => {
   it("exposes a tagged result type with WALLET_ALREADY_BOUND surfacing the bound address", () => {
     expect(authClientSource).toMatch(/code:\s*["']WALLET_ALREADY_BOUND["'];\s*boundAddress/);
+  });
+
+  it("exposes WALLET_TAKEN (cross-email collision) without leaking the colliding email", () => {
+    expect(authClientSource).toMatch(/code:\s*["']WALLET_TAKEN["']\s*\}/);
+  });
+
+  it("exposes EMAIL_ALREADY_BOUND (cross-session collision) with the bound wallet", () => {
+    expect(authClientSource).toMatch(/code:\s*["']EMAIL_ALREADY_BOUND["'];\s*boundAddress/);
   });
 
   it("distinguishes SIGNATURE_CANCELLED / NETWORK / REJECTED so the UI doesn't lump failures", () => {

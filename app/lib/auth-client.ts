@@ -109,23 +109,30 @@ export async function getAuthCreds(
 
 /**
  * Bind a wallet to the caller's email session — Phase 1 of the identity
- * model (see docs/sprint-bnb-focus.md §10). Mints a fresh challenge,
+ * model (see docs/sprint-bnb-focus.md §10 + §12). Mints a fresh challenge,
  * prompts the wallet for a signature, POSTs the signed payload to
  * /api/auth/wallet-bind. Returns a tagged result so the caller can render
  * the right UX for each failure mode without parsing error strings.
  *
- *   { ok: true, address }                          — bound, idempotent or first-time
+ *   { ok: true, address }                            — bound, idempotent or first-time
  *   { ok: false, code: "WALLET_ALREADY_BOUND",
- *     boundAddress }                               — different wallet already claimed
- *                                                    (UI should show hard-block / recovery)
- *   { ok: false, code: "SIGNATURE_CANCELLED" }     — user rejected wallet prompt
- *   { ok: false, code: "NETWORK", error }          — fetch / parse failed
- *   { ok: false, code: "REJECTED", error }         — server returned non-ok with no
- *                                                    bind-specific code (rate limit etc.)
+ *     boundAddress }                                 — THIS session is already bound to a
+ *                                                      different wallet (UI shows hard-block)
+ *   { ok: false, code: "WALLET_TAKEN" }              — this wallet is already claimed by a
+ *                                                      DIFFERENT email account
+ *   { ok: false, code: "EMAIL_ALREADY_BOUND",
+ *     boundAddress }                                 — THIS email is already bound to a
+ *                                                      different wallet (cross-session bind)
+ *   { ok: false, code: "SIGNATURE_CANCELLED" }       — user rejected wallet prompt
+ *   { ok: false, code: "NETWORK", error }            — fetch / parse failed
+ *   { ok: false, code: "REJECTED", error }           — server returned non-ok with no
+ *                                                      bind-specific code (rate limit etc.)
  */
 export type BindWalletResult =
   | { ok: true; address: string; idempotent?: boolean }
   | { ok: false; code: "WALLET_ALREADY_BOUND"; boundAddress: string }
+  | { ok: false; code: "WALLET_TAKEN" }
+  | { ok: false; code: "EMAIL_ALREADY_BOUND"; boundAddress: string }
   | { ok: false; code: "SIGNATURE_CANCELLED"; error: string }
   | { ok: false; code: "NETWORK"; error: string }
   | { ok: false; code: "REJECTED"; error: string };
@@ -160,6 +167,16 @@ export async function bindWallet(
       return {
         ok: false,
         code: "WALLET_ALREADY_BOUND",
+        boundAddress: typeof data.boundAddress === "string" ? data.boundAddress : "",
+      };
+    }
+    if (res.status === 409 && data.code === "WALLET_TAKEN") {
+      return { ok: false, code: "WALLET_TAKEN" };
+    }
+    if (res.status === 409 && data.code === "EMAIL_ALREADY_BOUND") {
+      return {
+        ok: false,
+        code: "EMAIL_ALREADY_BOUND",
         boundAddress: typeof data.boundAddress === "string" ? data.boundAddress : "",
       };
     }
