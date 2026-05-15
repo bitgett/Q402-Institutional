@@ -877,11 +877,18 @@ export default function DashboardPage() {
     );
   }
 
-  // Email-only view: user signed in via Google / magic-link, no wallet
-  // connected yet. Trial is already active (Google/email callback grants
-  // 2,000 sponsored TX + live key on first signup) — surface everything
-  // they need in one screen.
-  if (mounted && emailSession && !isConnected) {
+  // Email-only view: user signed in via Google / magic-link.
+  //   - !isConnected → pure email-only (the "API key fast path" landing)
+  //   - skipClaimPrompt && !emailSession.address && isConnected → user
+  //     deferred binding from State D; treat them as effectively email-
+  //     only and route back to this simpler page rather than the full
+  //     multichain dashboard chrome. They can re-trigger State D from
+  //     the in-page "Bind ..." button by clearing the skip flag.
+  if (
+    mounted &&
+    emailSession &&
+    (!isConnected || (skipClaimPrompt && !emailSession.address))
+  ) {
     const trialDaysLeft = sessionTrial.trialExpiresAt
       ? Math.max(0, Math.ceil((new Date(sessionTrial.trialExpiresAt).getTime() - Date.now()) / 86_400_000))
       : null;
@@ -1034,15 +1041,14 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Wallet-bind nudge — copy + CTA depend on whether a wallet is
-              already bound to this email session. Bound case: the wallet is
-              the persistent identity, so the CTA promotes "reconnect to
-              unlock the full Multichain dashboard" (this user's session
-              record already knows the addr; we just need an active in-browser
-              connection to sign + render the multichain view). Unbound case:
-              the original "test the full flow" pitch. Either way, clicking
-              the CTA opens WalletModal — the existing wallet-bind useEffect
-              picks up the new connection and POSTs /api/auth/wallet-bind. */}
+          {/* Wallet-bind nudge — three modes:
+              (a) bound:            reconnect-for-multichain CTA
+              (b) skip-mode:        wallet already connected but user
+                                    deferred binding in State D. Show
+                                    "Resume claim" instead of "Connect".
+              (c) pure email-only:  no wallet connected yet
+              Mode (b) is reached via the email-only branch's extended
+              condition above (skipClaimPrompt && !emailSession.address). */}
           {emailSession.address ? (
             <div className="rounded-2xl border border-yellow/25 p-6 mb-6"
                  style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(255,255,255,0.02) 100%)" }}>
@@ -1063,6 +1069,26 @@ export default function DashboardPage() {
                 className="inline-block bg-yellow text-navy font-bold text-sm px-6 py-2.5 rounded-full hover:bg-yellow-hover transition-colors"
               >
                 Reconnect wallet →
+              </button>
+            </div>
+          ) : isConnected && address ? (
+            <div className="rounded-2xl border border-yellow/20 p-6 mb-6"
+                 style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.04) 0%, rgba(255,255,255,0.02) 100%)" }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] uppercase tracking-widest text-yellow font-bold">Skip mode — trial only</span>
+              </div>
+              <h2 className="text-base font-bold mb-2">Resume claiming this account?</h2>
+              <p className="text-white/45 text-sm mb-4">
+                You deferred binding <span className="font-mono text-white/75">{address.slice(0, 6)}…{address.slice(-4)}</span> to
+                this account. Trial credits + API keys above are live — but
+                Multichain stays locked until you bind a wallet. Claim now to
+                unlock it.
+              </p>
+              <button
+                onClick={() => setSkipClaimPrompt(false)}
+                className="inline-block bg-yellow text-navy font-bold text-sm px-6 py-2.5 rounded-full hover:bg-yellow-hover transition-colors"
+              >
+                Bind {address.slice(0, 6)}…{address.slice(-4)} permanently →
               </button>
             </div>
           ) : (
