@@ -19,30 +19,65 @@
  *      and the CallTool switch.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+const ROOT = resolve(__dirname, "..");
+
 const batchRouteSrc = readFileSync(
-  resolve(__dirname, "..", "app", "api", "relay", "batch", "route.ts"),
+  resolve(ROOT, "app", "api", "relay", "batch", "route.ts"),
   "utf8",
 );
 const sdkSrc = readFileSync(
-  resolve(__dirname, "..", "public", "q402-sdk.js"),
+  resolve(ROOT, "public", "q402-sdk.js"),
   "utf8",
 );
-const mcpIndexSrc = readFileSync(
-  resolve(__dirname, "..", "mcp-server", "src", "index.ts"),
-  "utf8",
-);
-const mcpBatchToolSrc = readFileSync(
-  resolve(__dirname, "..", "mcp-server", "src", "tools", "batch-pay.ts"),
-  "utf8",
-);
+
+// The MCP server is a sibling repo (bitgett/q402-mcp), gitignored here.
+// On a fresh clone of q402-landing the `mcp-server/` directory is absent
+// and we'd ENOENT at module load. Soft-skip the MCP-side blocks when the
+// sibling repo isn't checked out alongside; the same suites still run on
+// the canonical local dev layout where it IS present.
+//
+// Every cross-repo readFileSync runs at TOP LEVEL with an existsSync
+// guard, never inside a describe(...) body. `describe.skipIf` only skips
+// the it() callbacks below it — the describe callback itself is always
+// evaluated, so a raw readFileSync nested inside would ENOENT before
+// the skipIf even runs.
+const MCP_INDEX_PATH       = resolve(ROOT, "mcp-server", "src", "index.ts");
+const MCP_BATCH_TOOL_PATH  = resolve(ROOT, "mcp-server", "src", "tools", "batch-pay.ts");
+const MCP_CLIENT_PATH      = resolve(ROOT, "mcp-server", "src", "client.ts");
+const mcpAvailable         = existsSync(MCP_INDEX_PATH) && existsSync(MCP_BATCH_TOOL_PATH);
+const mcpClientAvailable   = existsSync(MCP_CLIENT_PATH);
+const mcpIndexSrc          = mcpAvailable       ? readFileSync(MCP_INDEX_PATH,      "utf8") : "";
+const mcpBatchToolSrc      = mcpAvailable       ? readFileSync(MCP_BATCH_TOOL_PATH, "utf8") : "";
+const mcpClientSrc         = mcpClientAvailable ? readFileSync(MCP_CLIENT_PATH,     "utf8") : "";
 
 describe("/api/relay/batch route", () => {
   it("declares trial=5 and paid=20 recipient caps as named constants", () => {
     expect(batchRouteSrc).toMatch(/MAX_RECIPIENTS_TRIAL\s*=\s*5/);
     expect(batchRouteSrc).toMatch(/MAX_RECIPIENTS_PAID\s*=\s*20/);
+  });
+
+  it("aborted batches return ok:false with status 424", () => {
+    // Previous revision returned 200/ok:true even when recipient[0]
+    // failed and the batch was abandoned. SDK wrappers that only throw
+    // on !resp.ok would silently surface a fully-failed batch as
+    // success. The status policy lives in source so a regression
+    // (e.g. a refactor that drops the `{ status }` arg) trips here.
+    expect(batchRouteSrc).toMatch(/ok:\s*totalFailed\s*===\s*0/);
+    expect(batchRouteSrc).toMatch(/isAborted\s*\?\s*424/);
+    expect(batchRouteSrc).toMatch(/isPartialFailure\s*\?\s*207/);
+  });
+
+  it("rejects non-batchable chains (xlayer / stable) with CHAIN_NOT_BATCHABLE", () => {
+    // The server is the authoritative chain gate for batching. Browser
+    // SDK + Node client + MCP tool schema all agree on the same 5-chain
+    // set; this assertion locks the server in lockstep.
+    expect(batchRouteSrc).toMatch(/CHAIN_NOT_BATCHABLE/);
+    expect(batchRouteSrc).toMatch(/BATCHABLE_CHAINS[\s\S]*?"avax"[\s\S]*?"bnb"[\s\S]*?"eth"[\s\S]*?"mantle"[\s\S]*?"injective"/);
+    expect(batchRouteSrc).not.toMatch(/BATCHABLE_CHAINS[^)]*"xlayer"/);
+    expect(batchRouteSrc).not.toMatch(/BATCHABLE_CHAINS[^)]*"stable"/);
   });
 
   it("selects the cap off keyRecord.plan === \"trial\" (not a header or hint)", () => {
@@ -90,6 +125,16 @@ describe("browser SDK batchPay()", () => {
     expect(sdkSrc).toMatch(/async\s+batchPay\s*\(\s*\{\s*recipients/);
   });
 
+  it("throws BatchPayError on aborted or partial-failure responses", () => {
+    // Earlier revision only threw on !resp.ok; the server now returns
+    // 424/207/200 + ok:false, and the SDK MUST surface either as an
+    // exception so callers can't keep treating the response as success.
+    expect(sdkSrc).toMatch(/!resp\.ok\s*\|\|\s*data\?\.ok\s*===\s*false/);
+    expect(sdkSrc).toMatch(/err\.name\s*=\s*"BatchPayError"/);
+    expect(sdkSrc).toMatch(/err\.aborted\s*=/);
+    expect(sdkSrc).toMatch(/err\.results\s*=/);
+  });
+
   it("caps recipients at 20 client-side (server is authoritative)", () => {
     expect(sdkSrc).toMatch(/recipients\.length\s*>\s*20/);
   });
@@ -114,7 +159,7 @@ describe("browser SDK batchPay()", () => {
   });
 });
 
-describe("MCP server q402_batch_pay registration", () => {
+describe.skipIf(!mcpAvailable)("MCP server q402_batch_pay registration", () => {
   it("imports BATCH_PAY_TOOL, BatchPayInputSchema, runBatchPay", () => {
     expect(mcpIndexSrc).toMatch(
       /import\s*\{\s*BATCH_PAY_TOOL,\s*BatchPayInputSchema,\s*runBatchPay\s*\}\s*from\s*"\.\/tools\/batch-pay\.js"/,
@@ -148,5 +193,49 @@ describe("MCP server q402_batch_pay registration", () => {
   it("applies max-amount + allowlist guards PER RECIPIENT", () => {
     expect(mcpBatchToolSrc).toMatch(/maxAmountGuardBatch/);
     expect(mcpBatchToolSrc).toMatch(/recipientAllowlistGuardBatch/);
+  });
+
+  it("input schema restricts chain to the 5-chain batchable set", () => {
+    // xlayer + stable must NOT appear in the Zod enum or in the JSON
+    // schema enum — the server is authoritative but the tool surface
+    // should fail fast for the agent. Same set as Node client + server.
+    expect(mcpBatchToolSrc).toMatch(/z\.enum\(\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective"\s*\]\)/);
+    expect(mcpBatchToolSrc).toMatch(/enum:\s*\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective"\s*\]/);
+    // Negative: xlayer / stable should NOT appear in either enum.
+    // (They may still appear in comments — restrict the check to the
+    // schema declarations only via tight surrounding context.)
+    const zodChainBlock = mcpBatchToolSrc.match(/chain:\s*z\.enum\([^)]+\)/);
+    expect(zodChainBlock?.[0]).not.toMatch(/"xlayer"|"stable"/);
+  });
+
+  it("BatchPayInputSchema accepts the (token, recipients) shape — no per-row token", () => {
+    // The recipient items in the Zod schema must be { to, amount } only
+    // — adding a per-row token here would silently allow mixed-token
+    // batches that the server can't fan out.
+    const recipientsBlock = mcpBatchToolSrc.match(/recipients:\s*z\s*\.\s*array\([\s\S]*?\.describe/);
+    expect(recipientsBlock).not.toBeNull();
+    expect(recipientsBlock![0]).not.toMatch(/\btoken:\s*z\./);
+  });
+});
+
+describe.skipIf(!mcpClientAvailable)("MCP Node client batchPay()", () => {
+  it("signature is `batchPay({ token, recipients })` — not `PayInput[]`", () => {
+    // The previous signature `batchPay(inputs: PayInput[])` let callers
+    // build payloads where every row had its own token field, but only
+    // inputs[0].token was actually shipped. The new signature surfaces
+    // the constraint in the type so mixed-token batches are impossible.
+    expect(mcpClientSrc).toMatch(/async\s+batchPay\(\s*input:\s*\{[^}]*token:[^}]*recipients:/);
+    expect(mcpClientSrc).not.toMatch(/async\s+batchPay\(\s*inputs:\s*PayInput\[\]/);
+  });
+
+  it("rejects xlayer / stable chains early", () => {
+    expect(mcpClientSrc).toMatch(/chain\.key\s*===\s*"xlayer"\s*\|\|\s*chain\.key\s*===\s*"stable"/);
+    expect(mcpClientSrc).toMatch(/batchPay does not yet support chain/);
+  });
+
+  it("throws BatchPayError on aborted / partial-failure server responses", () => {
+    expect(mcpClientSrc).toMatch(/export\s+class\s+BatchPayError\s+extends\s+Error/);
+    expect(mcpClientSrc).toMatch(/!resp\.ok\s*\|\|\s*data\.ok\s*===\s*false/);
+    expect(mcpClientSrc).toMatch(/throw\s+err/);
   });
 });

@@ -23,7 +23,7 @@
  * appear to settle on a stale local wallet.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(__dirname, "..");
@@ -31,10 +31,17 @@ const browserSdkSource = readFileSync(
   resolve(ROOT, "public", "q402-sdk.js"),
   "utf8",
 );
-const mcpClientSource = readFileSync(
-  resolve(ROOT, "mcp-server", "src", "client.ts"),
-  "utf8",
-);
+
+// The MCP server lives in its own repo (bitgett/q402-mcp) and is gitignored
+// here. On a fresh `git clone` of q402-landing the `mcp-server/` directory
+// is absent — without this guard the test crashes with ENOENT before any
+// describe block runs, even though the browser-SDK half could still verify.
+// When the sibling repo IS checked out alongside (the canonical local dev
+// layout), we run the full cross-repo grep.
+const MCP_CLIENT_PATH = resolve(ROOT, "mcp-server", "src", "client.ts");
+const mcpClientSource = existsSync(MCP_CLIENT_PATH)
+  ? readFileSync(MCP_CLIENT_PATH, "utf8")
+  : null;
 
 function extractFn(src: string, fnNamePattern: RegExp): string | null {
   const m = src.match(fnNamePattern);
@@ -74,13 +81,13 @@ describe("EIP-7702 authorization signing — protocol-spec, not EIP-712", () => 
     });
   });
 
-  describe("MCP Node client (mcp-server/src/client.ts)", () => {
+  describe.skipIf(mcpClientSource === null)("MCP Node client (mcp-server/src/client.ts)", () => {
     // Greedy across `\n}` would consume into the next function (which
     // legitimately uses signTypedData for the witness EIP-712 sig).
     // Anchor on the function's exact closure: top-level `^}` after the
     // body. Multiline flag so `^` matches line starts.
     const fn = extractFn(
-      mcpClientSource,
+      mcpClientSource ?? "",
       /async\s+function\s+signAuthorization\s*\([\s\S]*?\n^\}/m,
     );
 
@@ -97,7 +104,7 @@ describe("EIP-7702 authorization signing — protocol-spec, not EIP-712", () => 
     });
 
     it("does NOT reference the AUTHORIZATION_TYPES const (now removed)", () => {
-      expect(mcpClientSource).not.toMatch(/AUTHORIZATION_TYPES\s*=/);
+      expect(mcpClientSource!).not.toMatch(/AUTHORIZATION_TYPES\s*=/);
     });
 
     it("returns the canonical r/s/yParity tuple shape", () => {

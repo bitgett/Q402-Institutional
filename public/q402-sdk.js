@@ -452,7 +452,28 @@ class Q402Client {
     });
 
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error ?? `Batch relay failed (HTTP ${resp.status})`);
+    // Aborted batches (424) and partial failures (207) are NOT successes.
+    // Earlier revision only threw on !resp.ok, but the server then returned
+    // 200/ok:true even when recipient[0] failed and aborted the batch —
+    // callers silently treated a fully-failed batch as success. Now the
+    // server returns 4xx/207 with ok:false on any failure, and we throw
+    // a BatchPayError carrying the partial-results array so the caller
+    // can still inspect which rows landed and which didn't.
+    if (!resp.ok || data?.ok === false) {
+      const err = new Error(
+        data?.aborted
+          ? `Batch aborted: recipient[0] failed (${data.results?.[0]?.error ?? "unknown"}). No transfers landed.`
+          : data?.totalFailed > 0
+            ? `Batch completed with ${data.totalFailed}/${data.results?.length ?? "?"} failed rows.`
+            : (data?.error ?? `Batch relay failed (HTTP ${resp.status})`),
+      );
+      err.name = "BatchPayError";
+      err.aborted = !!data?.aborted;
+      err.totalSuccess = data?.totalSuccess ?? 0;
+      err.totalFailed  = data?.totalFailed  ?? signedRecipients.length;
+      err.results = data?.results ?? [];
+      throw err;
+    }
     return data;
   }
 

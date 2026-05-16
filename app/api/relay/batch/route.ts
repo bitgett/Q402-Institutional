@@ -133,6 +133,21 @@ export async function POST(req: NextRequest) {
   if (typeof chain !== "string" || !chain) {
     return NextResponse.json({ error: "chain is required" }, { status: 400 });
   }
+  // Authoritative batch-chain scope. Browser SDK + Node client also
+  // reject xlayer / stable for batching — chain-specific nonce field
+  // shapes (xlayerNonce / stableNonce) and the X Layer USDC EIP-3009
+  // fallback don't compose cleanly with sequential first-fail-abort
+  // semantics. Per-recipient pay() loop remains the path for those.
+  const BATCHABLE_CHAINS = new Set(["avax", "bnb", "eth", "mantle", "injective"]);
+  if (!BATCHABLE_CHAINS.has(chain)) {
+    return NextResponse.json(
+      {
+        error: `chain "${chain}" is not batchable. Batch-supported chains: avax, bnb, eth, mantle, injective. For xlayer / stable use /api/relay in a client-side loop.`,
+        code: "CHAIN_NOT_BATCHABLE",
+      },
+      { status: 400 },
+    );
+  }
   if (typeof token !== "string" || !ALLOWED_TOKENS.has(token)) {
     return NextResponse.json({ error: "token must be USDC, USDT, or RLUSD" }, { status: 400 });
   }
@@ -273,13 +288,41 @@ export async function POST(req: NextRequest) {
     if (firstFailed) break;
   }
 
-  return NextResponse.json({
-    ok: true,
-    scope: isTrialScopedKey ? "trial" : "paid",
-    limit,
-    totalSuccess,
-    totalFailed,
-    aborted: firstFailed,
-    results,
-  });
+  // Response-status policy:
+  //   - all rows OK                  → 200, ok: true
+  //   - recipient[0] failed (abort)  → 424 (Failed Dependency), ok: false
+  //                                    The delegation install dictates every
+  //                                    downstream row; the caller cannot retry
+  //                                    sub-rows in isolation. This MUST NOT
+  //                                    look like a success to the SDK / MCP
+  //                                    client wrapper — earlier revision
+  //                                    returned 200/ok:true here and Codex's
+  //                                    audit caught that the wrappers, which
+  //                                    only throw on !resp.ok, would silently
+  //                                    treat a fully-failed batch as success.
+  //   - some rows failed (partial)   → 207 (Multi-Status), ok: false
+  //                                    The first transfer succeeded so the
+  //                                    delegation IS in place; remaining
+  //                                    failures are per-row state, not a
+  //                                    batch-wide collapse. ok:false still
+  //                                    forces caller attention to the
+  //                                    results[] array.
+  const isAborted        = firstFailed;
+  const isPartialFailure = !firstFailed && totalFailed > 0;
+  const status =
+      isAborted        ? 424
+    : isPartialFailure ? 207
+    :                    200;
+  return NextResponse.json(
+    {
+      ok: totalFailed === 0,
+      scope: isTrialScopedKey ? "trial" : "paid",
+      limit,
+      totalSuccess,
+      totalFailed,
+      aborted: isAborted,
+      results,
+    },
+    { status },
+  );
 }
