@@ -88,10 +88,10 @@ export async function GET(req: NextRequest) {
   kv.del(tokenKvKey(token)).catch(() => {});
 
   const email = payload.email.toLowerCase();
-  // Redirects after a magic-link consumption pin to the canonical APP_ORIGIN
-  // for the same reason the link itself does — a Host-header swap would
-  // otherwise let an attacker observe the post-consumption redirect.
-  const appOrigin = getAppOrigin();
+  // Redirects pin to APP_ORIGIN env when set, else the inbound origin.
+  // Passing `req` here keeps preview-deploy magic links landing back
+  // on the preview's /dashboard (same deploy that issued the link).
+  const appOrigin = getAppOrigin(req);
   const isEmailOnly = payload.mode === "signup" || typeof payload.address !== "string";
 
   if (isEmailOnly) {

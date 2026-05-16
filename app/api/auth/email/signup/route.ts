@@ -72,9 +72,11 @@ export async function POST(req: NextRequest) {
     { ex: TOKEN_TTL_SEC },
   );
 
-  // Auth-bearing links pin to the canonical APP_ORIGIN — see
-  // app/lib/app-origin.ts for the rationale.
-  const magicLinkUrl = `${getAppOrigin()}/api/auth/email/callback?token=${token}`;
+  // Magic-link URL: APP_ORIGIN env when set, else the inbound request's
+  // origin (so sprint-branch preview deploys link back to themselves and
+  // not to a production deploy that may not have the email/* routes yet).
+  // See app/lib/app-origin.ts for the full resolution hierarchy.
+  const magicLinkUrl = `${getAppOrigin(req)}/api/auth/email/callback?token=${token}`;
 
   const { subject, html, text } = renderMagicLinkHtml({
     email,

@@ -71,12 +71,13 @@ export async function POST(req: NextRequest) {
   const token = randomBytes(TOKEN_BYTES).toString("hex");
   await kv.set(tokenKvKey(token), { address: addr, email }, { ex: TOKEN_TTL_SEC });
 
-  // Auth-bearing links resolve to the canonical APP_ORIGIN, not the request's
-  // Host header. The request can legitimately arrive on a preview deploy /
-  // edge / forwarded host and we still want the email to point at the
-  // production app. Misrouted or spoofed Host values cannot survive into a
-  // user's inbox.
-  const magicLinkUrl = `${getAppOrigin()}/api/auth/email/callback?token=${token}`;
+  // Magic-link URL is built from getAppOrigin(req). Production sets
+  // APP_ORIGIN in env so the link is operator-pinned regardless of Host.
+  // Preview deploys without APP_ORIGIN fall back to the inbound request's
+  // origin (i.e. the preview URL), so a magic link generated on a sprint-
+  // branch preview lands back on that same preview's callback route — not
+  // on production, which may not have the email/* routes yet.
+  const magicLinkUrl = `${getAppOrigin(req)}/api/auth/email/callback?token=${token}`;
 
   const { subject, html, text } = renderMagicLinkHtml({
     email,

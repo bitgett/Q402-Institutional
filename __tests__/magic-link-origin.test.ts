@@ -20,9 +20,23 @@ const emailStartSrc  = readFileSync(resolve(ROOT, "app", "api", "auth", "email",
 const emailSignupSrc = readFileSync(resolve(ROOT, "app", "api", "auth", "email", "signup", "route.ts"), "utf8");
 const emailCbSrc     = readFileSync(resolve(ROOT, "app", "api", "auth", "email", "callback", "route.ts"), "utf8");
 
-describe("getAppOrigin canonical helper", () => {
-  it("reads APP_ORIGIN env first, then NEXT_PUBLIC_BASE_URL, then production fallback", () => {
+describe("getAppOrigin resolution helper", () => {
+  it("reads APP_ORIGIN env first, then NEXT_PUBLIC_BASE_URL", () => {
     expect(helperSrc).toMatch(/process\.env\.APP_ORIGIN\s*\?\?\s*process\.env\.NEXT_PUBLIC_BASE_URL/);
+  });
+
+  it("falls back to the inbound request's origin when no env is set (preview-deploy safety)", () => {
+    // Earlier revision hard-coded "https://q402.quackai.ai" as the no-env
+    // fallback, which broke sprint preview deploys: magic links generated
+    // on the preview pointed users at production, where the email/*
+    // routes don't exist yet → 404. The req-derived fallback keeps the
+    // preview self-contained.
+    expect(helperSrc).toMatch(/if\s*\(\s*req\s*\)/);
+    expect(helperSrc).toMatch(/req\.headers\.get\(\s*["']host["']\s*\)/);
+    expect(helperSrc).toMatch(/req\.headers\.get\(\s*["']x-forwarded-proto["']\s*\)/);
+  });
+
+  it("keeps a hard-coded canonical fallback for the no-env no-req case (local dev safety)", () => {
     expect(helperSrc).toMatch(/"https:\/\/q402\.quackai\.ai"/);
   });
 
@@ -35,22 +49,26 @@ describe("getAppOrigin canonical helper", () => {
   });
 });
 
-describe("magic-link routes use getAppOrigin (not Host header)", () => {
-  it("/api/auth/email/start uses getAppOrigin for the magic link URL", () => {
-    expect(emailStartSrc).toMatch(/getAppOrigin\(\)/);
-    // And the old Host-header read is gone.
+describe("magic-link routes pass req to getAppOrigin", () => {
+  // Routes must pass `req` so preview deploys without APP_ORIGIN env
+  // resolve to their own host instead of hardcoded production. Direct
+  // `req.headers.get("host")` reads in route bodies stay forbidden —
+  // the helper is the single source of origin truth.
+
+  it("/api/auth/email/start passes req to getAppOrigin", () => {
+    expect(emailStartSrc).toMatch(/getAppOrigin\(\s*req\s*\)/);
     expect(emailStartSrc).not.toMatch(/req\.headers\.get\(\s*["']host["']/);
     expect(emailStartSrc).not.toMatch(/x-forwarded-proto/);
   });
 
-  it("/api/auth/email/signup uses getAppOrigin for the magic link URL", () => {
-    expect(emailSignupSrc).toMatch(/getAppOrigin\(\)/);
+  it("/api/auth/email/signup passes req to getAppOrigin", () => {
+    expect(emailSignupSrc).toMatch(/getAppOrigin\(\s*req\s*\)/);
     expect(emailSignupSrc).not.toMatch(/req\.headers\.get\(\s*["']host["']/);
     expect(emailSignupSrc).not.toMatch(/x-forwarded-proto/);
   });
 
-  it("/api/auth/email/callback uses getAppOrigin for post-consume redirects", () => {
-    expect(emailCbSrc).toMatch(/getAppOrigin\(\)/);
+  it("/api/auth/email/callback passes req to getAppOrigin for post-consume redirects", () => {
+    expect(emailCbSrc).toMatch(/getAppOrigin\(\s*req\s*\)/);
     expect(emailCbSrc).not.toMatch(/req\.headers\.get\(\s*["']host["']/);
     expect(emailCbSrc).not.toMatch(/x-forwarded-proto/);
   });
