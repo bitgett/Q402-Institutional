@@ -22,10 +22,14 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+// Normalize line endings so source-grep regexes anchored on `\n` work
+// regardless of whether git checked the file out as LF or CRLF (Windows
+// default vs CI default). Several earlier fragile tests passed locally
+// but red'd in fresh Windows clones; this is the single fix.
 const pageSrc = readFileSync(
   resolve(__dirname, "..", "app", "payment", "page.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 describe("payment retry — no double-charge", () => {
   it("payWithWallet branches on submittedTxHash before running ERC20 transfer", () => {

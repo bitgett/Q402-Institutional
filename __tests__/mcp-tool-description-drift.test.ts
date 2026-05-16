@@ -20,18 +20,25 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+// CRLF→LF normalization so the source-grep regexes work in fresh
+// Windows clones too (git default checkout = CRLF).
+function readLF(p: string): string {
+  return readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+}
 const ROOT = resolve(__dirname, "..");
 const PAY_PATH   = resolve(ROOT, "mcp-server", "src", "tools", "pay.ts");
 const QUOTE_PATH = resolve(ROOT, "mcp-server", "src", "tools", "quote.ts");
 const available = existsSync(PAY_PATH) && existsSync(QUOTE_PATH);
-const paySrc   = available ? readFileSync(PAY_PATH,   "utf8") : "";
-const quoteSrc = available ? readFileSync(QUOTE_PATH, "utf8") : "";
+const paySrc   = available ? readLF(PAY_PATH)   : "";
+const quoteSrc = available ? readLF(QUOTE_PATH) : "";
 
 describe.skipIf(!available)("MCP tool descriptions match actual server policy", () => {
   describe("PAY_TOOL.description", () => {
     it("does NOT claim a blanket 'BNB-FOCUS SPRINT IS ACTIVE: only chain: bnb' policy", () => {
-      // The blanket claim is the bug Codex caught — it lies to the agent
-      // when BNB_FOCUS_MODE is off, which it currently is.
+      // The blanket claim was an earlier sprint snapshot that survived
+      // past BNB_FOCUS_MODE being flipped to false — it lies to the
+      // agent because the runtime actually accepts the paid 7-chain
+      // matrix.
       expect(paySrc).not.toMatch(/BNB-FOCUS SPRINT IS ACTIVE/);
       expect(paySrc).not.toMatch(/every other chain and RLUSD return an error/);
     });

@@ -23,10 +23,11 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+// CRLF→LF so source-grep regexes work in Windows fresh-clones.
 const routeSrc = readFileSync(
   resolve(__dirname, "..", "app", "api", "relay", "route.ts"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 describe("API key is the builder's account, NOT a wallet anchor", () => {
   it("does NOT enforce `from === keyRecord.address` anywhere in relay", () => {

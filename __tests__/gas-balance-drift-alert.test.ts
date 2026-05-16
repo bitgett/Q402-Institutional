@@ -18,10 +18,11 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+// CRLF→LF so source-grep regexes work in Windows fresh-clones.
 const dbSrc = readFileSync(
   resolve(__dirname, "..", "app", "lib", "db.ts"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 describe("getGasBalance — negative drift alert", () => {
   it("still clamps negative balances to 0 for the user UI", () => {

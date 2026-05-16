@@ -22,16 +22,15 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+// CRLF→LF normalization so source-grep regexes work in Windows
+// fresh-clones (git default checkout = CRLF).
+function readLF(p: string): string {
+  return readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+}
 const ROOT = resolve(__dirname, "..");
 
-const batchRouteSrc = readFileSync(
-  resolve(ROOT, "app", "api", "relay", "batch", "route.ts"),
-  "utf8",
-);
-const sdkSrc = readFileSync(
-  resolve(ROOT, "public", "q402-sdk.js"),
-  "utf8",
-);
+const batchRouteSrc = readLF(resolve(ROOT, "app", "api", "relay", "batch", "route.ts"));
+const sdkSrc        = readLF(resolve(ROOT, "public", "q402-sdk.js"));
 
 // The MCP server is a sibling repo (bitgett/q402-mcp), gitignored here.
 // On a fresh clone of q402-landing the `mcp-server/` directory is absent
@@ -49,9 +48,9 @@ const MCP_BATCH_TOOL_PATH  = resolve(ROOT, "mcp-server", "src", "tools", "batch-
 const MCP_CLIENT_PATH      = resolve(ROOT, "mcp-server", "src", "client.ts");
 const mcpAvailable         = existsSync(MCP_INDEX_PATH) && existsSync(MCP_BATCH_TOOL_PATH);
 const mcpClientAvailable   = existsSync(MCP_CLIENT_PATH);
-const mcpIndexSrc          = mcpAvailable       ? readFileSync(MCP_INDEX_PATH,      "utf8") : "";
-const mcpBatchToolSrc      = mcpAvailable       ? readFileSync(MCP_BATCH_TOOL_PATH, "utf8") : "";
-const mcpClientSrc         = mcpClientAvailable ? readFileSync(MCP_CLIENT_PATH,     "utf8") : "";
+const mcpIndexSrc          = mcpAvailable       ? readLF(MCP_INDEX_PATH)      : "";
+const mcpBatchToolSrc      = mcpAvailable       ? readLF(MCP_BATCH_TOOL_PATH) : "";
+const mcpClientSrc         = mcpClientAvailable ? readLF(MCP_CLIENT_PATH)     : "";
 
 describe("/api/relay/batch route", () => {
   it("declares trial=5 and paid=20 recipient caps as named constants", () => {

@@ -14,11 +14,17 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+// Normalize CRLF→LF so source-grep regexes are line-ending agnostic.
+// Without this, Windows fresh-clones (git default = CRLF) fail tests
+// that pass on LF-checked-out repos.
+function readLF(p: string): string {
+  return readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+}
 const ROOT = resolve(__dirname, "..");
-const helperSrc      = readFileSync(resolve(ROOT, "app", "lib", "app-origin.ts"), "utf8");
-const emailStartSrc  = readFileSync(resolve(ROOT, "app", "api", "auth", "email", "start", "route.ts"), "utf8");
-const emailSignupSrc = readFileSync(resolve(ROOT, "app", "api", "auth", "email", "signup", "route.ts"), "utf8");
-const emailCbSrc     = readFileSync(resolve(ROOT, "app", "api", "auth", "email", "callback", "route.ts"), "utf8");
+const helperSrc      = readLF(resolve(ROOT, "app", "lib", "app-origin.ts"));
+const emailStartSrc  = readLF(resolve(ROOT, "app", "api", "auth", "email", "start", "route.ts"));
+const emailSignupSrc = readLF(resolve(ROOT, "app", "api", "auth", "email", "signup", "route.ts"));
+const emailCbSrc     = readLF(resolve(ROOT, "app", "api", "auth", "email", "callback", "route.ts"));
 
 describe("getAppOrigin resolution helper", () => {
   it("reads APP_ORIGIN env first, then NEXT_PUBLIC_BASE_URL", () => {

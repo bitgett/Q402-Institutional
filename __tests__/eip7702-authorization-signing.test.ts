@@ -26,11 +26,12 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
+// CRLF→LF so source-grep regexes work in Windows fresh-clones.
+function readLF(p: string): string {
+  return readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+}
 const ROOT = resolve(__dirname, "..");
-const browserSdkSource = readFileSync(
-  resolve(ROOT, "public", "q402-sdk.js"),
-  "utf8",
-);
+const browserSdkSource = readLF(resolve(ROOT, "public", "q402-sdk.js"));
 
 // The MCP server lives in its own repo (bitgett/q402-mcp) and is gitignored
 // here. On a fresh `git clone` of q402-landing the `mcp-server/` directory
@@ -39,9 +40,7 @@ const browserSdkSource = readFileSync(
 // When the sibling repo IS checked out alongside (the canonical local dev
 // layout), we run the full cross-repo grep.
 const MCP_CLIENT_PATH = resolve(ROOT, "mcp-server", "src", "client.ts");
-const mcpClientSource = existsSync(MCP_CLIENT_PATH)
-  ? readFileSync(MCP_CLIENT_PATH, "utf8")
-  : null;
+const mcpClientSource = existsSync(MCP_CLIENT_PATH) ? readLF(MCP_CLIENT_PATH) : null;
 
 function extractFn(src: string, fnNamePattern: RegExp): string | null {
   const m = src.match(fnNamePattern);

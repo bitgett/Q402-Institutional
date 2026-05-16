@@ -20,9 +20,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+// Normalize CRLF→LF so source-grep regexes are line-ending agnostic.
+function readLF(p: string): string {
+  return readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+}
 const ROOT = resolve(__dirname, "..");
-const signupSrc = readFileSync(resolve(ROOT, "app", "api", "auth", "email", "signup", "route.ts"), "utf8");
-const startSrc  = readFileSync(resolve(ROOT, "app", "api", "auth", "email", "start",  "route.ts"), "utf8");
+const signupSrc = readLF(resolve(ROOT, "app", "api", "auth", "email", "signup", "route.ts"));
+const startSrc  = readLF(resolve(ROOT, "app", "api", "auth", "email", "start",  "route.ts"));
 
 function expectFailClosed(src: string, label: string) {
   // The guard MUST consider isProd OR resend-set — NOT just resend-set.

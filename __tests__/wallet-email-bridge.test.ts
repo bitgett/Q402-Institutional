@@ -19,27 +19,16 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+// CRLF→LF normalization for line-ending agnostic source greps.
+function readLF(p: string): string {
+  return readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+}
 const ROOT = resolve(__dirname, "..");
-const bindSource = readFileSync(
-  resolve(ROOT, "app", "api", "auth", "wallet-bind", "route.ts"),
-  "utf8",
-);
-const trialActivateSource = readFileSync(
-  resolve(ROOT, "app", "api", "trial", "activate", "route.ts"),
-  "utf8",
-);
-const provisionSource = readFileSync(
-  resolve(ROOT, "app", "api", "keys", "provision", "route.ts"),
-  "utf8",
-);
-const dashboardSource = readFileSync(
-  resolve(ROOT, "app", "dashboard", "page.tsx"),
-  "utf8",
-);
-const transactionsSource = readFileSync(
-  resolve(ROOT, "app", "api", "transactions", "route.ts"),
-  "utf8",
-);
+const bindSource         = readLF(resolve(ROOT, "app", "api", "auth", "wallet-bind",   "route.ts"));
+const trialActivateSource = readLF(resolve(ROOT, "app", "api", "trial", "activate",   "route.ts"));
+const provisionSource    = readLF(resolve(ROOT, "app", "api", "keys", "provision",    "route.ts"));
+const dashboardSource    = readLF(resolve(ROOT, "app", "dashboard", "page.tsx"));
+const transactionsSource = readLF(resolve(ROOT, "app", "api", "transactions",         "route.ts"));
 
 describe("wallet_email_link write — both bind paths populate the bridge", () => {
   it("/api/auth/wallet-bind invokes writeWalletEmailBridge AFTER pairSessionWithWallet", () => {
@@ -80,10 +69,7 @@ describe("wallet_email_link write — both bind paths populate the bridge", () =
 });
 
 describe("writeWalletEmailBridge helper", () => {
-  const helperSrc = readFileSync(
-    resolve(ROOT, "app", "lib", "wallet-email-bridge.ts"),
-    "utf8",
-  );
+  const helperSrc = readLF(resolve(ROOT, "app", "lib", "wallet-email-bridge.ts"));
 
   it("writes BOTH directions of the bridge", () => {
     expect(helperSrc).toMatch(/wallet_email_link:\$\{addr\}/);

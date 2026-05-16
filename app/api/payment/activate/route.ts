@@ -157,10 +157,41 @@ export async function POST(req: NextRequest) {
   const creditGrantKey = `credit_grant:${result.txHash}`;
 
   // Phase 1a — permanent used check
-  const alreadyUsed = await kv.get(usedKey);
+  //
+  // Idempotency on response loss: if a previous call to this route succeeded
+  // on the server (txHash marked used, intent cleared, credits granted) but
+  // the response was lost in transit, the browser will retry. The retry
+  // re-derives the SAME txHash, so we recognise the marker and return a
+  // 200 success with the current subscription state instead of a 402 error.
+  // The earlier revision flat-returned 402 here — users saw "transaction
+  // already used" after the activation had in fact succeeded, with money
+  // already debited and credits already granted.
+  //
+  // The marker's VALUE is the address that first claimed it. We only return
+  // the idempotent success when that address matches the current caller —
+  // otherwise something is wrong (txHash reuse across accounts) and we keep
+  // the 402 reject.
+  const alreadyUsed = await kv.get<string>(usedKey);
   if (alreadyUsed) {
+    if (typeof alreadyUsed === "string" && alreadyUsed.toLowerCase() === addr.toLowerCase()) {
+      const currentSub      = await getSubscription(addr);
+      const currentCredits  = await getQuotaCredits(addr);
+      return NextResponse.json({
+        status:    "already_active",
+        plan:      currentSub?.plan ?? "starter",
+        apiKey:    currentSub?.apiKey ?? null,
+        sandboxApiKey: currentSub?.sandboxApiKey ?? null,
+        credits:   currentCredits,
+        // Surface the txHash + amount so the client UI matches the success
+        // shape it would have rendered on the original (lost) response.
+        txHash:    result.txHash ?? null,
+        amountUSD: result.amountUSD ?? null,
+        idempotentReplay: true,
+      });
+    }
+    // Same txHash claimed by a different address — that's misuse, keep 402.
     return NextResponse.json(
-      { error: "This transaction has already been used for activation" },
+      { error: "This transaction has already been used for activation", code: "TXHASH_ALREADY_USED" },
       { status: 402 },
     );
   }

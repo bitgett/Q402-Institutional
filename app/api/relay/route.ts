@@ -701,40 +701,50 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 11. Record the TX (including receipt id for dashboard link) ──────────
-  // Fire-and-forget — on-chain TX already succeeded; don't block response on KV write
+  // Routed through `after()` (next/server) so the writes run AFTER the
+  // response is flushed but before Vercel tears the serverless function
+  // down. Earlier revision called recordRelayedTx without await — on a
+  // cold-stop or KV transient failure the response went out but the TX
+  // history + gas-tank debit never landed. Symptom: "I paid but my
+  // Transactions tab is empty / gas tank wasn't charged."
   //
   // Trial users: gasCostNative is zeroed in the per-user record so the dashboard
   // doesn't show negative gas-tank balance against their $0 deposit. The actual
   // gas is paid by Q402's relayer wallet; aggregate trial-gas burn is tracked
   // separately via the trial_gas_burned:{chain} HINCRBYFLOAT counter below so
   // ops still has visibility into platform spend.
-  recordRelayedTx(keyRecord.address, {
-    apiKey,
-    address:      keyRecord.address,
-    chain,
-    fromUser:     from,
-    toUser:       to,
-    tokenAmount,
-    tokenSymbol:  token,
-    gasCostNative: isActiveTrial ? 0 : gasCostNative,
-    relayTxHash:  result.txHash ?? "",
-    relayedAt,
-    receiptId:    receiptId ?? undefined,
-  }).catch(e => console.error("[relay] TX record failed (non-fatal):", e));
+  after(async () => {
+    try {
+      await recordRelayedTx(keyRecord.address, {
+        apiKey,
+        address:      keyRecord.address,
+        chain,
+        fromUser:     from,
+        toUser:       to,
+        tokenAmount,
+        tokenSymbol:  token,
+        gasCostNative: isActiveTrial ? 0 : gasCostNative,
+        relayTxHash:  result.txHash ?? "",
+        relayedAt,
+        receiptId:    receiptId ?? undefined,
+      });
+    } catch (e) {
+      console.error("[relay] TX record failed (after-response):", e);
+    }
+  });
 
   // Platform trial-gas burn counter — tracks how much native gas Q402 is
   // covering on behalf of trial users, broken down by chain. Pure ops metric,
-  // not user-facing. Read with `HGETALL trial_gas_burned` from the Vercel KV
-  // dashboard to see "X BNB burned for trial users this sprint".
+  // not user-facing. Same after() guarantee as the TX-record above.
   if (isActiveTrial && gasCostNative > 0) {
-    void (async () => {
+    after(async () => {
       try {
         const { kv } = await import("@vercel/kv");
         await kv.hincrbyfloat("trial_gas_burned", chain, gasCostNative);
       } catch (e) {
-        console.error("[relay] trial_gas_burned counter failed (non-fatal):", e);
+        console.error("[relay] trial_gas_burned counter failed (after-response):", e);
       }
-    })();
+    });
   }
 
   // Sync subscription.quotaBonus for dashboard display (fire-and-forget, non-critical).
