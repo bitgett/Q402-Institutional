@@ -1,19 +1,23 @@
 /**
- * trial-from-binding.test.ts
+ * api-key-platform-model.test.ts (previously trial-from-binding.test.ts)
  *
- * Source-grep guards for the trial-scope `from`-wallet binding gate in
- * /api/relay. A leaked trial API key alone must not let an attacker burn
- * the legit owner's 2,000 sponsored TX credits by signing witnesses with
- * their own EOA.
+ * Locks in the platform-as-billing product model: an API key is the
+ * BUILDER's billing/quota account, and `from` is the END USER's wallet
+ * — distinct from the key owner's address. The witness signature in the
+ * request body is signed by `from`'s EOA, so the server cannot move
+ * anyone's funds without their direct authorization regardless of who
+ * holds the API key.
  *
- * Rules (locked in source):
- *   - keyRecord.address is an EVM address          → from === keyRecord.address
- *   - keyRecord.address starts with "email:"
- *     AND subscription has bound wallet            → from === bound wallet
- *     AND no bound wallet (email-only signup)      → fall through (no anchor)
+ * An earlier revision tried to bind `from === keyRecord.address` (or the
+ * email-pseudo's linked wallet) for trial-scoped keys. That broke the
+ * platform model — a builder selling Q402 settlements to N customers
+ * would need N API keys. We reverted, and this test pins the reversal
+ * so a future "fix" doesn't reintroduce the enforcement without
+ * deliberately rethinking the product.
  *
- * Paid keys are intentionally out of scope here (their threat model + use
- * case differs and needs a separate product decision).
+ * The real defense against API-key leak is operational (rate limits +
+ * quota caps + rotation), not structural — captured in section 4c's
+ * doc-block in the route source.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -24,44 +28,40 @@ const routeSrc = readFileSync(
   "utf8",
 );
 
-describe("trial-scope from-wallet binding (/api/relay)", () => {
-  it("declares the binding gate with TRIAL_FROM_NOT_BOUND error code", () => {
-    expect(routeSrc).toMatch(/TRIAL_FROM_NOT_BOUND/);
+describe("API key is the builder's account, NOT a wallet anchor", () => {
+  it("does NOT enforce `from === keyRecord.address` anywhere in relay", () => {
+    // A direct equality check on these two lower-cased addresses is the
+    // tell-tale signature of the old binding revision. If a refactor
+    // reintroduces it, this assertion trips.
+    expect(routeSrc).not.toMatch(/fromLc\s*!==\s*ownerAddrLc/);
+    expect(routeSrc).not.toMatch(/fromLc\s*===\s*ownerAddrLc/);
   });
 
-  it("EVM-owned trial key: enforces from === keyRecord.address", () => {
-    // For non-email pseudo addresses, the gate is a direct equality check
-    // on the lower-cased from vs keyRecord.address.
-    expect(routeSrc).toMatch(/!isEmailPseudo/);
-    expect(routeSrc).toMatch(/fromLc\s*!==\s*ownerAddrLc/);
+  it("does NOT enforce `from === bound wallet` for email-pseudo keys", () => {
+    // The bind-index lookup path lived in section 4c; locking the
+    // expression-shape out so the lookup can't be reintroduced as an
+    // enforcement gate (it's still legitimately used elsewhere for
+    // 1:1 uniqueness checks at bind time).
+    expect(routeSrc).not.toMatch(/fromLc\s*!==\s*boundWallet\.toLowerCase\(\)/);
   });
 
-  it("email-pseudo trial key: enforces from === bound wallet (via email_to_wallet index)", () => {
-    // The lookup must go through subscription.email + email_to_wallet, not
-    // keyRecord.address — Google OAuth keys store the googleSub in the
-    // pseudo, not the actual email.
-    expect(routeSrc).toMatch(/email_to_wallet:\$\{subscription\.email\.toLowerCase\(\)\}/);
-    expect(routeSrc).toMatch(/fromLc\s*!==\s*boundWallet\.toLowerCase\(\)/);
+  it("does NOT return the TRIAL_FROM_NOT_BOUND error code", () => {
+    // The error code itself must be gone — its presence anywhere in the
+    // relay route is proof the enforcement is back.
+    expect(routeSrc).not.toMatch(/TRIAL_FROM_NOT_BOUND/);
   });
 
-  it("email-pseudo trial key WITHOUT bound wallet falls through (no anchor)", () => {
-    // The gate is `if (boundWallet && fromLc !== ...)`. The `&& boundWallet`
-    // short-circuit is what lets brand-new email-only signups still relay
-    // before they ever connect a wallet.
-    expect(routeSrc).toMatch(/boundWallet\s*&&\s*fromLc\s*!==\s*boundWallet\.toLowerCase\(\)/);
+  it("documents the platform-as-billing model in source", () => {
+    // The reasoning must be inline in the code so a future contributor
+    // doesn't try to "fix" the missing enforcement.
+    expect(routeSrc).toMatch(/platform-as-billing/i);
+    expect(routeSrc).toMatch(/end[- ]user/i);
   });
 
-  it("paid keys bypass the trial from-binding gate", () => {
-    // The whole block is guarded by `if (!isSandbox && isTrialScopedKey)`.
-    expect(routeSrc).toMatch(/if\s*\(\s*!isSandbox\s*&&\s*isTrialScopedKey\s*\)\s*\{[\s\S]*?TRIAL_FROM_NOT_BOUND/);
-  });
-
-  it("sandbox keys bypass", () => {
-    // Same `!isSandbox` guard. Belt-and-suspenders assertion.
-    expect(routeSrc).toMatch(/!isSandbox\s*&&\s*isTrialScopedKey/);
-  });
-
-  it("returns 403 on binding mismatch", () => {
-    expect(routeSrc).toMatch(/TRIAL_FROM_NOT_BOUND[\s\S]*?status:\s*403/);
+  it("relies on rate-limit + quota + rotation as the operational defense", () => {
+    // The defense-in-depth must be referenced in source — these are the
+    // operational backstops that replace the structural binding.
+    expect(routeSrc).toMatch(/Per-API-key rate limit/i);
+    expect(routeSrc).toMatch(/rotation/i);
   });
 });

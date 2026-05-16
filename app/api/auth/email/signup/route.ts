@@ -85,12 +85,27 @@ export async function POST(req: NextRequest) {
   });
 
   const sendResult = await sendEmail({ to: email, subject, html, text });
-  if (!sendResult.ok && process.env.RESEND_API_KEY) {
-    console.error(`[email/signup] send failed for ${email}: ${sendResult.error}`);
-    return NextResponse.json(
-      { error: "Could not deliver verification email. Please try again.", code: "EMAIL_SEND_FAILED" },
-      { status: 502 },
-    );
+  // Fail-closed in production. The previous revision only returned an error
+  // when RESEND_API_KEY was set AND the send failed — so a production deploy
+  // that simply forgot to configure RESEND would silently return ok:true
+  // and the user would stare at "Check your inbox" forever. Now:
+  //   - production + send failure (regardless of cause)  → 502 EMAIL_SEND_FAILED
+  //   - dev/preview + RESEND unset                       → still ok, devLink returned
+  //   - dev/preview + RESEND set but send failed         → 502
+  if (!sendResult.ok) {
+    const isProd = process.env.NODE_ENV === "production";
+    if (isProd || process.env.RESEND_API_KEY) {
+      console.error(`[email/signup] send failed for ${email}: ${sendResult.error}`);
+      return NextResponse.json(
+        {
+          error: process.env.RESEND_API_KEY
+            ? "Could not deliver verification email. Please try again."
+            : "Email delivery is not configured on this deploy. Contact support.",
+          code: "EMAIL_SEND_FAILED",
+        },
+        { status: 502 },
+      );
+    }
   }
 
   const devLink =

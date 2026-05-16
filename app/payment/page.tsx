@@ -132,6 +132,12 @@ export default function PaymentPage() {
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
   const [submittedTxHash,  setSubmittedTxHash]  = useState("");
+  // Held across retries so the activation-only retry path can replay the
+  // same intentId after a transient activation failure — without it we'd
+  // either re-mint an intent (server rejects: "intent already consumed for
+  // this txHash") or lose the binding and confuse the server-side
+  // reconciliation. Cleared at the start of each FRESH payWithWallet call.
+  const [lastIntentId,     setLastIntentId]     = useState<string | null>(null);
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, perTx } = calcPrice(selectedChain, selectedVolume);
@@ -144,10 +150,65 @@ export default function PaymentPage() {
 
   // Removed: no longer redirect existing subscribers — they can top up credits
 
+  // Activation-only path. Used by both the initial happy-path call and by
+  // the "Try Again" button when an ERC20 transfer has already succeeded but
+  // the subsequent server-side activation step failed. Idempotent on the
+  // server (intentId + txHash deduplicate); safe to call repeatedly without
+  // re-sending money.
+  async function runActivationOnly(txHash: string, intentId: string | null): Promise<void> {
+    setPayStep("activating");
+    const chal = await getFreshChallenge(address!, signMessage);
+    if (!chal) {
+      setVerifyError("__sig_declined__");
+      setPayStep("error");
+      return;
+    }
+    const res = await fetch("/api/payment/activate", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        address,
+        challenge: chal.challenge,
+        signature: chal.signature,
+        ...(intentId ? { intentId } : {}),
+        txHash,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok && (data.status === "activated" || data.status === "already_active" || data.status === "credits_added")) {
+      setActivatedPlan(data.plan);
+      setPayStep("success");
+    } else {
+      setVerifyAttempts(v => v + 1);
+      setVerifyError(data.error ?? "Payment submitted, but activation did not complete. Please try again in a moment.");
+      setPayStep("error");
+    }
+  }
+
   async function payWithWallet() {
     if (!address) { setShowWalletModal(true); return; }
+
+    // Double-payment guard. If a prior attempt already moved ERC20 and we're
+    // sitting on a recorded txHash, "Try Again" must NOT re-run the transfer
+    // — that's the user paying twice for one activation. Branch to the
+    // activation-only path and reuse the existing txHash + intentId. The
+    // server's payment/activate route is idempotent on (intentId, txHash)
+    // so repeating it after a transient activation failure converges.
+    if (submittedTxHash) {
+      setVerifyError(null);
+      try {
+        await runActivationOnly(submittedTxHash, lastIntentId);
+      } catch (err) {
+        setVerifyAttempts(v => v + 1);
+        setVerifyError(walletErrorMessage(err));
+        setPayStep("error");
+      }
+      return;
+    }
+
     setVerifyError(null);
     setSubmittedTxHash("");
+    setLastIntentId(null);
     try {
       setPayStep("preparing_intent");
       const auth = await getAuthCreds(address, signMessage);
@@ -172,6 +233,7 @@ export default function PaymentPage() {
       }
       const intentData = await intentRes.json();
       const intentId = intentData.intentId ?? null;
+      setLastIntentId(intentId);
 
       setPayStep("awaiting_wallet");
       const txHash = await sendErc20Transfer({
@@ -187,33 +249,7 @@ export default function PaymentPage() {
       setPayStep("confirming_tx");
       await waitForWalletReceipt(payToken.chainId as WalletChainKey, txHash);
 
-      setPayStep("activating");
-      const chal = await getFreshChallenge(address, signMessage);
-      if (!chal) {
-        setVerifyError("__sig_declined__");
-        setPayStep("error");
-        return;
-      }
-      const res = await fetch("/api/payment/activate", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          address,
-          challenge: chal.challenge,
-          signature: chal.signature,
-          ...(intentId ? { intentId } : {}),
-          txHash,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && (data.status === "activated" || data.status === "already_active" || data.status === "credits_added")) {
-        setActivatedPlan(data.plan);
-        setPayStep("success");
-      } else {
-        setVerifyAttempts(v => v + 1);
-        setVerifyError(data.error ?? "Payment submitted, but activation did not complete. Please try again in a moment.");
-        setPayStep("error");
-      }
+      await runActivationOnly(txHash, intentId);
     } catch (err) {
       setVerifyAttempts(v => v + 1);
       setVerifyError(walletErrorMessage(err));
@@ -501,14 +537,24 @@ export default function PaymentPage() {
                     )}
                   </div>
 
-                  {/* Retry on error — re-runs payWithWallet (server-side intent + activate
-                      already include their own RPC retry / chain-fallback rescue). */}
+                  {/* Retry on error.
+                      - If submittedTxHash is set, the ERC20 transfer already
+                        landed and we only need to retry the activation step;
+                        the button copy reflects that so a user doesn't think
+                        they're paying again.
+                      - If no txHash yet, payWithWallet runs the full flow.
+                      payWithWallet itself branches internally and is safe to
+                      call either way. */}
                   {payStep === "error" && (
                     <button
                       onClick={payWithWallet}
                       className="w-full bg-white/[0.04] text-yellow border border-yellow/20 font-bold text-sm py-3.5 rounded-xl hover:bg-yellow/10 transition-all"
                     >
-                      {verifyError === "__sig_declined__" ? "Approve Signature →" : "Try Again →"}
+                      {verifyError === "__sig_declined__"
+                        ? "Approve Signature →"
+                        : submittedTxHash
+                          ? "Retry Activation (no new payment) →"
+                          : "Try Again →"}
                     </button>
                   )}
                 </div>

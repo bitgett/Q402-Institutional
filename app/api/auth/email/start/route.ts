@@ -87,14 +87,24 @@ export async function POST(req: NextRequest) {
 
   const sendResult = await sendEmail({ to: email, subject, html, text });
   if (!sendResult.ok) {
-    // Email transport failed AND RESEND is configured. The link itself is
-    // still stored in KV (so a manual operator action could deliver it), but
-    // we surface the failure so the user can retry instead of waiting on a
-    // ghost message.
+    // Fail-closed in production. The link is still in KV, but we surface
+    // the failure so the user retries instead of waiting on a ghost mail.
+    // Previous revision only 502'd when RESEND_API_KEY was set — production
+    // deploys that forgot to configure RESEND therefore returned ok:true
+    // and the user saw "Check your inbox" while no email ever went out.
+    //   production + send failure (regardless of cause)  → 502
+    //   dev/preview + RESEND unset                       → ok + devLink
+    //   dev/preview + RESEND set but send failed         → 502
     console.error(`[email/start] send failed for ${email}: ${sendResult.error}`);
-    if (process.env.RESEND_API_KEY) {
+    const isProd = process.env.NODE_ENV === "production";
+    if (isProd || process.env.RESEND_API_KEY) {
       return NextResponse.json(
-        { error: "Could not deliver verification email. Please try again.", code: "EMAIL_SEND_FAILED" },
+        {
+          error: process.env.RESEND_API_KEY
+            ? "Could not deliver verification email. Please try again."
+            : "Email delivery is not configured on this deploy. Contact support.",
+          code: "EMAIL_SEND_FAILED",
+        },
         { status: 502 },
       );
     }

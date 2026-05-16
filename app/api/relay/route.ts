@@ -40,7 +40,6 @@ import {
 } from "@/app/lib/relayer";
 import { BNB_FOCUS_MODE, BNB_FOCUS_REJECTION_MESSAGE } from "@/app/lib/feature-flags";
 import type { Hex, Address } from "viem";
-import { kv } from "@vercel/kv";
 
 // Valid Ethereum address pattern
 const ETH_ADDR = /^0x[0-9a-fA-F]{40}$/;
@@ -335,63 +334,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 4c. Trial-scope keys → from-wallet binding enforcement ────────────────
-  // A leaked trial API key alone must NOT let an attacker burn the legit
-  // owner's 2,000 sponsored TX credits by signing witnesses with their own
-  // EOA. We bind the relay's `from` to the API key's owning identity:
+  // ── 4c. API key model — `from` is the end-user wallet, NOT the key owner ─
+  // Q402's product model is platform-as-billing (Stripe-Connect-style):
   //
-  //   keyRecord.address is an EVM address           → from === keyRecord.address
-  //   keyRecord.address is "email:*" (pseudo)
-  //     AND subscription has a bound wallet         → from === bound wallet
-  //     AND no bound wallet (email-only signup)     → allowed (no anchor to bind to)
+  //   - The API key is the BUILDER's billing/quota account.
+  //   - The `from` parameter is the END USER's wallet — a different person
+  //     for each call. A builder selling a SaaS to N customers relays N
+  //     distinct from-addresses through a single API key.
+  //   - The witness signature in the body is signed by `from`'s EOA, so the
+  //     server never moves anyone's funds without their direct authorization.
   //
-  // The email-only "unbound" case is the documented soft path: a brand new
-  // email signup without any wallet connected has no canonical from to
-  // enforce against, so we fall through. The /event flow nudges them to
-  // bind a wallet, after which this gate kicks in. Sandbox keys bypass
-  // (they don't move funds). Paid keys are out of scope here — their
-  // threat model + use case (one key relaying for many end users) needs a
-  // separate product decision.
-  if (!isSandbox && isTrialScopedKey) {
-    const fromLc = String(from).toLowerCase();
-    const ownerAddrLc = String(keyRecord.address).toLowerCase();
-    const isEmailPseudo = ownerAddrLc.startsWith("email:");
-    if (!isEmailPseudo) {
-      // EVM-address-owned trial key: from must equal the owner.
-      if (fromLc !== ownerAddrLc) {
-        return NextResponse.json(
-          {
-            error: "Trial API key is bound to a specific wallet. The `from` parameter must match the wallet that minted the key.",
-            code:  "TRIAL_FROM_NOT_BOUND",
-          },
-          { status: 403 },
-        );
-      }
-    } else {
-      // Email-pseudo trial key: if a wallet is bound, enforce from == bound.
-      // Otherwise allow (email-only, no anchor).
-      const boundWallet = subscription
-        ? // subscription.email holds the lowercased email; the global index
-          // is keyed by that email. Don't trust keyRecord.address's `email:`
-          // suffix because Google-signed accounts store the googleSub there,
-          // not the actual email. The bind index lookup is the only authoritative
-          // path from email → wallet.
-          (subscription.email
-            ? await kv.get<string>(`email_to_wallet:${subscription.email.toLowerCase()}`)
-            : null)
-        : null;
-      if (boundWallet && fromLc !== boundWallet.toLowerCase()) {
-        return NextResponse.json(
-          {
-            error: "Trial API key is bound to wallet via your email. The `from` parameter must match the bound wallet.",
-            code:  "TRIAL_FROM_NOT_BOUND",
-          },
-          { status: 403 },
-        );
-      }
-      // boundWallet null → email-only trial, fall through.
-    }
-  }
+  // Earlier revisions added a "from must equal keyRecord.address (or the
+  // bound wallet)" enforcement — that BROKE the platform model: any builder
+  // would have been forced to mint one API key per end user. Reverted.
+  //
+  // The real defense against API-key leak in this model is operational, not
+  // structural:
+  //   - Per-API-key rate limit (section 3b above, 30 relay calls / 60s).
+  //   - Daily TX cap (section 7c via decrementCredit + the trial-scope
+  //     2,000-credit ceiling for trial keys; paid keys cap on their gas
+  //     tank balance).
+  //   - Auth-fresh signature on every state-changing dashboard action so
+  //     a leaked key alone can't rotate or top up.
+  //   - One-click rotation in /dashboard → Developer.
+  //
+  // The blast radius of a leaked key is therefore bounded by quota and gas
+  // tank, NOT by the user's primary wallet — which is what we want for a
+  // platform model.
 
   // ── 4a. TX credit quick pre-check (stale OK — real gate is atomic decrement) ──
   if (!isSandbox) {
