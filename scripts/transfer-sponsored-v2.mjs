@@ -11,7 +11,7 @@
  *   - Delete sub:<addr>
  *   - Reset quota:<addr> to 0
  *
- * On TO_ADDR (0xfe7ba1…):
+ * On TO_ADDR:
  *   - Mint a fresh q402_live_ key
  *   - Upsert sub:<addr> with sponsored sentinel (amountUSD=1, paidAt="")
  *   - INCRBY quota by AMOUNT

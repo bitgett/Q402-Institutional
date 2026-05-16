@@ -1,46 +1,36 @@
 /**
  * Q402 Client SDK (browser-compatible)
- * v1.7.3-bnbfocus — q402.batchPay() — fan out a single chain × token
- *          settlement to multiple recipients in one round-trip. Trial keys:
- *          up to 5 rows per call. Paid keys: up to 20. Server is the
- *          authoritative gate via /api/relay/batch; the SDK enforces the
- *          paid ceiling locally so a malformed call doesn't sign 100
- *          authorizations before the relay rejects them. Same EIP-712 +
- *          EIP-7702 wire shape as pay(); sequential authNonce (base + i)
- *          across rows. EIP-3009 (xlayer USDC fallback) and the EIP-7702
- *          xlayer/stable routes are intentionally NOT batchable — those
- *          paths require chain-specific nonce fields the batch endpoint
- *          doesn't fan out. Use pay() for those.
- * v1.7.2-bnbfocus — Critical fix: _signAuthorization now uses ethers'
- *          native EIP-7702 authorize() helper. Previous revision signed
- *          EIP-712 typed data over a custom domain, which the EVM does
- *          NOT accept for protocol-level authorization tuples — fresh
- *          EOAs would emit tx-success / zero-token-movement no-ops on
- *          their first relay, while already-delegated EOAs accidentally
- *          worked from prior (correctly-signed) authorizations.
- * v1.7.1-bnbfocus — BNB-focus sprint (2026-05-13 → 2026-05-20). While
- *          Q402_BNB_FOCUS_MODE is true, the SDK collapses to BNB Chain +
- *          USDC/USDT only. The other 6 chains and RLUSD are still defined
- *          below (zero code removed) but `supportedTokens` is rewritten to
- *          [] at module load, so every non-BNB call surfaces a sprint-aware
- *          error instead of signing. Flip the flag back to false to restore
- *          the full v1.7.0 7-chain matrix without further edits.
- * v1.7.0 — RLUSD (Ripple USD, NY DFS regulated stablecoin, decimals 18) added
- *          on Ethereum mainnet. RLUSD is Ethereum-only; the other 6 chains
- *          reject token:"RLUSD" via the supportedTokens allowlist. All chains
- *          now declare an explicit supportedTokens list so per-chain token
- *          policy is the single SDK source of truth.
- * v1.6.0 — Injective EVM (chainId 1776) added as the 7th supported chain.
- *          USDT only on Injective for now; native USDC via Circle CCTP is
- *          announced for Q2 2026 and will be added then. The IBC-bridged
- *          USDC on Injective EVM is intentionally not supported.
- * v1.5.0 — Mantle USDT repointed to USDT0 (LayerZero OFT), reflecting the 2025-11-27
- *          ecosystem migration. Legacy bridged USDT deposits sunset 2026-02-03.
- * v1.4.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable/mantle) + EIP-3009 (xlayer USDC fallback)
- *          Exact decimal→raw conversion via ethers.parseUnits (no IEEE-754 precision loss).
  *
- * The authoritative source for witness type, domain, and contract mapping is
- * contracts.manifest.json at the repo root. This SDK mirrors that manifest.
+ * Capabilities:
+ *   - q402.pay({ to, amount, token })   — single-recipient gasless settlement
+ *   - q402.batchPay({ recipients, token }) — multi-recipient on a single
+ *     chain × token. Trial keys: up to 5 rows. Paid keys: up to 20.
+ *     Server is the authoritative gate; the SDK enforces the paid ceiling
+ *     locally so a malformed call doesn't sign 100 authorizations before
+ *     the relay rejects them.
+ *
+ * Wire shapes:
+ *   - Default EIP-7702 path: avax / bnb / eth / mantle / injective. Used
+ *     for both pay() and batchPay(). Sequential authNonce (base + i) on
+ *     batch rows.
+ *   - EIP-7702 chain variants: xlayer / stable use chain-specific nonce
+ *     fields (xlayerNonce / stableNonce). Single-recipient pay() only.
+ *   - EIP-3009 fallback: xlayer USDC. Single-recipient pay() only.
+ *
+ * Multi-chain coverage:
+ *   - RLUSD (Ripple USD, NY DFS regulated, decimals 18) is Ethereum-only.
+ *   - Injective EVM (chainId 1776) is USDT-only until Circle CCTP native
+ *     USDC ships (announced for Q2 2026).
+ *   - Mantle USDT routes through USDT0 (LayerZero OFT) per the
+ *     2025-11-27 ecosystem migration; legacy bridged USDT deposits
+ *     sunset 2026-02-03.
+ *
+ * Amount handling: exact decimal → raw via ethers.parseUnits — no
+ * IEEE-754 precision loss for 18-decimal tokens.
+ *
+ * The authoritative source for witness type, domain, and contract
+ * mapping is contracts.manifest.json at the repo root. This SDK
+ * mirrors that manifest.
  *
  * ── Chain signing matrix (verified against deployed contract source) ───────────
  *
@@ -81,16 +71,15 @@
  *   const result = await q402s.pay({ to: "0x...", amount: "1.00", token: "USDT" });
  */
 
-// ─── BNB-focus sprint flag ────────────────────────────────────────────────────
-// Mirrors app/lib/feature-flags.ts BNB_FOCUS_MODE. The two must move together —
-// drift would let server reject calls the SDK happily signed (worst UX) or
-// vice versa. The post-config rewrite block at the bottom of this section is
-// what actually enforces the gate; flipping this constant to false restores
-// the v1.7.0 7-chain `supportedTokens` lists exactly as defined below.
+// ─── Optional BNB-only narrowing flag ────────────────────────────────────────
+// Mirrors app/lib/feature-flags.ts BNB_FOCUS_MODE. When true, the SDK
+// collapses to BNB Chain + USDC/USDT only; every non-BNB chain's
+// supportedTokens list is rewritten to [] at module load. Currently false;
+// flip both this constant and the server-side flag together to opt into the
+// narrowing without further edits.
 const Q402_BNB_FOCUS_MODE = false;
 const Q402_BNB_FOCUS_REJECTION_MESSAGE =
-  "BNB-focus sprint: this chain/token is temporarily hidden. " +
-  "Full multi-chain support returns after the sprint window. " +
+  "This chain/token is currently disabled by the BNB-only narrowing flag. " +
   "Pass chain: \"bnb\" with token \"USDC\" or \"USDT\".";
 
 const Q402_CHAIN_CONFIG = {
@@ -174,13 +163,13 @@ const Q402_CHAIN_CONFIG = {
   },
 };
 
-// ─── Apply BNB-focus sprint narrowing ─────────────────────────────────────────
-// During the sprint, every non-BNB chain's supportedTokens is rewritten to [].
-// The runtime check in `pay()` already rejects any token not in supportedTokens,
-// so this single mutation cascades to RLUSD on Ethereum, USDC/USDT on the other
-// 5 chains, and any chain a future caller might try. BNB itself keeps its
-// original ["USDC","USDT"]. The original arrays are intentionally written in
-// the config above (not deleted) so the sprint is a one-flag revert.
+// ─── Apply BNB-only narrowing when the flag is set ───────────────────────────
+// Every non-BNB chain's supportedTokens is rewritten to []. The runtime check
+// in `pay()` rejects any token not in supportedTokens, so this single
+// mutation cascades to RLUSD on Ethereum, USDC/USDT on the other 5 chains,
+// and any chain a future caller might try. BNB itself keeps its original
+// ["USDC","USDT"]. The original arrays stay in the config above so the
+// narrowing is a one-flag revert.
 if (Q402_BNB_FOCUS_MODE) {
   for (const c of Object.keys(Q402_CHAIN_CONFIG)) {
     if (c !== "bnb") Q402_CHAIN_CONFIG[c].supportedTokens = [];
@@ -723,18 +712,14 @@ class Q402Client {
   /**
    * EIP-7702 protocol-level authorization signature.
    *
-   * Earlier revisions of this method used EIP-712 typed-data signing with
-   * a custom "EIP7702Authorization" domain. That signature is over the
-   * WRONG message — the EVM evaluates authorization tuples by ecrecovering
-   * `keccak256(0x05 || rlp([chainId, address, nonce]))`, not an EIP-712
-   * digest. Tuples signed the old way recovered a different address than
-   * the EOA owner, the protocol marked them invalid, and the EOA's code
-   * was never set to the delegate. Subsequent calls to the EOA executed
-   * as no-ops against empty code — txs landed as `status: success` with
-   * zero token movement. Already-delegated wallets accidentally worked
-   * (their code was set on a previous, properly-signed authorization),
-   * but every first-time-binding wallet on the trial flow silently
-   * failed — exactly the BNB-focus sprint's primary signup path.
+   * The EVM evaluates authorization tuples by ecrecovering
+   * `keccak256(0x05 || rlp([chainId, address, nonce]))` — NOT an
+   * EIP-712 typed-data digest with a custom domain. Any signature
+   * produced over the wrong message recovers a different address than
+   * the EOA owner; the protocol marks the authorization invalid, the
+   * EOA's code never gets set to the delegate, and subsequent calls
+   * execute as no-ops against empty code (status:success with zero
+   * token movement). Always use the spec-correct signer helper.
    *
    * `signer.authorize({ chainId, address, nonce })` is ethers v6.16+'s
    * native helper that produces the spec-correct signature. For an

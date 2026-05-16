@@ -124,7 +124,7 @@ export default function EventPage() {
           >
             <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-yellow/95">
-              BNB-focus sprint
+              Free Trial · BNB Chain
             </span>
             <span className="text-white/25 text-xs">·</span>
             <span className="text-xs text-white/65">

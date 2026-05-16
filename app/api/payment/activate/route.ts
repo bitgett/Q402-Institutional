@@ -158,14 +158,13 @@ export async function POST(req: NextRequest) {
 
   // Phase 1a — permanent used check
   //
-  // Idempotency on response loss: if a previous call to this route succeeded
-  // on the server (txHash marked used, intent cleared, credits granted) but
-  // the response was lost in transit, the browser will retry. The retry
-  // re-derives the SAME txHash, so we recognise the marker and return a
-  // 200 success with the current subscription state instead of a 402 error.
-  // The earlier revision flat-returned 402 here — users saw "transaction
-  // already used" after the activation had in fact succeeded, with money
-  // already debited and credits already granted.
+  // Idempotency on response loss: if the activation succeeded on the
+  // server (txHash marked used, intent cleared, credits granted) but the
+  // response was lost in transit, the browser retry re-derives the SAME
+  // txHash. We recognise the marker and return a 200 success with the
+  // current subscription state instead of a 402 error so the user UI
+  // converges on the same success card they would have seen the first
+  // time.
   //
   // The marker's VALUE is the address that first claimed it. We only return
   // the idempotent success when that address matches the current caller —

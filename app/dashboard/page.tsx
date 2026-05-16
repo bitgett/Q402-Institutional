@@ -2050,7 +2050,7 @@ export default function DashboardPage() {
                 What ships in the package
               </div>
               <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
-                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-focus sprint: shows BNB Chain + USDC/USDT." : "compare gas across all 7 chains."} Read-only, no auth.</li>
+                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 7 chains."} Read-only, no auth.</li>
                 <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
                 <li>• <code className="text-yellow text-xs">q402_pay</code> — send a gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
               </ul>

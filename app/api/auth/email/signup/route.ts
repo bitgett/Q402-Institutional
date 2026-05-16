@@ -85,12 +85,9 @@ export async function POST(req: NextRequest) {
   });
 
   const sendResult = await sendEmail({ to: email, subject, html, text });
-  // Fail-closed in production. The previous revision only returned an error
-  // when RESEND_API_KEY was set AND the send failed — so a production deploy
-  // that simply forgot to configure RESEND would silently return ok:true
-  // and the user would stare at "Check your inbox" forever. Now:
+  // Email delivery policy (fail-closed in production):
   //   - production + send failure (regardless of cause)  → 502 EMAIL_SEND_FAILED
-  //   - dev/preview + RESEND unset                       → still ok, devLink returned
+  //   - dev/preview + RESEND unset                       → ok, devLink returned
   //   - dev/preview + RESEND set but send failed         → 502
   if (!sendResult.ok) {
     const isProd = process.env.NODE_ENV === "production";

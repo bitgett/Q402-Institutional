@@ -12,28 +12,24 @@
  */
 
 /**
- * BNB-focus sprint (2026-05-19 → 2026-06-30).
- *
- * ── Semantics (revised) ────────────────────────────────────────────────
- * This flag NO LONGER narrows the main product. The main landing, relay
- * route, SDK, MCP server, and UI all stay on the full 7-chain + RLUSD
- * matrix exactly as on `main`. The flag now only controls visibility of
- * the dedicated `/event` page that hosts the free-trial signup +
- * sprint narrative.
+ * EVENT_MODE — toggles the dedicated `/event` page that hosts the free-
+ * trial signup + event narrative. The main landing, relay route, SDK,
+ * MCP server, and UI all stay on the full 7-chain + RLUSD matrix
+ * regardless of this flag.
  *
  * When EVENT_MODE is true:
- *   - /event renders the sprint page (Hero CTA stack, trial activation,
- *     Google / Email / Wallet signup, sprint marketing copy)
+ *   - /event renders the event page (Hero CTA stack, trial activation,
+ *     Google / Email / Wallet signup, event marketing copy)
  *   - Navbar adds an "Event" link pointing at /event
  *
- * When EVENT_MODE is false (post-sprint state, on `main`):
+ * When EVENT_MODE is false:
  *   - /event returns a small "Event ended — multichain back to normal"
  *     page (no 404 so any stale shared links still resolve gracefully)
  *   - Navbar omits the Event link
  *
  * The free-trial backend (`/api/trial/activate`, sessions, email magic
  * link, Google OAuth) is independent of this flag — the trial program
- * itself stays callable after the sprint; we just stop promoting it.
+ * itself stays callable; this flag only controls promotion.
  *
  * Legacy export name `BNB_FOCUS_MODE` is kept as an alias for the
  * handful of test files that still import it, but new code should
@@ -42,10 +38,11 @@
 export const EVENT_MODE = true;
 
 /**
- * Legacy alias — semantically "is the relay/SDK/MCP narrowed to BNB-only?".
- * The narrowing was reverted (see Semantics section above), so this is now
- * permanently false. Kept as an export so existing tests that grep for the
- * symbol still find it and pass.
+ * Optional BNB-only narrowing of the relay/SDK/MCP chain matrix. When
+ * true, every non-BNB chain's supportedTokens collapses to [] and the
+ * matching server-side guards reject non-BNB calls. Currently disabled;
+ * the constant is still exported so existing source-grep tests that
+ * look for the symbol resolve cleanly.
  */
 export const BNB_FOCUS_MODE = false;
 export const BNB_FOCUS_REJECTION_MESSAGE = "";

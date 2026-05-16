@@ -382,8 +382,8 @@ export default function ClaudePage() {
             Only what an agent should reach for.
           </h2>
           <p className="text-white/50 text-sm max-w-xl mb-10">
-            No hidden admin endpoints, no key-rotation paths, nothing that could let a
-            hallucination cost you money.
+            No hidden admin endpoints, no key-rotation paths, nothing in the agent surface
+            that can move funds outside the explicit confirm-and-sign flow.
           </p>
 
           <div className="grid md:grid-cols-2 gap-5">

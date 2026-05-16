@@ -100,7 +100,7 @@ The agent can now `q402_quote` (compare gas across all 7 chains), `q402_balance`
 
 ## Free trial event
 
-During the BNB-focus event window (currently 2026-05-19 → 2026-06-30), any developer can sign up at [/event](https://q402.quackai.ai/event) and immediately receive:
+Any developer can sign up at [/event](https://q402.quackai.ai/event) and immediately receive:
 
 - 2,000 sponsored transactions on BNB Chain
 - Both a live (`q402_live_*`) and a sandbox (`q402_test_*`) API key
@@ -231,7 +231,6 @@ Test files cover relay route ordering, EIP-7702 signing shape, trial-vs-paid key
 - **Trial scope**: enforced by `keyRecord.plan`, not by the subscription's current plan. A paid user holding a legacy trial key still sees trial-scope policy (BNB only, trial expiry) on that key.
 - **Identity 1:1**: wallet ↔ email is enforced bidirectionally via `wallet_email_link` + `email_to_wallet` indexes. Cross-session attempts to claim either side return `409`.
 - **EIP-7702 spec**: authorization signatures use ethers' native `Wallet.authorize()` — protocol-correct RLP+keccak, validated by EVM ecrecover; no EIP-712 fallback.
-- **Source-grep regression tests** lock the shape of each of the above so a refactor that silently weakens any of them fails CI.
 
 ---
 

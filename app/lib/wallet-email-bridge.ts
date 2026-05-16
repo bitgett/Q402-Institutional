@@ -12,9 +12,10 @@
  * a partial write (one key set, the other dropped) lets a future bind
  * incorrectly think no claim exists and creates 1:1 drift.
  *
- * Earlier revisions called `kv.set` twice without `await`, relying on
- * fire-and-forget. KV transient failures caused silent drift — bind
- * succeeded in the session but the global index missed. New behaviour:
+ * Both writes are awaited with per-key retry; the helper never
+ * fire-and-forgets, because KV transient failures would otherwise
+ * cause silent 1:1 drift (bind succeeds in the session but the
+ * global index goes missing).
  *
  *   - Attempt both writes with 3 retries (50ms / 250ms / 750ms backoff).
  *   - Idempotent against partial-previous-write — re-setting the same

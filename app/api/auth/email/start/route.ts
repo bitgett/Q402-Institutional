@@ -87,11 +87,9 @@ export async function POST(req: NextRequest) {
 
   const sendResult = await sendEmail({ to: email, subject, html, text });
   if (!sendResult.ok) {
-    // Fail-closed in production. The link is still in KV, but we surface
-    // the failure so the user retries instead of waiting on a ghost mail.
-    // Previous revision only 502'd when RESEND_API_KEY was set — production
-    // deploys that forgot to configure RESEND therefore returned ok:true
-    // and the user saw "Check your inbox" while no email ever went out.
+    // Email delivery policy (fail-closed in production). The link is still
+    // in KV, but the failure surfaces so the user retries instead of
+    // waiting on a ghost mail.
     //   production + send failure (regardless of cause)  → 502
     //   dev/preview + RESEND unset                       → ok + devLink
     //   dev/preview + RESEND set but send failed         → 502

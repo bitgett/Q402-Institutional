@@ -334,33 +334,22 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 4c. API key model — `from` is the end-user wallet, NOT the key owner ─
-  // Q402's product model is platform-as-billing (Stripe-Connect-style):
+  // ── 4c. Platform billing permits payer != key owner ──────────────────────
+  // The API key is the builder's billing/quota account; `from` is the end
+  // user's wallet, signed by that wallet's EOA in the witness. A builder
+  // relaying for N end-users uses a single API key with N distinct `from`
+  // values. No structural equality check between `from` and the key owner.
   //
-  //   - The API key is the BUILDER's billing/quota account.
-  //   - The `from` parameter is the END USER's wallet — a different person
-  //     for each call. A builder selling a SaaS to N customers relays N
-  //     distinct from-addresses through a single API key.
-  //   - The witness signature in the body is signed by `from`'s EOA, so the
-  //     server never moves anyone's funds without their direct authorization.
-  //
-  // Earlier revisions added a "from must equal keyRecord.address (or the
-  // bound wallet)" enforcement — that BROKE the platform model: any builder
-  // would have been forced to mint one API key per end user. Reverted.
-  //
-  // The real defense against API-key leak in this model is operational, not
-  // structural:
-  //   - Per-API-key rate limit (section 3b above, 30 relay calls / 60s).
-  //   - Daily TX cap (section 7c via decrementCredit + the trial-scope
-  //     2,000-credit ceiling for trial keys; paid keys cap on their gas
-  //     tank balance).
-  //   - Auth-fresh signature on every state-changing dashboard action so
-  //     a leaked key alone can't rotate or top up.
+  // Defense against API-key leak is operational:
+  //   - Per-API-key rate limit (section 3b — 30 relay calls / 60s).
+  //   - Daily TX cap via the atomic credit decrement (section 7c).
+  //   - Trial-scope 2,000-credit ceiling; paid-scope gas-tank balance gate.
+  //   - Fresh-auth required for state-changing dashboard actions, so a
+  //     leaked key alone cannot rotate the key or top up the gas tank.
   //   - One-click rotation in /dashboard → Developer.
   //
-  // The blast radius of a leaked key is therefore bounded by quota and gas
-  // tank, NOT by the user's primary wallet — which is what we want for a
-  // platform model.
+  // Blast radius of a leak is bounded by quota and gas tank — never by the
+  // owner's primary wallet, which the server has no signing authority over.
 
   // ── 4a. TX credit quick pre-check (stale OK — real gate is atomic decrement) ──
   if (!isSandbox) {
@@ -703,10 +692,9 @@ export async function POST(req: NextRequest) {
   // ── 11. Record the TX (including receipt id for dashboard link) ──────────
   // Routed through `after()` (next/server) so the writes run AFTER the
   // response is flushed but before Vercel tears the serverless function
-  // down. Earlier revision called recordRelayedTx without await — on a
-  // cold-stop or KV transient failure the response went out but the TX
-  // history + gas-tank debit never landed. Symptom: "I paid but my
-  // Transactions tab is empty / gas tank wasn't charged."
+  // down. A fire-and-forget call here can drop the write on cold-stop or
+  // transient KV failure — the user would see the on-chain settlement
+  // succeed but the Transactions tab + gas-tank debit would never land.
   //
   // Trial users: gasCostNative is zeroed in the per-user record so the dashboard
   // doesn't show negative gas-tank balance against their $0 deposit. The actual

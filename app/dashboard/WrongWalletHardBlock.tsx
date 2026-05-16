@@ -8,11 +8,11 @@
  *   - session is bound to wallet X (session.address = X)
  *   - browser is connected to wallet Y (Y !== X)
  *
- * This is the gate that closes the "two identities, one screen" audit
- * finding. The dashboard MUST NOT fetch or render any multichain data
- * from the currently-connected mismatched wallet — doing so leaks paid-
- * plan / gas-tank / tx-history state across identities that the server
- * already treats as separate subscription records.
+ * Prevents mixed email/wallet identity rendering: the dashboard MUST
+ * NOT fetch or render any multichain data from the mismatched wallet,
+ * because doing so would leak paid-plan / gas-tank / tx-history state
+ * across identities that the server already treats as separate
+ * subscription records.
  *
  * No data is fetched from Y. The page is a deliberate dead-end with two
  * exits: switch wallets back to X (handled in the wallet extension, we

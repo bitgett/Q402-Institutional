@@ -299,13 +299,12 @@ export async function POST(req: NextRequest) {
   //   - recipient[0] failed (abort)  → 424 (Failed Dependency), ok: false
   //                                    The delegation install dictates every
   //                                    downstream row; the caller cannot retry
-  //                                    sub-rows in isolation. This MUST NOT
-  //                                    look like a success to the SDK / MCP
-  //                                    client wrapper — earlier revision
-  //                                    returned 200/ok:true here, and wrappers
-  //                                    that only throw on !resp.ok would
-  //                                    silently treat a fully-failed batch
-  //                                    as success.
+  //                                    sub-rows in isolation. Returning 200
+  //                                    here would look like success to any
+  //                                    wrapper that only inspects resp.ok,
+  //                                    so the response MUST signal failure
+  //                                    via the HTTP status as well as the
+  //                                    body.
   //   - some rows failed (partial)   → 207 (Multi-Status), ok: false
   //                                    The first transfer succeeded so the
   //                                    delegation IS in place; remaining

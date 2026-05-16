@@ -52,10 +52,12 @@ describe("API key is the builder's account, NOT a wallet anchor", () => {
     expect(routeSrc).not.toMatch(/TRIAL_FROM_NOT_BOUND/);
   });
 
-  it("documents the platform-as-billing model in source", () => {
+  it("documents the platform-billing model in source (payer != key owner)", () => {
     // The reasoning must be inline in the code so a future contributor
-    // doesn't try to "fix" the missing enforcement.
-    expect(routeSrc).toMatch(/platform-as-billing/i);
+    // doesn't try to "fix" the missing enforcement. We accept any phrasing
+    // that conveys (a) payer can differ from key owner and (b) end-user
+    // is the signing party.
+    expect(routeSrc).toMatch(/payer\s*!=\s*key owner|payer is the end[- ]user|builder's billing/i);
     expect(routeSrc).toMatch(/end[- ]user/i);
   });
 
