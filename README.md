@@ -247,6 +247,7 @@ Test files cover relay route ordering, EIP-7702 signing shape, trial-vs-paid key
 - 📦 SDK: [public/q402-sdk.js](public/q402-sdk.js)
 - 📦 MCP: https://www.npmjs.com/package/@quackai/q402-mcp
 - 📖 Docs: https://q402.quackai.ai/docs
+- 🚀 Merge runbook: [docs/MERGE_RUNBOOK.md](docs/MERGE_RUNBOOK.md) (read before cutover)
 - 🌐 Live: https://q402.quackai.ai
 - 🎟️ Free trial: https://q402.quackai.ai/event
 - 📧 Contact: business@quackai.ai
