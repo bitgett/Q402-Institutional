@@ -28,6 +28,7 @@ import {
   addTrialSubscriptionToIndex,
 } from "@/app/lib/db";
 import { createSession, attachSessionCookie } from "@/app/lib/session";
+import { getAppOrigin } from "@/app/lib/app-origin";
 import {
   TRIAL_CREDITS,
   TRIAL_DURATION_DAYS,
@@ -87,10 +88,10 @@ export async function GET(req: NextRequest) {
   kv.del(tokenKvKey(token)).catch(() => {});
 
   const email = payload.email.toLowerCase();
-  const proto =
-    req.headers.get("x-forwarded-proto") ??
-    (req.url.startsWith("https") ? "https" : "http");
-  const host = req.headers.get("host") ?? "q402.quackai.ai";
+  // Redirects after a magic-link consumption pin to the canonical APP_ORIGIN
+  // for the same reason the link itself does — a Host-header swap would
+  // otherwise let an attacker observe the post-consumption redirect.
+  const appOrigin = getAppOrigin();
   const isEmailOnly = payload.mode === "signup" || typeof payload.address !== "string";
 
   if (isEmailOnly) {
@@ -155,7 +156,7 @@ export async function GET(req: NextRequest) {
     }
 
     const sid = await createSession(email);
-    const resp = NextResponse.redirect(`${proto}://${host}/dashboard?signin=email`, 302);
+    const resp = NextResponse.redirect(`${appOrigin}/dashboard?signin=email`, 302);
     attachSessionCookie(resp, sid);
     return resp;
   }
@@ -177,7 +178,7 @@ export async function GET(req: NextRequest) {
   });
 
   const sid = await createSession(email, addr);
-  const resp = NextResponse.redirect(`${proto}://${host}/dashboard?email=verified`, 302);
+  const resp = NextResponse.redirect(`${appOrigin}/dashboard?email=verified`, 302);
   attachSessionCookie(resp, sid);
   return resp;
 }

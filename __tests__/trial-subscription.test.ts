@@ -293,9 +293,15 @@ describe("trial — /api/auth/email/start magic-link generation", () => {
     expect(emailStartSource).toMatch(/code:\s*["']INVALID_EMAIL["']/);
   });
 
-  it("derives magic-link host from x-forwarded-proto / host headers (no user-supplied baseUrl)", () => {
-    expect(emailStartSource).toMatch(/x-forwarded-proto/);
-    expect(emailStartSource).toMatch(/req\.headers\.get\(\s*["']host["']\s*\)/);
+  it("derives magic-link host from canonical APP_ORIGIN (NOT Host header)", () => {
+    // Auth-bearing links must not trust the request's Host header — a
+    // misrouted or spoofed request can otherwise survive into a user's
+    // inbox as a phishing link. The canonical helper lives in
+    // app/lib/app-origin.ts and reads APP_ORIGIN env first, then
+    // NEXT_PUBLIC_BASE_URL, then a hard-coded production fallback.
+    expect(emailStartSource).toMatch(/getAppOrigin\(\)/);
+    expect(emailStartSource).not.toMatch(/x-forwarded-proto/);
+    expect(emailStartSource).not.toMatch(/req\.headers\.get\(\s*["']host["']\s*\)/);
   });
 
   it("returns devLink only when RESEND_API_KEY is missing AND NODE_ENV !== production", () => {

@@ -238,4 +238,16 @@ describe.skipIf(!mcpClientAvailable)("MCP Node client batchPay()", () => {
     expect(mcpClientSrc).toMatch(/!resp\.ok\s*\|\|\s*data\.ok\s*===\s*false/);
     expect(mcpClientSrc).toMatch(/throw\s+err/);
   });
+
+  it("preserves the server's scope + limit on BatchPayError (no hardcoded 'paid')", () => {
+    // The server's relay/batch route emits `scope` + `limit` on every
+    // response (200/207/424). The client MUST surface those onto the
+    // error so the MCP tool can report the actual tier — agents shouldn't
+    // see "scope: paid" on a trial user's failed batch.
+    expect(mcpClientSrc).toMatch(/scope:\s+data\.scope/);
+    expect(mcpClientSrc).toMatch(/limit:\s+data\.limit/);
+    // BatchPayError constructor declares scope + limit as required.
+    expect(mcpClientSrc).toMatch(/readonly\s+scope:\s+["']trial["']\s*\|\s*["']paid["']/);
+    expect(mcpClientSrc).toMatch(/readonly\s+limit:\s+number/);
+  });
 });

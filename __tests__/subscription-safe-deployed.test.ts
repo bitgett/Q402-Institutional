@@ -3,11 +3,10 @@
  *
  * The SUBSCRIPTION Safe is a CREATE2 contract — the same address resolves on
  * every EVM chain, but bytecode only exists where we've explicitly run the
- * Safe deploy flow. A previous review caught the case where the
- * payment-intent route allowed payments on chains where the Safe wasn't yet
- * deployed (P0); the fix narrowed VALID_CHAINS to ["bnb", "eth"], but that
- * fix relied on a human keeping the allowlist and the deploy footprint in
- * sync.
+ * Safe deploy flow. An earlier P0 incident: the payment-intent route allowed
+ * payments on chains where the Safe wasn't yet deployed. The fix narrowed
+ * VALID_CHAINS to ["bnb", "eth"], but that fix relied on a human keeping
+ * the allowlist and the deploy footprint in sync.
  *
  * This test pins the invariant in CI: every chain in
  * `SUBSCRIPTION_DEPLOYED_CHAINS` must have actual Safe bytecode at

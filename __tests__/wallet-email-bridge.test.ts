@@ -42,19 +42,19 @@ const transactionsSource = readFileSync(
 );
 
 describe("wallet_email_link write — both bind paths populate the bridge", () => {
-  it("/api/auth/wallet-bind writes wallet_email_link on successful bind", () => {
+  it("/api/auth/wallet-bind invokes writeWalletEmailBridge AFTER pairSessionWithWallet", () => {
     // The bind path must write the reverse pointer AFTER
     // pairSessionWithWallet succeeds. Skipping this leaves the wallet-
     // only-login view permanently unable to find the email pseudo.
     //
-    // The route also READS walletEmailLinkKey upfront (for 1:1 uniqueness
-    // — see §13), so we can't compare the FIRST occurrences. Compare
-    // the WRITE call site (kv.set(walletEmailLinkKey(...))) against
-    // pairSessionWithWallet.
-    expect(bindSource).toMatch(/walletEmailLinkKey\(verifiedAddr\)/);
-    expect(bindSource).toMatch(/kv\.set\(\s*walletEmailLinkKey\(verifiedAddr\),\s*session\.email/);
+    // The bridge write was previously a fire-and-forget Promise.all().catch;
+    // the helper (app/lib/wallet-email-bridge.ts) now wraps both writes
+    // with retry + ops alert on persistent failure. The route must use
+    // the helper AND await it.
+    expect(bindSource).toMatch(/from\s+["']@\/app\/lib\/wallet-email-bridge["']/);
+    expect(bindSource).toMatch(/await\s+writeWalletEmailBridge\(/);
     const pairIdx = bindSource.indexOf("pairSessionWithWallet(");
-    const writeIdx = bindSource.indexOf("kv.set(walletEmailLinkKey(verifiedAddr)");
+    const writeIdx = bindSource.indexOf("await writeWalletEmailBridge(");
     expect(pairIdx).toBeGreaterThan(0);
     expect(writeIdx).toBeGreaterThan(0);
     expect(pairIdx).toBeLessThan(writeIdx);
@@ -64,12 +64,42 @@ describe("wallet_email_link write — both bind paths populate the bridge", () =
     expect(bindSource).toMatch(/WALLET_EMAIL_LINK_TTL\s*=\s*10\s*\*\s*365/);
   });
 
-  it("/api/trial/activate also writes wallet_email_link when adopting an email session", () => {
-    // Defence-in-depth: the trial-activate path also pairs the session
-    // when an email is adopted. It should populate the same bridge so
-    // the wallet-only login of that user can still see the trial.
-    expect(trialActivateSource).toMatch(/wallet_email_link:\$\{addr\}/);
+  it("/api/trial/activate also invokes writeWalletEmailBridge when adopting an email session", () => {
+    expect(trialActivateSource).toMatch(/from\s+["']@\/app\/lib\/wallet-email-bridge["']/);
+    expect(trialActivateSource).toMatch(/await\s+writeWalletEmailBridge\(/);
     expect(trialActivateSource).toMatch(/adoptedEmail/);
+  });
+
+  it("neither bind path retains the legacy fire-and-forget Promise.all().catch pattern", () => {
+    // Regression guard: previous revision used `Promise.all([...]).catch(...)`
+    // without await. Persistent KV failures silently dropped the index
+    // write. The helper now retries and pages ops on persistent failure.
+    expect(bindSource).not.toMatch(/Promise\.all\(\s*\[[\s\S]*?kv\.set\(\s*walletEmailLinkKey/);
+    expect(trialActivateSource).not.toMatch(/Promise\.all\(\s*\[[\s\S]*?wallet_email_link:\$\{addr\}/);
+  });
+});
+
+describe("writeWalletEmailBridge helper", () => {
+  const helperSrc = readFileSync(
+    resolve(ROOT, "app", "lib", "wallet-email-bridge.ts"),
+    "utf8",
+  );
+
+  it("writes BOTH directions of the bridge", () => {
+    expect(helperSrc).toMatch(/wallet_email_link:\$\{addr\}/);
+    expect(helperSrc).toMatch(/email_to_wallet:\$\{email\}/);
+  });
+
+  it("retries each write up to 3 attempts with backoff", () => {
+    expect(helperSrc).toMatch(/delays\s*=\s*\[\s*50,\s*250,\s*750\s*\]/);
+    expect(helperSrc).toMatch(/for\s*\(\s*let\s+attempt\s*=\s*0;\s*attempt\s*<\s*delays\.length/);
+  });
+
+  it("emits a deduped ops alert on persistent failure (1h TTL)", () => {
+    expect(helperSrc).toMatch(/sendOpsAlert/);
+    expect(helperSrc).toMatch(/bridge_write_alert:\$\{addr\}/);
+    expect(helperSrc).toMatch(/ex:\s*3600/);
+    expect(helperSrc).toMatch(/nx:\s*true/);
   });
 });
 

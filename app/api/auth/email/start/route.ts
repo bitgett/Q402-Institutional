@@ -27,6 +27,7 @@ import { randomBytes } from "node:crypto";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { renderMagicLinkHtml, sendEmail } from "@/app/lib/email";
+import { getAppOrigin } from "@/app/lib/app-origin";
 
 const TOKEN_TTL_SEC = 15 * 60;
 const TOKEN_BYTES = 32;
@@ -70,14 +71,12 @@ export async function POST(req: NextRequest) {
   const token = randomBytes(TOKEN_BYTES).toString("hex");
   await kv.set(tokenKvKey(token), { address: addr, email }, { ex: TOKEN_TTL_SEC });
 
-  // The host header is the authoritative origin under Vercel's proxy. We
-  // never trust user-supplied baseUrl — that would let a phisher swap the
-  // host on the magic link.
-  const proto =
-    req.headers.get("x-forwarded-proto") ??
-    (req.url.startsWith("https") ? "https" : "http");
-  const host = req.headers.get("host") ?? "q402.quackai.ai";
-  const magicLinkUrl = `${proto}://${host}/api/auth/email/callback?token=${token}`;
+  // Auth-bearing links resolve to the canonical APP_ORIGIN, not the request's
+  // Host header. The request can legitimately arrive on a preview deploy /
+  // edge / forwarded host and we still want the email to point at the
+  // production app. Misrouted or spoofed Host values cannot survive into a
+  // user's inbox.
+  const magicLinkUrl = `${getAppOrigin()}/api/auth/email/callback?token=${token}`;
 
   const { subject, html, text } = renderMagicLinkHtml({
     email,

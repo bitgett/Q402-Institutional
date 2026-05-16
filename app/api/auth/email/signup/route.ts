@@ -22,6 +22,7 @@ import { kv } from "@vercel/kv";
 import { randomBytes } from "node:crypto";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { renderMagicLinkHtml, sendEmail } from "@/app/lib/email";
+import { getAppOrigin } from "@/app/lib/app-origin";
 
 const TOKEN_TTL_SEC = 15 * 60;
 const TOKEN_BYTES = 32;
@@ -71,11 +72,9 @@ export async function POST(req: NextRequest) {
     { ex: TOKEN_TTL_SEC },
   );
 
-  const proto =
-    req.headers.get("x-forwarded-proto") ??
-    (req.url.startsWith("https") ? "https" : "http");
-  const host = req.headers.get("host") ?? "q402.quackai.ai";
-  const magicLinkUrl = `${proto}://${host}/api/auth/email/callback?token=${token}`;
+  // Auth-bearing links pin to the canonical APP_ORIGIN — see
+  // app/lib/app-origin.ts for the rationale.
+  const magicLinkUrl = `${getAppOrigin()}/api/auth/email/callback?token=${token}`;
 
   const { subject, html, text } = renderMagicLinkHtml({
     email,

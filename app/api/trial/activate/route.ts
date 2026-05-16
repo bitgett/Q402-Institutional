@@ -49,6 +49,7 @@ import {
 } from "@/app/lib/feature-flags";
 import { getSession, pairSessionWithWallet, SESSION_COOKIE } from "@/app/lib/session";
 import { kv } from "@vercel/kv";
+import { writeWalletEmailBridge } from "@/app/lib/wallet-email-bridge";
 
 const TRIAL_USED_TTL = 10 * 365 * 24 * 60 * 60; // 10y — same horizon as used_txhash
 const trialUsedKey = (addr: string) => `trial_used:${addr.toLowerCase()}`;
@@ -241,14 +242,9 @@ export async function POST(req: NextRequest) {
         await pairSessionWithWallet(sid, addr).catch(() => {});
       }
       // Read-side bridge + 1:1 enforcement indexes — same pair the
-      // /api/auth/wallet-bind route writes. Lets /api/keys/provision find
-      // the email pseudo-account on wallet-only logins AND lets future
-      // wallet-bind attempts reject cross-account claims via the global
-      // wallet_email_link / email_to_wallet uniqueness checks. Best-effort.
-      Promise.all([
-        kv.set(`wallet_email_link:${addr}`, adoptedEmail, { ex: TRIAL_USED_TTL }),
-        kv.set(`email_to_wallet:${adoptedEmail}`, addr, { ex: TRIAL_USED_TTL }),
-      ]).catch(e => console.error("[trial/activate] bridge index write failed (non-fatal):", e));
+      // /api/auth/wallet-bind route writes. Awaited, with per-key retry +
+      // ops alert on persistent failure. See wallet-email-bridge.ts.
+      await writeWalletEmailBridge(addr, adoptedEmail, TRIAL_USED_TTL, "trial-activate");
     }
 
     // Register this wallet for the trial-expiry cron (best-effort; missing

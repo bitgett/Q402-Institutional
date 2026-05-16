@@ -110,10 +110,16 @@ interface BatchBody {
 
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
-  // Batch is rate-limited more aggressively than single relay: the inner
-  // /api/relay calls each consume their own per-key + per-IP budget, so
-  // a batch of 20 already burns 20 inner-relay slots. The outer cap here
-  // throttles bursty batchPay floods.
+  // Rate-limit budget (effective per-key throughput):
+  //
+  //   Outer (per-IP, this route): 10 batches per 60s
+  //   Inner (per-API-key, /api/relay): 30 relays per 60s — applied PER ROW
+  //
+  // So a 20-row paid batch consumes 20 of the inner 30/60s budget; after one
+  // full batch you have 10 inner slots left for the next 60s. Effective ceiling
+  // is ~1.5 paid batches per 60s before the per-key inner cap throttles you.
+  // Trial (5 rows) is ~6 batches per 60s before inner cap kicks in. Document
+  // this in the public docs alongside batchPay's input schema.
   if (!(await rateLimit(ip, "relay-batch", 10, 60, false))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
@@ -296,10 +302,10 @@ export async function POST(req: NextRequest) {
   //                                    sub-rows in isolation. This MUST NOT
   //                                    look like a success to the SDK / MCP
   //                                    client wrapper — earlier revision
-  //                                    returned 200/ok:true here and Codex's
-  //                                    audit caught that the wrappers, which
-  //                                    only throw on !resp.ok, would silently
-  //                                    treat a fully-failed batch as success.
+  //                                    returned 200/ok:true here, and wrappers
+  //                                    that only throw on !resp.ok would
+  //                                    silently treat a fully-failed batch
+  //                                    as success.
   //   - some rows failed (partial)   → 207 (Multi-Status), ok: false
   //                                    The first transfer succeeded so the
   //                                    delegation IS in place; remaining

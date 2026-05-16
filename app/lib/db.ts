@@ -8,6 +8,7 @@
  */
 import { kv } from "@vercel/kv";
 import { TIER_CREDITS, TIER_PLANS } from "@/app/lib/blockchain";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 
 interface Subscription {
   paidAt: string;
@@ -340,11 +341,52 @@ export async function getGasBalance(address: string): Promise<Record<string, num
   for (const chain of Object.keys(usedTotals)) {
     totals[chain] = (totals[chain] ?? 0) - usedTotals[chain];
   }
-  // Clamp to 0 — negative balance means deposit was never recorded in KV
+  // Detect pre-clamp negative drift before we hide it from the user UI.
+  // A negative pre-clamp value means a settlement debited gas against a
+  // deposit we never recorded in KV — that's a real ledger divergence and
+  // ops needs to see it, even though the user UI shows 0 (since they have
+  // no claim on the deficit). Throttled to one fan-out per drifting chain
+  // per 1h so a continuous read-storm doesn't spam the operator channel.
+  const drifting: Array<{ chain: string; balance: number; deposited: number; used: number }> = [];
   for (const chain of Object.keys(totals)) {
-    if (totals[chain] < 0) totals[chain] = 0;
+    if (totals[chain] < 0) {
+      const depositedOnChain = deposits.filter(d => d.chain === chain).reduce((a, d) => a + d.amount, 0);
+      const usedOnChain      = usedTotals[chain] ?? 0;
+      drifting.push({ chain, balance: totals[chain], deposited: depositedOnChain, used: usedOnChain });
+      totals[chain] = 0;
+    }
+  }
+  if (drifting.length > 0) {
+    // Fire-and-forget — alerts must never block balance reads.
+    void emitGasDriftAlert(address, drifting);
   }
   return totals;
+}
+
+async function emitGasDriftAlert(
+  address: string,
+  drifting: Array<{ chain: string; balance: number; deposited: number; used: number }>,
+): Promise<void> {
+  try {
+    const lines = [
+      `<b>Gas-balance negative drift</b>`,
+      `Address: <code>${address}</code>`,
+      "",
+      ...drifting.map(
+        d => `• <b>${d.chain}</b>: balance=${d.balance.toFixed(8)}  deposited=${d.deposited.toFixed(8)}  used=${d.used.toFixed(8)}`,
+      ),
+      "",
+      `User UI clamps to 0; this alert is the only signal of ledger divergence.`,
+    ].join("\n");
+    // Dedup key per (address, chain set) so we don't spam on every dashboard
+    // poll. 1h TTL — drift is a slow problem; one alert per hour is enough.
+    const dedupKey = `gas_drift_alert:${address}:${drifting.map(d => d.chain).sort().join(",")}`;
+    const fresh = await kv.set(dedupKey, "1", { nx: true, ex: 3600 });
+    if (!fresh) return;
+    await sendOpsAlert(lines, "warn");
+  } catch {
+    /* never throw out of a balance read */
+  }
 }
 
 // ── Relayed TXs ───────────────────────────────────────────────────────────────

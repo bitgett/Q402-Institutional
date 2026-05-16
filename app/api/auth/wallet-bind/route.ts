@@ -40,6 +40,7 @@ import { getSession, pairSessionWithWallet, SESSION_COOKIE } from "@/app/lib/ses
 import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { kv } from "@vercel/kv";
+import { writeWalletEmailBridge } from "@/app/lib/wallet-email-bridge";
 
 // Reverse indexes — together enforce strict 1:1 binding between an email
 // session and a wallet address. Without these the per-session bind-once
@@ -174,15 +175,17 @@ export async function POST(req: NextRequest) {
   // verifiedAddr as session.address (the canonical bound wallet).
   await pairSessionWithWallet(sid, verifiedAddr);
 
-  // Write BOTH global indexes so future binds are checked against this
-  // claim from either direction. Best-effort: the bind itself is already
-  // committed and a failed index write just leaves the wallet-only view
-  // in its pre-bridge state (Phase 1.5 visibility degrades to "no bridge"
-  // rather than corrupting state).
-  Promise.all([
-    kv.set(walletEmailLinkKey(verifiedAddr), session.email, { ex: WALLET_EMAIL_LINK_TTL }),
-    kv.set(emailToWalletKey(emailLc), verifiedAddr, { ex: WALLET_EMAIL_LINK_TTL }),
-  ]).catch(e => console.error("[wallet-bind] bridge index write failed (non-fatal):", e));
+  // Write BOTH global indexes — awaited, with per-key retry (3 attempts,
+  // 50ms/250ms/750ms backoff). Persistent failure emits a deduped ops
+  // alert but does NOT block the bind, since pairSessionWithWallet above
+  // already committed and a 5xx now would mislead the caller. See
+  // app/lib/wallet-email-bridge.ts for full rationale + behaviour notes.
+  await writeWalletEmailBridge(
+    verifiedAddr,
+    emailLc,
+    WALLET_EMAIL_LINK_TTL,
+    "wallet-bind",
+  );
 
   // Best-effort operator alert. Same fail-soft pattern as payment-activate.
   // Phase 2's migration job triggers off this event downstream.
