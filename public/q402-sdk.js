@@ -1,5 +1,16 @@
 /**
  * Q402 Client SDK (browser-compatible)
+ * v1.7.3-bnbfocus — q402.batchPay() — fan out a single chain × token
+ *          settlement to multiple recipients in one round-trip. Trial keys:
+ *          up to 5 rows per call. Paid keys: up to 20. Server is the
+ *          authoritative gate via /api/relay/batch; the SDK enforces the
+ *          paid ceiling locally so a malformed call doesn't sign 100
+ *          authorizations before the relay rejects them. Same EIP-712 +
+ *          EIP-7702 wire shape as pay(); sequential authNonce (base + i)
+ *          across rows. EIP-3009 (xlayer USDC fallback) and the EIP-7702
+ *          xlayer/stable routes are intentionally NOT batchable — those
+ *          paths require chain-specific nonce fields the batch endpoint
+ *          doesn't fan out. Use pay() for those.
  * v1.7.2-bnbfocus — Critical fix: _signAuthorization now uses ethers'
  *          native EIP-7702 authorize() helper. Previous revision signed
  *          EIP-712 typed data over a custom domain, which the EVM does
@@ -306,6 +317,143 @@ class Q402Client {
     } else {
       return this._payEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg);
     }
+  }
+
+  /**
+   * Send a single chain × token settlement to MULTIPLE recipients in one
+   * round-trip. The owner pays $0 in gas regardless of batch size; Q402's
+   * relayer covers gas for every transfer.
+   *
+   * @param {object} opts
+   * @param {Array<{to: string, amount: string}>} opts.recipients
+   *   Recipient rows. All share the SAME chain (the one this client was
+   *   constructed with) and the SAME token. Trial keys: max 5 rows. Paid
+   *   keys: max 20. The server is the authoritative gate; this method also
+   *   caps locally at 20 to fail fast on malformed inputs.
+   * @param {"USDC"|"USDT"|"RLUSD"} [opts.token="USDC"]
+   *
+   * Each row is signed independently: one EIP-712 TransferAuthorization
+   * witness + one EIP-7702 authorization per row. The authorization nonces
+   * are sequential starting from the EOA's current transaction count
+   * (base + i), so the relayer can apply them in order. Server-side
+   * execution is sequential — the first transfer installs the EIP-7702
+   * delegation on the owner's EOA, subsequent rows reuse it. If row 0
+   * fails the batch aborts; later failures surface in the result array
+   * without aborting.
+   *
+   * Only the default EIP-7702 mode (avax / bnb / eth / mantle / injective)
+   * supports batchPay. X Layer (USDC EIP-3009 fallback), Stable, and the
+   * xlayer EIP-7702 variant route through chain-specific nonce fields
+   * that the batch endpoint doesn't fan out cleanly — those chains throw
+   * here and should use pay() in a client-side loop instead.
+   *
+   * @returns {Promise<{ok, scope, limit, totalSuccess, totalFailed, aborted, results}>}
+   */
+  async batchPay({ recipients, token = "USDC" }) {
+    if (!Array.isArray(recipients) || recipients.length === 0) {
+      throw new Error("recipients must be a non-empty array of {to, amount}");
+    }
+    if (recipients.length > 20) {
+      throw new Error(`recipients cannot exceed 20 per call (trial keys cap at 5; server is authoritative)`);
+    }
+    if (this.chainCfg.supportedTokens && !this.chainCfg.supportedTokens.includes(token)) {
+      if (Q402_BNB_FOCUS_MODE) throw new Error(Q402_BNB_FOCUS_REJECTION_MESSAGE);
+      throw new Error(
+        `Token "${token}" is not supported on chain "${this.chain}". ` +
+        `Supported tokens: ${this.chainCfg.supportedTokens.join(", ")}.`
+      );
+    }
+    if (this.chainCfg.mode && this.chainCfg.mode !== "eip7702") {
+      throw new Error(
+        `batchPay does not yet support chain "${this.chain}" (mode=${this.chainCfg.mode}). ` +
+        `Use pay() in a loop for this chain.`
+      );
+    }
+    for (let i = 0; i < recipients.length; i++) {
+      const r = recipients[i];
+      if (!r || typeof r.to !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(r.to)) {
+        throw new Error(`recipients[${i}].to must be a 0x-prefixed EVM address`);
+      }
+      if (typeof r.amount !== "string" || !/^\d+(\.\d+)?$/.test(r.amount)) {
+        throw new Error(`recipients[${i}].amount must be a positive decimal string`);
+      }
+    }
+
+    const ethereum = window.ethereum || window.okxwallet;
+    if (!ethereum) throw new Error("No Web3 wallet found. Install MetaMask or OKX Wallet.");
+
+    const provider = new ethers.BrowserProvider(ethereum);
+    const signer   = await provider.getSigner();
+    const owner    = await signer.getAddress();
+
+    const tokenCfg = this.chainCfg[token.toLowerCase()];
+    if (!tokenCfg) throw new Error(`Unsupported token: ${token} on chain ${this.chain}`);
+
+    const infoUrl  = this.relayUrl.replace(/\/relay$/, "/relay/info");
+    const infoResp = await fetch(infoUrl);
+    if (!infoResp.ok) throw new Error("Failed to fetch relay facilitator info");
+    const { facilitator } = await infoResp.json();
+
+    const domain = {
+      name:              this.chainCfg.domainName,
+      version:           "1",
+      chainId:           this.chainCfg.chainId,
+      verifyingContract: owner,
+    };
+
+    const baseAuthNonce = await provider.getTransactionCount(owner);
+    const decimals      = tokenCfg.decimals;
+    const deadline      = Math.floor(Date.now() / 1000) + 600;
+
+    const signedRecipients = [];
+    for (let i = 0; i < recipients.length; i++) {
+      const r          = recipients[i];
+      const amountRaw  = toRawAmount(r.amount, decimals);
+      const nonce      = ethers.toBigInt(ethers.randomBytes(32));
+
+      const witnessSig = await signer.signTypedData(domain, Q402_TRANSFER_AUTH_TYPES, {
+        owner,
+        facilitator,
+        token:     tokenCfg.address,
+        recipient: r.to,
+        amount:    BigInt(amountRaw),
+        nonce,
+        deadline:  BigInt(deadline),
+      });
+
+      const authorization = await this._signAuthorization(signer, {
+        chainId: this.chainCfg.chainId,
+        address: this.chainCfg.implContract,
+        nonce:   baseAuthNonce + i,
+      });
+
+      signedRecipients.push({
+        from:   owner,
+        to:     r.to,
+        amount: amountRaw,
+        nonce:  nonce.toString(),
+        deadline,
+        witnessSig,
+        authorization,
+      });
+    }
+
+    const batchUrl = this.relayUrl.replace(/\/relay$/, "/relay/batch");
+    const resp = await fetch(batchUrl, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        apiKey: this.apiKey,
+        chain:  this.chain,
+        token,
+        facilitator,
+        recipients: signedRecipients,
+      }),
+    });
+
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error ?? `Batch relay failed (HTTP ${resp.status})`);
+    return data;
   }
 
   // ── EIP-7702 결제 (avax / bnb / eth / mantle) ────────────────────────────────
