@@ -9,14 +9,15 @@
  * /docs version badge, the /claude hero pill, README cover row, etc.
  *
  * Why a TypeScript module instead of inlined strings:
- *   The Mantle v1.18, Codex v1.23, and RLUSD v1.27 rounds each shipped
- *   with at least one screen still rendering the previous version. The
- *   pattern is always the same — a hand-written "v1.x.0" buried in a
- *   marketing component nobody grep'd. Forcing every surface to import
- *   from here means the next release is a one-line change.
+ *   Past release rounds (Mantle v1.18, the v1.23 hardening pass, RLUSD
+ *   v1.27) each shipped with at least one screen still rendering the
+ *   previous version. The pattern is always the same — a hand-written
+ *   "v1.x.0" buried in a marketing component nobody grep'd. Forcing
+ *   every surface to import from here means the next release is a
+ *   one-line change.
  */
 
-export const SDK_VERSION = "1.7.1-bnbfocus" as const;
+export const SDK_VERSION = "1.7.3-bnbfocus" as const;
 
 /**
  * The npm-published @quackai/q402-mcp version. Kept in lockstep with
@@ -25,4 +26,4 @@ export const SDK_VERSION = "1.7.1-bnbfocus" as const;
  * registry.npmjs.org, but UI labels reference *this* constant — so a
  * forgotten label after publish trips on screenshot review, not silently.
  */
-export const MCP_VERSION = "0.3.5" as const;
+export const MCP_VERSION = "0.3.12" as const;
