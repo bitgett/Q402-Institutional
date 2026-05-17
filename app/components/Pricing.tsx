@@ -2,6 +2,23 @@
 
 const tiers = [
   {
+    name: "Free Trial",
+    price: "$0",
+    period: "/30-day · no card",
+    description: "Start in one signature. Email or wallet, no payment up-front.",
+    features: [
+      "2,000 sponsored transactions",
+      "BNB Chain · USDC + USDT",
+      "Live + sandbox API keys",
+      "Q402 covers the gas",
+    ],
+    badge: "Start here",
+    cta: "Start free trial →",
+    href: "/event",
+    highlight: false,
+    trial: true,
+  },
+  {
     name: "Starter",
     price: "$29",
     period: "/30-day access",
@@ -76,51 +93,78 @@ export default function Pricing() {
           <p className="text-white/40 text-sm max-w-2xl mx-auto">Each purchase = credits + 30-day access. Top up within the window and your tier upgrades automatically. No gas, no friction — plug in the SDK and you&apos;re live.</p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {tiers.map((tier, i) => (
-            <div
-              key={i}
-              className={`rounded-2xl p-6 flex flex-col border transition-all ${
-                tier.highlight
-                  ? "bg-yellow/10 border-yellow/40 shadow-lg shadow-yellow/10"
-                  : "bg-card border-white/10"
-              }`}
-            >
-              {tier.badge && (
-                <div className="text-yellow text-xs font-bold uppercase tracking-widest mb-3">
-                  {tier.badge}
-                </div>
-              )}
-              <div className="mb-4">
-                <div className="text-lg font-semibold mb-1">{tier.name}</div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-extrabold">{tier.price}</span>
-                  {tier.period && <span className="text-white/40 text-sm">{tier.period}</span>}
-                </div>
-                <p className="text-white/50 text-sm mt-2">{tier.description}</p>
-              </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-5">
+          {tiers.map((tier, i) => {
+            // Three visual states:
+            //   trial     → yellow-dominant "start here" treatment with a soft
+            //               yellow glow + dashed accent so it reads as the
+            //               entry point, not as one tier among many
+            //   highlight → existing Pro/yellow-tint
+            //   default   → flat card
+            const cardClasses = tier.trial
+              ? "relative bg-gradient-to-br from-yellow/10 via-yellow/[0.04] to-transparent border-yellow/40 shadow-xl shadow-yellow/10"
+              : tier.highlight
+                ? "bg-yellow/10 border-yellow/40 shadow-lg shadow-yellow/10"
+                : "bg-card border-white/10";
 
-              <ul className="flex-1 space-y-2 mb-6">
-                {tier.features.map((f, j) => (
-                  <li key={j} className="flex items-start gap-2 text-sm text-white/70">
-                    <span className="text-yellow mt-0.5 flex-shrink-0">✓</span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
-              <a
-                href={tier.href!}
-                className={`text-center text-sm font-semibold py-3 rounded-full transition-all ${
-                  tier.highlight
-                    ? "bg-yellow text-navy hover:bg-yellow-hover"
-                    : "border border-white/20 text-white hover:bg-white/5"
-                }`}
+            return (
+              <div
+                key={i}
+                className={`rounded-2xl p-6 flex flex-col border transition-all ${cardClasses}`}
               >
-                {tier.cta}
-              </a>
-            </div>
-          ))}
+                {/* Top-right "FREE" diagonal ornament on the trial card */}
+                {tier.trial && (
+                  <div className="absolute -top-3 -right-3 rotate-6">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] bg-yellow text-navy px-2.5 py-1 rounded-full shadow-lg shadow-yellow/30">
+                      Free · 2k TX
+                    </span>
+                  </div>
+                )}
+
+                {tier.badge && (
+                  <div className={`text-xs font-bold uppercase tracking-widest mb-3 ${
+                    tier.trial ? "text-yellow" : "text-yellow"
+                  }`}>
+                    {tier.badge}
+                  </div>
+                )}
+                <div className="mb-4">
+                  <div className="text-lg font-semibold mb-1">{tier.name}</div>
+                  <div className={`text-3xl font-extrabold leading-none ${tier.trial ? "text-yellow" : ""}`}>
+                    {tier.price}
+                  </div>
+                  {tier.period && (
+                    <div className="text-white/40 text-xs mt-1.5 whitespace-nowrap">
+                      {tier.period}
+                    </div>
+                  )}
+                  <p className="text-white/50 text-sm mt-2">{tier.description}</p>
+                </div>
+
+                <ul className="flex-1 space-y-2 mb-6">
+                  {tier.features.map((f, j) => (
+                    <li key={j} className="flex items-start gap-2 text-sm text-white/70">
+                      <span className="text-yellow mt-0.5 flex-shrink-0">✓</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+
+                <a
+                  href={tier.href!}
+                  className={`text-center text-sm font-semibold py-3 rounded-full transition-all ${
+                    tier.trial
+                      ? "bg-yellow text-navy hover:bg-yellow-hover shadow-md shadow-yellow/20"
+                      : tier.highlight
+                        ? "bg-yellow text-navy hover:bg-yellow-hover"
+                        : "border border-white/20 text-white hover:bg-white/5"
+                  }`}
+                >
+                  {tier.cta}
+                </a>
+              </div>
+            );
+          })}
         </div>
 
         {/* Agent CTA */}

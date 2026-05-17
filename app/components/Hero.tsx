@@ -181,18 +181,35 @@ export default function Hero() {
                 transition={{ duration: 0.6, delay: 0.45 }}
                 className="flex flex-wrap items-center gap-3"
               >
-                <button
-                  onClick={() => setShowModal(true)}
+                {/* Primary CTA — B2B / partnerships entry. */}
+                <a
+                  href="#contact"
                   className="group bg-yellow text-navy font-bold text-sm px-7 py-3.5 rounded-full hover:bg-yellow-hover transition-all hover:scale-[1.02] shadow-lg shadow-yellow/25"
                 >
-                  Start Gasless
+                  Talk to us
                   <span className="ml-2 inline-block group-hover:translate-x-1 transition-transform">→</span>
-                </button>
+                </a>
+
+                {/* Mid-tier CTA — sparkles to pull attention.
+                    Uses the existing `animate-mypage` keyframe (yellow box-
+                    shadow + border pulse, 1.8s loop) that already lives in
+                    globals.css. Slight yellow tint background + yellow text
+                    so it reads as the "fun" option between the formal primary
+                    (Talk to us) and the calmer outline (See plans). */}
                 <a
-                  href="#how-it-works"
-                  className="border border-white/15 text-white text-sm font-semibold px-7 py-3.5 rounded-full hover:bg-white/[0.04] transition-colors"
+                  href="/event"
+                  className="group relative bg-yellow/[0.06] text-yellow text-sm font-semibold px-7 py-3.5 rounded-full border border-yellow/40 hover:bg-yellow/10 transition-colors animate-mypage"
                 >
-                  See how it works
+                  <span className="inline-block mr-1.5 -translate-y-px">✦</span>
+                  Start free trial
+                </a>
+
+                {/* Calm secondary — same pill geometry, outlined. */}
+                <a
+                  href="#pricing"
+                  className="border border-white/15 text-white text-sm font-semibold px-7 py-3.5 rounded-full hover:bg-white/[0.04] hover:border-yellow/40 transition-colors"
+                >
+                  See plans
                 </a>
               </motion.div>
 
