@@ -38,6 +38,7 @@ import {
   type EIP3009PayParams,
   type XLayerEIP7702PayParams,
 } from "@/app/lib/relayer";
+import { BNB_FOCUS_MODE, BNB_FOCUS_REJECTION_MESSAGE } from "@/app/lib/feature-flags";
 import type { Hex, Address } from "viem";
 
 // Valid Ethereum address pattern
@@ -120,13 +121,19 @@ export async function POST(req: NextRequest) {
   // Mirror the SDK's supportedTokens guard here so the server is the source
   // of truth and the asymmetric defense (SDK strict, server tolerant) is closed.
   //
+  // The full multi-chain matrix below is what the protocol shipped on v1.27.
+  // During a sprint window the feature flag BNB_FOCUS_MODE collapses the
+  // matrix to a single chain/token pair (see app/lib/feature-flags.ts) — the
+  // 7-chain entries remain in this file so removing the flag (or pointing
+  // Vercel back at main) restores the full surface with zero code churn.
+  //
   //   - Injective: USDT only. Native USDC via Circle CCTP is announced for Q2 2026.
   //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18).
   //   - RLUSD is intentionally Ethereum-only — Ripple has not deployed RLUSD on
   //     the XRPL EVM Sidechain yet, and Q402 is EVM-only so XRPL native is
   //     out of scope. Other 6 chains reject RLUSD via the absence of the token
   //     from their allowlist entry.
-  const CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
+  const FULL_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
     injective: ["USDT"],
     eth:       ["USDC", "USDT", "RLUSD"],
     bnb:       ["USDC", "USDT"],
@@ -135,16 +142,24 @@ export async function POST(req: NextRequest) {
     mantle:    ["USDC", "USDT"],
     stable:    ["USDC", "USDT"],
   };
+  const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
+    bnb: ["USDC", "USDT"],
+  };
+  const CHAIN_TOKEN_ALLOWLIST = BNB_FOCUS_MODE
+    ? SPRINT_CHAIN_TOKEN_ALLOWLIST
+    : FULL_CHAIN_TOKEN_ALLOWLIST;
   const allowedTokens = CHAIN_TOKEN_ALLOWLIST[chain];
-  if (allowedTokens && !allowedTokens.includes(token)) {
+  if (!allowedTokens || !allowedTokens.includes(token)) {
     return NextResponse.json(
       {
         error:
-          chain === "injective" && token === "USDC"
-            ? "USDC is not yet supported on Injective. Native USDC via Circle CCTP is announced for Q2 2026; until then use USDT on Injective."
-            : token === "RLUSD"
-              ? `RLUSD is only supported on Ethereum mainnet. Tried chain="${chain}".`
-              : `Token "${token}" is not supported on chain "${chain}". Supported: ${allowedTokens.join(", ")}.`,
+          BNB_FOCUS_MODE && (chain !== "bnb" || !["USDC", "USDT"].includes(token))
+            ? BNB_FOCUS_REJECTION_MESSAGE
+            : chain === "injective" && token === "USDC"
+              ? "USDC is not yet supported on Injective. Native USDC via Circle CCTP is announced for Q2 2026; until then use USDT on Injective."
+              : token === "RLUSD"
+                ? `RLUSD is only supported on Ethereum mainnet. Tried chain="${chain}".`
+                : `Token "${token}" is not supported on chain "${chain}".${allowedTokens ? ` Supported: ${allowedTokens.join(", ")}.` : ""}`,
         code: "TOKEN_NOT_SUPPORTED_ON_CHAIN",
       },
       { status: 400 }
@@ -259,24 +274,82 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 4. Key matches current subscription + not expired ────────────────────
+  // After the Phase 1 trial/paid key separation, a subscription may carry
+  // FOUR key slots (apiKey + sandboxApiKey for paid scope, trialApiKey +
+  // trialSandboxApiKey for trial scope). The incoming key is "current" if
+  // it matches any of those four. We also derive `isTrialScopedKey` from
+  // the key record's plan so a paid user who still has an active trial
+  // key from before they upgraded gets TRIAL-scope semantics for that
+  // key (BNB-only, trial expiry) — NOT paid-scope. Source-of-truth for
+  // the key's scope is keyRecord.plan, set at generation time and
+  // immutable except via updateApiKeyPlan (which payment-activate only
+  // calls on the paid slots).
   const subscription = await getSubscription(keyRecord.address);
+  const isTrialScopedKey = keyRecord.plan === "trial";
   if (subscription) {
-    // Allow both the live key and the sandbox key
-    const isCurrentKey = subscription.apiKey === apiKey || subscription.sandboxApiKey === apiKey;
+    const isCurrentKey =
+      subscription.apiKey === apiKey ||
+      subscription.sandboxApiKey === apiKey ||
+      subscription.trialApiKey === apiKey ||
+      subscription.trialSandboxApiKey === apiKey;
     if (!isCurrentKey) {
       return NextResponse.json({ error: "API key has been rotated. Please use your current key." }, { status: 401 });
     }
-    // Expiry check: only for paid accounts (amountUSD > 0) with a real paidAt timestamp.
-    // Provisioned free accounts have paidAt="" — skip to avoid false "expired" errors.
-    // Sandbox requests also bypass expiry (they don't consume the paid quota).
+    // Paid-scope expiry: only fires for non-trial keys on accounts that
+    // actually paid (amountUSD > 0 + real paidAt). Trial keys hit the
+    // trial-scope expiry below regardless of whether the subscription
+    // has since upgraded to a paid plan.
     const isPaidAccount = (subscription.amountUSD ?? 0) > 0 && !!subscription.paidAt;
-    if (!isSandbox && isPaidAccount) {
+    if (!isSandbox && !isTrialScopedKey && isPaidAccount) {
       const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
       if (new Date() >= expiresAt) {
         return NextResponse.json({ error: "Subscription expired. Please renew to continue." }, { status: 403 });
       }
     }
+    // Trial-scope expiry — keyed on trialExpiresAt. Fires for any key
+    // generated with plan="trial" (legacy trial subs that wrote into
+    // apiKey/sandboxApiKey AND post-Phase-1 trial subs in trialApiKey /
+    // trialSandboxApiKey both go through this gate).
+    if (!isSandbox && isTrialScopedKey) {
+      if (!subscription.trialExpiresAt || new Date() >= new Date(subscription.trialExpiresAt)) {
+        return NextResponse.json({ error: "Trial expired. Upgrade at /pricing to continue." }, { status: 403 });
+      }
+    }
   }
+
+  // ── 4b. Trial-scope keys → BNB-only enforcement ──────────────────────────
+  // Trial-scoped keys can only relay on BNB Chain regardless of the global
+  // BNB_FOCUS_MODE flag. Free credits + Q402-covered gas only make economic
+  // sense on the cheapest chain; anything else, the user should be on a
+  // paid plan. Sandbox keys bypass (they don't move funds). Scoped on the
+  // KEY's plan, not the subscription's — a paid user using an old trial
+  // key still sees BNB-only on that key.
+  if (!isSandbox && isTrialScopedKey && chain !== "bnb") {
+    return NextResponse.json(
+      {
+        error: "Trial accounts are restricted to BNB Chain. Upgrade at /pricing for multi-chain access.",
+        code: "TRIAL_BNB_ONLY",
+      },
+      { status: 403 },
+    );
+  }
+
+  // ── 4c. Platform billing permits payer != key owner ──────────────────────
+  // The API key is the builder's billing/quota account; `from` is the end
+  // user's wallet, signed by that wallet's EOA in the witness. A builder
+  // relaying for N end-users uses a single API key with N distinct `from`
+  // values. No structural equality check between `from` and the key owner.
+  //
+  // Defense against API-key leak is operational:
+  //   - Per-API-key rate limit (section 3b — 30 relay calls / 60s).
+  //   - Daily TX cap via the atomic credit decrement (section 7c).
+  //   - Trial-scope 2,000-credit ceiling; paid-scope gas-tank balance gate.
+  //   - Fresh-auth required for state-changing dashboard actions, so a
+  //     leaked key alone cannot rotate the key or top up the gas tank.
+  //   - One-click rotation in /dashboard → Developer.
+  //
+  // Blast radius of a leak is bounded by quota and gas tank — never by the
+  // owner's primary wallet, which the server has no signing authority over.
 
   // ── 4a. TX credit quick pre-check (stale OK — real gate is atomic decrement) ──
   if (!isSandbox) {
@@ -319,8 +392,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 6. Gas Tank balance check (sandbox skips this) ───────────────────────
-  if (!isSandbox) {
+  // ── 6. Gas Tank balance check (sandbox + active trial skip this) ─────────
+  // Trial users don't fund their own gas tank — Q402 covers the gas during
+  // the sprint window. The relayer hot wallet still pays gas on-chain, but
+  // we don't debit a per-user balance the user never deposited into.
+  //
+  // Scoped on the KEY's plan, not the subscription's — a paid user using
+  // their old trial key still hits trial-scope gas behaviour for that key
+  // (and the trial-expiry gate above already rejected it if past window).
+  const isActiveTrial =
+    isTrialScopedKey &&
+    !!subscription?.trialExpiresAt &&
+    new Date(subscription.trialExpiresAt) > new Date();
+  if (!isSandbox && !isActiveTrial) {
     const gasBalance   = await getGasBalance(keyRecord.address);
     const chainBalance = gasBalance[chain] ?? 0;
     if (chainBalance <= MIN_GAS_BALANCE[chain]) {
@@ -462,11 +546,25 @@ export async function POST(req: NextRequest) {
   }
 
   if (!result.success) {
-    // Relay failed — refund quota credit so the user isn't charged for a failed attempt
+    // Relay failed — refund the quota credit so the user isn't charged for
+    // a failed attempt. The refund MUST be awaited: a fire-and-forget
+    // promise can be dropped when the serverless invocation returns, which
+    // silently strands the user's quota in the "spent" state for a relay
+    // that never landed on chain. If the refund itself also fails (KV
+    // transient), page ops so the deficit doesn't go unnoticed.
     if (creditReserved) {
-      refundCredit(keyRecord.address).catch(e =>
-        console.error("[relay] credit refund failed after relay failure:", e)
-      );
+      try {
+        await refundCredit(keyRecord.address);
+      } catch (e) {
+        console.error("[relay] credit refund failed after relay failure:", e);
+        await sendOpsAlert(
+          `<b>Quota refund failed after relay failure</b>\n` +
+          `Address: <code>${keyRecord.address}</code>\n` +
+          `Chain: ${chain}\nFrom: <code>${from}</code>\n` +
+          `Error: ${e instanceof Error ? e.message : String(e)}`,
+          "error",
+        );
+      }
     }
     // Don't leak internal RPC errors or contract revert reasons to callers
     console.error(`[relay] failed chain=${chain} from=${from}: ${result.error}`);
@@ -606,20 +704,50 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 11. Record the TX (including receipt id for dashboard link) ──────────
-  // Fire-and-forget — on-chain TX already succeeded; don't block response on KV write
-  recordRelayedTx(keyRecord.address, {
-    apiKey,
-    address:      keyRecord.address,
-    chain,
-    fromUser:     from,
-    toUser:       to,
-    tokenAmount,
-    tokenSymbol:  token,
-    gasCostNative,
-    relayTxHash:  result.txHash ?? "",
-    relayedAt,
-    receiptId:    receiptId ?? undefined,
-  }).catch(e => console.error("[relay] TX record failed (non-fatal):", e));
+  // Routed through `after()` (next/server) so the writes run AFTER the
+  // response is flushed but before Vercel tears the serverless function
+  // down. A fire-and-forget call here can drop the write on cold-stop or
+  // transient KV failure — the user would see the on-chain settlement
+  // succeed but the Transactions tab + gas-tank debit would never land.
+  //
+  // Trial users: gasCostNative is zeroed in the per-user record so the dashboard
+  // doesn't show negative gas-tank balance against their $0 deposit. The actual
+  // gas is paid by Q402's relayer wallet; aggregate trial-gas burn is tracked
+  // separately via the trial_gas_burned:{chain} HINCRBYFLOAT counter below so
+  // ops still has visibility into platform spend.
+  after(async () => {
+    try {
+      await recordRelayedTx(keyRecord.address, {
+        apiKey,
+        address:      keyRecord.address,
+        chain,
+        fromUser:     from,
+        toUser:       to,
+        tokenAmount,
+        tokenSymbol:  token,
+        gasCostNative: isActiveTrial ? 0 : gasCostNative,
+        relayTxHash:  result.txHash ?? "",
+        relayedAt,
+        receiptId:    receiptId ?? undefined,
+      });
+    } catch (e) {
+      console.error("[relay] TX record failed (after-response):", e);
+    }
+  });
+
+  // Platform trial-gas burn counter — tracks how much native gas Q402 is
+  // covering on behalf of trial users, broken down by chain. Pure ops metric,
+  // not user-facing. Same after() guarantee as the TX-record above.
+  if (isActiveTrial && gasCostNative > 0) {
+    after(async () => {
+      try {
+        const { kv } = await import("@vercel/kv");
+        await kv.hincrbyfloat("trial_gas_burned", chain, gasCostNative);
+      } catch (e) {
+        console.error("[relay] trial_gas_burned counter failed (after-response):", e);
+      }
+    });
+  }
 
   // Sync subscription.quotaBonus for dashboard display (fire-and-forget, non-critical).
   // The authoritative counter is quota:{addr} (atomically decremented above).

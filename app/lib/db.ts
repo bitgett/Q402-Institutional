@@ -8,9 +8,15 @@
  */
 import { kv } from "@vercel/kv";
 import { TIER_CREDITS, TIER_PLANS } from "@/app/lib/blockchain";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 
 interface Subscription {
   paidAt: string;
+  // Paid-plan live key. Only minted by /api/payment/activate. Empty string
+  // on a freshly provisioned (unpaid) account. NEVER reused as a trial key —
+  // trial activation mints into trialApiKey instead so the two scopes stay
+  // isolated. If a user pays during/after a trial, this slot gets a brand
+  // new key while trialApiKey keeps working until trialExpiresAt.
   apiKey: string;
   plan: string;
   txHash: string;
@@ -22,6 +28,20 @@ interface Subscription {
   // payment arrives. Optional to keep the type backwards compatible — any
   // undefined value is lazily bootstrapped from amountUSD on read.
   windowPaidBnbUSD?: number;
+  // Trial-only fields. When `plan === "trial"`, `trialExpiresAt` is the
+  // canonical expiry (paidAt + TRIAL_DURATION_DAYS, materialized at activation
+  // so the dashboard can display it without recomputing). `email` is set when
+  // the user pairs their wallet with a verified email via the magic-link flow.
+  trialExpiresAt?: string;
+  email?: string;
+  // Trial keys — separate slot from apiKey/sandboxApiKey so a paid upgrade
+  // can mint fresh paid keys without invalidating the trial keys (trial keys
+  // expire naturally with trialExpiresAt). Dashboard surfaces these in the
+  // "Free Trial" view; relay route gates by the api-key record's own plan,
+  // so even if both keys exist simultaneously the live one and the trial one
+  // see independent feature gates.
+  trialApiKey?: string;
+  trialSandboxApiKey?: string;
 }
 
 interface ApiKeyRecord {
@@ -270,6 +290,16 @@ export async function getGasDeposits(address: string): Promise<GasDeposit[]> {
  * Appends a deposit atomically using RPUSH.
  * Dedup is enforced via a separate Redis SET (SADD) — O(1) and race-safe.
  * Returns true if added, false if duplicate.
+ *
+ * IMPORTANT — dedup SET has NO TTL on purpose. An earlier version of this
+ * function expired the SET after 90d to bound KV cost, but that opened a
+ * money-loss bug: after expiry, the same historical txHash re-verified
+ * (manual support credit, re-scan job, anything that re-presents an old
+ * deposit) would SADD=1 and RPUSH a duplicate credit. KV cost of the
+ * dedup SET is bounded by the number of deposits a wallet has ever made
+ * — negligible compared to the cost of erroneously double-crediting.
+ * The defence-in-depth `existing.some(...)` check on the duplicate path
+ * below also catches any list↔set drift if the SET ever did get evicted.
  */
 export async function addGasDeposit(address: string, deposit: GasDeposit): Promise<boolean> {
   if (deposit.txHash) {
@@ -285,7 +315,11 @@ export async function addGasDeposit(address: string, deposit: GasDeposit): Promi
         await kv.rpush(gasDepKey(address), deposit);
         return true;
       }
-      kv.expire(gasDepDedupKey(address), 90 * 24 * 60 * 60).catch(() => {});
+      // SET was previously expired? Belt-and-suspenders: scan the deposits
+      // list before RPUSH so a TTL-evicted SET (or migration drift) can't
+      // produce a double-credit even if SADD returned "new".
+      const existing = await getGasDeposits(address);
+      if (existing.some(d => d.txHash === deposit.txHash)) return false;
       await kv.rpush(gasDepKey(address), deposit);
       return true;
     } catch { /* fall through to legacy */ }
@@ -307,11 +341,52 @@ export async function getGasBalance(address: string): Promise<Record<string, num
   for (const chain of Object.keys(usedTotals)) {
     totals[chain] = (totals[chain] ?? 0) - usedTotals[chain];
   }
-  // Clamp to 0 — negative balance means deposit was never recorded in KV
+  // Detect pre-clamp negative drift before we hide it from the user UI.
+  // A negative pre-clamp value means a settlement debited gas against a
+  // deposit we never recorded in KV — that's a real ledger divergence and
+  // ops needs to see it, even though the user UI shows 0 (since they have
+  // no claim on the deficit). Throttled to one fan-out per drifting chain
+  // per 1h so a continuous read-storm doesn't spam the operator channel.
+  const drifting: Array<{ chain: string; balance: number; deposited: number; used: number }> = [];
   for (const chain of Object.keys(totals)) {
-    if (totals[chain] < 0) totals[chain] = 0;
+    if (totals[chain] < 0) {
+      const depositedOnChain = deposits.filter(d => d.chain === chain).reduce((a, d) => a + d.amount, 0);
+      const usedOnChain      = usedTotals[chain] ?? 0;
+      drifting.push({ chain, balance: totals[chain], deposited: depositedOnChain, used: usedOnChain });
+      totals[chain] = 0;
+    }
+  }
+  if (drifting.length > 0) {
+    // Fire-and-forget — alerts must never block balance reads.
+    void emitGasDriftAlert(address, drifting);
   }
   return totals;
+}
+
+async function emitGasDriftAlert(
+  address: string,
+  drifting: Array<{ chain: string; balance: number; deposited: number; used: number }>,
+): Promise<void> {
+  try {
+    const lines = [
+      `<b>Gas-balance negative drift</b>`,
+      `Address: <code>${address}</code>`,
+      "",
+      ...drifting.map(
+        d => `• <b>${d.chain}</b>: balance=${d.balance.toFixed(8)}  deposited=${d.deposited.toFixed(8)}  used=${d.used.toFixed(8)}`,
+      ),
+      "",
+      `User UI clamps to 0; this alert is the only signal of ledger divergence.`,
+    ].join("\n");
+    // Dedup key per (address, chain set) so we don't spam on every dashboard
+    // poll. 1h TTL — drift is a slow problem; one alert per hour is enough.
+    const dedupKey = `gas_drift_alert:${address}:${drifting.map(d => d.chain).sort().join(",")}`;
+    const fresh = await kv.set(dedupKey, "1", { nx: true, ex: 3600 });
+    if (!fresh) return;
+    await sendOpsAlert(lines, "warn");
+  } catch {
+    /* never throw out of a balance read */
+  }
 }
 
 // ── Relayed TXs ───────────────────────────────────────────────────────────────
@@ -603,14 +678,25 @@ export function getPlanQuota(plan: string): number {
 
 export async function isSubscriptionActive(address: string): Promise<boolean> {
   const sub = await getSubscription(address);
-  if (!sub || !sub.paidAt || (sub.amountUSD ?? 0) === 0) return false;
+  if (!sub || !sub.paidAt) return false;
+  // Trial: amountUSD is 0 but trialExpiresAt is the authoritative window. The
+  // legacy `amountUSD > 0` gate would have rejected every trial otherwise.
+  if (sub.plan === "trial") {
+    if (!sub.trialExpiresAt) return false;
+    return new Date() < new Date(sub.trialExpiresAt);
+  }
+  if ((sub.amountUSD ?? 0) === 0) return false;
   const expiresAt = new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
   return new Date() < expiresAt;
 }
 
 export async function getSubscriptionExpiry(address: string): Promise<Date | null> {
   const sub = await getSubscription(address);
-  if (!sub || !sub.paidAt || (sub.amountUSD ?? 0) === 0) return null;
+  if (!sub || !sub.paidAt) return null;
+  if (sub.plan === "trial") {
+    return sub.trialExpiresAt ? new Date(sub.trialExpiresAt) : null;
+  }
+  if ((sub.amountUSD ?? 0) === 0) return null;
   return new Date(new Date(sub.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
 }
 
@@ -684,4 +770,53 @@ export async function resetUsageAlertState(address: string): Promise<void> {
 export async function listUsageAlertAddresses(): Promise<string[]> {
   const members = await kv.smembers(ALERT_INDEX_SET);
   return Array.isArray(members) ? members.map(String) : [];
+}
+
+// ── Trial expiration reminders ────────────────────────────────────────────────
+// Parallel to the usage-alert index above. /api/trial/activate adds wallets
+// to TRIAL_INDEX_SET on activation; the cron fans out across this set so
+// expiry reminders cost O(trial users), not O(all KV keys).
+//
+// Hysteresis lives in `trial_alert:{addr}.lastDaysAlerted` — a downward
+// crossing of 7d / 3d / 1d fires one email per tier. The index entry is
+// auto-pruned by the cron once a trial expires (no record → no reminder).
+
+export interface TrialAlertState {
+  /** Lowest days-left tier we've already mailed for. 7 → 3 → 1 → null. */
+  lastDaysAlerted: number | null;
+}
+
+const TRIAL_INDEX_SET = "trial_alert:_index";
+const trialAlertKey = (addr: string) => `trial_alert:${addr.toLowerCase()}`;
+
+export async function addTrialSubscriptionToIndex(address: string): Promise<void> {
+  await kv.sadd(TRIAL_INDEX_SET, address.toLowerCase());
+}
+
+export async function removeTrialSubscriptionFromIndex(address: string): Promise<void> {
+  await Promise.all([
+    kv.srem(TRIAL_INDEX_SET, address.toLowerCase()),
+    kv.del(trialAlertKey(address)),
+  ]);
+}
+
+export async function listTrialSubscriptionAddresses(): Promise<string[]> {
+  const members = await kv.smembers(TRIAL_INDEX_SET);
+  return Array.isArray(members) ? members.map(String) : [];
+}
+
+export async function getTrialAlertState(address: string): Promise<TrialAlertState | null> {
+  return kv.get<TrialAlertState>(trialAlertKey(address));
+}
+
+/**
+ * Mark `daysTier` as the lowest expiry tier we've alerted for. Idempotent —
+ * only advances downward (1 < 3 < 7) so cron re-runs on the same day don't
+ * double-mail. Mirrors recordAlertSent for usage alerts.
+ */
+export async function recordTrialAlertSent(address: string, daysTier: number): Promise<void> {
+  const cur = (await getTrialAlertState(address)) ?? { lastDaysAlerted: null };
+  const prev = cur.lastDaysAlerted ?? Number.POSITIVE_INFINITY;
+  if (daysTier >= prev) return;
+  await kv.set(trialAlertKey(address), { lastDaysAlerted: daysTier });
 }

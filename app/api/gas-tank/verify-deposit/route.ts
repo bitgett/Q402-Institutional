@@ -6,11 +6,10 @@ import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
 
 // blockWindow is sized so every chain covers ~10 minutes of recent history,
 // matching the realistic gap between a user submitting a deposit and tapping
-// "Verify". The BSC and Injective values were doubled in May 2026 after
-// observed block times dropped to ~0.75s — the previous 200-block window only
-// covered ~2.5 minutes on BSC, which silently dropped legitimate deposits
-// older than a couple of minutes (caught when 0xfe7ba1…6726f's 6-min-old
-// 0.001 BNB deposit failed to surface in the scan path).
+// "Verify". BSC and Injective values are doubled vs the smaller-chain default
+// because observed block times on those networks are ~0.75s — a 200-block
+// window would only cover ~2.5 minutes there and silently drop legitimate
+// deposits older than a couple of minutes.
 const CHAINS = [
   { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",       blockWindow: 800, explorer: "https://bscscan.com/tx/" },
   { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",          blockWindow: 50,  explorer: "https://etherscan.io/tx/" },

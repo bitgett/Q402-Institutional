@@ -80,7 +80,10 @@ export default function DocsPage() {
         <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-5">
             <Link href="/" className="flex items-center gap-2">
-              <span className="text-yellow font-bold text-base">Q402</span>
+              <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
+                <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
+              </span>
+              <span className="text-yellow font-bold text-base tracking-tight leading-none">Q402</span>
               <span className="text-white/20 text-xs">/</span>
               <span className="text-white/50 text-xs font-medium">docs</span>
             </Link>
