@@ -111,9 +111,20 @@ async function readRelayedTxs(addr) {
 
 function classifyAccount(sub) {
   const now = new Date();
-  const hasTrialSignal = !!sub?.trialApiKey
+  // Modern trial signal: explicit trialApiKey slot + a future expiry. This is
+  // the post-Phase-1 shape — accounts created after the trial/paid key split.
+  const hasModernTrialSignal = !!sub?.trialApiKey
     && !!sub?.trialExpiresAt
     && new Date(sub.trialExpiresAt) > now;
+  // Legacy trial signal: pre-Phase-1 accounts wrote the trial key into the
+  // `apiKey` slot and set `plan="trial"` directly. `trialExpiresAt` may or
+  // may not exist depending on when they activated. amountUSD=0 confirms
+  // they never paid. These accounts were skipped as orphans by the original
+  // logic even though they're obviously trial-scope (legacy quota ≈ 2000,
+  // plan field is the explicit signal).
+  const hasLegacyTrialSignal = sub?.plan === TRIAL_PLAN_NAME
+    && (sub?.amountUSD ?? 0) === 0;
+  const hasTrialSignal = hasModernTrialSignal || hasLegacyTrialSignal;
   const hasPaidSignal = (sub?.amountUSD ?? 0) > 0
     && !!sub?.paidAt
     && sub?.plan !== TRIAL_PLAN_NAME;
