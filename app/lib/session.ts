@@ -38,8 +38,7 @@ export interface SessionRecord {
    * Canonical BOUND wallet for this email session. Set ONLY by
    * /api/auth/wallet-bind (which requires a fresh signed challenge) and
    * NEVER overwritten silently — a second bind attempt with a different
-   * address returns 409 WALLET_ALREADY_BOUND. See docs/sprint-bnb-focus.md
-   * §10 "Identity model".
+   * address returns 409 WALLET_ALREADY_BOUND.
    *
    * Front-end consumers MUST treat this field as the source-of-truth for
    * "which wallet's data should this account see" — not whatever wallet
