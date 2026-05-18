@@ -245,8 +245,23 @@ describe("trial — email session merges into wallet activation", () => {
     expect(trialRouteSource).toMatch(/pairSessionWithWallet\(sid,\s*addr\)/);
   });
 
-  it("writes trial_used_by_email:{email} permanent sentinel when an email is adopted", () => {
-    expect(trialRouteSource).toMatch(/kv\.set\(\s*`trial_used_by_email:\$\{adoptedEmail\}`/);
+  it("atomically claims trial_used_by_email:{email} via SET NX before granting credits", () => {
+    // Regression guard: previous revision checked the sentinel then wrote
+    // it at separate gates. Two concurrent activations with the same
+    // verified email both passed the check, both granted credits, and only
+    // then raced to write — same email got TWO trials. The claim now uses
+    // SET NX (claim-if-absent) and the route rejects with
+    // TRIAL_ALREADY_USED_EMAIL on collision.
+    expect(trialRouteSource).toMatch(/trial_used_by_email:\$\{adoptedEmail\}/);
+    expect(trialRouteSource).toMatch(/kv\.set\([\s\S]+?nx:\s*true[\s\S]+?ex:\s*TRIAL_USED_TTL/);
+    expect(trialRouteSource).toMatch(/code:\s*"TRIAL_ALREADY_USED_EMAIL"/);
+    // The claim must precede addCredits — that's the whole point of NX
+    // being a pre-credit gate.
+    const claimIdx = trialRouteSource.indexOf("trial_used_by_email:${adoptedEmail}");
+    const grantIdx = trialRouteSource.indexOf("await addCredits(");
+    expect(claimIdx).toBeGreaterThan(0);
+    expect(grantIdx).toBeGreaterThan(0);
+    expect(claimIdx).toBeLessThan(grantIdx);
   });
 
   it("registers the wallet in the trial-expiry index when an email is bound", () => {

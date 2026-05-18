@@ -33,6 +33,11 @@ const RPC_BY_CHAIN: Record<SubscriptionDeployedChain, string> = {
 };
 
 async function getCode(rpcUrl: string, address: string): Promise<{ code: string | null; error: string | null }> {
+  // Explicit 4s timeout so a hanging public RPC (BSC dataseed has been
+  // observed to stall past Vitest's default 5s test timeout) trips the
+  // soft-skip path instead of failing the suite. The fix shapes the
+  // exception path: AbortSignal.timeout fires AbortError → caught here
+  // → returns { code: null, error } → caller treats as offline → it.skip.
   try {
     const resp = await fetch(rpcUrl, {
       method: "POST",
@@ -43,6 +48,7 @@ async function getCode(rpcUrl: string, address: string): Promise<{ code: string 
         params: [address, "latest"],
         id: 1,
       }),
+      signal: AbortSignal.timeout(4000),
     });
     if (!resp.ok) return { code: null, error: `HTTP ${resp.status}` };
     const data = (await resp.json()) as { result?: string; error?: { message?: string } };

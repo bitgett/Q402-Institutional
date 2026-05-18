@@ -171,21 +171,46 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // First bind — promote the session from "unbound" to "bound". Persists
-  // verifiedAddr as session.address (the canonical bound wallet).
-  await pairSessionWithWallet(sid, verifiedAddr);
-
-  // Write BOTH global indexes — awaited, with per-key retry (3 attempts,
-  // 50ms/250ms/750ms backoff). Persistent failure emits a deduped ops
-  // alert but does NOT block the bind, since pairSessionWithWallet above
-  // already committed and a 5xx now would mislead the caller. See
-  // app/lib/wallet-email-bridge.ts for full rationale + behaviour notes.
-  await writeWalletEmailBridge(
+  // Atomic bridge claim FIRST (SET NX on both directions), then commit the
+  // session. Order matters: the pre-check above is a friendly fast-reject,
+  // but the race-safe guarantee lives in the bridge helper. If a concurrent
+  // bind landed between our pre-check and here, the helper returns conflict
+  // and we surface 409 to the caller — we MUST NOT call
+  // pairSessionWithWallet in that case, or the session ends up pointing at
+  // a wallet the global index doesn't actually claim for this email.
+  const bridge = await writeWalletEmailBridge(
     verifiedAddr,
     emailLc,
     WALLET_EMAIL_LINK_TTL,
     "wallet-bind",
   );
+  if (!bridge.ok) {
+    if (bridge.conflict === "email_already_bound") {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "EMAIL_ALREADY_BOUND",
+          boundAddress: bridge.existingAddr ?? null,
+        },
+        { status: 409 },
+      );
+    }
+    if (bridge.conflict === "wallet_already_bound") {
+      return NextResponse.json(
+        { ok: false, code: "WALLET_TAKEN" },
+        { status: 409 },
+      );
+    }
+    // kv_write — transient KV failure after retries. Ops alert already
+    // fired from inside the helper; surface a 503 so the caller can retry.
+    return NextResponse.json(
+      { error: "Temporary storage error. Please retry." },
+      { status: 503 },
+    );
+  }
+
+  // Bridge is claimed — now promote the session from "unbound" to "bound".
+  await pairSessionWithWallet(sid, verifiedAddr);
 
   // Best-effort operator alert. Same fail-soft pattern as payment-activate.
   // Phase 2's migration job triggers off this event downstream.

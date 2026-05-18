@@ -130,23 +130,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Sybil cap by email — paired with the wallet sentinel above, this stops
-  // one Google identity from harvesting multiple trials via fresh wallets.
-  // Only fires when the user actually signed in with email/Google first;
-  // pure wallet-flow users skip this check (no email to key against).
-  if (adoptedEmail) {
-    const alreadyUsedByEmail = await kv.get(`trial_used_by_email:${adoptedEmail}`);
-    if (alreadyUsedByEmail) {
-      return NextResponse.json(
-        {
-          error: "This email has already claimed a free trial. Upgrade at /pricing.",
-          code: "TRIAL_ALREADY_USED_EMAIL",
-        },
-        { status: 409 },
-      );
-    }
-  }
-
   // If the wallet already has a paid subscription, free trial is moot.
   const existing = await getSubscription(addr);
   if (existing && existing.plan !== TRIAL_PLAN_NAME && (existing.amountUSD ?? 0) > 0) {
@@ -170,6 +153,43 @@ export async function POST(req: NextRequest) {
       },
       { status: 409 },
     );
+  }
+
+  // Atomic Sybil cap by email — SET NX on the per-email sentinel BEFORE
+  // crediting. The previous check-then-write at separate gates left a window
+  // where two wallets with the same verified email could both pass the
+  // pre-check (no sentinel exists yet), both grant credits, and only then
+  // race to write the sentinel. NX closes that window: one wallet claims,
+  // the other gets back the existing claim and is rejected.
+  //
+  // Idempotency: same wallet retrying after a partial failure re-runs this
+  // and finds its own addr — proceed without re-granting (the credit_grant
+  // SET NX inside the try block handles the credit dedup separately).
+  let emailClaimedByUs = false;
+  if (adoptedEmail) {
+    const emailSentinelKey = `trial_used_by_email:${adoptedEmail}`;
+    const claimedEmail = await kv.set(emailSentinelKey, addr, {
+      nx: true,
+      ex: TRIAL_USED_TTL,
+    });
+    if (claimedEmail) {
+      emailClaimedByUs = true;
+    } else {
+      const existing = await kv.get<string>(emailSentinelKey);
+      if (existing && existing.toLowerCase() !== addr.toLowerCase()) {
+        // Different wallet already claimed this email's trial — release the
+        // wallet lock and reject. Don't touch the existing sentinel.
+        kv.del(trialClaimKey(addr)).catch(() => {});
+        return NextResponse.json(
+          {
+            error: "This email has already claimed a free trial. Upgrade at /pricing.",
+            code: "TRIAL_ALREADY_USED_EMAIL",
+          },
+          { status: 409 },
+        );
+      }
+      // existing === addr → idempotent retry by the same wallet. Proceed.
+    }
   }
 
   try {
@@ -229,11 +249,10 @@ export async function POST(req: NextRequest) {
     // (which still works because activate doesn't check this key).
     await kv.set(trialUsedKey(addr), addr, { ex: TRIAL_USED_TTL });
 
-    // If we adopted an email session, also block this email from claiming
-    // another trial via a different wallet — caps the Sybil ceiling per
-    // verified email. Same 10y TTL as the wallet sentinel.
+    // If we adopted an email session, pair the session to the wallet and
+    // write the read-side bridge. The trial_used_by_email sentinel was
+    // already atomically claimed above (SET NX) — no need to re-write it.
     if (adoptedEmail) {
-      await kv.set(`trial_used_by_email:${adoptedEmail}`, addr, { ex: TRIAL_USED_TTL });
       // Pair the session to the wallet so /api/auth/me reflects the binding
       // on the next dashboard load (the email-only view will swap out for
       // the full wallet view without requiring a session refresh).
@@ -244,7 +263,17 @@ export async function POST(req: NextRequest) {
       // Read-side bridge + 1:1 enforcement indexes — same pair the
       // /api/auth/wallet-bind route writes. Awaited, with per-key retry +
       // ops alert on persistent failure. See wallet-email-bridge.ts.
-      await writeWalletEmailBridge(addr, adoptedEmail, TRIAL_USED_TTL, "trial-activate");
+      // A conflict here is rare (would mean wallet-bind ran for a different
+      // wallet before trial activate — pre-existing edge case, not P1-4
+      // scope) — log and move on; the trial is already committed and the
+      // session pairing above keeps the dashboard usable.
+      const bridge = await writeWalletEmailBridge(addr, adoptedEmail, TRIAL_USED_TTL, "trial-activate");
+      if (!bridge.ok) {
+        console.warn(
+          `[trial/activate] bridge write non-fatal conflict addr=${addr} ` +
+          `email=${adoptedEmail} conflict=${bridge.conflict}`,
+        );
+      }
     }
 
     // Register this wallet for the trial-expiry cron (best-effort; missing
@@ -296,6 +325,14 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error(`[trial/activate] write failure addr=${addr}:`, e);
+    // Roll back the email-side sentinel IF we wrote it ourselves this call.
+    // Without this, a mid-flight failure between the atomic claim and the
+    // credit grant burns the email's trial slot permanently — the user
+    // can't retry with their email. Wallet-side credit_grant has its own
+    // SET NX dedup so retries pick up where they left off.
+    if (emailClaimedByUs && adoptedEmail) {
+      kv.del(`trial_used_by_email:${adoptedEmail}`).catch(() => {});
+    }
     return NextResponse.json(
       { error: "Trial activation failed. Please try again.", code: "TRIAL_RETRY" },
       { status: 500 },

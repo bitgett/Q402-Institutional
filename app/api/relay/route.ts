@@ -546,11 +546,25 @@ export async function POST(req: NextRequest) {
   }
 
   if (!result.success) {
-    // Relay failed — refund quota credit so the user isn't charged for a failed attempt
+    // Relay failed — refund the quota credit so the user isn't charged for
+    // a failed attempt. The refund MUST be awaited: a fire-and-forget
+    // promise can be dropped when the serverless invocation returns, which
+    // silently strands the user's quota in the "spent" state for a relay
+    // that never landed on chain. If the refund itself also fails (KV
+    // transient), page ops so the deficit doesn't go unnoticed.
     if (creditReserved) {
-      refundCredit(keyRecord.address).catch(e =>
-        console.error("[relay] credit refund failed after relay failure:", e)
-      );
+      try {
+        await refundCredit(keyRecord.address);
+      } catch (e) {
+        console.error("[relay] credit refund failed after relay failure:", e);
+        await sendOpsAlert(
+          `<b>Quota refund failed after relay failure</b>\n` +
+          `Address: <code>${keyRecord.address}</code>\n` +
+          `Chain: ${chain}\nFrom: <code>${from}</code>\n` +
+          `Error: ${e instanceof Error ? e.message : String(e)}`,
+          "error",
+        );
+      }
     }
     // Don't leak internal RPC errors or contract revert reasons to callers
     console.error(`[relay] failed chain=${chain} from=${from}: ${result.error}`);

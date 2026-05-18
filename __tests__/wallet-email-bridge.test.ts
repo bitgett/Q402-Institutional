@@ -31,10 +31,13 @@ const dashboardSource    = readLF(resolve(ROOT, "app", "dashboard", "page.tsx"))
 const transactionsSource = readLF(resolve(ROOT, "app", "api", "transactions",         "route.ts"));
 
 describe("wallet_email_link write — both bind paths populate the bridge", () => {
-  it("/api/auth/wallet-bind invokes writeWalletEmailBridge AFTER pairSessionWithWallet", () => {
-    // The bind path must write the reverse pointer AFTER
-    // pairSessionWithWallet succeeds. Skipping this leaves the wallet-
-    // only-login view permanently unable to find the email pseudo.
+  it("/api/auth/wallet-bind invokes writeWalletEmailBridge BEFORE pairSessionWithWallet", () => {
+    // The bridge helper now performs SET NX on both directions; a conflict
+    // means a concurrent bind beat us to the claim. We MUST gate the
+    // session commit on a successful bridge claim — committing the session
+    // first and then discovering the bridge conflicts would leave the
+    // session pointing at a wallet the global index doesn't claim for
+    // this email. So the call order flips: bridge first, then pair.
     //
     // The bridge write was previously a fire-and-forget Promise.all().catch;
     // the helper (app/lib/wallet-email-bridge.ts) now wraps both writes
@@ -46,7 +49,7 @@ describe("wallet_email_link write — both bind paths populate the bridge", () =
     const writeIdx = bindSource.indexOf("await writeWalletEmailBridge(");
     expect(pairIdx).toBeGreaterThan(0);
     expect(writeIdx).toBeGreaterThan(0);
-    expect(pairIdx).toBeLessThan(writeIdx);
+    expect(writeIdx).toBeLessThan(pairIdx);
   });
 
   it("/api/auth/wallet-bind uses a 10y TTL on the bridge (mirrors trial_used sentinels)", () => {
@@ -76,9 +79,28 @@ describe("writeWalletEmailBridge helper", () => {
     expect(helperSrc).toMatch(/email_to_wallet:\$\{email\}/);
   });
 
+  it("uses SET NX semantics on every write (atomic claim, not last-write-wins)", () => {
+    // The race-safe guarantee lives in the helper: two concurrent binds
+    // for the same email or wallet must not both pass. SET NX (claim only
+    // if absent) + an explicit GET-and-compare on collision gives us
+    // atomic claim-or-conflict without a true transaction.
+    expect(helperSrc).toMatch(/kv\.set\([^)]+nx:\s*true[^)]+ex:\s*ttlSec/);
+  });
+
+  it("returns a conflict shape that distinguishes email vs wallet collisions", () => {
+    expect(helperSrc).toMatch(/conflict:\s*"email_already_bound"/);
+    expect(helperSrc).toMatch(/conflict:\s*"wallet_already_bound"/);
+  });
+
+  it("rolls back the email claim if the wallet side conflicts (and we wrote it ourselves)", () => {
+    // Without this rollback, a wallet-side conflict would leave a stale
+    // email→wallet pointer for OUR wallet that no future bind matches.
+    expect(helperSrc).toMatch(/if\s*\(\s*emailClaim\.status\s*===\s*"claimed"\s*\)[\s\S]+?kv\.del\(emailKey\)/);
+  });
+
   it("retries each write up to 3 attempts with backoff", () => {
-    expect(helperSrc).toMatch(/delays\s*=\s*\[\s*50,\s*250,\s*750\s*\]/);
-    expect(helperSrc).toMatch(/for\s*\(\s*let\s+attempt\s*=\s*0;\s*attempt\s*<\s*delays\.length/);
+    expect(helperSrc).toMatch(/RETRY_DELAYS\s*=\s*\[\s*50,\s*250,\s*750\s*\]/);
+    expect(helperSrc).toMatch(/for\s*\(\s*let\s+attempt\s*=\s*0;\s*attempt\s*<\s*RETRY_DELAYS\.length/);
   });
 
   it("emits a deduped ops alert on persistent failure (1h TTL)", () => {
