@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSubscription, setSubscription, generateSandboxKey, getQuotaCredits } from "@/app/lib/db";
+import { getSubscription, setSubscription, generateSandboxKey, getScopedCredits } from "@/app/lib/db";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { isOwnerWallet } from "@/app/lib/owners";
@@ -44,7 +44,11 @@ async function loadBoundEmailTrial(addr: string): Promise<
   const trialApiKey = pseudoSub.trialApiKey ?? pseudoSub.apiKey ?? null;
   const trialSandboxApiKey = pseudoSub.trialSandboxApiKey ?? pseudoSub.sandboxApiKey ?? null;
   if (!trialApiKey && !trialSandboxApiKey) return null;
-  const credits = await getQuotaCredits(pseudoAddr);
+  // Bound pseudos are trial-only by construction (email-callback / google
+  // signup grants land in the trial pool; pseudos never accumulate paid
+  // credits). Read the trial pool directly so the dashboard's bridged view
+  // can't accidentally render a paid balance.
+  const credits = await getScopedCredits(pseudoAddr, "trial");
   return {
     email: linkedEmail,
     pseudoAddr,
@@ -106,13 +110,15 @@ export async function POST(req: NextRequest) {
       existing.sandboxApiKey = sandboxApiKey;
     }
 
-    // Trial scope: live whenever trialExpiresAt is in the future, regardless
-    // of whether the user has also paid. A user mid-trial who pays gets BOTH
-    // keys back so the dashboard can show them side-by-side until the trial
-    // expires. Legacy accounts that only have `apiKey`/`sandboxApiKey` set
-    // (pre-migration) fall back through to those slots.
+    // Trial scope: live whenever a trial key is provisioned AND the trial
+    // window is open. NOTE: we deliberately do NOT gate on
+    // `existing.plan === "trial"` — once a user upgrades to a paid plan,
+    // `plan` becomes "starter"/etc and the trial credits + trial key are
+    // still valid until `trialExpiresAt`. The pre-fix code's plan gate was
+    // the root cause of the dashboard rendering 0 in the Trial view right
+    // after a paid activation.
     const isTrialActive =
-      existing.plan === "trial" &&
+      !!existing.trialApiKey &&
       !!existing.trialExpiresAt &&
       new Date(existing.trialExpiresAt) > new Date();
     const trialApiKey = existing.trialApiKey
@@ -138,6 +144,15 @@ export async function POST(req: NextRequest) {
     // would otherwise be invisible (the pseudo's quota counter sits at
     // `quota:email:<sub>`, not `quota:{wallet}`).
     const boundEmailTrial = !trialApiKey ? await loadBoundEmailTrial(addr) : null;
+
+    // Scoped credit reads — the dashboard's primary credit source.
+    // Computed fresh on every provision call (cheap KV read) so the response
+    // never serves stale mirrors. Subscription mirror fields stay updated
+    // for back-compat readers.
+    const [trialCredits, paidCredits] = await Promise.all([
+      getScopedCredits(addr, "trial"),
+      getScopedCredits(addr, "paid"),
+    ]);
 
     return NextResponse.json({
       // Legacy field — prefers paid key, then own trial key, then the
@@ -165,6 +180,14 @@ export async function POST(req: NextRequest) {
       plan:               existing.plan,
       hasPaid:            isPaid,
       isOwner:            isOwnerWallet(addr),
+      // NEW — scoped credit counts, the source of truth for the dashboard.
+      trialCredits,
+      paidCredits,
+      // BUG FIX — surface amountUSD (was missing pre-migration). Dashboard's
+      // `showPaidScope` derivation reads `hasPaid` (above) post-fix, but
+      // legacy callers may still want this for display.
+      amountUSD:          existing.amountUSD ?? 0,
+      // Legacy sum mirror retained for back-compat readers.
       quotaBonus:         existing.quotaBonus ?? 0,
       paidAt:             existing.paidAt,
       isNew:              false,
@@ -211,6 +234,11 @@ export async function POST(req: NextRequest) {
     hasPaid:            false,
     isOwner:            isOwnerWallet(addr),
     isNew:              true,
+    // Brand-new wallet has no scoped pools of its own; bridged email-trial
+    // (if any) renders via boundEmailTrial. Surface zeros here for clarity.
+    trialCredits:       0,
+    paidCredits:        0,
+    amountUSD:          0,
     quotaBonus:         0,
     paidAt:             "",
   });

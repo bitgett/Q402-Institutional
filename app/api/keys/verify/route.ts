@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiKeyRecord, getSubscription, getQuotaCredits } from "@/app/lib/db";
+import { getApiKeyRecord, getSubscription, getScopedCredits, type CreditScope } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
@@ -59,10 +59,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Atomic remaining credits — populated when q402_balance MCP tool calls
-  // through. Sandbox keys share the same counter logic as live keys; the
-  // call is cheap (single KV GET) so we always compute it.
-  const remainingCredits = await getQuotaCredits(record.address);
+  // Atomic remaining credits in the pool that matches THIS key's scope.
+  // q402_balance MCP tool shows the model what's available for the key it's
+  // actually using — a trial key sees trial credits, a paid key sees paid
+  // credits. The two pools are independent post-migration.
+  const scope: CreditScope = record.plan === "trial" ? "trial" : "paid";
+  const remainingCredits = await getScopedCredits(record.address, scope);
 
   // Trial metadata surfaces the days-left + expiry on /keys/verify so the
   // MCP balance tool can show it to the model without a second roundtrip.

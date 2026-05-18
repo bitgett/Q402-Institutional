@@ -111,9 +111,14 @@ describe("trial — /api/trial/activate hardening", () => {
     expect(trialRouteSource).toMatch(/trialExpiresAt:\s*trialExpiresAt\.toISOString\(\)/);
   });
 
-  it("addCredits is guarded by credit_grant:trial NX key (idempotent retry)", () => {
+  it("trial credit grant is guarded by credit_grant:trial NX key (idempotent retry)", () => {
     expect(trialRouteSource).toMatch(/credit_grant:trial:/);
-    expect(trialRouteSource).toMatch(/addCredits\(\s*addr,\s*TRIAL_CREDITS\s*\)/);
+    // Phase 2 two-pool migration: trial activate must write into the trial
+    // pool (`quota:trial:{addr}`) via `addScopedCredits`. Legacy
+    // `addCredits` would route into the paid pool — silently incorrect.
+    expect(trialRouteSource).toMatch(
+      /addScopedCredits\(\s*addr,\s*["']trial["'],\s*TRIAL_CREDITS\s*\)/,
+    );
   });
 });
 
@@ -137,9 +142,34 @@ describe("trial — db.ts trial fields + isSubscriptionActive branch", () => {
 });
 
 describe("trial — /api/keys/provision exposes trial + paid keys separately", () => {
-  it("computes isTrialActive from plan + trialExpiresAt + now", () => {
-    expect(provisionSource).toMatch(/isTrialActive\s*=\s*\n?\s*existing\.plan\s*===\s*["']trial["']/);
+  it("computes isTrialActive from trialApiKey + trialExpiresAt + now (no plan gate)", () => {
+    // BUG FIX (two-pool migration): the previous `plan === "trial"` gate
+    // turned isTrialActive=false the moment a user upgraded to a paid plan,
+    // even though their trial key + 29 days of trial credits were still
+    // valid. The dashboard's Trial view then rendered 0. Verify the plan
+    // gate is gone and isTrialActive only depends on the trial key + expiry.
+    expect(provisionSource).toMatch(
+      /isTrialActive\s*=\s*\n?\s*!!existing\.trialApiKey\s*&&[\s\S]{0,80}?!!existing\.trialExpiresAt/,
+    );
     expect(provisionSource).toMatch(/new Date\(existing\.trialExpiresAt\)\s*>\s*new Date\(\)/);
+    expect(provisionSource).not.toMatch(/isTrialActive\s*=\s*\n?\s*existing\.plan\s*===\s*["']trial["']/);
+  });
+
+  it("returns amountUSD on the response (so dashboard hydrates it correctly)", () => {
+    // BUG FIX (two-pool migration): the prior provision response omitted
+    // amountUSD, so the dashboard defaulted it to 0 on every reload and
+    // showPaidScope evaluated false even for paying users.
+    expect(provisionSource).toMatch(/amountUSD:\s*existing\.amountUSD\s*\?\?\s*0/);
+  });
+
+  it("returns scoped credit counts (trialCredits + paidCredits) from getScopedCredits", () => {
+    // Two-pool migration: provision is the dashboard's primary credit
+    // source. It must read fresh scoped counters on every call so the UI
+    // never serves stale mirror values.
+    expect(provisionSource).toMatch(/trialCredits[,:]/);
+    expect(provisionSource).toMatch(/paidCredits[,:]/);
+    expect(provisionSource).toMatch(/getScopedCredits\(addr,\s*["']trial["']\)/);
+    expect(provisionSource).toMatch(/getScopedCredits\(addr,\s*["']paid["']\)/);
   });
 
   it("surfaces trialApiKey separately from the paid apiKey slot", () => {
@@ -255,10 +285,11 @@ describe("trial — email session merges into wallet activation", () => {
     expect(trialRouteSource).toMatch(/trial_used_by_email:\$\{adoptedEmail\}/);
     expect(trialRouteSource).toMatch(/kv\.set\([\s\S]+?nx:\s*true[\s\S]+?ex:\s*TRIAL_USED_TTL/);
     expect(trialRouteSource).toMatch(/code:\s*"TRIAL_ALREADY_USED_EMAIL"/);
-    // The claim must precede addCredits — that's the whole point of NX
-    // being a pre-credit gate.
+    // The claim must precede the credit grant — that's the whole point of
+    // NX being a pre-credit gate. Two-pool migration routes the grant
+    // through addScopedCredits(..., "trial", ...).
     const claimIdx = trialRouteSource.indexOf("trial_used_by_email:${adoptedEmail}");
-    const grantIdx = trialRouteSource.indexOf("await addCredits(");
+    const grantIdx = trialRouteSource.indexOf("await addScopedCredits(");
     expect(claimIdx).toBeGreaterThan(0);
     expect(grantIdx).toBeGreaterThan(0);
     expect(claimIdx).toBeLessThan(grantIdx);
@@ -280,8 +311,9 @@ describe("trial — email session merges into wallet activation", () => {
     // to true the moment addCredits succeeds OR the credit_grant key is
     // already present (= a prior call's credits are still in the ledger).
     expect(trialRouteSource).toMatch(/let\s+creditsPersisted\s*=\s*false/);
+    // Two-pool migration: grant is now scoped to the trial pool.
     expect(trialRouteSource).toMatch(
-      /await\s+addCredits\(addr,\s*TRIAL_CREDITS\)[\s\S]{0,80}?creditsPersisted\s*=\s*true/,
+      /await\s+addScopedCredits\(addr,\s*["']trial["'],\s*TRIAL_CREDITS\)[\s\S]{0,80}?creditsPersisted\s*=\s*true/,
     );
     // The catch's rollback must require !creditsPersisted in addition to
     // emailClaimedByUs.

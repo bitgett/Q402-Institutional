@@ -16,7 +16,7 @@ import WrongWalletHardBlock from "./WrongWalletHardBlock";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
 import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
-import { BNB_FOCUS_MODE, TRIAL_DURATION_DAYS } from "../lib/feature-flags";
+import { BNB_FOCUS_MODE, TRIAL_DURATION_DAYS, TRIAL_CREDITS } from "../lib/feature-flags";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
@@ -58,7 +58,7 @@ const STEPS = [
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; sandboxApiKey?: string; trialApiKey?: string; trialSandboxApiKey?: string; isTrialActive?: boolean; trialExpiresAt?: string; email?: string; }
+interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; trialQuotaBonus?: number; paidQuotaBonus?: number; sandboxApiKey?: string; trialApiKey?: string; trialSandboxApiKey?: string; isTrialActive?: boolean; trialExpiresAt?: string; email?: string; }
 interface RelayedTx {
   apiKey: string; address: string; chain: string;
   fromUser: string; toUser: string; tokenAmount: number | string; tokenSymbol: string;
@@ -785,8 +785,14 @@ export default function DashboardPage() {
         isTrialActive:     provData.isTrialActive === true,
         plan:              provData.plan as string ?? "starter",
         quotaBonus:        provData.quotaBonus as number ?? prev?.quotaBonus ?? 0,
+        // Scoped pool mirrors — primary source for the dashboard credit display.
+        trialQuotaBonus:   provData.trialCredits as number ?? prev?.trialQuotaBonus ?? 0,
+        paidQuotaBonus:    provData.paidCredits  as number ?? prev?.paidQuotaBonus  ?? 0,
         paidAt:            provData.paidAt as string ?? prev?.paidAt ?? "",
-        amountUSD:         prev?.amountUSD ?? 0,
+        // BUG FIX — actually hydrate amountUSD from the provision response.
+        // The previous default of `prev?.amountUSD ?? 0` meant a fresh reload
+        // always had amountUSD=0 and showPaidScope evaluated to false.
+        amountUSD:         (provData.amountUSD as number) ?? prev?.amountUSD ?? 0,
       }));
 
       // Fetch subscription expiry & status
@@ -1208,30 +1214,36 @@ export default function DashboardPage() {
   //     until they upgrade.
   const walletApiKey = subscription?.apiKey ?? "";
   const walletTrialApiKey = subscription?.trialApiKey ?? "";
-  const walletCredits = subscription?.quotaBonus ?? 0;
+  // Two-pool credit model: scoped mirrors are the source of truth post-
+  // migration. `quotaBonus` (legacy sum) is retained for back-compat only.
+  const trialPoolCredits = subscription?.trialQuotaBonus ?? 0;
+  const paidPoolCredits  = subscription?.paidQuotaBonus  ?? 0;
+  const legacyTotalCredits = subscription?.quotaBonus ?? 0;
+  const hasScopedMirrors =
+    subscription?.trialQuotaBonus !== undefined ||
+    subscription?.paidQuotaBonus  !== undefined;
   const isTrialOnlySub = subscription?.plan === "trial";
   const hasEmailTrial = !!emailSession && !!sessionTrial.apiKey;
-  // A paid wallet's credit counter (`quota:{addr}`) is unified per address
-  // and rolls forward across plan changes — a user who used part of their
-  // trial and then paid sees ONE remaining count that mixes both sources.
-  // For surface accounting (Trial view vs Multichain view), only show
-  // trial credits when the account is verifiably ON a trial right now:
-  // either the email pseudo has an active trial key (hasEmailTrial), the
-  // wallet sub's current plan is "trial" (isTrialOnlySub), OR the
-  // wallet's read-side bridge to a bound email pseudo carries trial
-  // data (boundEmailTrial — covers the wallet-only login of a bound
-  // user). Otherwise the credits belong to the paid scope and surface
-  // in Multichain.
+  // Trial-side key surface: prefer the dedicated trialApiKey slot. Falls back
+  // to the wallet's main apiKey only on legacy `plan === "trial"` accounts
+  // (pre-Phase-1 they wrote into the apiKey slot). Bound-email bridge
+  // covers wallet-only logins of bound users.
   const trialApiKey = hasEmailTrial
     ? (sessionTrial.apiKey ?? "")
     : (walletTrialApiKey || (isTrialOnlySub ? walletApiKey : "") || (boundEmailTrial?.apiKey ?? ""));
+  // Trial credits: scoped mirror is authoritative once migrated. Pre-migration
+  // accounts fall back to the legacy sum only when the sub is trial-only
+  // (clear single-pool signal). Bound-email bridge handles wallet-only logins.
   const trialCredits = hasEmailTrial
     ? sessionTrial.credits
-    : (isTrialOnlySub ? walletCredits : (boundEmailTrial?.credits ?? 0));
-  // Multichain side: only render real values for paying users (amountUSD > 0
-  // AND non-trial plan). The Locked placeholder is rendered inside the card
-  // itself when this is false — the card shell still mounts.
-  const showPaidScope = !trialViewActive && !isTrialOnlySub && (subscription?.amountUSD ?? 0) > 0;
+    : hasScopedMirrors
+      ? trialPoolCredits
+      : (isTrialOnlySub ? legacyTotalCredits : (boundEmailTrial?.credits ?? 0));
+  // Multichain side: render real values for paid accounts. `hasPaid` is
+  // computed from the provision response (amountUSD > 0 && paid live key
+  // exists) and is the source of truth — the prior `amountUSD > 0` check
+  // failed when amountUSD wasn't in the response and defaulted to 0.
+  const showPaidScope = !trialViewActive && hasPaid === true;
   const API_KEY = trialViewActive
     ? (trialApiKey || "—")
     : (showPaidScope ? walletApiKey : "—");
@@ -1274,13 +1286,19 @@ export default function DashboardPage() {
   // Internal key "enterprise_flex" is shown to users as just "Enterprise".
   const planDisplayKey = plan === "enterprise_flex" ? "enterprise" : plan;
   const planName = planDisplayKey.charAt(0).toUpperCase() + planDisplayKey.slice(1);
-  // TX credits remaining — decrements on each successful relay
-  // Scoped credits — same source logic as API_KEY.
+  // TX credits remaining — pulled from the scope-matching pool. Trial view
+  // reads trialCredits (already scoped above); paid view reads the paid pool
+  // (or the legacy total only when scoped mirrors aren't populated yet).
   const remainingCredits = trialViewActive
     ? trialCredits
-    : (showPaidScope ? walletCredits : 0);
-  // Use plan base quota as reference for the bar (credits start at plan quota per payment)
-  const baseCredits = PLAN_QUOTA[plan.toLowerCase()] ?? 500;
+    : (showPaidScope
+        ? (hasScopedMirrors ? paidPoolCredits : legacyTotalCredits)
+        : 0);
+  // Base quota for the progress bar. Trial view uses the canonical trial
+  // grant (TRIAL_CREDITS); paid view uses the plan's base allotment.
+  const baseCredits = trialViewActive
+    ? TRIAL_CREDITS
+    : (PLAN_QUOTA[plan.toLowerCase()] ?? 500);
   // pct consumed = how far below base we are (capped 0–100)
   const pct = Math.min(100, Math.max(0, Math.round((1 - remainingCredits / Math.max(baseCredits, 1)) * 100)));
   const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000) : null;

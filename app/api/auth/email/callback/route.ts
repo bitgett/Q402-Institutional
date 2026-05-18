@@ -23,8 +23,8 @@ import {
   setSubscription,
   generateApiKey,
   generateSandboxKey,
-  addCredits,
-  getQuotaCredits,
+  addScopedCredits,
+  getScopedCredits,
   addTrialSubscriptionToIndex,
 } from "@/app/lib/db";
 import { createSession, attachSessionCookie } from "@/app/lib/session";
@@ -125,13 +125,13 @@ export async function GET(req: NextRequest) {
       const canGrant = await kv.set(grantKey, TRIAL_CREDITS, { nx: true, ex: TRIAL_USED_TTL });
       if (canGrant) {
         try {
-          await addCredits(pseudoAddr, TRIAL_CREDITS);
+          await addScopedCredits(pseudoAddr, "trial", TRIAL_CREDITS);
         } catch (e) {
           kv.del(grantKey).catch(() => {});
           throw e;
         }
       }
-      const credits = await getQuotaCredits(pseudoAddr);
+      const credits = await getScopedCredits(pseudoAddr, "trial");
 
       const now = new Date();
       const expiry = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
@@ -143,7 +143,9 @@ export async function GET(req: NextRequest) {
         plan: TRIAL_PLAN_NAME,
         txHash: "email-signup",
         amountUSD: 0,
-        quotaBonus: credits,
+        trialQuotaBonus: credits,
+        paidQuotaBonus:  0, // email pseudo never has a paid pool
+        quotaBonus:      credits, // legacy sum mirror
         trialExpiresAt: expiry.toISOString(),
         email,
       });

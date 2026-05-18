@@ -4,7 +4,7 @@ import {
   listUsageAlertAddresses,
   getUsageAlert,
   getSubscription,
-  getQuotaCredits,
+  getScopedCredits,
   recordAlertSent,
   clearUsageAlert,
   listTrialSubscriptionAddresses,
@@ -89,10 +89,14 @@ export async function GET(req: Request) {
     if (!addr) continue;
     checked++;
 
+    // Usage alerts are a paid-customer feature only — trial users have a
+    // separate trial-expiry reminder track below. Read the paid pool directly
+    // so a trial-only user opted into alerts can't accidentally trip the
+    // burn-down threshold on their (irrelevant) trial counter.
     const [cfg, sub, remaining] = await Promise.all([
       getUsageAlert(addr),
       getSubscription(addr),
-      getQuotaCredits(addr),
+      getScopedCredits(addr, "paid"),
     ]);
 
     if (!cfg) {
@@ -101,7 +105,9 @@ export async function GET(req: Request) {
       cleaned++;
       continue;
     }
-    const total = sub?.quotaBonus ?? 0;
+    // Denominator: paid pool's peak. Fall back to legacy `quotaBonus` only
+    // when the scoped mirror isn't populated (pre-migration accounts).
+    const total = sub?.paidQuotaBonus ?? sub?.quotaBonus ?? 0;
     if (total <= 0) continue;  // nothing ever purchased — no denominator
 
     const tier = pickAlertTier({

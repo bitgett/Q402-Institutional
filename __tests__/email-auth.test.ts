@@ -116,11 +116,13 @@ describe("/api/auth/google — signup ↔ session bridge", () => {
 
   it("grants the trial bundle on first signup (live + sandbox keys + 2k credits)", () => {
     // First-time Google signup mints both keys at plan=TRIAL_PLAN_NAME and
-    // calls addCredits(TRIAL_CREDITS). Source-level check pins the contract
-    // without standing up a KV mock.
+    // calls addScopedCredits(pseudoAddr, "trial", TRIAL_CREDITS). Two-pool
+    // migration: the grant must land in the trial pool, never the paid pool.
     expect(googleRouteSource).toMatch(/generateApiKey\(pseudoAddr,\s*TRIAL_PLAN_NAME\)/);
     expect(googleRouteSource).toMatch(/generateSandboxKey\(pseudoAddr,\s*TRIAL_PLAN_NAME\)/);
-    expect(googleRouteSource).toMatch(/addCredits\(pseudoAddr,\s*TRIAL_CREDITS\)/);
+    expect(googleRouteSource).toMatch(
+      /addScopedCredits\(pseudoAddr,\s*["']trial["'],\s*TRIAL_CREDITS\)/,
+    );
   });
 
   it("blocks repeat trials via trial_used_by_email permanent sentinel", () => {

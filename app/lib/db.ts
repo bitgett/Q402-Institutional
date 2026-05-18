@@ -21,7 +21,16 @@ interface Subscription {
   plan: string;
   txHash: string;
   amountUSD: number;
+  /**
+   * @deprecated SUM of trialQuotaBonus + paidQuotaBonus. Kept as a back-compat
+   * display mirror for any caller that hasn't migrated to the scoped fields.
+   * The authoritative counters live at `quota:trial:{addr}` and `quota:paid:{addr}`.
+   */
   quotaBonus?: number;
+  /** Trial pool display mirror — last-known value of `quota:trial:{addr}`. */
+  trialQuotaBonus?: number;
+  /** Paid pool display mirror — last-known value of `quota:paid:{addr}`. */
+  paidQuotaBonus?: number;
   sandboxApiKey?: string;
   // Cumulative BNB-equivalent USD paid in the current 30-day window.
   // Reset when the prior expiry (paidAt + 30d) has lapsed before the next
@@ -583,48 +592,133 @@ export async function patchRelayedTxReceiptId(
   return false;
 }
 
-// ── Atomic TX credit counter ──────────────────────────────────────────────────
-// quota:{addr} is a Redis integer key updated via DECRBY/INCRBY.
-// This avoids the read-modify-write race in concurrent relay requests.
-// subscription.quotaBonus is kept in sync (fire-and-forget) for display only.
+// ── Atomic TX credit counters — two-pool model ───────────────────────────────
+// Trial and paid credits live in separate KV keys so the dashboard can render
+// each pool independently and a paid activation never silently drains the
+// remaining trial allotment.
+//
+//   quota:trial:{addr}  — trial credits remaining (BNB-only, relayer-sponsored)
+//   quota:paid:{addr}   — paid credits remaining  (8 chains, user-funded gas tank)
+//
+// The relay route picks the pool based on `keyRecord.plan === "trial"` — an
+// immutable per-key signal set at generation time. Trial relay decrements
+// trial pool only; paid relay decrements paid pool only.
+//
+// LEGACY: the pre-migration single-pool `quota:{addr}` key is read by the
+// safety-net `seedFromLegacy()` for accounts the eager reconciliation script
+// missed. On a clean reconciliation that path should never trigger — if it
+// does, an ops alert fires so the operator can re-run the script. After +2
+// weeks of clean traffic, `scripts/cleanup-legacy-quota.mjs` deletes the
+// legacy keys for accounts whose scoped pools are populated.
 
-const quotaKey = (addr: string) => `quota:${addr.toLowerCase()}`;
-
-/**
- * Returns current remaining TX credits from the atomic quota key.
- * Falls back to subscription.quotaBonus for accounts not yet migrated.
- */
-export async function getQuotaCredits(address: string): Promise<number> {
-  const val = await kv.get<number>(quotaKey(address));
-  if (val !== null) return Math.max(0, val);
-  // Fallback for pre-migration accounts — read from subscription JSON
-  const sub = await getSubscription(address);
-  return Math.max(0, sub?.quotaBonus ?? 0);
-}
-
-/**
- * Initialize the atomic quota key from `initialAmount` only if the key does
- * not already exist (SET NX — safe to call on every relay, no-op after first).
- * Migrates old accounts on their first relay after this change.
- */
-export async function initQuotaIfNeeded(address: string, initialAmount: number): Promise<void> {
-  await kv.set(quotaKey(address), Math.max(0, initialAmount), { nx: true });
-}
+export type CreditScope = "trial" | "paid";
+const scopedQuotaKey = (addr: string, scope: CreditScope) =>
+  `quota:${scope}:${addr.toLowerCase()}`;
+const legacyQuotaKey = (addr: string) => `quota:${addr.toLowerCase()}`;
 
 /**
- * Atomically decrement TX credit by 1 (DECRBY).
- * Returns { ok: true, remaining } if a credit was available,
- *         { ok: false, remaining: 0 } if the counter was already at 0.
- * On underflow (result < 0), the credit is immediately restored so the
- * counter stays at 0 and the caller must not proceed with the relay.
+ * Decide which pool unmigrated legacy quota belongs to for `addr` / `scope`.
+ * Used by `getScopedCredits` (read fallback) and `initScopedQuotaIfNeeded`
+ * (mutation seed). Fires an ops alert when invoked — on a clean reconciliation
+ * sequence this path should be unreachable, so any hit is a signal that
+ * `scripts/reconcile-credit-pools.mjs` needs to be re-run.
+ *
+ * Returns the legacy value when scope matches the account's signal, 0 otherwise.
+ * Hybrid (both signals) biases the legacy value to the paid scope so the
+ * account stays functional; the alert prompts the operator to do an honest
+ * TX-history split via the reconciliation script.
  */
-export async function decrementCredit(
+export async function seedFromLegacy(
   address: string,
+  scope: CreditScope,
+): Promise<number> {
+  const legacyVal = await kv.get<number>(legacyQuotaKey(address));
+  if (legacyVal === null || legacyVal <= 0) return 0;
+
+  // Fire ops alert ONCE per address+scope hit. This is a "should never happen"
+  // path on a clean reconciliation; getting here means an account slipped
+  // through. Best-effort — don't block the request if alerting fails.
+  sendOpsAlert(
+    `<b>Unmigrated legacy credit pool detected</b>\n` +
+    `Address: <code>${address}</code>\n` +
+    `Scope: ${scope}\n` +
+    `Legacy <code>quota:{addr}</code> value: ${legacyVal}\n\n` +
+    `Run <code>scripts/reconcile-credit-pools.mjs --address=${address} --execute</code> to fix.`,
+    "error",
+  ).catch(() => {});
+
+  const sub = await getSubscription(address);
+  const now = new Date();
+  const hasTrialSignal = !!sub?.trialApiKey
+    && !!sub?.trialExpiresAt
+    && new Date(sub.trialExpiresAt) > now;
+  const hasPaidSignal = (sub?.amountUSD ?? 0) > 0
+    && !!sub?.paidAt
+    && sub?.plan !== "trial";
+
+  // Single-scope accounts: legacy belongs unambiguously to the active scope.
+  if (hasTrialSignal && !hasPaidSignal) return scope === "trial" ? legacyVal : 0;
+  if (!hasTrialSignal && hasPaidSignal) return scope === "paid"  ? legacyVal : 0;
+  // Hybrid: bias to paid to keep the account functional. The reconciliation
+  // script does an honest TX-history-based split as a follow-up. Trial pool
+  // starts at 0 until that runs.
+  if (hasTrialSignal && hasPaidSignal)  return scope === "paid"  ? legacyVal : 0;
+  // Orphan — neither signal. Don't auto-seed.
+  return 0;
+}
+
+/**
+ * Returns current remaining credits in `scope` for `address`.
+ *   1. Scoped key (post-migration source of truth).
+ *   2. Legacy fallback via seedFromLegacy (fires ops alert).
+ *   3. Subscription mirror (very-old accounts whose legacy key was evicted).
+ *
+ * The fallback chain never re-writes anything — reads must be idempotent.
+ * First mutation (via addScopedCredits / decrementScopedCredit) is what
+ * actually seeds the scoped key.
+ */
+export async function getScopedCredits(
+  address: string,
+  scope: CreditScope,
+): Promise<number> {
+  const scopedVal = await kv.get<number>(scopedQuotaKey(address, scope));
+  if (scopedVal !== null) return Math.max(0, scopedVal);
+  const legacySeed = await seedFromLegacy(address, scope);
+  if (legacySeed > 0) return legacySeed;
+  // Last-resort: subscription mirror (legacy key evicted, scoped not yet seeded)
+  const sub = await getSubscription(address);
+  if (scope === "trial") return Math.max(0, sub?.trialQuotaBonus ?? 0);
+  return Math.max(0, sub?.paidQuotaBonus ?? sub?.quotaBonus ?? 0);
+}
+
+/**
+ * SET NX on quota:{scope}:{addr}. Safe to call on every mutation — no-op after
+ * the first. The seed value typically comes from `seedFromLegacy`; on clean
+ * reconciliations the scoped key already exists so this is a no-op.
+ */
+export async function initScopedQuotaIfNeeded(
+  address: string,
+  scope: CreditScope,
+  initialAmount: number,
+): Promise<void> {
+  await kv.set(scopedQuotaKey(address, scope), Math.max(0, initialAmount), { nx: true });
+}
+
+/**
+ * Atomic DECRBY in `scope`. Returns { ok, remaining }. Embeds a seed-first
+ * call so any unmigrated legacy quota is captured before the decrement.
+ */
+export async function decrementScopedCredit(
+  address: string,
+  scope: CreditScope,
 ): Promise<{ ok: boolean; remaining: number }> {
-  const key = quotaKey(address);
+  // Seed-first: ensure scoped key reflects any unmigrated legacy state BEFORE
+  // we decrement. Without this, a paid-only legacy user's first decrement
+  // would start at 0 and incorrectly 429 them.
+  await initScopedQuotaIfNeeded(address, scope, await seedFromLegacy(address, scope));
+  const key = scopedQuotaKey(address, scope);
   const newVal = await kv.decrby(key, 1);
   if (newVal < 0) {
-    // Compensate: restore counter to 0 (another concurrent request may also be here)
     await kv.incrby(key, 1);
     return { ok: false, remaining: 0 };
   }
@@ -632,32 +726,90 @@ export async function decrementCredit(
 }
 
 /**
- * Refund 1 TX credit — call when a relay attempt fails after credit was reserved.
+ * Atomic INCRBY in `scope` — restore a credit on relay failure.
+ * Use the SAME `scope` that was passed to `decrementScopedCredit` so the
+ * refund lands in the pool the credit was originally taken from.
  */
-export async function refundCredit(address: string): Promise<void> {
-  await kv.incrby(quotaKey(address), 1);
+export async function refundScopedCredit(
+  address: string,
+  scope: CreditScope,
+): Promise<void> {
+  await kv.incrby(scopedQuotaKey(address, scope), 1);
 }
 
 /**
- * Atomically add TX credits (INCRBY).  Used by payment activation and admin topup.
- * Returns the new total remaining credits.
+ * Atomic INCRBY in `scope`. Used by activation routes and admin topup.
+ * Embeds seed-first so a paid-only legacy account's top-up doesn't discard
+ * the legacy balance.
  */
-export async function addCredits(address: string, amount: number): Promise<number> {
-  if (amount <= 0) return getQuotaCredits(address);
-  return kv.incrby(quotaKey(address), amount);
+export async function addScopedCredits(
+  address: string,
+  scope: CreditScope,
+  amount: number,
+): Promise<number> {
+  if (amount <= 0) return getScopedCredits(address, scope);
+  await initScopedQuotaIfNeeded(address, scope, await seedFromLegacy(address, scope));
+  return kv.incrby(scopedQuotaKey(address, scope), amount);
 }
 
+// ── Legacy wrappers (kept during the rollout window) ─────────────────────────
+// Callers that haven't migrated yet land here. The wrappers route to the
+// paid pool — the historical default for `addCredits` was paid grants, and
+// the only trial caller (trial/activate) is migrated to `addScopedCredits`
+// explicitly. Trial-side legacy callers (email-callback, auth/google) are
+// likewise migrated. If any pre-migration caller remains and lands here, the
+// paid-pool default is the safer choice than dropping credits.
+
+/**
+ * @deprecated Returns the SUM of trial + paid pools for backwards compat.
+ * Prefer `getScopedCredits(addr, scope)`.
+ */
+export async function getQuotaCredits(address: string): Promise<number> {
+  const [trial, paid] = await Promise.all([
+    getScopedCredits(address, "trial"),
+    getScopedCredits(address, "paid"),
+  ]);
+  return trial + paid;
+}
+
+/** @deprecated Use `initScopedQuotaIfNeeded(addr, scope, …)` */
+export async function initQuotaIfNeeded(address: string, initialAmount: number): Promise<void> {
+  return initScopedQuotaIfNeeded(address, "paid", initialAmount);
+}
+
+/** @deprecated Use `decrementScopedCredit(addr, scope)` */
+export async function decrementCredit(
+  address: string,
+): Promise<{ ok: boolean; remaining: number }> {
+  return decrementScopedCredit(address, "paid");
+}
+
+/** @deprecated Use `refundScopedCredit(addr, scope)` */
+export async function refundCredit(address: string): Promise<void> {
+  return refundScopedCredit(address, "paid");
+}
+
+/** @deprecated Use `addScopedCredits(addr, scope, amount)` */
+export async function addCredits(address: string, amount: number): Promise<number> {
+  return addScopedCredits(address, "paid", amount);
+}
+
+/**
+ * Admin topup. Always targets the PAID pool — trial credit topups would
+ * silently bypass `trialExpiresAt` and the BNB-only relay gate, so we make
+ * the scope explicit.
+ */
 export async function addQuotaBonus(address: string, additionalTxs: number) {
   const sub = await getSubscription(address);
   if (!sub) throw new Error("No subscription found");
-  // Update atomic counter + subscription JSON in parallel
-  await Promise.all([
-    addCredits(address, additionalTxs),
-    setSubscription(address, {
-      ...sub,
-      quotaBonus: (sub.quotaBonus ?? 0) + additionalTxs,
-    }),
-  ]);
+  const newPaid = await addScopedCredits(address, "paid", additionalTxs);
+  await setSubscription(address, {
+    ...sub,
+    paidQuotaBonus: newPaid,
+    // Keep the legacy sum mirror so any reader stuck on `quotaBonus` still
+    // sees the right total.
+    quotaBonus: (sub.trialQuotaBonus ?? 0) + newPaid,
+  });
 }
 
 // ── Plan helpers ──────────────────────────────────────────────────────────────
