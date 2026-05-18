@@ -556,7 +556,7 @@ const auth = await client.experimental_signAuthorization({
 // → { chainId, address, nonce, yParity, r, s }`,
               },
               {
-                n: "3", label: "Relay — Q402 pays all gas",
+                n: "3", label: "Relay — agents pay $0, gas billed to your Gas Tank",
                 code: `const res = await fetch("https://q402.quackai.ai/api/relay", {
   method: "POST",
   body: JSON.stringify({

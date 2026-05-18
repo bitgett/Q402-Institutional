@@ -5,7 +5,7 @@
 > backend, or any MCP-compatible AI client (Claude Desktop, Claude
 > Code, Cline).
 
-[![sdk](https://img.shields.io/badge/sdk-v1.7.2-yellow)](public/q402-sdk.js)
+[![sdk](https://img.shields.io/badge/sdk-v1.7.3-yellow)](public/q402-sdk.js)
 [![mcp](https://img.shields.io/badge/npm-@quackai/q402--mcp-blue)](https://www.npmjs.com/package/@quackai/q402-mcp)
 [![chains](https://img.shields.io/badge/chains-7-green)](#supported-chains)
 
@@ -94,7 +94,7 @@ Add to your Claude Desktop / Claude Code config:
 }
 ```
 
-The agent can now `q402_quote` (compare gas across all 7 chains), `q402_balance` (verify key + remaining credits), `q402_pay` (send a real gasless transfer), and `q402_receipt` (fetch + cryptographically verify a Trust Receipt). Sandbox mode is the default — only the simultaneous presence of all three live-mode env vars switches `q402_pay` into real on-chain settlement.
+The agent can now `q402_quote` (compare gas across all 7 chains), `q402_balance` (verify key + remaining credits), `q402_pay` (single-recipient gasless transfer), `q402_batch_pay` (one signed batch to up to 20 recipients on a single chain × token), and `q402_receipt` (fetch + cryptographically verify a Trust Receipt). Sandbox mode is the default — only the simultaneous presence of all three live-mode env vars switches `q402_pay` and `q402_batch_pay` into real on-chain settlement.
 
 ---
 
@@ -106,7 +106,7 @@ Any developer can sign up at [/event](https://q402.quackai.ai/event) and immedia
 - Both a live (`q402_live_*`) and a sandbox (`q402_test_*`) API key
 - 30-day window from the moment of signup
 
-Trial credits are real settlements — the relayer's hot wallet pays the gas, the recipient receives the full amount, and the trial counter atomically decrements on every transfer. After the trial window or once credits are exhausted, the same key keeps working under a paid plan with a self-funded Gas Tank.
+Trial credits are real settlements — the relayer's hot wallet pays the gas, the recipient receives the full amount, and the trial counter atomically decrements on every transfer. Trial credentials live in their own key slot (`trialApiKey` / `trialSandboxApiKey`) so they keep working until the trial window or credits are exhausted; upgrading on [/payment](https://q402.quackai.ai/payment) provisions a separate paid key (`apiKey` / `sandboxApiKey`) drawn against a self-funded Gas Tank.
 
 The trial is BNB-Chain-only by server-side policy (`TRIAL_BNB_ONLY` gate). Paid keys see the full 7-chain matrix.
 

@@ -416,7 +416,12 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_pay</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
-                    <td className="px-4 py-3">Send a gasless USDC, USDT, or RLUSD payment. <strong>Sandbox by default</strong> — see below.</td>
+                    <td className="px-4 py-3">Send a gasless USDC, USDT, or RLUSD payment to a single recipient. <strong>Sandbox by default</strong> — see below.</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_batch_pay</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
+                    <td className="px-4 py-3">Send one signed batch to up to 20 recipients on a single chain × token (trial keys: 5 max). Supported chains: avax, bnb, eth, mantle, injective. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_receipt</code></td>
