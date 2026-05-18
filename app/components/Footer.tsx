@@ -5,11 +5,16 @@ export default function Footer() {
         {/* Top row */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
           <div>
-            <div className="flex items-baseline gap-2 mb-1">
-              <span className="text-yellow font-bold text-lg">Q402</span>
-              <span className="text-white/30 text-sm">by Quack AI</span>
+            <div className="flex items-center gap-2 mb-1">
+              {/* Same yellow square logo as the Navbar, kept identical so
+                  brand mark looks consistent top + bottom of every page. */}
+              <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
+                <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
+              </span>
+              <span className="text-yellow font-bold text-lg leading-none">Q402</span>
+              <span className="text-white/30 text-sm leading-none">by Quack AI</span>
             </div>
-            <p className="text-white/30 text-xs max-w-xs leading-relaxed">
+            <p className="text-white/30 text-xs max-w-xs leading-relaxed mt-2">
               Gasless Payment Protocol · EIP-712 + EIP-7702 · Multi-chain EVM
             </p>
           </div>
