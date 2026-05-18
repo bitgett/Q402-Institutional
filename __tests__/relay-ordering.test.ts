@@ -38,7 +38,11 @@ describe("Q402-SEC-001 — relay must not charge before viability is known", () 
   const AUTH_LOCK_GUARD   = /authorization\.address must be the official Q402/;
   const GAS_TANK_GUARD    = /Insufficient gas tank on \$\{chain\}/;
   const LOAD_RELAYER_KEY  = /const key = loadRelayerKey\(\);/;
-  const DECREMENT_CREDIT  = /const dec = await decrementCredit\(keyRecord\.address\);/;
+  // Two-pool migration: relay route now reserves credits in the scope that
+  // matches the API key's plan (trial vs paid). The Q402-SEC-001 ordering
+  // invariant (loadRelayerKey BEFORE the decrement) is unchanged in spirit —
+  // only the function call shape changed.
+  const DECREMENT_CREDIT  = /const dec = await decrementScopedCredit\(keyRecord\.address,\s*creditScope\);/;
   const RELAY_CALLS       = /await settlePayment\b|await settlePaymentXLayerEIP7702\b|await settlePaymentEIP3009\b/;
 
   it("validates CHAIN_CONFIG before decrementing credits", () => {
@@ -71,7 +75,7 @@ describe("Q402-SEC-001 follow-up — nonce parsing must precede credit decrement
   // threw a SyntaxError that escaped the !result.success refund path, leaving
   // the credit burned. This guards the prevalidation that fixes that.
   const NONCE_PARSE_BLOCK = /parsedXLayerNonce\s*=\s*BigInt\(xlayerNonce!\)|parsedStableNonce\s*=\s*BigInt\(stableNonce!\)/;
-  const DECREMENT_CREDIT  = /const dec = await decrementCredit\(keyRecord\.address\);/;
+  const DECREMENT_CREDIT  = /const dec = await decrementScopedCredit\(keyRecord\.address,\s*creditScope\);/;
 
   it("pre-parses xlayer/stable nonces before the credit decrement", () => {
     const parseIdx = routeSource.search(NONCE_PARSE_BLOCK);

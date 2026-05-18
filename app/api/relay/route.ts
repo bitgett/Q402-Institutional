@@ -7,11 +7,13 @@ import {
   getSubscription,
   setSubscription,
   getWebhookConfig,
-  getQuotaCredits,
-  initQuotaIfNeeded,
-  decrementCredit,
-  refundCredit,
+  getScopedCredits,
+  initScopedQuotaIfNeeded,
+  decrementScopedCredit,
+  refundScopedCredit,
+  seedFromLegacy,
   recordWebhookDelivery,
+  type CreditScope,
 } from "@/app/lib/db";
 import {
   createReceipt,
@@ -240,7 +242,7 @@ export async function POST(req: NextRequest) {
 
   // ── 2b. Parse nonce-like fields up front (Q402-SEC-001 follow-up) ────────────
   // BigInt() throws on malformed input. If we let that throw later — after
-  // section 7c's decrementCredit() — a malformed nonce burns a credit slot
+  // section 7c's decrementScopedCredit() — a malformed nonce burns a credit slot
   // without a successful relay. Parse here, return 400 on garbage, so the
   // entitlement-ordering invariant ("no quota burn before commit") holds for
   // every required nonce field on every chain.
@@ -359,11 +361,16 @@ export async function POST(req: NextRequest) {
   // owner's primary wallet, which the server has no signing authority over.
 
   // ── 4a. TX credit quick pre-check (stale OK — real gate is atomic decrement) ──
+  // Scope-aware: a paid user with depleted trial pool but an active paid key
+  // never hits this gate. Trial keys read trial pool; paid keys read paid pool.
   if (!isSandbox) {
-    const quickCredits = await getQuotaCredits(keyRecord.address);
+    const quickScope: CreditScope = isTrialScopedKey ? "trial" : "paid";
+    const quickCredits = await getScopedCredits(keyRecord.address, quickScope);
     if (quickCredits <= 0) {
       return NextResponse.json({
-        error: "No TX credits remaining. Purchase additional credits to continue.",
+        error: isTrialScopedKey
+          ? "No trial credits remaining. Upgrade at /pricing to continue."
+          : "No TX credits remaining. Purchase additional credits to continue.",
       }, { status: 429 });
     }
   }
@@ -423,7 +430,7 @@ export async function POST(req: NextRequest) {
 
   // ── 6a. Relayer key readiness (live only) ────────────────────────────────
   // Q402-SEC-001: verify the relay infrastructure is actually usable BEFORE
-  // decrementing credits. Previously loadRelayerKey() ran after decrementCredit(),
+  // decrementing credits. Previously loadRelayerKey() ran after decrementScopedCredit(),
   // so a misconfigured RELAYER_PRIVATE_KEY would silently drain every caller's
   // quota on 503 return.
   let relayerAddress: Address = "0x" as Address;
@@ -444,16 +451,26 @@ export async function POST(req: NextRequest) {
   let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };
 
   // ── 7c. Atomic credit reservation (just before relay — race-safe) ────────
-  // initQuotaIfNeeded: lazy-migrates legacy accounts to the quota key on first relay (SET NX)
-  // decrementCredit:   Redis DECRBY — if result < 0, refund immediately and block
+  // initScopedQuotaIfNeeded: SET NX with a seed pulled from legacy. On a
+  //                           clean post-reconciliation account this is a
+  //                           no-op (key already exists). On an unmigrated
+  //                           account this captures the legacy balance into
+  //                           the correct pool exactly once.
+  // decrementScopedCredit:    Redis DECRBY on quota:{scope}:{addr}.
+  //                           Underflow → refund + 429.
   let creditReserved = false;
   let creditRemaining = 0;
+  let creditScope: CreditScope = "paid";
   if (!isSandbox) {
-    await initQuotaIfNeeded(keyRecord.address, subscription?.quotaBonus ?? 0);
-    const dec = await decrementCredit(keyRecord.address);
+    creditScope = isTrialScopedKey ? "trial" : "paid";
+    const seed = await seedFromLegacy(keyRecord.address, creditScope);
+    await initScopedQuotaIfNeeded(keyRecord.address, creditScope, seed);
+    const dec = await decrementScopedCredit(keyRecord.address, creditScope);
     if (!dec.ok) {
       return NextResponse.json({
-        error: "No TX credits remaining. Purchase additional credits to continue.",
+        error: isTrialScopedKey
+          ? "No trial credits remaining. Upgrade at /pricing to continue."
+          : "No TX credits remaining. Purchase additional credits to continue.",
       }, { status: 429 });
     }
     creditReserved = true;
@@ -561,7 +578,11 @@ export async function POST(req: NextRequest) {
     // transient), page ops so the deficit doesn't go unnoticed.
     if (creditReserved) {
       try {
-        await refundCredit(keyRecord.address);
+        // Refund hits the SAME pool we decremented from. The captured
+        // `creditScope` is the source of truth — never re-derive from
+        // isTrialScopedKey here (it'd still be correct today but is
+        // fragile to future scope-determination refactors).
+        await refundScopedCredit(keyRecord.address, creditScope);
       } catch (e) {
         console.error("[relay] credit refund failed after relay failure:", e);
         await sendOpsAlert(
@@ -756,13 +777,20 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Sync subscription.quotaBonus for dashboard display (fire-and-forget, non-critical).
-  // The authoritative counter is quota:{addr} (atomically decremented above).
+  // Sync subscription mirrors for dashboard display (fire-and-forget, non-critical).
+  // Authoritative counters live in quota:{scope}:{addr}. The mirrors below let
+  // the dashboard render without an extra round-trip on most page loads.
   if (subscription && !isSandbox && creditReserved) {
+    const mirrorField = creditScope === "trial" ? "trialQuotaBonus" : "paidQuotaBonus";
+    const otherScopeMirror = creditScope === "trial"
+      ? (subscription.paidQuotaBonus  ?? 0)
+      : (subscription.trialQuotaBonus ?? 0);
     setSubscription(keyRecord.address, {
       ...subscription,
-      quotaBonus: creditRemaining,
-    }).catch(e => console.error("[relay] quotaBonus display sync failed (non-fatal):", e));
+      [mirrorField]: creditRemaining,
+      // Legacy sum mirror stays in sync for back-compat readers.
+      quotaBonus: creditRemaining + otherScopeMirror,
+    }).catch(e => console.error("[relay] quota mirror display sync failed (non-fatal):", e));
   }
 
   // ── 11b. Webhook dispatch (non-blocking, LIVE only) ──────────────────────

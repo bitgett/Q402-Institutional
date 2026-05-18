@@ -130,17 +130,27 @@ describe("Sidebar — Phase 1 routing keeps the lock UI unreachable", () => {
 });
 
 describe("trial-credits scope hygiene", () => {
-  it("trialCredits falls back to 0 (not walletCredits) when no active trial", () => {
+  it("trialCredits falls back to 0 (not the paid pool) when no active trial", () => {
     // Regression catch: a paid user with no email trial used to see their
-    // 491-remaining paid credits surfaced in the Trial view because
-    // trialCredits naively defaulted to walletCredits. The fix gates the
-    // fallback on isTrialOnlySub. After Phase 1.5 the same fallback also
-    // tries boundEmailTrial?.credits (read-side bridge for wallet-only
-    // logins of bound users) but the final fallback is still 0 — never
-    // walletCredits.
+    // 491-remaining paid credits surfaced in the Trial view because the old
+    // derivation defaulted to the unified `walletCredits` counter.
+    //
+    // After the two-pool migration, the source of truth is the scoped
+    // mirror `trialQuotaBonus` (read as `trialPoolCredits`). The fallback
+    // chain is:
+    //   1. hasEmailTrial  → sessionTrial.credits
+    //   2. hasScopedMirrors → trialPoolCredits (post-migration default)
+    //   3. legacy single-pool: isTrialOnlySub → legacyTotalCredits,
+    //      else boundEmailTrial?.credits ?? 0
+    // Critically the legacy fallback is gated by isTrialOnlySub and never
+    // touches the paid pool — so a paid user with no active trial never
+    // sees their paid credits leak into the Trial view.
     expect(dashboardSource).toMatch(
-      /trialCredits\s*=[\s\S]+?isTrialOnlySub\s*\?\s*walletCredits\s*:\s*\(boundEmailTrial\?\.credits\s*\?\?\s*0\)/,
+      /trialCredits\s*=[\s\S]+?hasScopedMirrors[\s\S]+?trialPoolCredits[\s\S]+?isTrialOnlySub\s*\?\s*legacyTotalCredits\s*:\s*\(boundEmailTrial\?\.credits\s*\?\?\s*0\)/,
     );
+    // Hard guard: the old `walletCredits` symbol must be gone — the regression
+    // we're catching is its accidental reintroduction.
+    expect(dashboardSource).not.toMatch(/\bwalletCredits\b/);
   });
 
   it("auto-flip uses an explicit active-trial signal, not just emailSession existence", () => {
