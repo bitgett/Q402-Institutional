@@ -49,7 +49,7 @@ const manifest = JSON.parse(
   readFileSync(resolve(__dirname, "..", "contracts.manifest.json"), "utf8"),
 ) as Manifest;
 
-const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective"] as const;
+const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad"] as const;
 
 let mcpSource: string | null = null;
 let mcpVersion: string | null = null;
