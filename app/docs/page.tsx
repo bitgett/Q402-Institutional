@@ -460,7 +460,7 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                   <tr>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_receipt</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
-                    <td className="px-4 py-3">Fetch + locally verify a Trust Receipt by <code className="text-white/60 text-xs">rct_…</code> id. Recovers the relayer ECDSA signature client-side.</td>
+                    <td className="px-4 py-3">Fetch + locally verify a Trust Receipt by <code className="text-white/60 text-xs">rct_</code>… id. Recovers the relayer ECDSA signature client-side.</td>
                   </tr>
                 </tbody>
               </table>
@@ -539,7 +539,7 @@ Q402_ENABLE_REAL_PAYMENTS=1                   # explicit opt-in for live mode`} 
 
             <h3 className="text-lg font-semibold mb-3 mt-8">Verify any receipt from Claude</h3>
             <p className="text-white/55 text-sm mb-3">
-              The <code className="text-yellow text-xs">@quackai/q402-mcp</code> server (v{MCP_VERSION}) exposes a <code className="text-yellow text-xs">q402_receipt</code> tool. After <code className="text-yellow text-xs">q402_pay</code> hands back a <code className="text-yellow text-xs">rct_…</code> id, ask Claude to verify it and the recovery runs inside the MCP process — same canonical-JSON + ECDSA recovery the receipt page does, no UI trust required:
+              The <code className="text-yellow text-xs">@quackai/q402-mcp</code> server (v{MCP_VERSION}) exposes a <code className="text-yellow text-xs">q402_receipt</code> tool. After <code className="text-yellow text-xs">q402_pay</code> hands back a <code className="text-yellow text-xs">rct_</code>… id, ask Claude to verify it and the recovery runs inside the MCP process — same canonical-JSON + ECDSA recovery the receipt page does, no UI trust required:
             </p>
             <CodeBlock lang="text" code={`> Send 0.10 USDT to alice on BNB via Q402, then verify the receipt.
 
