@@ -255,9 +255,19 @@ export async function POST(req: NextRequest) {
 
     let result: { success: boolean; txHash?: string; blockNumber?: number; receiptId?: string; method?: string; error?: string; code?: string };
     try {
+      // Forward the original client IP so the inner /api/relay applies its
+      // per-IP rate limit + audit logging against the real caller, not the
+      // self-fetch (which would otherwise look like localhost / the Vercel
+      // edge for every row). x-real-ip + x-forwarded-for are the headers
+      // getClientIP reads in priority order; pass both so either lookup
+      // path resolves to the batch caller's IP.
       const innerRes = await fetch(relayUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type":    "application/json",
+          "x-real-ip":       ip,
+          "x-forwarded-for": ip,
+        },
         body: JSON.stringify(innerBody),
       });
       const innerJson = await innerRes.json();

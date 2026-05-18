@@ -376,7 +376,7 @@ export default function ClaudePage() {
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-6xl mx-auto px-6 py-16 md:py-20">
           <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
-            four tools · one package
+            five tools · one package
           </div>
           <h2 className="text-2xl md:text-4xl font-bold mb-2">
             Only what an agent should reach for.
@@ -410,7 +410,15 @@ export default function ClaudePage() {
                 color: "rgba(245,158,11,0.32)",
                 bg: "rgba(245,158,11,0.06)",
                 description:
-                  "Send a gasless USDC, USDT, or RLUSD payment. Sandbox by default — three env vars must align before a single wei moves.",
+                  "Send a gasless USDC, USDT, or RLUSD payment to a single recipient. Sandbox by default — three env vars must align before a single wei moves.",
+              },
+              {
+                name: "q402_batch_pay",
+                auth: "live mode",
+                color: "rgba(245,158,11,0.32)",
+                bg: "rgba(245,158,11,0.06)",
+                description:
+                  "Send one signed batch to up to 20 recipients on a single chain × token (trial: 5). Same sandbox gating as q402_pay; agent must confirm the full batch in chat first.",
               },
               {
                 name: "q402_receipt",

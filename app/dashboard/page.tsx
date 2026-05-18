@@ -2052,7 +2052,9 @@ export default function DashboardPage() {
               <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
                 <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 7 chains."} Read-only, no auth.</li>
                 <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
-                <li>• <code className="text-yellow text-xs">q402_pay</code> — send a gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
+                <li>• <code className="text-yellow text-xs">q402_pay</code> — send a single-recipient gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
+                <li>• <code className="text-yellow text-xs">q402_batch_pay</code> — one signed batch to up to 20 recipients on a single chain × token (trial keys: 5). Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</li>
+                <li>• <code className="text-yellow text-xs">q402_receipt</code> — fetch + locally verify a Trust Receipt by <code className="text-white/60 text-xs">rct_…</code> id. Read-only.</li>
               </ul>
               <div className="text-[11px] text-white/30 mt-4 pt-3 border-t border-white/8">
                 Full reference in{" "}
