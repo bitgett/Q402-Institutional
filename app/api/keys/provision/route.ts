@@ -117,8 +117,19 @@ export async function POST(req: NextRequest) {
     // still valid until `trialExpiresAt`. The pre-fix code's plan gate was
     // the root cause of the dashboard rendering 0 in the Trial view right
     // after a paid activation.
+    // isTrialActive = trial pool is live + a trial key exists to use it.
+    // Modern shape: existing.trialApiKey populated by the post-Phase-1
+    // trial/activate route. Legacy shape: pre-Phase-1 trial activations
+    // wrote the trial key into the `apiKey` slot and set plan="trial" —
+    // those accounts (still present in production: 0x700a..., 0xc9c4...,
+    // email pseudos) have an empty trialApiKey field but ARE active trials.
+    // Requiring `existing.trialApiKey` alone left those users with
+    // isTrialActive=false and an empty Trial view post-migration. Accept
+    // the legacy `plan === "trial"` + apiKey signal as a secondary path.
+    const hasLegacyTrialKey =
+      existing.plan === "trial" && !!existing.apiKey && !existing.trialApiKey;
     const isTrialActive =
-      !!existing.trialApiKey &&
+      (!!existing.trialApiKey || hasLegacyTrialKey) &&
       !!existing.trialExpiresAt &&
       new Date(existing.trialExpiresAt) > new Date();
     const trialApiKey = existing.trialApiKey

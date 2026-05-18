@@ -85,7 +85,13 @@ describe.skipIf(!available)("MCP tool descriptions match actual server policy", 
     });
 
     it("notes that trial keys see a narrower view", () => {
-      expect(quoteSrc).toMatch(/Trial[- ]tier|trial.+BNB[- ]only/i);
+      // v0.4.4+: quote tool doesn't read an API key, so it can't filter by
+      // scope. The description now says so explicitly and tells the caller
+      // to treat non-BNB rows as informational when using a Trial key.
+      // Accept either the old "trial keys see BNB-only" wording or the
+      // new "any non-BNB row as informational" wording.
+      expect(quoteSrc).toMatch(/Trial[- ]tier|trial.+BNB[- ]only|Trial API Key/i);
+      expect(quoteSrc).toMatch(/BNB/);
     });
   });
 });

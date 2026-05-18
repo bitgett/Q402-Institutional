@@ -64,7 +64,17 @@ export async function POST(req: NextRequest) {
   if (existing) {
     const { kv } = await import("@vercel/kv");
     const now = new Date();
-    const hasTrialSignal = !!existing.trialApiKey
+    // Same legacy-trial detection as provision: pre-Phase-1 trial accounts
+    // wrote the trial key into the `apiKey` slot, so plan="trial" + apiKey
+    // is the legacy form of a trial signal. Without this fallback,
+    // pre-migration trial-only accounts that hit this paid activation
+    // path slip past the pre-seed (hasTrialSignal=false) and their legacy
+    // quota gets biased to paid by seedFromLegacy later — losing trial
+    // credits the user still expected to have.
+    const hasModernTrialKey = !!existing.trialApiKey;
+    const hasLegacyTrialKey =
+      existing.plan === "trial" && !!existing.apiKey && !existing.trialApiKey;
+    const hasTrialSignal = (hasModernTrialKey || hasLegacyTrialKey)
       && !!existing.trialExpiresAt
       && new Date(existing.trialExpiresAt) > now;
     const hasPaidSignal = (existing.amountUSD ?? 0) > 0
