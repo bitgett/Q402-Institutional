@@ -39,12 +39,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     setWalletType(null);
     localStorage.removeItem("q402_wallet");
     localStorage.removeItem("q402_wallet_type");
-    // Sticky flag — wallet extensions (MetaMask/OKX) don't expose a true
-    // "revoke site permission" API, so eth_accounts keeps returning the
-    // authorized address after our state-level disconnect. Without this
-    // flag the init() effect re-hydrates the address on reload and the
-    // user sees themselves "still connected" right after clicking ×.
-    localStorage.setItem("q402_user_disconnected", "1");
   }, []);
 
   const connect = useCallback(async () => {
@@ -52,7 +46,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (addr) {
       setAddress(addr);
       localStorage.setItem("q402_wallet", addr);
-      localStorage.removeItem("q402_user_disconnected");
     }
   }, []);
 
@@ -63,7 +56,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setWalletType(type);
       localStorage.setItem("q402_wallet", addr);
       localStorage.setItem("q402_wallet_type", type);
-      localStorage.removeItem("q402_user_disconnected");
     }
     return addr;
   }, []);
@@ -95,15 +87,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // Restore on mount
   useEffect(() => {
     const init = async () => {
-      // Sticky disconnect — if the user explicitly clicked × in the navbar,
-      // skip every auto-restore path until they explicitly Connect again.
-      // The wallet extension's eth_accounts keeps returning the authorized
-      // address otherwise, which silently undoes the user's intent.
-      const userDisconnected = localStorage.getItem("q402_user_disconnected") === "1";
-      if (userDisconnected) {
-        setMounted(true);
-        return;
-      }
       const saved = localStorage.getItem("q402_wallet");
       const savedType = localStorage.getItem("q402_wallet_type") as "metamask" | "okx" | null;
       // Immediately restore from localStorage so pages don't flash "disconnected"
