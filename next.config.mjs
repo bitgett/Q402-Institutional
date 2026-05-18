@@ -1,5 +1,15 @@
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Pin the file-tracing root to THIS project. Without this, Next walks up
+  // looking for the nearest lockfile and sometimes lands on a stray
+  // package-lock.json in the parent directory (e.g. C:\Users\user\), which
+  // makes serverless deploy traces bundle unrelated files. Explicit > inferred.
+  outputFileTracingRoot: __dirname,
   async headers() {
     return [
       {
