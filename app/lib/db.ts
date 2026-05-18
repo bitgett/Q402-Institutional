@@ -659,9 +659,24 @@ export async function seedFromLegacy(
 
   const sub = await getSubscription(address);
   const now = new Date();
-  const hasTrialSignal = !!sub?.trialApiKey
+  // Modern trial signal: explicit trialApiKey slot + a future expiry.
+  // Post-Phase-1 accounts created by trial/activate / auth/google /
+  // auth/email/callback all carry this shape.
+  const hasModernTrialSignal = !!sub?.trialApiKey
     && !!sub?.trialExpiresAt
     && new Date(sub.trialExpiresAt) > now;
+  // Legacy trial signal: pre-Phase-1 trial activations wrote the trial key
+  // into the `apiKey` slot and set plan="trial" directly (the trialApiKey
+  // field didn't exist yet). Mirrors the same fallback used in
+  // provision/route.ts (`hasLegacyTrialKey`) and payment/activate/route.ts.
+  // Without it, a pre-migration account that somehow misses reconciliation
+  // and falls through to this safety net gets classified as orphan even
+  // though plan="trial" + amountUSD=0 is an unambiguous trial signal.
+  const hasLegacyTrialSignal = sub?.plan === "trial"
+    && (sub?.amountUSD ?? 0) === 0
+    && !!sub?.apiKey
+    && !sub?.trialApiKey;
+  const hasTrialSignal = hasModernTrialSignal || hasLegacyTrialSignal;
   const hasPaidSignal = (sub?.amountUSD ?? 0) > 0
     && !!sub?.paidAt
     && sub?.plan !== "trial";
