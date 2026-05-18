@@ -100,7 +100,7 @@ const TABS: Tab[] = [
     category: "In-Game Economy",
     hook:     "$0.05 swords. Sub-cent settle.",
     description:
-      "Micro-transactions priced at chain economics, not gas economics. Batch a tournament's prize payouts in one signed call across any of the 7 supported chains.",
+      "Micro-transactions priced at chain economics, not gas economics. Batch a tournament's prize payouts in one signed call across any of the 8 supported chains.",
     chips: ["BATCH × 20", "ANY CHAIN", "SUB-CENT FEES"],
     code: [
       { kind: "comment", text: "// Tournament ends. Distribute prize payouts to 20 winners in one call." },

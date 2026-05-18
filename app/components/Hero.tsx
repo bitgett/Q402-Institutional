@@ -229,7 +229,7 @@ export default function Hero() {
                   { value: "99.99%",  label: "Uptime",            sub: "180-day rolling",  live: true,  accent: "yellow" },
                   { value: "<0.9 s",  label: "Inclusion time",    sub: "median, all chains", live: true,  accent: "yellow" },
                   { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "green" },
-                  { value: "7",       label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
+                  { value: "8",       label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
                 ].map((s, i) => {
                   const stripeColor =
                     s.accent === "yellow" ? "rgba(245,197,24,0.55)"
