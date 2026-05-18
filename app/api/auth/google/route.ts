@@ -30,8 +30,8 @@ import {
   setSubscription,
   generateApiKey,
   generateSandboxKey,
-  addCredits,
-  getQuotaCredits,
+  addScopedCredits,
+  getScopedCredits,
   addTrialSubscriptionToIndex,
 } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   let trialApiKey = existing?.trialApiKey ?? existing?.apiKey ?? "";
   let trialSandboxApiKey =
     existing?.trialSandboxApiKey ?? existing?.sandboxApiKey ?? "";
-  let credits = await getQuotaCredits(pseudoAddr);
+  let credits = await getScopedCredits(pseudoAddr, "trial");
   let trialExpiresAt: string = existing?.trialExpiresAt ?? "";
   let isNew = false;
 
@@ -113,13 +113,13 @@ export async function POST(req: NextRequest) {
     const canGrant = await kv.set(grantKey, TRIAL_CREDITS, { nx: true, ex: TRIAL_USED_TTL });
     if (canGrant) {
       try {
-        await addCredits(pseudoAddr, TRIAL_CREDITS);
+        await addScopedCredits(pseudoAddr, "trial", TRIAL_CREDITS);
       } catch (e) {
         kv.del(grantKey).catch(() => {});
         throw e;
       }
     }
-    credits = await getQuotaCredits(pseudoAddr);
+    credits = await getScopedCredits(pseudoAddr, "trial");
 
     const now = new Date();
     const expiry = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
@@ -133,7 +133,9 @@ export async function POST(req: NextRequest) {
       plan: TRIAL_PLAN_NAME,
       txHash: "google-signup",
       amountUSD: 0,
-      quotaBonus: credits,
+      trialQuotaBonus: credits,
+      paidQuotaBonus:  0,         // pseudo never has paid pool
+      quotaBonus:      credits,   // legacy sum mirror
       trialExpiresAt,
       email,
     });

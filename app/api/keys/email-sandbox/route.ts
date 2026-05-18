@@ -14,7 +14,7 @@ import { kv } from "@vercel/kv";
 import { getSession } from "@/app/lib/session";
 import {
   getSubscription,
-  getQuotaCredits,
+  getScopedCredits,
 } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { TRIAL_CREDITS } from "@/app/lib/feature-flags";
@@ -39,9 +39,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Account not provisioned. Please sign in again." }, { status: 404 });
   }
 
+  // Email pseudo accounts are trial-only by construction — they accrue
+  // credits via the trial pool only and never have a paid pool.
   const [subscription, credits] = await Promise.all([
     getSubscription(pseudoAddr),
-    getQuotaCredits(pseudoAddr),
+    getScopedCredits(pseudoAddr, "trial"),
   ]);
 
   if (!subscription) {

@@ -37,10 +37,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No subscription found" }, { status: 404 });
   }
 
+  // addQuotaBonus is paid-pool only by construction (the admin top-up surface
+  // never tops up the trial pool — trial credits are auto-granted at signup
+  // and don't accept ops adjustments).
   await addQuotaBonus(address, additionalTxs);
 
   const baseQuota = getPlanQuota(sub.plan);
-  const newTotal = baseQuota + (sub.quotaBonus ?? 0) + additionalTxs;
+  // Denominator: paid pool's peak. Fall back to legacy `quotaBonus` only when
+  // the scoped mirror isn't populated yet (pre-migration accounts).
+  const newTotal = baseQuota + (sub.paidQuotaBonus ?? sub.quotaBonus ?? 0) + additionalTxs;
 
   return NextResponse.json({
     success: true,

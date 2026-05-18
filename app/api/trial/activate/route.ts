@@ -36,8 +36,8 @@ import {
   setSubscription,
   generateApiKey,
   generateSandboxKey,
-  getQuotaCredits,
-  addCredits,
+  getScopedCredits,
+  addScopedCredits,
   addTrialSubscriptionToIndex,
 } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
     });
     if (canGrant) {
       try {
-        await addCredits(addr, TRIAL_CREDITS);
+        await addScopedCredits(addr, "trial", TRIAL_CREDITS);
         creditsPersisted = true;
       } catch (e) {
         kv.del(grantKey).catch(() => {});
@@ -230,7 +230,13 @@ export async function POST(req: NextRequest) {
       creditsPersisted = true;
     }
 
-    const totalTxs = await getQuotaCredits(addr);
+    // Read both pools so the subscription record's mirror fields reflect
+    // the post-grant state. Trial activation never touches paid pool, but
+    // a wallet that paid earlier may already have paid credits sitting in
+    // that pool — preserve them in the mirror.
+    const trialTxs = await getScopedCredits(addr, "trial");
+    const paidTxs  = await getScopedCredits(addr, "paid");
+    const totalTxs = trialTxs + paidTxs;
 
     // Trial keys live in their own slot (trialApiKey / trialSandboxApiKey) so
     // a later paid activation can mint fresh paid keys into apiKey without
@@ -255,7 +261,9 @@ export async function POST(req: NextRequest) {
       plan: TRIAL_PLAN_NAME,
       txHash: "trial", // sentinel — no on-chain TX backs a trial activation
       amountUSD: 0,
-      quotaBonus: totalTxs,
+      trialQuotaBonus: trialTxs,
+      paidQuotaBonus:  paidTxs,
+      quotaBonus:      totalTxs, // legacy sum mirror
       trialExpiresAt: trialExpiresAt.toISOString(),
       ...(finalEmail ? { email: finalEmail } : {}),
     });
@@ -329,6 +337,8 @@ export async function POST(req: NextRequest) {
       plan: TRIAL_PLAN_NAME,
       credits: TRIAL_CREDITS,
       totalTxs,
+      trialCredits: trialTxs,
+      paidCredits:  paidTxs,
       trialExpiresAt: trialExpiresAt.toISOString(),
       // Surface under both legacy + new names: callers that have not yet
       // adopted the trialApiKey field (older dashboard build, scripts) keep

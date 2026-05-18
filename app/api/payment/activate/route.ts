@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkPaymentOnChain, verifyPaymentTx, planFromAmount, toBnbEquivUSD, maxTier } from "@/app/lib/blockchain";
-import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getQuotaCredits, addCredits, updateApiKeyPlan, resetUsageAlertState } from "@/app/lib/db";
+import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getScopedCredits, addScopedCredits, initScopedQuotaIfNeeded, updateApiKeyPlan, resetUsageAlertState } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -45,6 +45,38 @@ export async function POST(req: NextRequest) {
   const addr = authResult;
 
   const existing = await getSubscription(addr);
+
+  // ── Two-pool migration cutover (race-safe) ───────────────────────────────
+  // A wallet that activated trial under the new code, then pays here for the
+  // FIRST time, transitions from "trial-only" to "hybrid" the moment
+  // setSubscription writes the paid plan below. After that moment, any
+  // subsequent reader can't tell from the subscription state alone whether
+  // the legacy `quota:{addr}` (if any) belonged to trial or paid — both
+  // signals are present, and seedFromLegacy must bias to paid to keep the
+  // account functional. The trial pool would then start at 0 even though the
+  // user just had remaining trial credits.
+  //
+  // To close that race, capture the trial pool from legacy BEFORE we mutate
+  // the subscription. Trigger condition is intentionally narrow — only true
+  // when the existing record shows trial-only (active trial key + expiry in
+  // the future) and no prior paid signal. Hybrid accounts are NOT auto-split
+  // here; the reconciliation script handles those.
+  if (existing) {
+    const { kv } = await import("@vercel/kv");
+    const now = new Date();
+    const hasTrialSignal = !!existing.trialApiKey
+      && !!existing.trialExpiresAt
+      && new Date(existing.trialExpiresAt) > now;
+    const hasPaidSignal = (existing.amountUSD ?? 0) > 0
+      && !!existing.paidAt
+      && existing.plan !== "trial";
+    if (hasTrialSignal && !hasPaidSignal) {
+      const legacy = await kv.get<number>(`quota:${addr.toLowerCase()}`);
+      if (typeof legacy === "number" && legacy > 0) {
+        await initScopedQuotaIfNeeded(addr, "trial", legacy);
+      }
+    }
+  }
 
   // ── Verify payment intent (chain + expectedUSD must match TX) ───────────
   // When intentId is supplied, look the intent up by id directly — this lets
@@ -173,14 +205,17 @@ export async function POST(req: NextRequest) {
   const alreadyUsed = await kv.get<string>(usedKey);
   if (alreadyUsed) {
     if (typeof alreadyUsed === "string" && alreadyUsed.toLowerCase() === addr.toLowerCase()) {
-      const currentSub      = await getSubscription(addr);
-      const currentCredits  = await getQuotaCredits(addr);
+      const currentSub   = await getSubscription(addr);
+      const trialCredits = await getScopedCredits(addr, "trial");
+      const paidCredits  = await getScopedCredits(addr, "paid");
       return NextResponse.json({
         status:    "already_active",
         plan:      currentSub?.plan ?? "starter",
         apiKey:    currentSub?.apiKey ?? null,
         sandboxApiKey: currentSub?.sandboxApiKey ?? null,
-        credits:   currentCredits,
+        credits:       trialCredits + paidCredits,    // legacy sum (back-compat)
+        trialCredits,
+        paidCredits,
         // Surface the txHash + amount so the client UI matches the success
         // shape it would have rendered on the original (lost) response.
         txHash:    result.txHash ?? null,
@@ -276,19 +311,23 @@ export async function POST(req: NextRequest) {
   const newExpiry = new Date(base.getTime() + 30 * 24 * 60 * 60 * 1000);
   // ── Phase 2 — Write (idempotent) ─────────────────────────────────────────
   try {
-    // addCredits (INCRBY) is non-idempotent — guard with credit_grant NX key.
+    // addScopedCredits (paid pool INCRBY) is non-idempotent — guard with credit_grant NX key.
     const canGrant = await kv.set(creditGrantKey, addedTxs, { nx: true, ex: USED_TTL });
     if (canGrant) {
       try {
-        await addCredits(addr, addedTxs);
+        await addScopedCredits(addr, "paid", addedTxs);
       } catch (e) {
-        // addCredits failed — roll back grant key so next retry can re-attempt.
+        // addScopedCredits failed — roll back grant key so next retry can re-attempt.
         kv.del(creditGrantKey).catch(() => {});
         throw e;
       }
     }
-    // Read actual balance after grant (correct on first attempt and on retry).
-    const totalTxs = await getQuotaCredits(addr);
+    // Read actual balances after grant. Both pools — paid (the one we just
+    // incremented) and trial (preserved from any pre-existing trial state).
+    // quotaBonus stays as the legacy sum mirror for back-compat readers.
+    const paidTxs  = await getScopedCredits(addr, "paid");
+    const trialTxs = await getScopedCredits(addr, "trial");
+    const totalTxs = paidTxs + trialTxs;
 
     // setSubscription is idempotent (overwrites same data) — safe on every attempt.
     await setSubscription(addr, {
@@ -299,7 +338,9 @@ export async function POST(req: NextRequest) {
       plan,
       txHash:           result.txHash!,
       amountUSD:        result.amountUSD!,
-      quotaBonus:       totalTxs,
+      trialQuotaBonus:  trialTxs,
+      paidQuotaBonus:   paidTxs,
+      quotaBonus:       totalTxs, // legacy sum mirror
       windowPaidBnbUSD: newWindow,
     });
 
@@ -363,6 +404,8 @@ export async function POST(req: NextRequest) {
       tierUpgraded,
       addedTxs,
       totalTxs,
+      trialCredits: trialTxs,
+      paidCredits:  paidTxs,
       expiresAt: newExpiry.toISOString(),
     });
   } catch (e) {

@@ -55,11 +55,16 @@ describe("/api/payment/activate idempotent replay", () => {
 
   it("surfaces plan + apiKey + credits in the idempotent-replay body", () => {
     // The client renders the success card off these fields; missing one
-    // would leave the UI half-rendered after a recovered retry.
+    // would leave the UI half-rendered after a recovered retry. After the
+    // two-pool migration the body returns both scoped counts plus a `credits`
+    // sum for legacy back-compat — assert all three so a future refactor
+    // can't accidentally drop the dashboard's hydration source.
     const block = routeSrc.match(/idempotentReplay:\s*true[\s\S]{0,300}/);
     expect(block).not.toBeNull();
     expect(routeSrc).toMatch(/plan:\s+currentSub\?\.plan/);
     expect(routeSrc).toMatch(/apiKey:\s+currentSub\?\.apiKey/);
-    expect(routeSrc).toMatch(/credits:\s+currentCredits/);
+    expect(routeSrc).toMatch(/credits:\s+trialCredits\s*\+\s*paidCredits/);
+    expect(routeSrc).toMatch(/trialCredits,/);
+    expect(routeSrc).toMatch(/paidCredits,/);
   });
 });
