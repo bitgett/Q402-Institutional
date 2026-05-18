@@ -1,11 +1,9 @@
 /**
  * wallet-email-bridge.test.ts
  *
- * Phase 1.5 — read-side bridge between a bound wallet and its email
- * pseudo-account (see docs/sprint-bnb-focus.md §12). This is the
- * structural counterpart to Phase 2's full migration: it doesn't move
- * any data, but it surfaces the email pseudo's trial state into the
- * wallet's /api/keys/provision response so a wallet-only login can
+ * Read-side bridge between a bound wallet and its email pseudo-account.
+ * Doesn't move any data, but surfaces the email pseudo's trial state into
+ * the wallet's /api/keys/provision response so a wallet-only login can
  * still see the trial credits + keys the user got via email signup.
  *
  * The regression mode this catches: someone refactors the bridge into

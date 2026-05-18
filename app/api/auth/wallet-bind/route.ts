@@ -2,10 +2,10 @@
  * POST /api/auth/wallet-bind
  *
  * Permanently binds a wallet to the caller's email session — this is the
- * "first wallet claim" gate in the Phase 1 identity model (see
- * docs/sprint-bnb-focus.md §10). Once a session has session.address set,
- * it never changes silently: a different wallet posting here returns 409
- * WALLET_ALREADY_BOUND. Re-binding the SAME wallet is idempotent (200 OK).
+ * "first wallet claim" gate in the identity model. Once a session has
+ * session.address set, it never changes silently: a different wallet
+ * posting here returns 409 WALLET_ALREADY_BOUND. Re-binding the SAME
+ * wallet is idempotent (200 OK).
  *
  * Why fresh signed challenge (not the old nonce-cached path):
  *   Wallet binding is now an irreversible-from-the-UI action (Phase 2 will
