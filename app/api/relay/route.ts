@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
   //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18).
   //   - RLUSD is intentionally Ethereum-only — Ripple has not deployed RLUSD on
   //     the XRPL EVM Sidechain yet, and Q402 is EVM-only so XRPL native is
-  //     out of scope. Other 6 chains reject RLUSD via the absence of the token
+  //     out of scope. Other 7 chains reject RLUSD via the absence of the token
   //     from their allowlist entry.
   const FULL_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
     injective: ["USDT"],
