@@ -1312,14 +1312,17 @@ export default function DashboardPage() {
     return sum + amt * (tokenPrices[c] ?? 0);
   }, 0);
 
-  // Build 14-day chart
+  // Build 14-day chart from scope-filtered transactions. The unscoped
+  // `relayedTxs.length` would show the same number on both views even
+  // though the keys (and therefore the relay activity) are independent.
+  // `scopedTxs` already filters by trialKeySet / paidKeySet above.
   const today = new Date();
   const dailyLabels: string[] = [];
   const dailyData: number[] = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date(today); d.setDate(d.getDate() - i);
     dailyLabels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
-    dailyData.push(relayedTxs.filter(tx => new Date(tx.relayedAt).toDateString() === d.toDateString()).length);
+    dailyData.push(scopedTxs.filter(tx => new Date(tx.relayedAt).toDateString() === d.toDateString()).length);
   }
 
   function copyKey() { navigator.clipboard.writeText(API_KEY); setKeyCopied(true); setTimeout(() => setKeyCopied(false), 2000); }
@@ -1659,7 +1662,7 @@ export default function DashboardPage() {
                         ? "no paid plan — upgrade"
                         : `${plan} plan`,
                 },
-                { label: "Total Relayed", value: relayedTxs.length.toLocaleString(), sub: "all time" },
+                { label: "Total Relayed", value: scopedTxs.length.toLocaleString(), sub: viewMode === "trial" ? "trial · all time" : "multichain · all time" },
                 // Trial view: no per-user gas tank — Q402 covers it. Multichain
                 // view: surface the deposited balance card so paid users can
                 // top up.
