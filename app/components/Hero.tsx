@@ -133,6 +133,7 @@ export default function Hero() {
                   { img: "/injective.png", label: "INJ"  },
                   { img: "/xlayer.png",    label: "X"    },
                   { img: "/stable.jpg",    label: "STB"  },
+                  { img: "/monad.png",     label: "MON"  },
                 ].map((c, i) => (
                   <motion.span
                     key={c.label}

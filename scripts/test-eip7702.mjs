@@ -1,7 +1,7 @@
 /**
  * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 7 Q402 chains.
  *
- *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective> [--amount 0.05] [--to 0x...]
+ *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective|monad> [--amount 0.05] [--to 0x...]
  *
  * Flow (identical for every chain — all 7 impl contracts share the same
  * TransferAuthorization witness + _domainSeparator(address(this)) scheme):
@@ -102,6 +102,14 @@ const CHAINS = {
     // Injective EVM: USDT only (native CCTP USDC pending Q2 2026 rollout).
     token: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6, symbol: "USDT",
     explorer: "https://blockscout.injective.network/tx/",
+  },
+  monad: {
+    id: 143, name: "Monad", domainName: "Q402 Monad",
+    rpc: "https://rpc.monad.xyz",
+    impl: "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+    // Default to USDC (native Circle CCTP) on Monad. USDT0 also supported.
+    token: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6, symbol: "USDC",
+    explorer: "https://monadscan.com/tx/",
   },
 };
 

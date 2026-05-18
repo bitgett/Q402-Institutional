@@ -58,6 +58,13 @@ const WALLET_CHAINS = {
     rpcUrls: ["https://rpc.stable.xyz"],
     blockExplorerUrls: ["https://stable-explorer.io"],
   },
+  monad: {
+    chainId: "0x8f",
+    chainName: "Monad",
+    nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
+    rpcUrls: ["https://rpc.monad.xyz"],
+    blockExplorerUrls: ["https://monadscan.com"],
+  },
 } as const;
 
 export type WalletChainKey = keyof typeof WALLET_CHAINS;

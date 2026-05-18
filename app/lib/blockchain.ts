@@ -117,9 +117,23 @@ const CHAINS = [
       { symbol: "USDT", address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
     ],
   },
+  {
+    name: "Monad",
+    rpcs: [
+      "https://rpc.monad.xyz",
+      "https://rpc1.monad.xyz",
+      "https://rpc2.monad.xyz",
+    ],
+    blockWindow: 6000,   // Monad ~0.5s block, ~50 min window
+    // Native Circle USDC via CCTP V2 + USDT0 (LayerZero OFT, same family as Mantle).
+    tokens: [
+      { symbol: "USDC", address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6 },
+      { symbol: "USDT", address: "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", decimals: 6 },
+    ],
+  },
 ];
 
-/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective") to CHAINS[].name */
+/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad") to CHAINS[].name */
 export const INTENT_CHAIN_MAP: Record<string, string> = {
   bnb:       "BNB Chain",
   eth:       "Ethereum",
@@ -128,6 +142,7 @@ export const INTENT_CHAIN_MAP: Record<string, string> = {
   stable:    "Stable",
   mantle:    "Mantle",
   injective: "Injective",
+  monad:     "Monad",
 };
 
 /**
@@ -340,6 +355,7 @@ const CHAIN_THRESHOLDS: Record<string, number[]> = {
   "Stable":     [  29,  49,  89,  149,  449,   799,  1999 ],
   "Mantle":     [  29,  49,  89,  149,  449,   799,  1999 ],
   "Injective":  [  29,  49,  89,  149,  449,   799,  1999 ],
+  "Monad":      [  29,  49,  89,  149,  449,   799,  1999 ],
   "Avalanche":  [  29,  49,  99,  159,  489,   879,  2199 ],
   "Ethereum":   [  39,  69, 129,  219,  669,  1199,  2999 ],
 };
