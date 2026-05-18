@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     to:           string;
     amount:       string;
     deadline:     number;
-    nonce?:       string;  // uint256 nonce for avax/bnb/eth/mantle/injective (v1.2 contract)
+    nonce?:       string;  // uint256 nonce for avax/bnb/eth/mantle/injective/monad (v1.2 contract)
     witnessSig:   string;
     authorization?: {
       chainId:  number;
@@ -214,16 +214,16 @@ export async function POST(req: NextRequest) {
   }
   if (!isXLayer && !isStable && !authorization) {
     return NextResponse.json(
-      { error: "EIP-7702 chains (avax/bnb/eth/mantle/injective) require authorization object" },
+      { error: "EIP-7702 chains (avax/bnb/eth/mantle/injective/monad) require authorization object" },
       { status: 400 }
     );
   }
-  // avax/bnb/eth/mantle/injective also require `nonce` — it's part of the signed witness, so a
+  // avax/bnb/eth/mantle/injective/monad also require `nonce` — it's part of the signed witness, so a
   // server-synthesized fallback would never match the caller's signature. Fail
   // fast with a clear 400 instead of letting the onchain verify path reject it.
   if (!isXLayer && !isStable && !nonce) {
     return NextResponse.json(
-      { error: "nonce is required for avax/bnb/eth/mantle/injective (uint256 string, must match the signed witness)" },
+      { error: "nonce is required for avax/bnb/eth/mantle/injective/monad (uint256 string, must match the signed witness)" },
       { status: 400 }
     );
   }
@@ -374,7 +374,7 @@ export async function POST(req: NextRequest) {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective.`,
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad.`,
     }, { status: 400 });
   }
 
@@ -435,7 +435,7 @@ export async function POST(req: NextRequest) {
     relayerAddress = key.address as Address;
   }
 
-  // ── 7b. nonce (uint256) for avax/bnb/eth/mantle/injective transferWithAuthorization ─────────
+  // ── 7b. nonce (uint256) for avax/bnb/eth/mantle/injective/monad transferWithAuthorization ─────────
   // Parsed up front in section 2b so a malformed value can't escape past the
   // credit reservation in section 7c.
   const paymentNonce: bigint = parsedPaymentNonce;

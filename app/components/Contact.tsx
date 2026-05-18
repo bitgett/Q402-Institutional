@@ -177,7 +177,7 @@ export default function Contact() {
             {[
               { value: "99.99%", label: "Uptime" },
               { value: "<0.9 sec", label: "Inclusion time" },
-              { value: "7 chains", label: "Mainnet live" },
+              { value: "8 chains", label: "Mainnet live" },
             ].map((stat, i) => (
               <div key={stat.label} className="flex items-center gap-8">
                 {i > 0 && <div className="w-px h-8 bg-white/10" />}

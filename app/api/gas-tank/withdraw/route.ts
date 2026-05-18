@@ -14,6 +14,7 @@ const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   avax:   { rpc: "https://api.avax.network/ext/bc/C/rpc",      token: "AVAX" },
   xlayer: { rpc: "https://rpc.xlayer.tech",                    token: "OKB"  },
   stable: { rpc: "https://rpc.stable.xyz",                     token: "USDT0"},
+  monad:  { rpc: "https://rpc.monad.xyz",                       token: "MON"  },
 };
 
 /**

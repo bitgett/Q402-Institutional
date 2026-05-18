@@ -73,7 +73,7 @@ if (process.env.CI === "true" && !mcpAvailable) {
   );
 }
 
-const NON_ETH_CHAINS = ["avax", "bnb", "xlayer", "stable", "mantle", "injective"] as const;
+const NON_ETH_CHAINS = ["avax", "bnb", "xlayer", "stable", "mantle", "injective", "monad"] as const;
 
 describe("RLUSD: Ethereum-only invariant — manifest", () => {
   it("manifest.chains.eth.tokens.RLUSD exists with the canonical address + decimals 18", () => {

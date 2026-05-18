@@ -10,6 +10,7 @@ const CHAINS = [
   { key: "avax",   token: "AVAX", rpc: "https://api.avax.network/ext/bc/C/rpc", cgId: "avalanche-2" },
   { key: "xlayer", token: "OKB",  rpc: "https://rpc.xlayer.tech",                cgId: "okb"         },
   { key: "stable", token: "USDT0", rpc: "https://rpc.stable.xyz",               cgId: "tether"      },
+  { key: "monad",  token: "MON",  rpc: "https://rpc.monad.xyz",                  cgId: "monad-2"     },
 ];
 
 async function getBalance(rpc: string, address: string): Promise<string> {
