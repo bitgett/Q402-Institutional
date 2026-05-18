@@ -110,19 +110,37 @@ export default function EventPage() {
         </div>
 
         <div className="relative max-w-5xl mx-auto px-6 py-10">
+          {/* BNB Chain hero accent — small floating stamp, top-right, well clear of headline */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.7, rotate: -12 }}
+            animate={{ opacity: 1, scale: 1, rotate: -6 }}
+            transition={{ duration: 1.0, delay: 0.15, ease: "easeOut" }}
+            className="hidden md:block pointer-events-none absolute top-10 right-4 lg:right-8 z-0"
+            style={{ filter: "drop-shadow(0 0 40px rgba(240,185,11,0.45))" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/bnb-hero.png"
+              alt=""
+              aria-hidden="true"
+              className="w-[120px] h-[120px] lg:w-[140px] lg:h-[140px] opacity-95 select-none"
+            />
+          </motion.div>
+
           {/* Sprint ribbon */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-2 mb-7 px-3.5 py-1.5 rounded-full"
+            className="relative z-10 inline-flex items-center gap-2 mb-7 pl-1.5 pr-3.5 py-1 rounded-full"
             style={{
               background: "linear-gradient(120deg, rgba(240,185,11,0.10) 0%, rgba(245,158,11,0.08) 100%)",
               border: "1px solid rgba(240,185,11,0.30)",
               boxShadow: "0 0 24px rgba(240,185,11,0.10)",
             }}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/bnb-hero.png" alt="BNB Chain" className="w-5 h-5 rounded-full" />
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-yellow/95">
               Free Trial · BNB Chain
             </span>
@@ -137,7 +155,7 @@ export default function EventPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.05 }}
-            className="text-4xl md:text-6xl font-extrabold leading-[1.05] mb-4 tracking-tight"
+            className="relative z-10 text-4xl md:text-6xl font-extrabold leading-[1.05] mb-4 tracking-tight"
           >
             Free trial.{" "}
             <span className="text-shimmer">No gas. No card.</span>
@@ -146,7 +164,7 @@ export default function EventPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.15 }}
-            className="text-lg text-white/55 font-light tracking-wide max-w-2xl mb-10"
+            className="relative z-10 text-lg text-white/55 font-light tracking-wide max-w-2xl mb-10"
           >
             {TRIAL_CREDITS.toLocaleString()} gasless transactions on BNB Chain (USDC + USDT) for
             the next {TRIAL_DURATION_DAYS} days. <span className="text-green-400 font-semibold">Q402 covers the gas</span> —
