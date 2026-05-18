@@ -336,7 +336,7 @@ export async function POST(req: NextRequest) {
   if (!isSandbox && isTrialScopedKey && chain !== "bnb") {
     return NextResponse.json(
       {
-        error: "Trial accounts are restricted to BNB Chain. Upgrade at /pricing for multi-chain access.",
+        error: `Trial API Key supports BNB Chain only — got "${chain}". Use a Multichain API Key for ${chain} and other paid chains. Upgrade at /pricing.`,
         code: "TRIAL_BNB_ONLY",
       },
       { status: 403 },

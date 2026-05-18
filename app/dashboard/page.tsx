@@ -395,7 +395,7 @@ function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean 
         </motion.div>
       )}
       <div className="pt-4 border-t border-white/6">
-        <p className="text-xs text-white/25 mb-2">Your API Key</p>
+        <p className="text-xs text-white/25 mb-2">Your {trialView ? "Trial" : "Multichain"} API Key</p>
         <div className="flex items-center gap-2 font-mono text-xs text-white/50 bg-navy border border-white/8 rounded-lg px-3 py-2">
           <span className="flex-1 break-all">{apiKey ? `${apiKey.slice(0, 12)}${"•".repeat(16)}${apiKey.slice(-4)}` : "—"}</span>
           <button
@@ -776,10 +776,16 @@ export default function DashboardPage() {
 
       setSubscription(prev => ({
         ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0, apiKey: "" }),
-        // Paid live key — only present when amountUSD > 0. Trial keys live
-        // in trialApiKey/trialSandboxApiKey so the two scopes don't collide.
-        apiKey:            (provData.hasPaid ? provData.apiKey : "") as string ?? "",
-        sandboxApiKey:     (provData.sandboxApiKey as string) ?? prev?.sandboxApiKey,
+        // Paid live key — prefer the scope-explicit `multichainApiKey` alias.
+        // Falls back to legacy `apiKey` for older provision responses during
+        // the rollout window. Trial keys live in trialApiKey/
+        // trialSandboxApiKey so the two scopes don't collide.
+        apiKey:            (provData.hasPaid
+                              ? (provData.multichainApiKey ?? provData.apiKey)
+                              : "") as string ?? "",
+        sandboxApiKey:     (provData.multichainSandboxApiKey as string)
+                              ?? (provData.sandboxApiKey as string)
+                              ?? prev?.sandboxApiKey,
         trialApiKey:       (provData.trialApiKey as string | null) ?? undefined,
         trialSandboxApiKey:(provData.trialSandboxApiKey as string | null) ?? undefined,
         isTrialActive:     provData.isTrialActive === true,
@@ -1711,7 +1717,9 @@ export default function DashboardPage() {
               {(trialViewActive ? !!trialApiKey : true) && (
               <div className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium">API Key</span>
+                  <span className="text-sm font-medium">
+                    {trialViewActive ? "Trial API Key" : "Multichain API Key"}
+                  </span>
                   {showPaidScope || trialViewActive ? (
                     <span className={`text-xs px-2.5 py-0.5 rounded-full border ${
                       isExpired
@@ -1732,7 +1740,7 @@ export default function DashboardPage() {
                       <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
                       {API_KEY !== "—" && (
                         <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
-                          {keyCopied ? "Copied!" : "Copy"}
+                          {keyCopied ? "Copied!" : `Copy ${trialViewActive ? "Trial" : "Multichain"} Key`}
                         </button>
                       )}
                     </div>
