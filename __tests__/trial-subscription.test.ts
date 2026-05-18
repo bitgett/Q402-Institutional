@@ -142,17 +142,26 @@ describe("trial — db.ts trial fields + isSubscriptionActive branch", () => {
 });
 
 describe("trial — /api/keys/provision exposes trial + paid keys separately", () => {
-  it("computes isTrialActive from trialApiKey + trialExpiresAt + now (no plan gate)", () => {
+  it("computes isTrialActive from trial key signal + trialExpiresAt + now (no plan-only gate)", () => {
     // BUG FIX (two-pool migration): the previous `plan === "trial"` gate
     // turned isTrialActive=false the moment a user upgraded to a paid plan,
     // even though their trial key + 29 days of trial credits were still
-    // valid. The dashboard's Trial view then rendered 0. Verify the plan
-    // gate is gone and isTrialActive only depends on the trial key + expiry.
+    // valid. The dashboard's Trial view then rendered 0.
+    //
+    // v0.4.4 additionally accepts a legacy trial signal — pre-Phase-1 trial
+    // accounts wrote the trial key into the `apiKey` slot with plan="trial"
+    // (no `trialApiKey` field existed yet). Without that fallback, those
+    // pre-migration accounts (still present in production) were stuck with
+    // isTrialActive=false even though the credits exist. Accept either:
+    //   (a) the modern `existing.trialApiKey` signal, OR
+    //   (b) the legacy `plan === "trial" && apiKey` signal.
+    expect(provisionSource).toMatch(/hasLegacyTrialKey/);
     expect(provisionSource).toMatch(
-      /isTrialActive\s*=\s*\n?\s*!!existing\.trialApiKey\s*&&[\s\S]{0,80}?!!existing\.trialExpiresAt/,
+      /isTrialActive\s*=\s*\n?\s*\(!!existing\.trialApiKey\s*\|\|\s*hasLegacyTrialKey\)\s*&&[\s\S]{0,120}?!!existing\.trialExpiresAt/,
     );
     expect(provisionSource).toMatch(/new Date\(existing\.trialExpiresAt\)\s*>\s*new Date\(\)/);
-    expect(provisionSource).not.toMatch(/isTrialActive\s*=\s*\n?\s*existing\.plan\s*===\s*["']trial["']/);
+    // The strict plan === "trial" sole gate must NOT be reinstated.
+    expect(provisionSource).not.toMatch(/isTrialActive\s*=\s*\n?\s*existing\.plan\s*===\s*["']trial["']\s*&&/);
   });
 
   it("returns amountUSD on the response (so dashboard hydrates it correctly)", () => {
