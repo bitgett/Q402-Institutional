@@ -1,11 +1,11 @@
 /**
  * wallet-bind.test.ts
  *
- * Phase 1 identity-model coverage for /api/auth/wallet-bind (see
- * docs/sprint-bnb-focus.md §10). The route was rewritten from a silent
- * unsigned hint into a high-risk gate, so the regression mode we worry
- * about is someone deleting the signature check or accidentally
- * re-allowing silent re-pair to a different wallet.
+ * Identity-model coverage for /api/auth/wallet-bind. The route was
+ * rewritten from a silent unsigned hint into a high-risk gate, so the
+ * regression mode we worry about is someone deleting the signature
+ * check or accidentally re-allowing silent re-pair to a different
+ * wallet.
  *
  * Source-level grep — behavioural integration is out of scope here
  * (would need a live KV mock + ECDSA signer). The structural assertions

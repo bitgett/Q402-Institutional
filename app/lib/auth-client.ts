@@ -108,8 +108,7 @@ export async function getAuthCreds(
 }
 
 /**
- * Bind a wallet to the caller's email session — Phase 1 of the identity
- * model (see docs/sprint-bnb-focus.md §10 + §12). Mints a fresh challenge,
+ * Bind a wallet to the caller's email session. Mints a fresh challenge,
  * prompts the wallet for a signature, POSTs the signed payload to
  * /api/auth/wallet-bind. Returns a tagged result so the caller can render
  * the right UX for each failure mode without parsing error strings.

@@ -471,7 +471,7 @@ export default function DashboardPage() {
   // explicit signed POST to /api/auth/wallet-bind. A wallet connected in
   // the browser that doesn't match this field triggers WrongWalletHardBlock
   // (State G); a wallet connected with this field still null triggers
-  // ClaimWalletPrompt (State D). See docs/sprint-bnb-focus.md §10.
+  // ClaimWalletPrompt (State D).
   const [emailSession, setEmailSession] = useState<{
     email: string;
     address: string | null;
@@ -553,9 +553,8 @@ export default function DashboardPage() {
   // ClaimWalletPrompt component (State D) handles binding via an explicit
   // user click + fresh signed challenge through /api/auth/wallet-bind.
   // The old silent unsigned auto-bind was removed in favour of the
-  // bind-once semantics documented in docs/sprint-bnb-focus.md §10 — a
-  // user shouldn't get permanently bound to a wallet just by having
-  // MetaMask connected at dashboard load time.
+  // bind-once semantics — a user shouldn't get permanently bound to a
+  // wallet just by having MetaMask connected at dashboard load time.
 
   // Wallet-only auto-trial: when a wallet is connected but the address has
   // no subscription (or only a provisioned stub with amountUSD=0 and no
@@ -858,9 +857,9 @@ export default function DashboardPage() {
 
   // ── Phase 1 identity-model early returns ──────────────────────────────
   // The 4-state machine routes the user before any multichain data is
-  // fetched. See docs/sprint-bnb-focus.md §10 for the full table; the two
-  // branches below cover the cases where an email session + browser-
-  // connected wallet exist together but in a state that must NOT render
+  // fetched. The two branches below cover the cases where an email
+  // session + browser-connected wallet exist together but in a state
+  // that must NOT render
   // the regular dashboard:
   //
   //   State D — wallet connected, session not yet claimed by any wallet
@@ -1553,7 +1552,7 @@ export default function DashboardPage() {
             removed when the Phase 1 identity model landed — mismatched
             wallets now hit the WrongWalletHardBlock full-screen early
             return above, which is non-dismissable and prevents any
-            multichain data fetch. See docs/sprint-bnb-focus.md §10. */}
+            multichain data fetch. */}
 
         {/* Quota usage warning banner — only for paying users */}
         {hasPaid && subscription && pct >= 80 && (

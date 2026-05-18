@@ -1,14 +1,13 @@
 /**
  * dashboard-state-machine.test.ts
  *
- * Phase 1 identity model coverage for app/dashboard/page.tsx — the
- * 4-state machine that routes users through (C) email-only / (D) claim
- * prompt / (E) reconnect / (F) full multichain / (G) wrong-wallet hard
- * block. See docs/sprint-bnb-focus.md §10 for the full state table.
+ * Identity-model coverage for app/dashboard/page.tsx — the 4-state
+ * machine that routes users through (C) email-only / (D) claim prompt /
+ * (E) reconnect / (F) full multichain / (G) wrong-wallet hard block.
  *
  * The regression mode this test catches: someone re-introduces silent
- * dual-identity rendering (the audit's "Trial view = email, Multichain
- * view = whatever wallet's connected" finding). Specifically:
+ * dual-identity rendering — the "Trial view = email, Multichain view =
+ * whatever wallet's connected" failure mode. Specifically:
  *
  *   - removing the State G early return → mismatched wallet leaks data
  *   - removing the provision-useEffect wallet-match gate → silent fetch
