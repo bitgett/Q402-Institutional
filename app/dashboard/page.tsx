@@ -1057,10 +1057,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Live API key — primary, the key they came for */}
+          {/* Trial API Key — primary, the key they came for. Was labelled
+              "Live API key" pre-Phase-2 which collided with the Multichain
+              view's "API Key" card and obscured the trial vs paid split. */}
           <div className="rounded-2xl border border-white/10 p-6 mb-4" style={{ background: "rgba(255,255,255,0.03)" }}>
             <div className="flex items-center justify-between mb-2">
-              <div className="text-[10px] uppercase tracking-widest text-white/45 font-semibold">Live API key</div>
+              <div className="text-[10px] uppercase tracking-widest text-white/45 font-semibold">Trial API Key</div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-yellow bg-yellow/15 border border-yellow/40 rounded-sm px-1.5 py-0.5">
                 BNB only
               </span>

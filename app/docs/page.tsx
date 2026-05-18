@@ -319,7 +319,7 @@ export default function DocsPage() {
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2a · Trial key — BNB-only sponsored payment</h3>
             <CodeBlock lang="javascript" code={`// Trial keys are BNB-only. No Gas Tank needed — Q402 sponsors gas.
 const q402 = new Q402Client({
-  apiKey: "q402_live_trial_YOUR_KEY",
+  apiKey: "q402_live_YOUR_TRIAL_KEY",   // from /event (your Trial API Key)
   chain:  "bnb",
 });
 
@@ -474,7 +474,7 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
 # The MCP server auto-routes by chain: BNB → trial key (if present),
 # anything else → multichain key. Set keyScope: "trial" | "multichain"
 # on a tool call to force one explicitly.
-Q402_TRIAL_API_KEY=q402_live_trial_...        # BNB-only sponsored Trial key
+Q402_TRIAL_API_KEY=q402_live_...              # BNB-only sponsored Trial key (from /event)
 Q402_MULTICHAIN_API_KEY=q402_live_...         # paid 8-chain key (per-chain Gas Tank)
 
 # Legacy single-env path — kept for back-compat. If only Q402_API_KEY is
