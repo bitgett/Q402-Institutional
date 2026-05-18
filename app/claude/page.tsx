@@ -8,7 +8,7 @@ import { MCP_VERSION } from "@/app/lib/version";
 /**
  * /claude — landing page for the @quackai/q402-mcp Claude integration.
  *
- * Live `q402_quote` simulation that re-ranks 7 chains as the visitor changes
+ * Live `q402_quote` simulation that re-ranks 8 chains as the visitor changes
  * the amount, animated install line with one-click copy + npm/GitHub deeplinks,
  * gradient tool cards.
  *
