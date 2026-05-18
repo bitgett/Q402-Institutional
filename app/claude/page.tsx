@@ -535,10 +535,13 @@ export default function ClaudePage() {
                 title: "Sandbox by default",
                 body: (
                   <>
-                    Without three env vars (
-                    <code className="text-yellow text-xs">Q402_API_KEY</code> live tier,{" "}
-                    <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code>,{" "}
-                    <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=1</code>),
+                    Without a live key (
+                    <code className="text-yellow text-xs">Q402_TRIAL_API_KEY</code> for BNB
+                    sponsored or <code className="text-yellow text-xs">Q402_MULTICHAIN_API_KEY</code>{" "}
+                    for paid 8-chain — the legacy{" "}
+                    <code className="text-yellow text-xs">Q402_API_KEY</code> works as a
+                    fallback) plus <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code>{" "}
+                    and <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=1</code>,
                     every <code className="text-yellow text-xs">q402_pay</code> returns a fake
                     hash. No funds, no quota.
                   </>

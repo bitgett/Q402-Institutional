@@ -110,6 +110,12 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
             sandbox key
           </span>
         </div>
+        <p className="text-white/35 text-[11px] mb-2 leading-relaxed">
+          The snippet uses <code className="text-white/50">Q402_API_KEY</code> as a legacy
+          single-env fallback because the sandbox key works in both scopes. For live mode, set{" "}
+          <code className="text-white/50">Q402_TRIAL_API_KEY</code> and/or{" "}
+          <code className="text-white/50">Q402_MULTICHAIN_API_KEY</code> in your shell — see below.
+        </p>
         <div className="relative">
           <pre className="bg-[#060C14] border border-white/7 rounded-xl p-4 overflow-x-auto">
             <code className="font-mono text-[11px] text-white/75 leading-relaxed whitespace-pre">
