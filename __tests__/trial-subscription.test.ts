@@ -267,6 +267,28 @@ describe("trial — email session merges into wallet activation", () => {
   it("registers the wallet in the trial-expiry index when an email is bound", () => {
     expect(trialRouteSource).toMatch(/addTrialSubscriptionToIndex\(addr\)/);
   });
+
+  it("only rolls back trial_used_by_email when NO credits have persisted", () => {
+    // Regression guard: an earlier iteration of the P1-4 fix wrapped the
+    // catch block with a blanket `kv.del(trial_used_by_email:...)`. That
+    // reopened the Sybil race the SET NX was supposed to close — if the
+    // route threw AFTER addCredits succeeded (network blip on a later
+    // KV write), the email sentinel got deleted and a different wallet
+    // with the same email could re-claim and ALSO get credited.
+    //
+    // The rollback must be gated by a `creditsPersisted` flag that flips
+    // to true the moment addCredits succeeds OR the credit_grant key is
+    // already present (= a prior call's credits are still in the ledger).
+    expect(trialRouteSource).toMatch(/let\s+creditsPersisted\s*=\s*false/);
+    expect(trialRouteSource).toMatch(
+      /await\s+addCredits\(addr,\s*TRIAL_CREDITS\)[\s\S]{0,80}?creditsPersisted\s*=\s*true/,
+    );
+    // The catch's rollback must require !creditsPersisted in addition to
+    // emailClaimedByUs.
+    expect(trialRouteSource).toMatch(
+      /emailClaimedByUs[\s\S]{0,80}?!creditsPersisted[\s\S]{0,160}?kv\.del\(\s*`trial_used_by_email:/,
+    );
+  });
 });
 
 describe("trial — expiry-reminder cron leg", () => {

@@ -192,6 +192,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Tracks whether ANY durable credit side effect exists for this wallet —
+  // either we addCredits'd in this call, or a prior call already did (and
+  // left credit_grant:trial:{addr} behind). Gates the catch-block rollback
+  // of trial_used_by_email: rolling back the email sentinel AFTER credits
+  // are in the ledger would reopen the Sybil window — a different wallet
+  // with the same email could claim trial again and ALSO get credited.
+  let creditsPersisted = false;
+
   try {
     const now = new Date();
     const trialExpiresAt = new Date(
@@ -209,10 +217,17 @@ export async function POST(req: NextRequest) {
     if (canGrant) {
       try {
         await addCredits(addr, TRIAL_CREDITS);
+        creditsPersisted = true;
       } catch (e) {
         kv.del(grantKey).catch(() => {});
         throw e;
       }
+    } else {
+      // grantKey already existed — a prior activation call (likely this
+      // same wallet retrying after a partial failure) already persisted
+      // the credits in the ledger. From the rollback-safety perspective,
+      // durable side effects exist.
+      creditsPersisted = true;
     }
 
     const totalTxs = await getQuotaCredits(addr);
@@ -325,12 +340,25 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error(`[trial/activate] write failure addr=${addr}:`, e);
-    // Roll back the email-side sentinel IF we wrote it ourselves this call.
-    // Without this, a mid-flight failure between the atomic claim and the
-    // credit grant burns the email's trial slot permanently — the user
-    // can't retry with their email. Wallet-side credit_grant has its own
-    // SET NX dedup so retries pick up where they left off.
-    if (emailClaimedByUs && adoptedEmail) {
+    // Roll back the email-side sentinel ONLY if all three hold:
+    //   1. we ourselves claimed it in THIS call (emailClaimedByUs)
+    //   2. there's an adopted email at all (defensive)
+    //   3. NO durable credit side effect exists yet (!creditsPersisted)
+    //
+    // Why the third gate matters: if addCredits already succeeded (in
+    // this call OR a prior retry whose credit_grant key is still alive),
+    // deleting the sentinel would reopen the Sybil race the P1-4 fix
+    // closed. A different wallet with the same email could SET NX the
+    // sentinel and get credited a second time — same email, two trials.
+    //
+    // The retry story:
+    //   - rollback case: credits never persisted → sentinel released →
+    //     same wallet (or any wallet at this email) can re-claim. Correct.
+    //   - no-rollback case: credits persisted but a later write failed →
+    //     sentinel stays → same wallet retries, NX matches own addr, sets
+    //     emailClaimedByUs=false on retry (rollback guard is moot), and
+    //     credit_grant!canGrant path skips addCredits. Final state heals.
+    if (emailClaimedByUs && adoptedEmail && !creditsPersisted) {
       kv.del(`trial_used_by_email:${adoptedEmail}`).catch(() => {});
     }
     return NextResponse.json(
