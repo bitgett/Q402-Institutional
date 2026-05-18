@@ -156,7 +156,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       // Legacy field — prefers paid key, then own trial key, then the
-      // bridged trial key (for wallet-only logins of bound users).
+      // bridged trial key (for wallet-only logins of bound users). New code
+      // should prefer `trialApiKey` / `multichainApiKey` (added below)
+      // because they unambiguously identify the scope of the returned key.
       apiKey:             paidApiKey
                             || (isTrialActive ? trialApiKey : null)
                             || boundEmailTrial?.apiKey
@@ -164,6 +166,11 @@ export async function POST(req: NextRequest) {
       sandboxApiKey:      existing.sandboxApiKey || boundEmailTrial?.sandboxApiKey || null,
       trialApiKey:        trialApiKey || boundEmailTrial?.apiKey || null,
       trialSandboxApiKey: trialSandboxApiKey || boundEmailTrial?.sandboxApiKey || null,
+      // Scope-explicit aliases for the paid key slot. Same source as the
+      // legacy `apiKey` field but named so the consumer can't confuse a
+      // paid-pool key with a trial-pool key. UI code should prefer these.
+      multichainApiKey:        paidApiKey || null,
+      multichainSandboxApiKey: existing.sandboxApiKey || null,
       isTrialActive:      isTrialActive || !!(boundEmailTrial && boundEmailTrial.trialExpiresAt
                             && new Date(boundEmailTrial.trialExpiresAt) > new Date()),
       // Explicit bound-email-trial surface so the dashboard can label the
@@ -220,6 +227,10 @@ export async function POST(req: NextRequest) {
     sandboxApiKey:      sandboxApiKey,
     trialApiKey:        boundEmailTrial?.apiKey ?? null,
     trialSandboxApiKey: boundEmailTrial?.sandboxApiKey ?? null,
+    // New account has no paid key (no payment yet) — surface null aliases
+    // so consumers don't have to special-case the new-account shape.
+    multichainApiKey:        null,
+    multichainSandboxApiKey: sandboxApiKey,
     isTrialActive:      !!(boundEmailTrial && boundEmailTrial.trialExpiresAt
                           && new Date(boundEmailTrial.trialExpiresAt) > new Date()),
     boundEmailTrial:    boundEmailTrial

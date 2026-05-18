@@ -132,6 +132,12 @@ export default function PaymentPage() {
   const [verifyAttempts,   setVerifyAttempts]   = useState(0);
   const [verifyError,      setVerifyError]      = useState<string | null>(null);
   const [activatedPlan,    setActivatedPlan]    = useState<string | null>(null);
+  // Two-pool surface: track the post-activation credit counts so the success
+  // view can spell out which pool actually changed. paidCredits is what the
+  // payment topped up; trialCredits is shown only when it's non-zero so the
+  // user can see their free-trial allotment was preserved through the upgrade.
+  const [activatedPaidCredits,  setActivatedPaidCredits]  = useState<number | null>(null);
+  const [activatedTrialCredits, setActivatedTrialCredits] = useState<number | null>(null);
   const [submittedTxHash,  setSubmittedTxHash]  = useState("");
   // Held across retries so the activation-only retry path can replay the
   // same intentId after a transient activation failure — without it we'd
@@ -178,6 +184,8 @@ export default function PaymentPage() {
     const data = await res.json();
     if (res.ok && (data.status === "activated" || data.status === "already_active" || data.status === "credits_added")) {
       setActivatedPlan(data.plan);
+      if (typeof data.paidCredits  === "number") setActivatedPaidCredits(data.paidCredits);
+      if (typeof data.trialCredits === "number") setActivatedTrialCredits(data.trialCredits);
       setPayStep("success");
     } else {
       setVerifyAttempts(v => v + 1);
@@ -443,6 +451,34 @@ export default function PaymentPage() {
                       <p className="text-white/40 text-xs capitalize">{activatedPlan} plan is now active</p>
                     </div>
                   </div>
+
+                  {/* Two-pool clarity. Spell out exactly which pool changed so
+                      the user sees that the Free Trial allotment survives the
+                      upgrade. Only renders when the activate response carried
+                      scoped credit numbers (post-Phase-2 migration). */}
+                  {(activatedPaidCredits !== null || activatedTrialCredits !== null) && (
+                    <div className="bg-white/[0.03] border border-white/8 rounded-xl px-4 py-3 space-y-1.5">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-green-400" aria-hidden>✓</span>
+                        <span className="text-white/80 font-semibold">Multichain API Key unlocked</span>
+                      </div>
+                      {activatedPaidCredits !== null && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-green-400" aria-hidden>✓</span>
+                          <span className="text-white/70">{activatedPaidCredits.toLocaleString()} Multichain credits available</span>
+                        </div>
+                      )}
+                      {activatedTrialCredits !== null && activatedTrialCredits > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-white/40" aria-hidden>·</span>
+                          <span className="text-white/50">
+                            Free Trial credits are unchanged ({activatedTrialCredits.toLocaleString()} remaining)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <button
                     onClick={() => router.push("/dashboard")}
                     className="w-full bg-yellow text-navy font-extrabold py-4 rounded-xl hover:bg-yellow-hover transition-all hover:scale-[1.02]"
