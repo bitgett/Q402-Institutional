@@ -12,6 +12,7 @@ const CHAINS = [
   { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",       cgId: "avalanche-2"  },
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                     cgId: "okb"          },
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                      cgId: "tether"       },
+  { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                       cgId: "monad-2"      },
 ];
 
 // Minimum USD thresholds — alert when below these
@@ -23,6 +24,11 @@ const ALERT_THRESHOLD_USD: Record<string, number> = {
   avax:   3,
   xlayer: 2,
   stable: 2,
+  // Monad's EIP-7702 reserve-balance rule forces delegated EOAs to keep
+  // ≥10 MON. The facilitator is never delegated, but keep the alert
+  // threshold above 15 MON so a top-up happens well before operational
+  // headroom shrinks under the 10-MON tripwire.
+  monad:  15,
 };
 
 async function getNativeBalance(rpc: string, address: string): Promise<string> {
