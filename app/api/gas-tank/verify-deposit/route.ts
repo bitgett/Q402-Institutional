@@ -18,6 +18,7 @@ const CHAINS = [
   { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",    blockWindow: 300, explorer: "https://snowtrace.io/tx/" },
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                  blockWindow: 200, explorer: "https://www.oklink.com/xlayer/tx/" },
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 600, explorer: "https://stable-explorer.io/tx/" },
+  { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                    blockWindow: 6000, explorer: "https://monadscan.com/tx/" },
 ];
 
 /**
@@ -215,7 +216,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ newDeposits: added ? 1 : 0, balances, alreadyCredited: !added });
   }
 
-  // ── Default path: recent-block scan across all 7 chains ──────────────────
+  // ── Default path: recent-block scan across all 8 chains ──────────────────
   const results = await Promise.allSettled(
     CHAINS.map(chain => scanNativeDeposits(chain, address).then(txs => ({ chain, txs })))
   );

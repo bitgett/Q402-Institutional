@@ -156,6 +156,27 @@
       "notes": "USDT0 is both the gas token and the transfer token. API token keys 'USDC' and 'USDT' both resolve to the USDT0 address.",
       "explorer": "https://stablescan.org",
       "verifyUrl": "https://stablescan.org/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
+    },
+    "monad": {
+      "name": "Monad",
+      "chainId": 143,
+      "relayMode": "eip7702",
+      "implContract": "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+      "witness": {
+        "type": "TransferAuthorization",
+        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "domainName": "Q402 Monad",
+        "domainVersion": "1",
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). Monad fully supports EIP-7702 (docs.monad.xyz/developer-essentials/eip-7702). Note: Monad's reserve-balance rule disallows delegated EOAs from dipping below 10 MON in a single TX — Q402 only moves ERC-20 tokens, so a delegated user's MON balance is unchanged by transfer() and the rule does not trigger in normal operation."
+      },
+      "tokens": {
+        "USDC": { "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", "decimals": 6, "notes": "Native Circle USDC via CCTP V2 — issued by Circle, not bridged. 17 source chains supported via CCTP." },
+        "USDT": { "address": "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", "decimals": 6, "notes": "USDT0 (LayerZero OFT) — Tether's omnichain standard on Monad. Same OFT family as Mantle's USDT0 entry." }
+      },
+      "supportedApiTokens": ["USDC", "USDT"],
+      "explorer": "https://monadscan.com",
+      "verifyUrl": "https://monadscan.com/address/0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC"
     }
   },
   "authorizationGuard": {

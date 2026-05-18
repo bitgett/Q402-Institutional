@@ -116,7 +116,7 @@ const TABS: Tab[] = [
     hook:     "Invoices clear in 400ms.",
     description:
       "USDC, USDT, or RLUSD between businesses with an ECDSA-signed Trust Receipt per TX. Your accountant gets a verifiable receipt chain instead of a CSV.",
-    chips: ["7-CHAIN", "TRUST RECEIPTS", "~400ms"],
+    chips: ["8-CHAIN", "TRUST RECEIPTS", "~400ms"],
     code: [
       { kind: "comment", text: "// Settle vendor invoice + fetch the receipt for the audit trail." },
       { kind: "code",    text: 'const { receiptId } = await q402.pay({ to: vendor, amount: "12500", token: "USDC" })' },

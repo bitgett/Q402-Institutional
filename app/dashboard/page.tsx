@@ -43,6 +43,7 @@ const CHAIN_META: Record<string, { name: string; token: string; color: string; i
   eth:    { name: "Ethereum",   token: "ETH",   color: "#627EEA", img: "/eth.png",    rounded: "rounded-full" },
   mantle: { name: "Mantle",     token: "MNT",   color: "#FFFFFF", img: "/mantle.png", rounded: "rounded-full" },
   injective: { name: "Injective", token: "INJ", color: "#0082FA", img: "/injective.png", rounded: "rounded-full" },
+  monad: { name: "Monad",       token: "MON",   color: "#836EF9", img: "/monad.png",  rounded: "rounded-full" },
   xlayer: { name: "X Layer",    token: "OKB",   color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-full" },
   avax:   { name: "Avalanche",  token: "AVAX",  color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
   // Stable: USDT0 is both the gas token and the payment token — no separate native coin
@@ -51,7 +52,7 @@ const CHAIN_META: Record<string, { name: string; token: string; color: string; i
 
 const STEPS = [
   { n: "01", title: "Load the SDK (browser)", code: `<script src="https://q402.quackai.ai/q402-sdk.js"></script>\n<!-- or: import { Q402Client } from "q402-sdk" -->` },
-  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective\n});\n// Note: chain "injective" is USDT-only until Circle CCTP native USDC ships (Q2 2026).` },
+  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad\n});\n// Note: chain "injective" is USDT-only until Circle CCTP native USDC ships (Q2 2026).` },
   { n: "03", title: "One-line gasless payment", code: `const result = await q402.pay({\n  to:     "0xRecipient...",\n  amount: "5.00",\n  token:  "USDC",  // use "USDT" for chain: "injective"\n});\nconsole.log(result.txHash);` },
   { n: "04", title: "Settlement confirmed", code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: "5", token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0` },
 ];
@@ -353,6 +354,7 @@ function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean 
                   <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
                   <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
                   <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
+                  <option value="monad" style={{ background: "#0d1422" }}>Monad ✓</option>
                 </>
               )}
             </select>
@@ -438,7 +440,7 @@ export default function DashboardPage() {
   const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
   const [thisMonthCount, setThisMonthCount] = useState(0); // for chart only
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
-  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0, mantle: 0, injective: 0 });
+  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0, mantle: 0, injective: 0, monad: 0 });
   const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
@@ -1121,7 +1123,7 @@ export default function DashboardPage() {
               <p className="text-white/45 text-sm mb-4">
                 Your wallet is already paired with this email account. Reconnect it
                 in this browser to unlock the Multichain dashboard (gas tank, paid
-                plans, transaction history across all 7 chains).
+                plans, transaction history across all 8 chains).
               </p>
               <button
                 onClick={() => setShowWalletConnectFromEmail(true)}
@@ -1745,7 +1747,7 @@ export default function DashboardPage() {
                       <span className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg text-white/35">🔒</span>
                     </div>
                     <p className="text-white/35 text-xs mt-2 leading-relaxed">
-                      Multichain keys unlock with a paid plan — full 7-chain
+                      Multichain keys unlock with a paid plan — full 8-chain
                       relay (Avalanche · BNB · Ethereum · X Layer · Stable ·
                       Mantle · Injective).
                     </p>
@@ -2049,7 +2051,7 @@ export default function DashboardPage() {
                 What ships in the package
               </div>
               <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
-                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 7 chains."} Read-only, no auth.</li>
+                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 8 chains."} Read-only, no auth.</li>
                 <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
                 <li>• <code className="text-yellow text-xs">q402_pay</code> — send a single-recipient gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
                 <li>• <code className="text-yellow text-xs">q402_batch_pay</code> — one signed batch to up to 20 recipients on a single chain × token (trial keys: 5). Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</li>

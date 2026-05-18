@@ -139,6 +139,22 @@ const CHAINS = {
     explorerBase: "https://blockscout.injective.network/tx/",
     nonceField: "nonce",
   },
+  monad: {
+    id: 143, name: "Monad", domainName: "Q402 Monad",
+    rpc: envVars.MONAD_RPC_URL ?? "https://rpc.monad.xyz",
+    impl: envVars.MONAD_IMPLEMENTATION_CONTRACT ?? "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+    // Monad mainnet (chainId 143). Native Circle USDC via CCTP V2 + USDT0 (LayerZero OFT).
+    // EIP-7702 fully supported (note: delegated EOAs can't dip below 10 MON in a single TX
+    // — Q402 only moves ERC-20s so the user's MON balance is unchanged and the rule
+    // doesn't trigger in normal operation).
+    tokens: {
+      USDC: { address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6 },
+      USDT: { address: "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", decimals: 6 },
+    },
+    nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
+    explorerBase: "https://monadscan.com/tx/",
+    nonceField: "nonce",
+  },
 };
 
 const TRANSFER_AUTH_TYPES = {

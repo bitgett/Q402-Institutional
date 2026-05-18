@@ -36,7 +36,7 @@ const CHAINS = [
   { id: "xlayer",   name: "X Layer",   color: "#CCCCCC", img: "/xlayer.png",   rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
   { id: "stable",   name: "Stable",    color: "#4AE54A", img: "/stable.jpg",     rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "injective", name: "Injective", color: "#0082FA", img: "/injective.png", rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "arbitrum", name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
+  { id: "monad",    name: "Monad",     color: "#836EF9", img: "/monad.png",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: true  },
 ];
 
@@ -64,6 +64,7 @@ const CHAIN_PRICES: Record<string, number[]> = {
   stable:    [ 29,  49,  89,  149,  449,   799,  1999 ],
   mantle:    [ 29,  49,  89,  149,  449,   799,  1999 ],
   injective: [ 29,  49,  89,  149,  449,   799,  1999 ],
+  monad:     [ 29,  49,  89,  149,  449,   799,  1999 ],
   avax:      [ 29,  49,  99,  159,  489,   879,  2199 ],
   eth:       [ 39,  69, 129,  219,  669,  1199,  2999 ],
 };

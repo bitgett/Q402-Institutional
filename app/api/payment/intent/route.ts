@@ -21,7 +21,7 @@ import { SUBSCRIPTION_DEPLOYED_CHAINS } from "@/app/lib/wallets";
  *
  * Body: { address, nonce, signature, chain, expectedUSD, token?, planChain? }
  *   chain:      payment chain id — "bnb" | "eth" (where funds actually move)
- *   planChain:  selected relay chain — "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective"
+ *   planChain:  selected relay chain — "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective" | "monad"
  *               (determines plan/credit thresholds; defaults to `chain` if omitted)
  *   token:      "USDC" | "USDT" | "RLUSD" (optional — cross-checked in activate).
  *               RLUSD is Ethereum-only; chain≠"eth" + token="RLUSD" is rejected

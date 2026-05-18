@@ -57,6 +57,12 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
   stable: 0.05,      // $0.05 (USDT0 is $1-pegged)
   mantle: 0.2,       // ~$0.10 at $0.50/MNT (Mantle L2, low gas)
   injective: 0.005,  // ~$0.10 at $20/INJ (Injective EVM uses Cosmos fee model — ~0.1 INJ per deploy, far less per relay)
+  // Monad: keep the per-relay floor well above the EIP-7702 reserve-balance
+  // tripwire (10 MON triggers `unconditionally revert` for delegated EOAs).
+  // That rule applies to the user's EOA, not the facilitator, but a floor
+  // here also lets the gas-tank exhaustion alert fire well before relayer
+  // settles dip into the user-side reserve range.
+  monad:  0.05,      // ~$0.10 at $2/MON (rough launch-day price; tune later)
 };
 
 
@@ -124,7 +130,7 @@ export async function POST(req: NextRequest) {
   // The full multi-chain matrix below is what the protocol shipped on v1.27.
   // During a sprint window the feature flag BNB_FOCUS_MODE collapses the
   // matrix to a single chain/token pair (see app/lib/feature-flags.ts) — the
-  // 7-chain entries remain in this file so removing the flag (or pointing
+  // 8-chain entries remain in this file so removing the flag (or pointing
   // Vercel back at main) restores the full surface with zero code churn.
   //
   //   - Injective: USDT only. Native USDC via Circle CCTP is announced for Q2 2026.
@@ -141,6 +147,7 @@ export async function POST(req: NextRequest) {
     xlayer:    ["USDC", "USDT"],
     mantle:    ["USDC", "USDT"],
     stable:    ["USDC", "USDT"],
+    monad:     ["USDC", "USDT"],
   };
   const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
     bnb: ["USDC", "USDT"],
