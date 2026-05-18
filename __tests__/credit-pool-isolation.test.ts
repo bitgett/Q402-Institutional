@@ -180,6 +180,33 @@ describe("seedFromLegacy — safety net routing", () => {
     expect(await seedFromLegacy(ADDR, "paid")).toBe(0);
   });
 
+  it("short-circuits to 0 when the scoped key already exists (no false alert)", async () => {
+    // Post-reconciliation state: scoped key is populated AND legacy key is
+    // intentionally preserved until the +2w cleanup phase. Mutation paths
+    // call seedFromLegacy defensively, but a real seed isn't needed and an
+    // ops alert here is pure noise. The guard must fire BEFORE the legacy
+    // read so seedFromLegacy is a true no-op in this state.
+    store.set(`quota:trial:${ADDR}`, 1998);
+    store.set(`quota:${ADDR}`, 2499);
+    store.set(`sub:${ADDR}`, {
+      paidAt: new Date().toISOString(),
+      apiKey: "q402_live_paid_x",
+      plan:   "starter",
+      txHash: "0xdeadbeef",
+      amountUSD: 29,
+      trialApiKey:    "q402_live_trial_x",
+      trialExpiresAt: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+    });
+
+    expect(await seedFromLegacy(ADDR, "trial")).toBe(0);
+    // Verify the legacy key was never touched. The guard fires before the
+    // legacy `kv.get`, so the legacy key only gets read on a true fallback.
+    const legacyReads = mockKv.get.mock.calls.filter(
+      (args: unknown[]) => args[0] === `quota:${ADDR}`,
+    );
+    expect(legacyReads.length).toBe(0);
+  });
+
   it("trial-only signal: returns legacy value for trial, 0 for paid", async () => {
     // Pure trial signal: trialApiKey + future trialExpiresAt, no paid signal.
     store.set(`quota:${ADDR}`, 1500);

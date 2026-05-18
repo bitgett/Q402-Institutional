@@ -632,12 +632,22 @@ export async function seedFromLegacy(
   address: string,
   scope: CreditScope,
 ): Promise<number> {
+  // Short-circuit when the scoped pool already exists. Mutation paths
+  // (`decrementScopedCredit` / `addScopedCredits`) call this defensively on
+  // every mutation, but if the scoped key is already populated the seed value
+  // gets discarded by the SET NX in `initScopedQuotaIfNeeded` — so there's
+  // nothing to seed and nothing worth alerting about. Without this guard, the
+  // safety-net alert fires on every post-reconciliation relay (the legacy
+  // `quota:{addr}` is intentionally preserved until the +2w cleanup phase).
+  const scopedVal = await kv.get<number>(scopedQuotaKey(address, scope));
+  if (scopedVal !== null) return 0;
+
   const legacyVal = await kv.get<number>(legacyQuotaKey(address));
   if (legacyVal === null || legacyVal <= 0) return 0;
 
-  // Fire ops alert ONCE per address+scope hit. This is a "should never happen"
-  // path on a clean reconciliation; getting here means an account slipped
-  // through. Best-effort — don't block the request if alerting fails.
+  // Real fallback path. On a clean reconciliation this should be unreachable;
+  // getting here means an account slipped through. Best-effort alert — don't
+  // block the request if alerting fails.
   sendOpsAlert(
     `<b>Unmigrated legacy credit pool detected</b>\n` +
     `Address: <code>${address}</code>\n` +
