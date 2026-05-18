@@ -291,14 +291,48 @@ export default function DocsPage() {
           {/* ── QUICK START ── */}
           <Section id="quickstart" title="Quick Start">
             <p className="text-white/55 text-sm mb-6">
-              Get your first gasless transaction running in under 5 minutes.
+              Get your first gasless transaction running in under 5 minutes. Two API key types exist — pick the one that matches your use case.
             </p>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Load the SDK</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">0 · Trial key vs Multichain key</h3>
+            <div className="grid sm:grid-cols-2 gap-3 mb-6">
+              <div className="rounded-xl border border-yellow/20 bg-yellow/[0.04] px-4 py-3">
+                <p className="text-yellow font-semibold text-sm mb-1">Trial API Key</p>
+                <p className="text-white/60 text-xs leading-relaxed">
+                  Free Trial · BNB Chain only · USDC / USDT · 2,000 TX sponsored credits · gas paid by Q402 relayer. Sign up at <a className="text-yellow hover:underline" href="/event">/event</a>.
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <p className="text-white/80 font-semibold text-sm mb-1">Multichain API Key</p>
+                <p className="text-white/60 text-xs leading-relaxed">
+                  Paid plan · 8 chains (Avalanche · BNB · Ethereum · X Layer · Stable · Mantle · Injective · Monad) · USDC, USDT, Ethereum RLUSD · per-chain Gas Tank. Activate at <a className="text-yellow hover:underline" href="/payment">/payment</a>.
+                </p>
+              </div>
+            </div>
+            <Callout type="tip">
+              Trial keys reject any non-BNB chain with HTTP 403 + <code className="text-orange-300">TRIAL_BNB_ONLY</code>. Use the Multichain key for Monad, Ethereum, Avalanche, and the rest.
+            </Callout>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">1 · Load the SDK</h3>
             <CodeBlock lang="html" code={`<script src="https://q402.quackai.ai/q402-sdk.js"></script>`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · One-line gasless payment (client-side)</h3>
-            <CodeBlock lang="javascript" code={`// Initialize once with your API key + chain
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2a · Trial key — BNB-only sponsored payment</h3>
+            <CodeBlock lang="javascript" code={`// Trial keys are BNB-only. No Gas Tank needed — Q402 sponsors gas.
+const q402 = new Q402Client({
+  apiKey: "q402_live_trial_YOUR_KEY",
+  chain:  "bnb",
+});
+
+const result = await q402.pay({
+  to:     recipientAddress,
+  amount: "1.00",
+  token:  "USDT",   // or "USDC"
+});
+// result → { success: true, txHash: "0x...", chain: "bnb", method: "eip7702" }`} />
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2b · Multichain key — full 8-chain payment</h3>
+            <CodeBlock lang="javascript" code={`// Multichain keys work across all supported chains. Each chain needs
+// a funded Gas Tank — deposit at /dashboard → Gas Tank.
 const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
   chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective" | "monad"
@@ -436,9 +470,19 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
             <p className="text-white/55 text-sm mb-3">
               By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a deterministic-looking fake transaction hash, no funds move, no gas-tank credit is consumed. To enable real on-chain transactions, all three environment variables must be set:
             </p>
-            <CodeBlock lang="bash" code={`Q402_API_KEY=q402_live_...      # live-tier key from /dashboard
-Q402_PRIVATE_KEY=0xabc...       # signer for the payer EOA
-Q402_ENABLE_REAL_PAYMENTS=1     # explicit opt-in`} />
+            <CodeBlock lang="bash" code={`# Trial / Multichain split — set whichever applies (or both).
+# The MCP server auto-routes by chain: BNB → trial key (if present),
+# anything else → multichain key. Set keyScope: "trial" | "multichain"
+# on a tool call to force one explicitly.
+Q402_TRIAL_API_KEY=q402_live_trial_...        # BNB-only sponsored Trial key
+Q402_MULTICHAIN_API_KEY=q402_live_...         # paid 8-chain key (per-chain Gas Tank)
+
+# Legacy single-env path — kept for back-compat. If only Q402_API_KEY is
+# set, both trial and multichain calls fall back to it.
+Q402_API_KEY=q402_live_...                    # fallback if the two above are unset
+
+Q402_PRIVATE_KEY=0xabc...                     # signer for the payer EOA
+Q402_ENABLE_REAL_PAYMENTS=1                   # explicit opt-in for live mode`} />
             <p className="text-white/40 text-xs mb-6">
               Anything missing → automatic sandbox fallback with a hint pointing at what to set. Two additional guards run regardless of mode: <code className="text-white/60">Q402_MAX_AMOUNT_PER_CALL</code> (default $5) caps any single call, and <code className="text-white/60">Q402_ALLOWED_RECIPIENTS</code> optionally restricts to an address allowlist.
             </p>

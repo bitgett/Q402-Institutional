@@ -48,9 +48,20 @@ describe.skipIf(!available)("MCP tool descriptions match actual server policy", 
       expect(paySrc).toMatch(/TRIAL_BNB_ONLY/);
     });
 
-    it("documents the paid → full 7-chain matrix", () => {
-      expect(paySrc).toMatch(/Paid keys/i);
+    it("documents the multichain → full 7-chain matrix", () => {
+      // v0.5.0+ renamed "Paid keys" → "Multichain keys" to match the
+      // dashboard's scope label. Both terms accepted so a future re-rename
+      // back to "Paid" doesn't churn this test.
+      expect(paySrc).toMatch(/Multichain keys|Paid keys/i);
       expect(paySrc).toMatch(/avax.+bnb.+eth.+xlayer.+stable.+mantle.+injective/i);
+    });
+
+    it("documents the Q402_TRIAL_API_KEY / Q402_MULTICHAIN_API_KEY split", () => {
+      // v0.5.0 two-key model: env vars must be named in the description so
+      // a user reading the tool catalogue understands which env powers what.
+      expect(paySrc).toMatch(/Q402_TRIAL_API_KEY/);
+      expect(paySrc).toMatch(/Q402_MULTICHAIN_API_KEY/);
+      expect(paySrc).toMatch(/keyScope/);
     });
 
     it("keeps the sandbox-by-default safety contract", () => {
