@@ -12,7 +12,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { loadRelayerKey } from "./relayer-key";
 
 // ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
-// All 7 chains (avax / bnb / eth / xlayer / stable / mantle / injective) default to EIP-7702 Type 4 TXs.
+// All 8 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad) default to EIP-7702 Type 4 TXs.
 // X Layer additionally supports EIP-3009 as a USDC-only fallback.
 //
 // Chain → relay method:
@@ -59,6 +59,11 @@ const CHAIN_RPC_FALLBACKS: Record<string, string[]> = {
   injective: [
     "https://sentry.evm-rpc.injective.network/",
     "https://1776.rpc.thirdweb.com",
+  ],
+  monad: [
+    "https://rpc.monad.xyz",
+    "https://rpc1.monad.xyz",
+    "https://rpc2.monad.xyz",
   ],
 };
 
@@ -160,6 +165,21 @@ export const CHAIN_CONFIG = {
     // lookups don't crash; SDK gates the exposed token list separately.
     usdc: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6, symbol: "USDT" },
     usdt: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6, symbol: "USDT" },
+  },
+  monad: {
+    name: "Monad",
+    rpc: "https://rpc.monad.xyz",
+    chainId: 143,
+    token: "MON",
+    // Q402PaymentImplementationMonad deployed on Monad Mainnet (Chain ID: 143)
+    // by deployer 0xfe7bA1cdc7077f71855627F9983A70188826726F.
+    implContract: process.env.MONAD_IMPLEMENTATION_CONTRACT ?? "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+    // Native Circle USDC via CCTP V2 (not bridged) — 6 decimals.
+    usdc: { address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6, symbol: "USDC" },
+    // USDT0 (LayerZero OFT) — Tether omnichain standard on Monad. Same OFT family as
+    // Mantle's USDT0 entry, exposed as "USDT" through the SDK to keep API surface
+    // (`token: "USDT"`) consistent with other chains. Decimals = 6 (per on-chain eth_call).
+    usdt: { address: "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", decimals: 6, symbol: "USDT" },
   },
 } as const;
 
@@ -272,7 +292,7 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
 
 // ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
 // Contract: 0x8D854436ab0426F5BC6Cc70865C90576AD523E73 (X Layer mainnet)
-// Witness type: TransferAuthorization (identical scheme across all 7 chains)
+// Witness type: TransferAuthorization (identical scheme across all 8 chains)
 // Key detail: verifyingContract = user's EOA (address(this) under EIP-7702)
 //             msg.sender must equal facilitator param
 const XLAYER_EIP7702_ABI = [

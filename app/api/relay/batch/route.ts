@@ -144,11 +144,11 @@ export async function POST(req: NextRequest) {
   // shapes (xlayerNonce / stableNonce) and the X Layer USDC EIP-3009
   // fallback don't compose cleanly with sequential first-fail-abort
   // semantics. Per-recipient pay() loop remains the path for those.
-  const BATCHABLE_CHAINS = new Set(["avax", "bnb", "eth", "mantle", "injective"]);
+  const BATCHABLE_CHAINS = new Set(["avax", "bnb", "eth", "mantle", "injective", "monad"]);
   if (!BATCHABLE_CHAINS.has(chain)) {
     return NextResponse.json(
       {
-        error: `chain "${chain}" is not batchable. Batch-supported chains: avax, bnb, eth, mantle, injective. For xlayer / stable use /api/relay in a client-side loop.`,
+        error: `chain "${chain}" is not batchable. Batch-supported chains: avax, bnb, eth, mantle, injective, monad. For xlayer / stable use /api/relay in a client-side loop.`,
         code: "CHAIN_NOT_BATCHABLE",
       },
       { status: 400 },

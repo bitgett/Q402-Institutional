@@ -175,7 +175,7 @@ export default function GrantPage() {
             {[
               {
                 num: "01",
-                title: "Seven chains. One integration. No migration.",
+                title: "Eight chains. One integration. No migration.",
                 body: "BNB Chain, Ethereum, Mantle, Avalanche, Injective, X Layer, Stable — not wrapped, not bridged. Native operations on each, through a single unified API. The multi-chain coverage that used to take months now takes an afternoon. And when the next chain matters, you're already there.",
               },
               {

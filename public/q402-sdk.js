@@ -10,7 +10,7 @@
  *     the relay rejects them.
  *
  * Wire shapes:
- *   - Default EIP-7702 path: avax / bnb / eth / mantle / injective. Used
+ *   - Default EIP-7702 path: avax / bnb / eth / mantle / injective / monad. Used
  *     for both pay() and batchPay(). Sequential authNonce (base + i) on
  *     batch rows.
  *   - EIP-7702 chain variants: xlayer / stable use chain-specific nonce
@@ -43,8 +43,9 @@
  *  stable     TransferAuthorization  "Q402 Stable"       user's EOA          18  ← USDT0 only
  *  mantle     TransferAuthorization  "Q402 Mantle"       user's EOA          6
  *  injective  TransferAuthorization  "Q402 Injective"    user's EOA          6  ← USDT only
+ *  monad      TransferAuthorization  "Q402 Monad"        user's EOA          6
  *
- *  All 7 deployed contracts compute _domainSeparator() with `address(this)`, which
+ *  All 8 deployed contracts compute _domainSeparator() with `address(this)`, which
  *  under EIP-7702 delegation equals the user's EOA — NOT the impl contract.
  *
  *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
@@ -161,6 +162,20 @@ const Q402_CHAIN_CONFIG = {
     usdt: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
     supportedTokens: ["USDT"],
   },
+  monad: {
+    name:         "Monad",
+    chainId:      143,
+    mode:         "eip7702",
+    domainName:   "Q402 Monad",
+    implContract: "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+    // Native Circle USDC (CCTP V2, 6 dec) + USDT0 (LayerZero OFT, 6 dec).
+    // Monad fully supports EIP-7702. Reserve-balance rule (delegated EOA can't
+    // dip below 10 MON in a single TX) does not affect ERC-20 transfers since
+    // the user's MON balance is unchanged.
+    usdc: { address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6 },
+    usdt: { address: "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", decimals: 6 },
+    supportedTokens: ["USDC", "USDT"],
+  },
 };
 
 // ─── Apply BNB-only narrowing when the flag is set ───────────────────────────
@@ -176,7 +191,7 @@ if (Q402_BNB_FOCUS_MODE) {
   }
 }
 
-// EIP-7702 witness type — shared by all 7 chains (avax/bnb/eth/xlayer/stable/mantle/injective).
+// EIP-7702 witness type — shared by all 8 chains (avax/bnb/eth/xlayer/stable/mantle/injective/monad).
 // All Q402PaymentImplementation* contracts use the identical TransferAuthorization
 // typehash. verifyingContract = address(this), which under EIP-7702 delegation = user EOA.
 const Q402_TRANSFER_AUTH_TYPES = {
@@ -242,7 +257,7 @@ class Q402Client {
     this.chain    = chain;
     this.relayUrl = relayUrl;
     this.chainCfg = Q402_CHAIN_CONFIG[chain];
-    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle, injective`);
+    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad`);
   }
 
   /**
