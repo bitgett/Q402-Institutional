@@ -3,11 +3,10 @@
  *
  * The SUBSCRIPTION Safe is a CREATE2 contract — the same address resolves on
  * every EVM chain, but bytecode only exists where we've explicitly run the
- * Safe deploy flow. A previous review caught the case where the
- * payment-intent route allowed payments on chains where the Safe wasn't yet
- * deployed (P0); the fix narrowed VALID_CHAINS to ["bnb", "eth"], but that
- * fix relied on a human keeping the allowlist and the deploy footprint in
- * sync.
+ * Safe deploy flow. An earlier P0 incident: the payment-intent route allowed
+ * payments on chains where the Safe wasn't yet deployed. The fix narrowed
+ * VALID_CHAINS to ["bnb", "eth"], but that fix relied on a human keeping
+ * the allowlist and the deploy footprint in sync.
  *
  * This test pins the invariant in CI: every chain in
  * `SUBSCRIPTION_DEPLOYED_CHAINS` must have actual Safe bytecode at
@@ -34,6 +33,11 @@ const RPC_BY_CHAIN: Record<SubscriptionDeployedChain, string> = {
 };
 
 async function getCode(rpcUrl: string, address: string): Promise<{ code: string | null; error: string | null }> {
+  // Explicit 4s timeout so a hanging public RPC (BSC dataseed has been
+  // observed to stall past Vitest's default 5s test timeout) trips the
+  // soft-skip path instead of failing the suite. The fix shapes the
+  // exception path: AbortSignal.timeout fires AbortError → caught here
+  // → returns { code: null, error } → caller treats as offline → it.skip.
   try {
     const resp = await fetch(rpcUrl, {
       method: "POST",
@@ -44,6 +48,7 @@ async function getCode(rpcUrl: string, address: string): Promise<{ code: string 
         params: [address, "latest"],
         id: 1,
       }),
+      signal: AbortSignal.timeout(4000),
     });
     if (!resp.ok) return { code: null, error: `HTTP ${resp.status}` };
     const data = (await resp.json()) as { result?: string; error?: { message?: string } };

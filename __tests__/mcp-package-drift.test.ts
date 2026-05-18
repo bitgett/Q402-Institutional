@@ -109,9 +109,9 @@ async function loadMcpChainsSource(): Promise<void> {
 
 // On CI we want a real drift to surface as a red build, not a warning. Local
 // dev keeps the soft-skip so developers without network access (planes,
-// internal-only environments) aren't blocked. The CI / local split is what
-// closes the previous "environment problem looks identical to a real drift"
-// trapdoor that the external reviewer flagged.
+// internal-only environments) aren't blocked. The CI / local split closes
+// the previous trapdoor where an environment problem looked identical to a
+// real drift detection.
 function skipIfOffline(): boolean {
   if (mcpSource) return false;
   const message = `[mcp-package-drift] could not fetch chains.ts (${fetchError ?? "unknown"})`;

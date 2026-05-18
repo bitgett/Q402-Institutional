@@ -1,21 +1,36 @@
 /**
  * Q402 Client SDK (browser-compatible)
- * v1.7.0 — RLUSD (Ripple USD, NY DFS regulated stablecoin, decimals 18) added
- *          on Ethereum mainnet. RLUSD is Ethereum-only; the other 6 chains
- *          reject token:"RLUSD" via the supportedTokens allowlist. All chains
- *          now declare an explicit supportedTokens list so per-chain token
- *          policy is the single SDK source of truth.
- * v1.6.0 — Injective EVM (chainId 1776) added as the 7th supported chain.
- *          USDT only on Injective for now; native USDC via Circle CCTP is
- *          announced for Q2 2026 and will be added then. The IBC-bridged
- *          USDC on Injective EVM is intentionally not supported.
- * v1.5.0 — Mantle USDT repointed to USDT0 (LayerZero OFT), reflecting the 2025-11-27
- *          ecosystem migration. Legacy bridged USDT deposits sunset 2026-02-03.
- * v1.4.0 — Multi-chain: EIP-7702 (avax/bnb/eth/xlayer/stable/mantle) + EIP-3009 (xlayer USDC fallback)
- *          Exact decimal→raw conversion via ethers.parseUnits (no IEEE-754 precision loss).
  *
- * The authoritative source for witness type, domain, and contract mapping is
- * contracts.manifest.json at the repo root. This SDK mirrors that manifest.
+ * Capabilities:
+ *   - q402.pay({ to, amount, token })   — single-recipient gasless settlement
+ *   - q402.batchPay({ recipients, token }) — multi-recipient on a single
+ *     chain × token. Trial keys: up to 5 rows. Paid keys: up to 20.
+ *     Server is the authoritative gate; the SDK enforces the paid ceiling
+ *     locally so a malformed call doesn't sign 100 authorizations before
+ *     the relay rejects them.
+ *
+ * Wire shapes:
+ *   - Default EIP-7702 path: avax / bnb / eth / mantle / injective. Used
+ *     for both pay() and batchPay(). Sequential authNonce (base + i) on
+ *     batch rows.
+ *   - EIP-7702 chain variants: xlayer / stable use chain-specific nonce
+ *     fields (xlayerNonce / stableNonce). Single-recipient pay() only.
+ *   - EIP-3009 fallback: xlayer USDC. Single-recipient pay() only.
+ *
+ * Multi-chain coverage:
+ *   - RLUSD (Ripple USD, NY DFS regulated, decimals 18) is Ethereum-only.
+ *   - Injective EVM (chainId 1776) is USDT-only until Circle CCTP native
+ *     USDC ships (announced for Q2 2026).
+ *   - Mantle USDT routes through USDT0 (LayerZero OFT) per the
+ *     2025-11-27 ecosystem migration; legacy bridged USDT deposits
+ *     sunset 2026-02-03.
+ *
+ * Amount handling: exact decimal → raw via ethers.parseUnits — no
+ * IEEE-754 precision loss for 18-decimal tokens.
+ *
+ * The authoritative source for witness type, domain, and contract
+ * mapping is contracts.manifest.json at the repo root. This SDK
+ * mirrors that manifest.
  *
  * ── Chain signing matrix (verified against deployed contract source) ───────────
  *
@@ -55,6 +70,17 @@
  *   const q402s = new Q402Client({ apiKey: "q402_live_xxx", chain: "stable" });
  *   const result = await q402s.pay({ to: "0x...", amount: "1.00", token: "USDT" });
  */
+
+// ─── Optional BNB-only narrowing flag ────────────────────────────────────────
+// Mirrors app/lib/feature-flags.ts BNB_FOCUS_MODE. When true, the SDK
+// collapses to BNB Chain + USDC/USDT only; every non-BNB chain's
+// supportedTokens list is rewritten to [] at module load. Currently false;
+// flip both this constant and the server-side flag together to opt into the
+// narrowing without further edits.
+const Q402_BNB_FOCUS_MODE = false;
+const Q402_BNB_FOCUS_REJECTION_MESSAGE =
+  "This chain/token is currently disabled by the BNB-only narrowing flag. " +
+  "Pass chain: \"bnb\" with token \"USDC\" or \"USDT\".";
 
 const Q402_CHAIN_CONFIG = {
   avax: {
@@ -136,6 +162,19 @@ const Q402_CHAIN_CONFIG = {
     supportedTokens: ["USDT"],
   },
 };
+
+// ─── Apply BNB-only narrowing when the flag is set ───────────────────────────
+// Every non-BNB chain's supportedTokens is rewritten to []. The runtime check
+// in `pay()` rejects any token not in supportedTokens, so this single
+// mutation cascades to RLUSD on Ethereum, USDC/USDT on the other 5 chains,
+// and any chain a future caller might try. BNB itself keeps its original
+// ["USDC","USDT"]. The original arrays stay in the config above so the
+// narrowing is a one-flag revert.
+if (Q402_BNB_FOCUS_MODE) {
+  for (const c of Object.keys(Q402_CHAIN_CONFIG)) {
+    if (c !== "bnb") Q402_CHAIN_CONFIG[c].supportedTokens = [];
+  }
+}
 
 // EIP-7702 witness type — shared by all 7 chains (avax/bnb/eth/xlayer/stable/mantle/injective).
 // All Q402PaymentImplementation* contracts use the identical TransferAuthorization
@@ -231,6 +270,9 @@ class Q402Client {
     // RLUSD is Ethereum-only — other chains' supportedTokens list omits it,
     // so this same guard catches `chain="bnb", token="RLUSD"` etc.
     if (this.chainCfg.supportedTokens && !this.chainCfg.supportedTokens.includes(token)) {
+      if (Q402_BNB_FOCUS_MODE) {
+        throw new Error(Q402_BNB_FOCUS_REJECTION_MESSAGE);
+      }
       throw new Error(
         `Token "${token}" is not supported on chain "${this.chain}". ` +
         `Supported tokens for ${this.chain}: ${this.chainCfg.supportedTokens.join(", ")}.` +
@@ -264,6 +306,161 @@ class Q402Client {
     } else {
       return this._payEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg);
     }
+  }
+
+  /**
+   * Send a single chain × token settlement to MULTIPLE recipients in one
+   * round-trip. The owner pays $0 in gas regardless of batch size; Q402's
+   * relayer covers gas for every transfer.
+   *
+   * @param {object} opts
+   * @param {Array<{to: string, amount: string}>} opts.recipients
+   *   Recipient rows. All share the SAME chain (the one this client was
+   *   constructed with) and the SAME token. Trial keys: max 5 rows. Paid
+   *   keys: max 20. The server is the authoritative gate; this method also
+   *   caps locally at 20 to fail fast on malformed inputs.
+   * @param {"USDC"|"USDT"|"RLUSD"} [opts.token="USDC"]
+   *
+   * Each row is signed independently: one EIP-712 TransferAuthorization
+   * witness + one EIP-7702 authorization per row. The authorization nonces
+   * are sequential starting from the EOA's current transaction count
+   * (base + i), so the relayer can apply them in order. Server-side
+   * execution is sequential — the first transfer installs the EIP-7702
+   * delegation on the owner's EOA, subsequent rows reuse it. If row 0
+   * fails the batch aborts; later failures surface in the result array
+   * without aborting.
+   *
+   * Only the default EIP-7702 mode (avax / bnb / eth / mantle / injective)
+   * supports batchPay. X Layer (USDC EIP-3009 fallback), Stable, and the
+   * xlayer EIP-7702 variant route through chain-specific nonce fields
+   * that the batch endpoint doesn't fan out cleanly — those chains throw
+   * here and should use pay() in a client-side loop instead.
+   *
+   * @returns {Promise<{ok, scope, limit, totalSuccess, totalFailed, aborted, results}>}
+   */
+  async batchPay({ recipients, token = "USDC" }) {
+    if (!Array.isArray(recipients) || recipients.length === 0) {
+      throw new Error("recipients must be a non-empty array of {to, amount}");
+    }
+    if (recipients.length > 20) {
+      throw new Error(`recipients cannot exceed 20 per call (trial keys cap at 5; server is authoritative)`);
+    }
+    if (this.chainCfg.supportedTokens && !this.chainCfg.supportedTokens.includes(token)) {
+      if (Q402_BNB_FOCUS_MODE) throw new Error(Q402_BNB_FOCUS_REJECTION_MESSAGE);
+      throw new Error(
+        `Token "${token}" is not supported on chain "${this.chain}". ` +
+        `Supported tokens: ${this.chainCfg.supportedTokens.join(", ")}.`
+      );
+    }
+    if (this.chainCfg.mode && this.chainCfg.mode !== "eip7702") {
+      throw new Error(
+        `batchPay does not yet support chain "${this.chain}" (mode=${this.chainCfg.mode}). ` +
+        `Use pay() in a loop for this chain.`
+      );
+    }
+    for (let i = 0; i < recipients.length; i++) {
+      const r = recipients[i];
+      if (!r || typeof r.to !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(r.to)) {
+        throw new Error(`recipients[${i}].to must be a 0x-prefixed EVM address`);
+      }
+      if (typeof r.amount !== "string" || !/^\d+(\.\d+)?$/.test(r.amount)) {
+        throw new Error(`recipients[${i}].amount must be a positive decimal string`);
+      }
+    }
+
+    const ethereum = window.ethereum || window.okxwallet;
+    if (!ethereum) throw new Error("No Web3 wallet found. Install MetaMask or OKX Wallet.");
+
+    const provider = new ethers.BrowserProvider(ethereum);
+    const signer   = await provider.getSigner();
+    const owner    = await signer.getAddress();
+
+    const tokenCfg = this.chainCfg[token.toLowerCase()];
+    if (!tokenCfg) throw new Error(`Unsupported token: ${token} on chain ${this.chain}`);
+
+    const infoUrl  = this.relayUrl.replace(/\/relay$/, "/relay/info");
+    const infoResp = await fetch(infoUrl);
+    if (!infoResp.ok) throw new Error("Failed to fetch relay facilitator info");
+    const { facilitator } = await infoResp.json();
+
+    const domain = {
+      name:              this.chainCfg.domainName,
+      version:           "1",
+      chainId:           this.chainCfg.chainId,
+      verifyingContract: owner,
+    };
+
+    const baseAuthNonce = await provider.getTransactionCount(owner);
+    const decimals      = tokenCfg.decimals;
+    const deadline      = Math.floor(Date.now() / 1000) + 600;
+
+    const signedRecipients = [];
+    for (let i = 0; i < recipients.length; i++) {
+      const r          = recipients[i];
+      const amountRaw  = toRawAmount(r.amount, decimals);
+      const nonce      = ethers.toBigInt(ethers.randomBytes(32));
+
+      const witnessSig = await signer.signTypedData(domain, Q402_TRANSFER_AUTH_TYPES, {
+        owner,
+        facilitator,
+        token:     tokenCfg.address,
+        recipient: r.to,
+        amount:    BigInt(amountRaw),
+        nonce,
+        deadline:  BigInt(deadline),
+      });
+
+      const authorization = await this._signAuthorization(signer, {
+        chainId: this.chainCfg.chainId,
+        address: this.chainCfg.implContract,
+        nonce:   baseAuthNonce + i,
+      });
+
+      signedRecipients.push({
+        from:   owner,
+        to:     r.to,
+        amount: amountRaw,
+        nonce:  nonce.toString(),
+        deadline,
+        witnessSig,
+        authorization,
+      });
+    }
+
+    const batchUrl = this.relayUrl.replace(/\/relay$/, "/relay/batch");
+    const resp = await fetch(batchUrl, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({
+        apiKey: this.apiKey,
+        chain:  this.chain,
+        token,
+        facilitator,
+        recipients: signedRecipients,
+      }),
+    });
+
+    const data = await resp.json();
+    // Aborted batches (424) and partial failures (207) are not successes.
+    // The server returns 4xx/207 with ok:false on any failure and we
+    // throw a BatchPayError carrying the partial-results array so the
+    // caller can still inspect which rows landed and which didn't.
+    if (!resp.ok || data?.ok === false) {
+      const err = new Error(
+        data?.aborted
+          ? `Batch aborted: recipient[0] failed (${data.results?.[0]?.error ?? "unknown"}). No transfers landed.`
+          : data?.totalFailed > 0
+            ? `Batch completed with ${data.totalFailed}/${data.results?.length ?? "?"} failed rows.`
+            : (data?.error ?? `Batch relay failed (HTTP ${resp.status})`),
+      );
+      err.name = "BatchPayError";
+      err.aborted = !!data?.aborted;
+      err.totalSuccess = data?.totalSuccess ?? 0;
+      err.totalFailed  = data?.totalFailed  ?? signedRecipients.length;
+      err.results = data?.results ?? [];
+      throw err;
+    }
+    return data;
   }
 
   // ── EIP-7702 결제 (avax / bnb / eth / mantle) ────────────────────────────────
@@ -510,24 +707,35 @@ class Q402Client {
   }
 
   /**
-   * EIP-7702 authorization 서명 (avax/bnb/eth/xlayer/stable/mantle/injective 공통)
+   * EIP-7702 protocol-level authorization signature.
+   *
+   * The EVM evaluates authorization tuples by ecrecovering
+   * `keccak256(0x05 || rlp([chainId, address, nonce]))` — NOT an
+   * EIP-712 typed-data digest with a custom domain. Any signature
+   * produced over the wrong message recovers a different address than
+   * the EOA owner; the protocol marks the authorization invalid, the
+   * EOA's code never gets set to the delegate, and subsequent calls
+   * execute as no-ops against empty code (status:success with zero
+   * token movement). Always use the spec-correct signer helper.
+   *
+   * `signer.authorize({ chainId, address, nonce })` is ethers v6.16+'s
+   * native helper that produces the spec-correct signature. For an
+   * ethers `Wallet` it signs locally with the private key. For a
+   * `BrowserProvider.getSigner()` it delegates to the wallet's
+   * `wallet_signAuthorization` RPC (MetaMask 12.x+ / Pectra-aware
+   * wallets). Wallets without EIP-7702 support throw — caller should
+   * surface a "your wallet needs EIP-7702 support" error to the user.
    */
   async _signAuthorization(signer, { chainId, address, nonce }) {
-    const domain = { name: "EIP7702Authorization", version: "1", chainId };
-    const types  = {
-      Authorization: [
-        { name: "address", type: "address" },
-        { name: "nonce",   type: "uint256" },
-      ],
+    const auth = await signer.authorize({ chainId, address, nonce });
+    return {
+      chainId: Number(auth.chainId),
+      address: auth.address,
+      nonce: Number(auth.nonce),
+      yParity: auth.signature.yParity,
+      r: auth.signature.r,
+      s: auth.signature.s,
     };
-
-    const sig     = await signer.signTypedData(domain, types, { address, nonce });
-    const r       = sig.slice(0, 66);
-    const s       = "0x" + sig.slice(66, 130);
-    const v       = parseInt(sig.slice(130, 132), 16);
-    const yParity = v === 27 ? 0 : 1;
-
-    return { chainId, address, nonce, yParity, r, s };
   }
 }
 

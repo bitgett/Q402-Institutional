@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import WalletButton from "../components/WalletButton";
+import WalletModal from "../components/WalletModal";
+import TrialActivationModal from "../components/TrialActivationModal";
+import DashboardSidebar, { type DashboardTab } from "./Sidebar";
 import ClaudeMcpCard from "../components/ClaudeMcpCard";
+import ClaimWalletPrompt from "./ClaimWalletPrompt";
+import WrongWalletHardBlock from "./WrongWalletHardBlock";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
 import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
+import { BNB_FOCUS_MODE, TRIAL_DURATION_DAYS } from "../lib/feature-flags";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
@@ -22,6 +28,7 @@ const DEPOSIT_ADDRESS = GASTANK_ADDRESS;
 // Must mirror TIER_CREDITS / TIER_PLANS in app/lib/blockchain.ts — the server
 // grants these values, so the UI display must match to the tx count.
 const PLAN_QUOTA: Record<string, number> = {
+  trial:          2_000,
   starter:          500,
   basic:          1_000,
   growth:         5_000,
@@ -50,7 +57,7 @@ const STEPS = [
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; sandboxApiKey?: string; }
+interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; sandboxApiKey?: string; trialApiKey?: string; trialSandboxApiKey?: string; isTrialActive?: boolean; trialExpiresAt?: string; email?: string; }
 interface RelayedTx {
   apiKey: string; address: string; chain: string;
   fromUser: string; toUser: string; tokenAmount: number | string; tokenSymbol: string;
@@ -281,8 +288,8 @@ function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
 }
 
 // ── Playground ────────────────────────────────────────────────────────────────
-function Playground({ apiKey }: { apiKey: string }) {
-  const [chain, setChain] = useState("avax");
+function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean }) {
+  const [chain, setChain] = useState(trialView ? "bnb" : "avax");
   const [token, setToken] = useState<"USDC" | "USDT" | "RLUSD">("USDC");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("5");
@@ -293,9 +300,12 @@ function Playground({ apiKey }: { apiKey: string }) {
   //   - Injective: USDT only (Circle CCTP native USDC announced for Q2 2026)
   //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18)
   //   - Others:    USDC / USDT
-  // Keep the preview snippet aligned so a copy-paste never hits a 400.
-  const availableTokens: ("USDC" | "USDT" | "RLUSD")[] =
-    chain === "injective" ? ["USDT"]
+  // BNB-focus sprint collapses every chain except bnb to []; the playground
+  // hides them in the picker below, so this branch only matters once the flag
+  // flips back.
+  const availableTokens: ("USDC" | "USDT" | "RLUSD")[] = trialView
+    ? ["USDC", "USDT"]
+    : chain === "injective" ? ["USDT"]
       : chain === "eth"    ? ["USDC", "USDT", "RLUSD"]
       :                       ["USDC", "USDT"];
 
@@ -307,6 +317,15 @@ function Playground({ apiKey }: { apiKey: string }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain]);
+
+  // Snap chain to BNB when the user flips into trial view (and they were
+  // previously on a chain that's no longer in the dropdown). Avoids a
+  // stale dropdown showing "Avalanche" while the playground only renders
+  // the BNB option after the trial-view re-render.
+  useEffect(() => {
+    if (trialView && chain !== "bnb") setChain("bnb");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trialView]);
 
   const previewToken = token;
 
@@ -323,13 +342,19 @@ function Playground({ apiKey }: { apiKey: string }) {
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Chain</label>
           <div className="relative">
             <select value={chain} onChange={e => setChain(e.target.value)} className="w-full appearance-none border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30 cursor-pointer" style={{ background: "#0d1422" }}>
-              <option value="avax" style={{ background: "#0d1422" }}>Avalanche ✓</option>
-              <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓</option>
-              <option value="eth" style={{ background: "#0d1422" }}>Ethereum ✓</option>
-              <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
-              <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
-              <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
-              <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
+              {trialView ? (
+                <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓ (trial)</option>
+              ) : (
+                <>
+                  <option value="avax" style={{ background: "#0d1422" }}>Avalanche ✓</option>
+                  <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓</option>
+                  <option value="eth" style={{ background: "#0d1422" }}>Ethereum ✓</option>
+                  <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
+                  <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
+                  <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
+                  <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
+                </>
+              )}
             </select>
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
           </div></div>
@@ -344,7 +369,7 @@ function Playground({ apiKey }: { apiKey: string }) {
           </div></div>
         <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Recipient</label>
           <input value={to} onChange={e => setTo(e.target.value)} placeholder="0x..." className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-yellow/30 placeholder-white/20" /></div>
-        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount ({previewToken})</label>
+        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount</label>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30" /></div>
       </div>
       <div className="bg-[#060C14] border border-white/8 rounded-xl p-4 font-mono text-xs text-white/50 leading-6">
@@ -382,18 +407,27 @@ function Playground({ apiKey }: { apiKey: string }) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-const TABS = ["overview", "gas-tank", "developer", "transactions", "claude"] as const;
-type Tab = typeof TABS[number];
+// Legacy tab type — Sidebar.tsx exports DashboardTab as the canonical union
+// (includes "webhooks" too, which the Multichain dashboard renders inside
+// Developer for now). Kept here as an alias so the existing internal
+// references compile without touching every call site.
+type Tab = DashboardTab;
 
 export default function DashboardPage() {
-  const { address, isConnected, signMessage } = useWallet();
+  const { address, isConnected, signMessage, disconnect } = useWallet();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
   const [keyCopied, setKeyCopied] = useState(false);
   const [depositChain, setDepositChain] = useState<{ chain: string; token: string } | null>(null);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertEmailInput, setAlertEmailInput] = useState("");
-  const [showEmailSetup, setShowEmailSetup] = useState(false);
+  // Sidebar-driven alert config modal — opens when the user clicks the
+  // "🔔 Email alerts" button in the Account section. The legacy
+  // in-content showEmailSetup banner was removed; this modal is the
+  // single config surface now.
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertDeleting, setAlertDeleting] = useState(false);
   const [emailSaved, setEmailSaved] = useState(false);
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
@@ -409,11 +443,16 @@ export default function DashboardPage() {
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // Top-level view toggle: trial-flavored (BNB-only · 2k credits · no Gas
+  // Tank · trial key) vs the original Multichain dashboard. Defaulted to
+  // trial for plan === "trial" wallets so first-touch lands on what they
+  // just signed up for.
+  const [trialViewActive, setTrialViewActive] = useState(false);
   const [hasPaid, setHasPaid] = useState<boolean | null>(null);
-  // Server-computed paywall bypass flag — see /api/keys/provision. The list
-  // of owner EOAs lives in OWNER_WALLETS (server-only env) and never reaches
-  // the client bundle; we receive only the boolean for the connected address.
-  const [isOwner,  setIsOwner]  = useState<boolean>(false);
+  // Server-computed paywall bypass flag from /api/keys/provision. Was used
+  // by the now-retired full-screen paywall gate; the response field is
+  // still read so the API contract stays stable for other callers.
+  const [, setIsOwner] = useState<boolean>(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookUrlInput, setWebhookUrlInput] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
@@ -422,10 +461,185 @@ export default function DashboardPage() {
   const [webhookTestResult, setWebhookTestResult] = useState<null | { ok: boolean; msg: string }>(null);
   const [rotatingKey, setRotatingKey] = useState(false);
   const [rotateConfirm, setRotateConfirm] = useState(false);
+  // Email session (Google OAuth or magic-link signup). When the user signed
+  // in via /api/auth/google or clicked an email magic link, /api/auth/me
+  // returns { authenticated: true, email, address? }. We surface a
+  // separate sandbox-only view for sessions that have no paired wallet yet,
+  // so "API key 받으러 온" users can grab their sandbox key in one click.
+  // Email session — populated from /api/auth/me. `address` here is the
+  // CANONICAL BOUND wallet (session.address on the server), set ONLY by an
+  // explicit signed POST to /api/auth/wallet-bind. A wallet connected in
+  // the browser that doesn't match this field triggers WrongWalletHardBlock
+  // (State G); a wallet connected with this field still null triggers
+  // ClaimWalletPrompt (State D). See docs/sprint-bnb-focus.md §10.
+  const [emailSession, setEmailSession] = useState<{
+    email: string;
+    address: string | null;
+  } | null>(null);
+  // "Skip for now" toggle on ClaimWalletPrompt — session-scoped only, no
+  // persistence. Resets on every page-load so the bind decision stays
+  // visible until the user makes it.
+  const [skipClaimPrompt, setSkipClaimPrompt] = useState(false);
+  // Read-side bridge to the email pseudo-account when this wallet is the
+  // bound canonical wallet for an email user — populated by
+  // /api/keys/provision via the wallet_email_link KV index. Lets a
+  // wallet-only login (no session cookie) still surface the trial
+  // credits + keys that live on `sub:email:<sub>`. See sprint doc §12.
+  const [boundEmailTrial, setBoundEmailTrial] = useState<{
+    email: string;
+    apiKey: string | null;
+    sandboxApiKey: string | null;
+    credits: number;
+    totalCredits: number;
+    trialExpiresAt: string | null;
+  } | null>(null);
+  const [sessionTrial, setSessionTrial] = useState<{
+    apiKey: string | null;
+    sandboxApiKey: string | null;
+    credits: number;
+    totalCredits: number;
+    trialExpiresAt: string | null;
+  }>({ apiKey: null, sandboxApiKey: null, credits: 0, totalCredits: 2000, trialExpiresAt: null });
+  const [sessionLiveCopied, setSessionLiveCopied] = useState(false);
+  const [sessionSandboxCopied, setSessionSandboxCopied] = useState(false);
+  // Email-only users click "Multichain →" → triggers wallet-connect modal.
+  const [showWalletConnectFromEmail, setShowWalletConnectFromEmail] = useState(false);
+  // Auto-prompt trial activation for wallet-only users who have no
+  // subscription yet. Fired exactly once per page-load via the ref below
+  // so a re-render doesn't keep popping the modal after the user closes it.
+  const [showAutoTrial, setShowAutoTrial] = useState(false);
+  const trialPromptedRef = useRef(false);
+  // Tracks whether the /api/auth/me check has resolved. Without it the
+  // dashboard would render null between mount and the cookie fetch returning,
+  // which a signed-in email user reads as "I got kicked back to the
+  // landing page" — the visible flash before the email-only view paints.
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Auto-flip to Trial view on first load ONLY when there's a verifiable
+  // active trial:
+  //   - wallet sub on plan="trial" (wallet trial still in window), OR
+  //   - email session has trial keys (canonical email-pseudo trial), OR
+  //   - wallet is bridged to an email pseudo via boundEmailTrial (the
+  //     wallet-only-login case the read-side bridge was added for)
+  // A paying user with no active trial defaults to Multichain — landing
+  // them on Trial view would surface "0 / 2000" or their paid credits
+  // in the wrong scope. Users can still toggle to Trial manually from
+  // the sidebar.
+  const initialViewMatched = useRef(false);
+  useEffect(() => {
+    if (initialViewMatched.current) return;
+    if (!subscription && !emailSession) return; // still loading
+    const walletHasTrialSignal =
+      subscription?.plan === "trial" &&
+      !!subscription?.trialExpiresAt &&
+      new Date(subscription.trialExpiresAt) > new Date();
+    const emailHasTrialSignal =
+      !!emailSession && (!!sessionTrial.apiKey || !!sessionTrial.trialExpiresAt);
+    const bridgedTrialSignal =
+      !!boundEmailTrial && (!!boundEmailTrial.apiKey || !!boundEmailTrial.trialExpiresAt);
+    if (walletHasTrialSignal || emailHasTrialSignal || bridgedTrialSignal) {
+      setTrialViewActive(true);
+    }
+    // Otherwise keep the default (multichain). Either way, lock the flip
+    // so we don't override the user's subsequent manual choice.
+    initialViewMatched.current = true;
+  }, [subscription, emailSession, sessionTrial, boundEmailTrial]);
+
+  // Phase 1 identity model: wallet binding is no longer auto-fired. The
+  // ClaimWalletPrompt component (State D) handles binding via an explicit
+  // user click + fresh signed challenge through /api/auth/wallet-bind.
+  // The old silent unsigned auto-bind was removed in favour of the
+  // bind-once semantics documented in docs/sprint-bnb-focus.md §10 — a
+  // user shouldn't get permanently bound to a wallet just by having
+  // MetaMask connected at dashboard load time.
+
+  // Wallet-only auto-trial: when a wallet is connected but the address has
+  // no subscription (or only a provisioned stub with amountUSD=0 and no
+  // trial plan), pop the trial-activation modal automatically so the user
+  // gets 2k credits with one signature instead of bouncing between pages.
+  //
+  // Critical skip: if the user already has an email session, their trial
+  // lives on the email pseudo-account and trial_used_by_email blocks
+  // /api/trial/activate. Firing the prompt anyway would surface a 409
+  // after the user has already signed. Skip — they have a trial elsewhere.
+  useEffect(() => {
+    if (trialPromptedRef.current) return;
+    if (!isConnected || !address) return;
+    if (hasPaid === null) return; // still loading
+    if (emailSession) return; // email session already has the trial
+    if (subscription?.plan === "trial") return; // already on trial
+    if (hasPaid === true) return; // paid user — don't push trial
+    // No trial AND not paid AND no email session → eligible. Prompt once.
+    trialPromptedRef.current = true;
+    setShowAutoTrial(true);
+  }, [isConnected, address, hasPaid, subscription, emailSession]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSession() {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.authenticated && typeof data.email === "string") {
+          // Prefer the explicit boundAddress field; fall back to the legacy
+          // `address` alias for older /api/auth/me responses (pre-Phase 1).
+          const bound = (typeof data.boundAddress === "string" && data.boundAddress)
+            || (typeof data.address === "string" && data.address)
+            || null;
+          setEmailSession({ email: data.email, address: bound });
+        }
+      } catch {
+        /* no session — silent */
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    }
+    loadSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // When the user is email-only (session active, no wallet connected), fetch
+  // the sandbox key bound to their email account. Lookup is via the email
+  // pseudo-address index that /api/auth/google + /api/auth/email/callback
+  // both populate. We POST to /api/keys/provision-by-email so the path stays
+  // unauthenticated-by-email — server reads the session cookie, never trusts
+  // a client-supplied email.
+  // Always fetch the email pseudo-account's trial data when an email session
+  // exists — wallet-connected users with an email session ALSO need it, so
+  // the Trial view can display the canonical email-side trial (the wallet's
+  // own subscription is a separate "starter" stub when the user signed up
+  // via email first, NOT a trial).
+  useEffect(() => {
+    if (!emailSession) return;
+    let cancelled = false;
+    async function loadTrial() {
+      try {
+        const res = await fetch("/api/keys/email-sandbox", { credentials: "include" });
+        const data = await res.json();
+        if (cancelled || !res.ok) return;
+        setSessionTrial({
+          apiKey: data.apiKey ?? null,
+          sandboxApiKey: data.sandboxApiKey ?? null,
+          credits: typeof data.credits === "number" ? data.credits : 0,
+          totalCredits: typeof data.totalCredits === "number" ? data.totalCredits : 2000,
+          trialExpiresAt: data.trialExpiresAt ?? null,
+        });
+      } catch {
+        /* leave blanks; UI falls back to "—" */
+      }
+    }
+    loadTrial();
+    return () => {
+      cancelled = true;
+    };
+  }, [emailSession]);
 
   useEffect(() => {
     if (!address) return;
@@ -443,21 +657,28 @@ export default function DashboardPage() {
         if (res.status === 401 && d.code === "NONCE_EXPIRED") { clearAuthCache(addr); return; }
         if (d.configured && d.email) {
           setAlertEmail(d.email);
-          setShowEmailSetup(false);
         } else {
           setAlertEmail("");
-          setShowEmailSetup(true);
         }
-      } catch { /* network blip — leave banner open */ }
+      } catch { /* network blip — sidebar Email-alerts entry stays "off" */ }
     }
     load();
     return () => { cancelled = true; };
   }, [address, signMessage]);
+  // 600 ms grace window for the WalletContext to rehydrate from localStorage
+  // on a fresh page load — if no wallet AND no email session is present
+  // after that, bounce back to the landing. Without the emailSession check
+  // here, an email-signed-in user got kicked to / within a second of
+  // landing on the dashboard.
   useEffect(() => {
     if (!mounted) return;
-    const t = setTimeout(() => { if (!isConnected) router.push("/"); }, 600);
+    if (!authChecked) return;
+    if (emailSession) return;
+    const t = setTimeout(() => {
+      if (!isConnected && !emailSession) router.push("/");
+    }, 600);
     return () => clearTimeout(t);
-  }, [mounted, isConnected, router]);
+  }, [mounted, authChecked, isConnected, emailSession, router]);
 
   const refreshUserBalance = useCallback(async (addr: string) => {
     // Q402-SEC-003: user-balance now requires nonce+signature auth.
@@ -481,6 +702,24 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!address) return;
+    // Wait for /api/auth/me to resolve before issuing /api/keys/provision
+    // — without this, a localStorage-rehydrated wallet can race the
+    // session fetch and pull its own subscription before we know the
+    // session is bound to a different wallet. The State G early-return
+    // would then replace the rendered view but the KV read already
+    // happened on a wallet we shouldn't have queried.
+    if (!authChecked) return;
+    // Phase 1 gate — refuse to provision when the email session has a
+    // canonical bound wallet that doesn't match the currently-connected
+    // wallet. Prevents the dashboard from quietly pulling another
+    // wallet's subscription record onto the screen.
+    if (
+      emailSession &&
+      emailSession.address &&
+      address.toLowerCase() !== emailSession.address.toLowerCase()
+    ) {
+      return;
+    }
     const addr = address; // narrow to string for async closures
 
     async function provision() {
@@ -509,13 +748,44 @@ export default function DashboardPage() {
       setHasPaid(provData.hasPaid === true);
       setIsOwner(provData.isOwner === true);
 
+      // Mirror the bound-email-trial bridge into local state so the trial
+      // view can fall back to it when this wallet has no own trial keys
+      // (e.g. wallet-only login of a bound user — pseudo carries the trial).
+      const bet = provData.boundEmailTrial as {
+        email: string;
+        credits: number;
+        totalCredits: number;
+        trialExpiresAt: string | null;
+      } | null | undefined;
+      if (bet) {
+        setBoundEmailTrial({
+          email: bet.email,
+          // Trial keys themselves are surfaced via trialApiKey /
+          // trialSandboxApiKey in the same response, populated from the
+          // bridge when the wallet's own slots were empty.
+          apiKey: (provData.trialApiKey as string | null) ?? null,
+          sandboxApiKey: (provData.trialSandboxApiKey as string | null) ?? null,
+          credits: bet.credits,
+          totalCredits: bet.totalCredits,
+          trialExpiresAt: bet.trialExpiresAt,
+        });
+      } else {
+        setBoundEmailTrial(null);
+      }
+
       setSubscription(prev => ({
-        ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0 }),
-        apiKey:     (provData.hasPaid ? provData.apiKey : "") as string ?? "",
-        plan:       provData.plan as string ?? "starter",
-        quotaBonus: provData.quotaBonus as number ?? prev?.quotaBonus ?? 0,
-        paidAt:     provData.paidAt as string ?? prev?.paidAt ?? "",
-        amountUSD:  prev?.amountUSD ?? 0,
+        ...(prev ?? { paidAt: "", plan: "starter", amountUSD: 0, apiKey: "" }),
+        // Paid live key — only present when amountUSD > 0. Trial keys live
+        // in trialApiKey/trialSandboxApiKey so the two scopes don't collide.
+        apiKey:            (provData.hasPaid ? provData.apiKey : "") as string ?? "",
+        sandboxApiKey:     (provData.sandboxApiKey as string) ?? prev?.sandboxApiKey,
+        trialApiKey:       (provData.trialApiKey as string | null) ?? undefined,
+        trialSandboxApiKey:(provData.trialSandboxApiKey as string | null) ?? undefined,
+        isTrialActive:     provData.isTrialActive === true,
+        plan:              provData.plan as string ?? "starter",
+        quotaBonus:        provData.quotaBonus as number ?? prev?.quotaBonus ?? 0,
+        paidAt:            provData.paidAt as string ?? prev?.paidAt ?? "",
+        amountUSD:         prev?.amountUSD ?? 0,
       }));
 
       // Fetch subscription expiry & status
@@ -534,11 +804,24 @@ export default function DashboardPage() {
     }
 
     provision();
+  // emailSession + authChecked are read inside the Phase 1 wallet-match
+  // gate above — include them in the deps so a late session resolution
+  // re-evaluates whether this address should still be provisioned.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address]);
+  }, [address, authChecked, emailSession]);
 
   useEffect(() => {
     if (!address) return;
+    if (!authChecked) return; // same race-avoidance as provision useEffect
+    // Same Phase 1 gate as provision — don't pull tx history for a wallet
+    // that isn't the canonical bound wallet for this email session.
+    if (
+      emailSession &&
+      emailSession.address &&
+      address.toLowerCase() !== emailSession.address.toLowerCase()
+    ) {
+      return;
+    }
     const addr = address;
     async function fetchTxs() {
       const auth = await getAuthCreds(addr, signMessage);
@@ -552,7 +835,7 @@ export default function DashboardPage() {
     }
     fetchTxs().catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, subscription]);
+  }, [address, subscription, authChecked, emailSession]);
 
   useEffect(() => {
     setTankLoading(true);
@@ -573,17 +856,428 @@ export default function DashboardPage() {
     }).catch(() => {});
   }, [address, refreshUserBalance]);
 
-  if (!mounted || !isConnected || !address) return null;
+  // ── Phase 1 identity-model early returns ──────────────────────────────
+  // The 4-state machine routes the user before any multichain data is
+  // fetched. See docs/sprint-bnb-focus.md §10 for the full table; the two
+  // branches below cover the cases where an email session + browser-
+  // connected wallet exist together but in a state that must NOT render
+  // the regular dashboard:
+  //
+  //   State D — wallet connected, session not yet claimed by any wallet
+  //             → ClaimWalletPrompt (signed bind via /api/auth/wallet-bind)
+  //   State G — session bound to wallet X, browser connected to wallet Y
+  //             → WrongWalletHardBlock (no data fetched from Y)
+  //
+  // skipClaimPrompt is a session-scoped escape hatch for State D only.
+  const walletMatches =
+    !!emailSession?.address &&
+    !!address &&
+    address.toLowerCase() === emailSession.address.toLowerCase();
 
-  const isGated = hasPaid === false && !isOwner;
+  // Lazy sign-out closure shared by the State D / State G screens — same
+  // semantics as the main dashboard's handleSignOut (defined later in
+  // render scope, so we inline it here).
+  async function earlyReturnSignOut() {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+    if (isConnected) {
+      try { disconnect(); } catch { /* best-effort */ }
+    }
+    if (typeof window !== "undefined") window.location.reload();
+  }
 
-  const API_KEY = subscription?.apiKey ?? "—";
+  // State D — email signed in, wallet connected, session has NEVER been
+  // claimed. Require explicit signed bind before any multichain data
+  // fetch. Skippable per-session via the prompt's own button.
+  if (
+    mounted &&
+    authChecked &&
+    emailSession &&
+    isConnected &&
+    address &&
+    !emailSession.address &&
+    !skipClaimPrompt
+  ) {
+    return (
+      <ClaimWalletPrompt
+        email={emailSession.email}
+        connectedAddress={address}
+        onBound={(boundAddr) => {
+          // Local optimistic update — server already persisted via the
+          // /api/auth/wallet-bind call inside ClaimWalletPrompt.
+          setEmailSession(prev => prev ? { ...prev, address: boundAddr } : prev);
+        }}
+        onSkip={() => setSkipClaimPrompt(true)}
+        onSignOut={earlyReturnSignOut}
+      />
+    );
+  }
+
+  // State G — email signed in, wallet connected, session is bound but the
+  // connected wallet doesn't match. Full-screen non-dismissable block, NO
+  // multichain data fetch (the provision useEffect's address dep would
+  // otherwise pull the wrong wallet's subscription). The wallet match
+  // gate inside that useEffect (added below) is the belt-and-suspenders
+  // — this early return is the actual UX.
+  if (
+    mounted &&
+    authChecked &&
+    emailSession &&
+    isConnected &&
+    address &&
+    emailSession.address &&
+    !walletMatches
+  ) {
+    return (
+      <WrongWalletHardBlock
+        email={emailSession.email}
+        boundAddress={emailSession.address}
+        connectedAddress={address}
+        onSignOut={earlyReturnSignOut}
+      />
+    );
+  }
+
+  // Email-only view: user signed in via Google / magic-link.
+  //   - !isConnected → pure email-only (the "API key fast path" landing)
+  //   - skipClaimPrompt && !emailSession.address && isConnected → user
+  //     deferred binding from State D; treat them as effectively email-
+  //     only and route back to this simpler page rather than the full
+  //     multichain dashboard chrome. They can re-trigger State D from
+  //     the in-page "Bind ..." button by clearing the skip flag.
+  if (
+    mounted &&
+    emailSession &&
+    (!isConnected || (skipClaimPrompt && !emailSession.address))
+  ) {
+    const trialDaysLeft = sessionTrial.trialExpiresAt
+      ? Math.max(0, Math.ceil((new Date(sessionTrial.trialExpiresAt).getTime() - Date.now()) / 86_400_000))
+      : null;
+    const creditsPct = Math.min(100, Math.max(0, Math.round((sessionTrial.credits / Math.max(1, sessionTrial.totalCredits)) * 100)));
+
+    return (
+      <div className="min-h-screen text-white px-6 py-12" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <Link href="/" className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
+                <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
+              </span>
+              <span className="text-yellow font-bold text-base tracking-tight leading-none">Q402</span>
+            </Link>
+            <div className="flex items-center gap-3 text-xs text-white/45">
+              <span>{emailSession.email}</span>
+              <button
+                onClick={async () => {
+                  await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+                  router.push("/");
+                }}
+                className="text-white/35 hover:text-white transition-colors"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+
+          {/* Trial / Multichain toggle — even though this user has no wallet
+              yet, surface the same toggle as the regular dashboard so they
+              know where the original Multichain view lives. Clicking
+              "Multichain" prompts for wallet connect (since multichain data
+              requires an on-chain signer). */}
+          <div className="mb-8 inline-flex items-center gap-1 bg-white/4 border border-white/10 rounded-full p-1">
+            <button
+              disabled
+              className="px-5 py-2 rounded-full text-xs font-bold bg-yellow text-navy shadow-lg shadow-yellow/15 cursor-default"
+            >
+              ✦ Free Trial
+            </button>
+            <button
+              onClick={() => setShowWalletConnectFromEmail(true)}
+              className="px-5 py-2 rounded-full text-xs font-bold text-white/45 hover:text-white transition-all"
+              title="Connect a wallet to view the original Multichain dashboard"
+            >
+              Multichain →
+            </button>
+          </div>
+
+          <h1 className="text-2xl font-bold mb-1">Welcome, {emailSession.email.split("@")[0]}</h1>
+          <p className="text-white/45 text-sm mb-8">
+            Your free trial is active. 2,000 sponsored TX on BNB Chain, Q402 covers the gas.
+            Use the live key from your backend; connect a wallet only when an end user signs an EIP-712.
+          </p>
+
+          {/* Trial summary card — sponsored TX gauge + days left + chain badge */}
+          <div className="rounded-2xl border border-yellow/25 p-6 mb-6"
+               style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(74,222,128,0.04) 100%)" }}>
+            <div className="flex items-baseline justify-between mb-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-widest text-yellow font-bold mb-1">Sponsored TX</div>
+                <div className="text-3xl font-display font-extrabold text-yellow leading-none">
+                  {sessionTrial.credits.toLocaleString()}
+                  <span className="text-white/30 text-base ml-1">/ {sessionTrial.totalCredits.toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-widest text-white/35 font-bold mb-1">Trial ends in</div>
+                <div className="text-2xl font-display font-extrabold text-white leading-none">
+                  {trialDaysLeft !== null ? `${trialDaysLeft}d` : "—"}
+                </div>
+              </div>
+            </div>
+            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden mb-3">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${creditsPct}%`,
+                  background: "linear-gradient(90deg, #F5C518, #4ade80)",
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2 text-[11px] text-white/45">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
+                Active
+              </span>
+              <span className="text-white/20">·</span>
+              <span>BNB Chain · USDC + USDT</span>
+              <span className="text-white/20">·</span>
+              <span>Q402 covers gas</span>
+            </div>
+          </div>
+
+          {/* Live API key — primary, the key they came for */}
+          <div className="rounded-2xl border border-white/10 p-6 mb-4" style={{ background: "rgba(255,255,255,0.03)" }}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10px] uppercase tracking-widest text-white/45 font-semibold">Live API key</div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-yellow bg-yellow/15 border border-yellow/40 rounded-sm px-1.5 py-0.5">
+                BNB only
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <code className="flex-1 font-mono text-sm text-yellow break-all">
+                {sessionTrial.apiKey || "—"}
+              </code>
+              <button
+                onClick={() => {
+                  if (!sessionTrial.apiKey) return;
+                  navigator.clipboard.writeText(sessionTrial.apiKey);
+                  setSessionLiveCopied(true);
+                  setTimeout(() => setSessionLiveCopied(false), 2000);
+                }}
+                disabled={!sessionTrial.apiKey}
+                className="text-xs px-3 py-1.5 rounded-md bg-white/5 hover:bg-yellow/15 hover:text-yellow text-white/60 transition-colors disabled:opacity-40"
+              >
+                {sessionLiveCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <p className="text-white/30 text-xs mt-3">
+              Use with the SDK on <code className="text-white/55">chain: &quot;bnb&quot;</code>, token{" "}
+              <code className="text-white/55">&quot;USDC&quot;</code> or <code className="text-white/55">&quot;USDT&quot;</code>.
+              Each relay consumes one sponsored TX credit.
+            </p>
+          </div>
+
+          {/* Sandbox API key — secondary */}
+          <div className="rounded-2xl border border-white/8 p-6 mb-6" style={{ background: "rgba(255,255,255,0.02)" }}>
+            <div className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-2">Sandbox API key</div>
+            <div className="flex items-center gap-3">
+              <code className="flex-1 font-mono text-sm text-white/70 break-all">
+                {sessionTrial.sandboxApiKey || "—"}
+              </code>
+              <button
+                onClick={() => {
+                  if (!sessionTrial.sandboxApiKey) return;
+                  navigator.clipboard.writeText(sessionTrial.sandboxApiKey);
+                  setSessionSandboxCopied(true);
+                  setTimeout(() => setSessionSandboxCopied(false), 2000);
+                }}
+                disabled={!sessionTrial.sandboxApiKey}
+                className="text-xs px-3 py-1.5 rounded-md bg-white/5 hover:bg-yellow/15 hover:text-yellow text-white/60 transition-colors disabled:opacity-40"
+              >
+                {sessionSandboxCopied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <p className="text-white/30 text-xs mt-3">
+              Mock-response key for integration testing — no real TX, no credits burned.
+            </p>
+          </div>
+
+          {/* Wallet-bind nudge — three modes:
+              (a) bound:            reconnect-for-multichain CTA
+              (b) skip-mode:        wallet already connected but user
+                                    deferred binding in State D. Show
+                                    "Resume claim" instead of "Connect".
+              (c) pure email-only:  no wallet connected yet
+              Mode (b) is reached via the email-only branch's extended
+              condition above (skipClaimPrompt && !emailSession.address). */}
+          {emailSession.address ? (
+            <div className="rounded-2xl border border-yellow/25 p-6 mb-6"
+                 style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(255,255,255,0.02) 100%)" }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] uppercase tracking-widest text-yellow font-bold">Wallet bound</span>
+                <span className="font-mono text-[11px] text-white/55">
+                  {emailSession.address.slice(0, 6)}…{emailSession.address.slice(-4)}
+                </span>
+              </div>
+              <h2 className="text-base font-bold mb-2">Welcome back — reconnect for the full dashboard</h2>
+              <p className="text-white/45 text-sm mb-4">
+                Your wallet is already paired with this email account. Reconnect it
+                in this browser to unlock the Multichain dashboard (gas tank, paid
+                plans, transaction history across all 7 chains).
+              </p>
+              <button
+                onClick={() => setShowWalletConnectFromEmail(true)}
+                className="inline-block bg-yellow text-navy font-bold text-sm px-6 py-2.5 rounded-full hover:bg-yellow-hover transition-colors"
+              >
+                Reconnect wallet →
+              </button>
+            </div>
+          ) : isConnected && address ? (
+            <div className="rounded-2xl border border-yellow/20 p-6 mb-6"
+                 style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.04) 0%, rgba(255,255,255,0.02) 100%)" }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-[10px] uppercase tracking-widest text-yellow font-bold">Skip mode — trial only</span>
+              </div>
+              <h2 className="text-base font-bold mb-2">Resume claiming this account?</h2>
+              <p className="text-white/45 text-sm mb-4">
+                You deferred binding <span className="font-mono text-white/75">{address.slice(0, 6)}…{address.slice(-4)}</span> to
+                this account. Trial credits + API keys above are live — but
+                Multichain stays locked until you bind a wallet. Claim now to
+                unlock it.
+              </p>
+              <button
+                onClick={() => setSkipClaimPrompt(false)}
+                className="inline-block bg-yellow text-navy font-bold text-sm px-6 py-2.5 rounded-full hover:bg-yellow-hover transition-colors"
+              >
+                Bind {address.slice(0, 6)}…{address.slice(-4)} permanently →
+              </button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/8 p-6 mb-6" style={{ background: "rgba(255,255,255,0.02)" }}>
+              <h2 className="text-base font-bold mb-2">Need to test the full flow yourself?</h2>
+              <p className="text-white/45 text-sm mb-4">
+                Connect a wallet to sign EIP-712 from this browser. We&apos;ll bind it
+                to this email account so you keep one identity going forward — trial
+                credits + keys stay attached, and you&apos;ll land on the Multichain
+                dashboard on next sign-in.
+              </p>
+              <button
+                onClick={() => setShowWalletConnectFromEmail(true)}
+                className="inline-block bg-white/5 border border-white/15 text-white font-semibold text-sm px-6 py-2.5 rounded-full hover:bg-white/10 transition-colors"
+              >
+                Connect wallet →
+              </button>
+            </div>
+          )}
+
+          <div className="text-white/35 text-xs">
+            Docs: <Link href="/docs" className="hover:text-white/60 underline-offset-2 hover:underline">/docs</Link>{" · "}
+            Claude MCP: <Link href="/claude" className="hover:text-white/60 underline-offset-2 hover:underline">/claude</Link>
+          </div>
+        </div>
+
+        {showWalletConnectFromEmail && (
+          <WalletModal onClose={() => setShowWalletConnectFromEmail(false)} />
+        )}
+      </div>
+    );
+  }
+
+  // Hold rendering until both (a) the mount tick has completed AND (b) the
+  // auth check has resolved — otherwise an email-signed-in user momentarily
+  // sees a blank page on /dashboard, which reads as "I got bounced back to
+  // the landing". Once auth is checked, the email-only branch above renders
+  // first; only after that do we know we genuinely need a wallet.
+  if (!mounted || !authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white/40 text-sm" style={{ background: "#0B1220" }}>
+        Loading dashboard…
+      </div>
+    );
+  }
+  if (!isConnected || !address) return null;
+
+  // API key + credits are SCOPED to the active view, and trial vs paid keys
+  // live in SEPARATE subscription slots so the scopes never collide:
+  //   - Trial view  → email pseudo's trialApiKey (when emailSession exists —
+  //     that's the canonical trial), else the wallet sub's own trialApiKey.
+  //     A paying user mid-trial sees their trial key in this view AND a
+  //     separate paid key in the Multichain view.
+  //   - Multichain  → wallet sub's apiKey, only when amountUSD > 0. Trial-
+  //     only users see the Locked placeholder (handled in the API Key card)
+  //     until they upgrade.
+  const walletApiKey = subscription?.apiKey ?? "";
+  const walletTrialApiKey = subscription?.trialApiKey ?? "";
+  const walletCredits = subscription?.quotaBonus ?? 0;
+  const isTrialOnlySub = subscription?.plan === "trial";
+  const hasEmailTrial = !!emailSession && !!sessionTrial.apiKey;
+  // A paid wallet's credit counter (`quota:{addr}`) is unified per address
+  // and rolls forward across plan changes — a user who used part of their
+  // trial and then paid sees ONE remaining count that mixes both sources.
+  // For surface accounting (Trial view vs Multichain view), only show
+  // trial credits when the account is verifiably ON a trial right now:
+  // either the email pseudo has an active trial key (hasEmailTrial), the
+  // wallet sub's current plan is "trial" (isTrialOnlySub), OR the
+  // wallet's read-side bridge to a bound email pseudo carries trial
+  // data (boundEmailTrial — covers the wallet-only login of a bound
+  // user). Otherwise the credits belong to the paid scope and surface
+  // in Multichain.
+  const trialApiKey = hasEmailTrial
+    ? (sessionTrial.apiKey ?? "")
+    : (walletTrialApiKey || (isTrialOnlySub ? walletApiKey : "") || (boundEmailTrial?.apiKey ?? ""));
+  const trialCredits = hasEmailTrial
+    ? sessionTrial.credits
+    : (isTrialOnlySub ? walletCredits : (boundEmailTrial?.credits ?? 0));
+  // Multichain side: only render real values for paying users (amountUSD > 0
+  // AND non-trial plan). The Locked placeholder is rendered inside the card
+  // itself when this is false — the card shell still mounts.
+  const showPaidScope = !trialViewActive && !isTrialOnlySub && (subscription?.amountUSD ?? 0) > 0;
+  const API_KEY = trialViewActive
+    ? (trialApiKey || "—")
+    : (showPaidScope ? walletApiKey : "—");
+
+  // Per-view key sets — used to filter the Transactions tab so the user sees
+  // only the history that matches their current scope (trial vs paid). Built
+  // here once so the table render doesn't recompute on each row.
+  const trialKeySet = new Set<string>(
+    [
+      subscription?.trialApiKey,
+      subscription?.trialSandboxApiKey,
+      // Pre-migration: trial activations wrote into apiKey/sandboxApiKey when
+      // plan==="trial". Include those so legacy trial history still shows up.
+      isTrialOnlySub ? subscription?.apiKey : null,
+      isTrialOnlySub ? subscription?.sandboxApiKey : null,
+      hasEmailTrial ? sessionTrial.apiKey : null,
+      hasEmailTrial ? sessionTrial.sandboxApiKey : null,
+      // Bound-email bridge: include the pseudo's keys so wallet-only
+      // logins see the trial history that was generated under the
+      // bridged email pseudo.
+      boundEmailTrial?.apiKey ?? null,
+      boundEmailTrial?.sandboxApiKey ?? null,
+    ].filter((k): k is string => typeof k === "string" && k.length > 0),
+  );
+  const paidKeySet = new Set<string>(
+    [
+      showPaidScope ? subscription?.apiKey : null,
+      showPaidScope ? subscription?.sandboxApiKey : null,
+    ].filter((k): k is string => typeof k === "string" && k.length > 0),
+  );
+  const scopedTxs = trialViewActive
+    ? relayedTxs.filter(tx => trialKeySet.has(tx.apiKey))
+    : relayedTxs.filter(tx => paidKeySet.has(tx.apiKey));
   const plan = subscription?.plan ?? "starter";
+
+  // View mode — top-level toggle between Free-trial flavoring and the
+  // original Multichain dashboard. State lives on a query param so a
+  // refresh / share-link keeps the user in the same view.
+  const viewMode: "trial" | "multichain" = trialViewActive ? "trial" : "multichain";
   // Internal key "enterprise_flex" is shown to users as just "Enterprise".
   const planDisplayKey = plan === "enterprise_flex" ? "enterprise" : plan;
   const planName = planDisplayKey.charAt(0).toUpperCase() + planDisplayKey.slice(1);
   // TX credits remaining — decrements on each successful relay
-  const remainingCredits = subscription?.quotaBonus ?? 0;
+  // Scoped credits — same source logic as API_KEY.
+  const remainingCredits = trialViewActive
+    ? trialCredits
+    : (showPaidScope ? walletCredits : 0);
   // Use plan base quota as reference for the bar (credits start at plan quota per payment)
   const baseCredits = PLAN_QUOTA[plan.toLowerCase()] ?? 500;
   // pct consumed = how far below base we are (capped 0–100)
@@ -634,6 +1328,7 @@ export default function DashboardPage() {
     const auth = await getAuthCreds(address, signMessage);
     if (!auth) return;
     const { nonce, signature } = auth;
+    setAlertSaving(true);
     try {
       const res = await fetch("/api/usage-alert", {
         method:  "POST",
@@ -645,8 +1340,25 @@ export default function DashboardPage() {
       if (!res.ok || !data.ok) return;
       setAlertEmail(alertEmailInput);
       setEmailSaved(true);
-      setTimeout(() => { setShowEmailSetup(false); setEmailSaved(false); }, 1500);
-    } catch { /* ignore */ }
+      setTimeout(() => { setShowAlertModal(false); setEmailSaved(false); }, 1200);
+    } catch { /* ignore */ } finally { setAlertSaving(false); }
+  }
+
+  async function deleteAlertEmail() {
+    if (!address) return;
+    const auth = await getAuthCreds(address, signMessage);
+    if (!auth) return;
+    const { nonce, signature } = auth;
+    setAlertDeleting(true);
+    try {
+      const qs = new URLSearchParams({ address, nonce, sig: signature }).toString();
+      const res = await fetch(`/api/usage-alert?${qs}`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
+      if (!res.ok) return;
+      setAlertEmail("");
+      setAlertEmailInput("");
+    } catch { /* ignore */ } finally { setAlertDeleting(false); }
   }
 
   async function saveWebhook() {
@@ -681,72 +1393,86 @@ export default function DashboardPage() {
     } catch { setWebhookTestResult({ ok: false, msg: "Network error" }); } finally { setWebhookTesting(false); }
   }
 
-  const tabLabel: Record<Tab, string> = {
-    "overview": "Overview",
-    "gas-tank": "Gas Tank",
-    "developer": "Developer",
-    "transactions": `Transactions${relayedTxs.length > 0 ? ` (${relayedTxs.length})` : ""}`,
-    "claude": "Claude",
-  };
+  // Sidebar handles tab labels + section visibility now; the old top-row
+  // tabLabel map was inlined here for the deleted nav row.
+  const trialCreditsLeft = trialViewActive ? trialCredits : 0;
+  const trialDaysLeftDerived = (() => {
+    // Prefer email-session pseudo expiry (canonical when user signed in
+    // via email), then wallet sub's own trialExpiresAt, then the bridged
+    // pseudo expiry — covers wallet-only logins of bound users.
+    const expiry =
+      sessionTrial.trialExpiresAt
+      ?? subscription?.trialExpiresAt
+      ?? boundEmailTrial?.trialExpiresAt
+      ?? null;
+    if (!expiry) return null;
+    return Math.max(0, Math.ceil((new Date(expiry).getTime() - Date.now()) / 86_400_000));
+  })();
+
+  function handleSignOut() {
+    void (async () => {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+      if (isConnected) {
+        try {
+          disconnect();
+        } catch {
+          /* best-effort */
+        }
+      }
+      if (typeof window !== "undefined") window.location.reload();
+    })();
+  }
 
   return (
-    <div className="min-h-screen text-white" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
-      {/* Paywall gate — shown to connected-but-unpaid users */}
-      {isGated && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
-          style={{ background: "rgba(5,7,10,0.88)", backdropFilter: "blur(14px)" }}>
-          <div className="w-full max-w-sm rounded-2xl border p-8 text-center shadow-2xl shadow-black"
-            style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }}>
-            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-5"
-              style={{ background: "rgba(245,197,24,0.08)", border: "1px solid rgba(245,197,24,0.2)" }}>
-              <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}
-                style={{ color: "#F5C518" }}>
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-            </div>
-            <h2 className="text-lg font-bold mb-2">Activate My Page</h2>
-            <p className="text-white/40 text-sm mb-7 leading-relaxed">
-              My Page is available to active Q402 subscribers.<br />
-              Make a one-time payment to unlock your API key, Gas Tank, and transaction history — or apply for a grant to get access at no cost.
-            </p>
-            <div className="space-y-3">
-              <button
-                onClick={() => router.push("/payment")}
-                className="block w-full bg-yellow text-navy font-bold text-sm py-3.5 rounded-full hover:bg-yellow-hover transition-colors">
-                Activate — from $29 / 30-day access
-              </button>
-              <button
-                onClick={() => router.push("/grant")}
-                className="block w-full border text-sm font-medium py-3.5 rounded-full transition-colors hover:bg-yellow/5"
-                style={{ borderColor: "rgba(245,197,24,0.3)", color: "#F5C518" }}>
-                Apply for a Grant instead
-              </button>
-            </div>
-            <p className="text-white/20 text-xs mt-6">Connected as {shortAddr(address)}</p>
-          </div>
-        </div>
-      )}
+    <div className="min-h-screen text-white flex" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
+      <DashboardSidebar
+        selection={{ view: trialViewActive ? "trial" : "multichain", tab: tab as DashboardTab }}
+        onSelect={({ view, tab: nextTab }) => {
+          setTrialViewActive(view === "trial");
+          setTab(nextTab as Tab);
+        }}
+        identity={{ email: emailSession?.email ?? null, address }}
+        trial={{
+          creditsLeft: trialCreditsLeft,
+          totalCredits: sessionTrial.totalCredits || 2000,
+          daysLeft: trialDaysLeftDerived,
+        }}
+        alertEmail={alertEmail || null}
+        onOpenAlerts={() => {
+          setAlertEmailInput(alertEmail || "");
+          setShowAlertModal(true);
+        }}
+        signOut={handleSignOut}
+      />
+
+      <div className="flex-1 min-w-0">
+      {/* Paywall gate retired — pre-trial era it forced a paid plan or
+          grant before any dashboard pixel rendered. With the Free Trial
+          path live, an unpaid wallet now lands on Trial view with the
+          "Activate Free Trial" CTA, and Multichain view carries the
+          paid + grant entry points. No full-screen modal needed. */}
 
       {depositChain && (
         <DepositModal chain={depositChain.chain} token={depositChain.token} onClose={() => setDepositChain(null)} address={address}
           onDepositVerified={balances => { setUserGasBalance(balances); setDepositChain(null); }} />
       )}
 
-      <header className="border-b px-6 h-16 flex items-center justify-between max-w-7xl mx-auto sticky top-0 z-40 backdrop-blur-md"
+      {/* Compact top bar — sidebar carries logo + sections, so we only need
+          a slim wallet/auth strip here. Hidden on md+ since the sidebar
+          already shows identity; visible on mobile as a fallback. */}
+      <header className="md:hidden border-b px-5 h-14 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md"
         style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(5,7,10,0.85)" }}>
-        <Link href="/" className="flex items-baseline gap-2">
-          <span className="text-yellow font-bold text-base">Q402</span>
-          <span className="text-white/25 text-xs hidden sm:block">Dashboard</span>
+        <Link href="/" className="flex items-center gap-2">
+          <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
+            <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
+          </span>
+          <span className="text-yellow font-bold text-base tracking-tight leading-none">Q402</span>
         </Link>
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:flex items-center gap-2 bg-white/5 border border-white/8 rounded-full px-3 py-1.5">
-            <span className="text-xs text-white/30 font-mono">{shortAddr(address)}</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-          </div>
-          <WalletButton />
-        </div>
+        <WalletButton />
       </header>
+
+      {/* Top trial banner moved into the sidebar (credits gauge + days-left
+          chip). One status surface instead of two stacked. */}
 
       {/* Expiry warning banner — only for paying users */}
       {hasPaid && daysLeft !== null && daysLeft <= 7 && !isExpired && (
@@ -774,20 +1500,33 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-5xl mx-auto px-6 py-8">
+        {/* Title row — view toggle + tab nav now live in the sidebar. The
+            page title doubles as the active view + tab context. */}
         <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold">My Dashboard</h1>
-            <p className="text-white/35 text-sm mt-0.5">Manage your Q402 plan, gas tank, and API access.</p>
+            <h1 className="text-2xl font-bold">
+              {viewMode === "trial" ? "Free Trial" : "My Dashboard"}
+            </h1>
+            <p className="text-white/35 text-sm mt-0.5">
+              {viewMode === "trial"
+                ? "2,000 sponsored TX · BNB Chain only · Q402 covers gas."
+                : "Manage your Q402 plan, gas tank, and API access."}
+            </p>
           </div>
-          <div className="flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-2">
-            <span className="text-yellow font-bold text-sm">{planName} Plan</span>
-            {subscription && subscription.amountUSD > 0 && <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>}
-          </div>
+          {viewMode === "multichain" && subscription && subscription.amountUSD > 0 && (
+            <div className="flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-2">
+              <span className="text-yellow font-bold text-sm">{planName} Plan</span>
+              <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>
+            </div>
+          )}
         </div>
 
-        {/* Expiry banner — only for paying users */}
-        {hasPaid && expiresAt && (
+        {/* Expiry banner — only for genuinely paying users (amountUSD > 0)
+            in Multichain view. Trial-only subs would otherwise show the
+            "Subscription Active · Renews" copy with the trial date, which
+            misreads as a paid subscription. */}
+        {hasPaid && expiresAt && !isTrialOnlySub && !trialViewActive && (subscription?.amountUSD ?? 0) > 0 && (
           <div className={`mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border ${isExpired ? "bg-red-400/8 border-red-400/20" : daysLeft !== null && daysLeft <= 7 ? "bg-yellow/6 border-yellow/20" : "bg-white/4 border-white/8"}`}>
             <div className="flex items-center gap-3">
               <span className={`text-lg ${isExpired ? "text-red-400" : "text-yellow"}`}>{isExpired ? "⚠" : "📅"}</span>
@@ -806,52 +1545,15 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Email alert — saved state (always visible, editable) */}
-        {alertEmail && !showEmailSetup && (
-          <div className="mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-3 border bg-white/4 border-white/10">
-            <div className="flex items-center gap-2 text-sm text-white/40">
-              <span>🔔</span>
-              <span>Usage alerts → <span className="text-white/70">{alertEmail}</span></span>
-            </div>
-            <button
-              onClick={() => { setAlertEmailInput(alertEmail); setShowEmailSetup(true); setAlertEmail(""); }}
-              className="text-xs text-white/30 hover:text-white transition-colors"
-            >
-              Edit
-            </button>
-          </div>
-        )}
+        {/* In-content email-alert banners removed — config moved into the
+            sidebar Account section, which opens the dashboard's alert modal
+            on click. */}
 
-        {/* Email alert setup banner */}
-        {showEmailSetup && !alertEmail && (
-          <div className="mb-6 rounded-2xl px-5 py-4 border bg-white/4 border-white/10">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="flex items-start gap-3">
-                <span className="text-xl mt-0.5">🔔</span>
-                <div>
-                  <p className="font-semibold text-sm text-white">Would you like to receive usage alerts?</p>
-                  <p className="text-white/35 text-xs mt-0.5">We&apos;ll email you when you&apos;re at 20% and 10% of your sponsored TXs remaining.</p>
-                </div>
-              </div>
-              <button onClick={() => setShowEmailSetup(false)} className="text-white/25 hover:text-white text-lg leading-none flex-shrink-0">×</button>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={alertEmailInput}
-                onChange={e => setAlertEmailInput(e.target.value)}
-                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-yellow/40 transition-colors"
-              />
-              <button
-                onClick={saveAlertEmail}
-                className="bg-yellow text-navy font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-yellow-hover transition-all"
-              >
-                {emailSaved ? "Saved ✓" : "Save"}
-              </button>
-            </div>
-          </div>
-        )}
+        {/* The legacy "Different wallet detected" dismissable banner was
+            removed when the Phase 1 identity model landed — mismatched
+            wallets now hit the WrongWalletHardBlock full-screen early
+            return above, which is non-dismissable and prevents any
+            multichain data fetch. See docs/sprint-bnb-focus.md §10. */}
 
         {/* Quota usage warning banner — only for paying users */}
         {hasPaid && subscription && pct >= 80 && (
@@ -872,25 +1574,74 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-white/4 border border-white/7 rounded-2xl p-1 w-fit mb-8 flex-wrap">
-          {TABS.map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-5 py-2 rounded-xl text-sm font-medium transition-all ${tab === t ? "bg-yellow text-navy shadow-lg shadow-yellow/15" : "text-white/40 hover:text-white"}`}>
-              {tabLabel[t]}
-            </button>
-          ))}
-        </div>
+        {/* Tabs moved into the left sidebar — see DashboardSidebar.tsx.
+            Removed here; tab content rendering continues unchanged below. */}
+
+        {/* Trial activation CTA — wallet-only user with no trial yet. Lets
+            them retry the activation flow as many times as needed without
+            depending on the auto-prompt firing exactly once. Skipped when
+            an email session exists (email path already granted the trial)
+            or the wallet already has plan="trial" / paid plan. */}
+        {trialViewActive
+          && isConnected
+          && address
+          && !emailSession
+          && !isTrialOnlySub
+          && hasPaid === false
+          && tab === "overview"
+          && (
+          <div className="mb-6 rounded-2xl border p-6"
+            style={{
+              background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(74,222,128,0.04) 100%)",
+              borderColor: "rgba(245,197,24,0.25)",
+            }}>
+            <div className="flex items-start gap-4 flex-wrap">
+              <div className="flex-1 min-w-[260px]">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
+                  Free trial · BNB Chain
+                </div>
+                <h3 className="text-xl font-bold mb-2">Activate 2,000 sponsored TX</h3>
+                <p className="text-white/50 text-sm leading-relaxed">
+                  One wallet signature (no on-chain TX) and you get a live API
+                  key + 2,000 gasless transactions for {TRIAL_DURATION_DAYS} days. Q402 covers the gas.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  trialPromptedRef.current = false; // allow re-fire
+                  setShowAutoTrial(true);
+                }}
+                className="self-center bg-yellow text-navy font-bold text-sm px-6 py-3 rounded-full hover:bg-yellow-hover transition-colors shadow-lg shadow-yellow/20"
+              >
+                Activate Free Trial →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── OVERVIEW ── */}
         {tab === "overview" && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: "Sponsored TXs Left", value: remainingCredits.toLocaleString(), sub: `${plan} plan` },
-                { label: "Total Relayed",  value: relayedTxs.length.toLocaleString(), sub: "all time" },
-                { label: "My Gas Tank",    value: `$${totalUserUSD.toFixed(2)}`, sub: "deposited balance", accent: true },
-                { label: "Today's Txs",    value: dailyData[13].toLocaleString(), sub: "today", green: true },
+                {
+                  label: "Sponsored TXs Left",
+                  value: remainingCredits.toLocaleString(),
+                  sub:
+                    viewMode === "trial"
+                      ? "trial · BNB only"
+                      : isTrialOnlySub
+                        ? "no paid plan — upgrade"
+                        : `${plan} plan`,
+                },
+                { label: "Total Relayed", value: relayedTxs.length.toLocaleString(), sub: "all time" },
+                // Trial view: no per-user gas tank — Q402 covers it. Multichain
+                // view: surface the deposited balance card so paid users can
+                // top up.
+                viewMode === "trial"
+                  ? { label: "Gas",         value: "Covered",                      sub: "Q402 pays during trial", accent: true }
+                  : { label: "My Gas Tank", value: `$${totalUserUSD.toFixed(2)}`, sub: "deposited balance",       accent: true },
+                { label: "Today's Txs", value: dailyData[13].toLocaleString(), sub: "today", green: true },
               ].map((s, i) => (
                 <div key={i} className="card-glow rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                   <div className="text-white/35 text-xs mb-2">{s.label}</div>
@@ -927,41 +1678,86 @@ export default function DashboardPage() {
                 </div>
               </div>
 
+              {/* API Key card.
+                  - Trial view: only renders when we actually have a trial
+                    key — no point teasing a key the user doesn't yet have.
+                  - Multichain view: ALWAYS renders. When the user has a
+                    paid plan we show the live key + rotate controls; when
+                    they don't, we keep the card shell so the surface still
+                    feels complete, but show a "Locked" badge + a hint
+                    pointing them at the paid product. Trial keys are
+                    intentionally NOT bridged into the multichain card —
+                    paid scope gets its own key (see /api/subscription/
+                    create). */}
+              {(trialViewActive ? !!trialApiKey : true) && (
               <div className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-medium">API Key</span>
-                  <span className={`text-xs px-2.5 py-0.5 rounded-full border ${isExpired ? "text-red-400 bg-red-400/8 border-red-400/20" : "text-green-400 bg-green-400/8 border-green-400/20"}`}>
-                    {isExpired ? "Expired" : "Active"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
-                  <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
-                  {API_KEY !== "—" && (
-                    <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
-                      {keyCopied ? "Copied!" : "Copy"}
-                    </button>
+                  {showPaidScope || trialViewActive ? (
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full border ${
+                      isExpired
+                        ? "text-red-400 bg-red-400/8 border-red-400/20"
+                        : "text-green-400 bg-green-400/8 border-green-400/20"
+                    }`}>
+                      {isExpired ? "Expired" : "Active"}
+                    </span>
+                  ) : (
+                    <span className="text-xs px-2.5 py-0.5 rounded-full border text-white/40 bg-white/[0.04] border-white/10">
+                      Locked
+                    </span>
                   )}
                 </div>
-                {subscription?.paidAt && expiresAt && (
-                  <p className="text-white/20 text-xs mt-2">
-                    Paid {new Date(subscription.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    {" · expires "}{expiresAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </p>
-                )}
-                {!rotateConfirm ? (
-                  <button onClick={() => setRotateConfirm(true)} className="mt-3 text-xs text-white/25 hover:text-red-400 transition-colors">
-                    Rotate Key…
-                  </button>
+                {showPaidScope || trialViewActive ? (
+                  <>
+                    <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
+                      <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
+                      {API_KEY !== "—" && (
+                        <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
+                          {keyCopied ? "Copied!" : "Copy"}
+                        </button>
+                      )}
+                    </div>
+                    {subscription?.paidAt && expiresAt && (
+                      <p className="text-white/20 text-xs mt-2">
+                        Paid {new Date(subscription.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        {" · expires "}{expiresAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </p>
+                    )}
+                    {!rotateConfirm ? (
+                      <button onClick={() => setRotateConfirm(true)} className="mt-3 text-xs text-white/25 hover:text-red-400 transition-colors">
+                        Rotate Key…
+                      </button>
+                    ) : (
+                      <div className="mt-3 flex items-center gap-2 bg-red-400/8 border border-red-400/20 rounded-xl px-3 py-2.5">
+                        <span className="text-xs text-red-400 flex-1">Current key will stop working immediately.</span>
+                        <button onClick={() => setRotateConfirm(false)} className="text-xs text-white/30 hover:text-white px-2">Cancel</button>
+                        <button onClick={rotateKey} disabled={rotatingKey} className="text-xs font-bold text-red-400 hover:text-red-300 px-2 disabled:opacity-50">
+                          {rotatingKey ? "Rotating…" : "Confirm"}
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <div className="mt-3 flex items-center gap-2 bg-red-400/8 border border-red-400/20 rounded-xl px-3 py-2.5">
-                    <span className="text-xs text-red-400 flex-1">Current key will stop working immediately.</span>
-                    <button onClick={() => setRotateConfirm(false)} className="text-xs text-white/30 hover:text-white px-2">Cancel</button>
-                    <button onClick={rotateKey} disabled={rotatingKey} className="text-xs font-bold text-red-400 hover:text-red-300 px-2 disabled:opacity-50">
-                      {rotatingKey ? "Rotating…" : "Confirm"}
-                    </button>
-                  </div>
+                  <>
+                    <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
+                      <span className="font-mono text-xs text-white/25 truncate flex-1 select-none">
+                        ••••••••••••••••••••••••••••
+                      </span>
+                      <span className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg text-white/35">🔒</span>
+                    </div>
+                    <p className="text-white/35 text-xs mt-2 leading-relaxed">
+                      Multichain keys unlock with a paid plan — full 7-chain
+                      relay (Avalanche · BNB · Ethereum · X Layer · Stable ·
+                      Mantle · Injective).
+                    </p>
+                    <Link href="/#pricing" className="mt-3 inline-flex items-center gap-1.5 text-xs text-yellow hover:text-yellow/80 transition-colors font-semibold">
+                      View pricing
+                      <span aria-hidden>→</span>
+                    </Link>
+                  </>
                 )}
               </div>
+              )}
             </div>
           </motion.div>
         )}
@@ -1143,7 +1939,7 @@ export default function DashboardPage() {
                 <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest mb-4">API Playground</h3>
                 <div className="rounded-2xl border p-6" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
                   <p className="text-white/40 text-sm mb-5">Test a simulated transaction using your API key.</p>
-                  <Playground apiKey={API_KEY} />
+                  <Playground apiKey={API_KEY} trialView={viewMode === "trial"} />
                 </div>
               </div>
             </div>
@@ -1154,9 +1950,24 @@ export default function DashboardPage() {
         {tab === "transactions" && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <div className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-              <div className="px-6 py-4 border-b flex items-center justify-between" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-                <span className="font-semibold">Relayed Transaction History</span>
-                <span className="text-white/25 text-xs">{relayedTxs.length} total · {remainingCredits.toLocaleString()} TXs left</span>
+              <div className="px-6 py-4 border-b flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Relayed Transaction History</span>
+                  {/* Scope chip — makes the trial/paid split visible so the user
+                      doesn't think "where did my multichain TXs go" after
+                      flipping to Trial view. Filters are keyed on the API
+                      key used at relay time. */}
+                  <span className={`text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border ${
+                    trialViewActive
+                      ? "text-yellow bg-yellow/8 border-yellow/20"
+                      : "text-white/55 bg-white/[0.04] border-white/10"
+                  }`}>
+                    {trialViewActive ? "Trial scope" : "Multichain scope"}
+                  </span>
+                </div>
+                <span className="text-white/25 text-xs">
+                  {scopedTxs.length} in view · {remainingCredits.toLocaleString()} TXs left
+                </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px]">
@@ -1168,9 +1979,15 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {relayedTxs.length === 0 ? (
-                      <tr><td colSpan={7} className="px-6 py-12 text-center text-white/25 text-sm">No transactions yet</td></tr>
-                    ) : [...relayedTxs].reverse().map((tx, i) => {
+                    {scopedTxs.length === 0 ? (
+                      <tr><td colSpan={7} className="px-6 py-12 text-center text-white/25 text-sm">
+                        {relayedTxs.length === 0
+                          ? "No transactions yet"
+                          : trialViewActive
+                            ? "No trial transactions yet — Multichain history lives in the Multichain view."
+                            : "No multichain transactions yet — Trial history lives in the Free Trial view."}
+                      </td></tr>
+                    ) : [...scopedTxs].reverse().map((tx, i) => {
                       const meta = CHAIN_META[tx.chain];
                       return (
                         <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
@@ -1233,7 +2050,7 @@ export default function DashboardPage() {
                 What ships in the package
               </div>
               <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
-                <li>• <code className="text-yellow text-xs">q402_quote</code> — compare gas across all 7 chains. Read-only, no auth.</li>
+                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 7 chains."} Read-only, no auth.</li>
                 <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
                 <li>• <code className="text-yellow text-xs">q402_pay</code> — send a gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
               </ul>
@@ -1248,6 +2065,97 @@ export default function DashboardPage() {
             </div>
           </motion.div>
         )}
+      </div>
+
+      {showAutoTrial && (
+        <TrialActivationModal
+          onClose={() => {
+            setShowAutoTrial(false);
+            // Re-fetch the subscription so the dashboard reflects the new
+            // 2k credits + plan=trial state without a full page reload.
+            if (typeof window !== "undefined") window.location.reload();
+          }}
+        />
+      )}
+
+      {/* Email Alert config modal — opened from the sidebar's Account
+          section. Wraps the existing /api/usage-alert flow (POST to set,
+          DELETE to remove). Only callable when a wallet is connected since
+          the endpoint requires nonce+signature auth from a real EOA. */}
+      {showAlertModal && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center px-4"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
+          onClick={() => setShowAlertModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-white/8 p-7 relative"
+            style={{ background: "linear-gradient(180deg, #0F1626 0%, #080E1C 100%)", boxShadow: "0 30px 80px rgba(0,0,0,0.6)" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowAlertModal(false)}
+              className="absolute top-4 right-4 text-white/40 hover:text-white/80 text-lg"
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xl">🔔</span>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold">
+                Email alerts
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Usage notifications</h2>
+            <p className="text-white/45 text-sm mb-5">
+              We&apos;ll email you when your sponsored TX balance drops to 20%
+              and then 10% — so you can top up before relay stalls.
+            </p>
+
+            {!address && (
+              <p className="text-red-400 text-xs mb-4">
+                Connect a wallet to configure email alerts (the endpoint
+                requires a wallet signature).
+              </p>
+            )}
+
+            <label className="block text-[11px] uppercase tracking-widest text-white/35 font-semibold mb-2">
+              Send alerts to
+            </label>
+            <input
+              type="email"
+              value={alertEmailInput}
+              onChange={e => setAlertEmailInput(e.target.value)}
+              placeholder="you@company.com"
+              className="w-full bg-white/5 border border-white/8 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-yellow/40 placeholder-white/20 mb-5"
+            />
+
+            <div className="flex flex-wrap gap-2">
+              {alertEmail && (
+                <button
+                  onClick={deleteAlertEmail}
+                  disabled={alertDeleting || !address}
+                  className="bg-red-400/8 border border-red-400/20 text-red-400 text-sm py-3 px-5 rounded-full hover:bg-red-400/15 transition-colors disabled:opacity-50"
+                >
+                  {alertDeleting ? "Removing…" : "Remove"}
+                </button>
+              )}
+              <button
+                onClick={saveAlertEmail}
+                disabled={alertSaving || !address || !alertEmailInput}
+                className="flex-1 bg-yellow text-navy font-bold text-sm py-3 rounded-full hover:bg-yellow-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {alertSaving ? "Saving…" : emailSaved ? "Saved ✓" : alertEmail ? "Update" : "Save"}
+              </button>
+            </div>
+
+            <p className="text-white/30 text-[11px] mt-4 leading-relaxed">
+              Hysteresis: each threshold fires once per top-up window. After
+              you top up, the next 20% / 10% crossing re-arms automatically.
+            </p>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
