@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * TrialActivationModal — entry point for the BNB-focus sprint's free trial.
+ * TrialActivationModal — entry point for the Free Trial program (BNB-only,
+ * 2,000 sponsored TX, 30-day window).
  *
  * Three states by step:
  *   1. wallet picker          (no connected wallet)
