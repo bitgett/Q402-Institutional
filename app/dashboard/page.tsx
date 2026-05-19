@@ -301,9 +301,9 @@ function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean 
   //   - Injective: USDT only (Circle CCTP native USDC announced for Q2 2026)
   //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18)
   //   - Others:    USDC / USDT
-  // BNB-focus sprint collapses every chain except bnb to []; the playground
-  // hides them in the picker below, so this branch only matters once the flag
-  // flips back.
+  // BNB_FOCUS_MODE (emergency flag, currently false) would collapse every
+  // chain except bnb to []; the playground hides them in the picker below
+  // so this branch matters whenever the flag is back to false (the default).
   const availableTokens: ("USDC" | "USDT" | "RLUSD")[] = trialView
     ? ["USDC", "USDT"]
     : chain === "injective" ? ["USDT"]
