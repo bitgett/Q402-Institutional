@@ -119,6 +119,25 @@ describe("activate routes — write to the matching pool", () => {
     );
   });
 
+  it("payment/activate promotes legacy trial key from apiKey slot to trialApiKey slot", () => {
+    // Pre-Phase-1 trial accounts stored the trial key in `apiKey` (no
+    // `trialApiKey` field existed). If payment/activate didn't move it to
+    // the trialApiKey slot, the paid activation would (a) reuse the trial
+    // key as the paid live key and (b) flip its plan attribute from "trial"
+    // to the paid tier via updateApiKeyPlan — orphaning the trial pool
+    // credits because no key in the user's possession would have
+    // plan==="trial" to spend them.
+    //
+    // The promotion runs when `hasLegacyTrialKey && existing.apiKey` and
+    // moves apiKey → trialApiKey (plus sandbox), clears apiKey so a fresh
+    // paid key gets generated downstream. Pin the shape so a future
+    // refactor can't quietly drop the migration step.
+    expect(paymentActivateSource).toMatch(/hasLegacyTrialKey\s*&&\s*existing\.apiKey/);
+    expect(paymentActivateSource).toMatch(/existing\.trialApiKey\s*=\s*existing\.apiKey/);
+    expect(paymentActivateSource).toMatch(/existing\.trialSandboxApiKey\s*=\s*existing\.sandboxApiKey/);
+    expect(paymentActivateSource).toMatch(/existing\.apiKey\s*=\s*""/);
+  });
+
   it("email/callback grants pseudo-trial into the trial pool", () => {
     expect(emailCallbackSource).toMatch(
       /addScopedCredits\(\s*pseudoAddr,\s*["']trial["'],\s*TRIAL_CREDITS\s*\)/,

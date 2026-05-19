@@ -175,8 +175,38 @@ describe("refundScopedCredit — only touches the scope it was called with", () 
 });
 
 describe("seedFromLegacy — safety net routing", () => {
-  it("returns 0 when there's no legacy key", async () => {
+  it("returns 0 when there's no legacy key AND no subscription mirror", async () => {
+    // Pristine address — neither legacy quota nor mirror credits exist.
     expect(await seedFromLegacy(ADDR, "trial")).toBe(0);
+    expect(await seedFromLegacy(ADDR, "paid")).toBe(0);
+  });
+
+  it("falls back to subscription mirror when no legacy quota exists (orphan-mirror)", async () => {
+    // Edge case the reviewer caught: an account has `trialQuotaBonus` /
+    // `paidQuotaBonus` set on the subscription (the cached display values)
+    // but no `quota:{addr}` legacy key (evicted, cleaned up, never seeded).
+    // Without the mirror fallback, mutation paths (`decrementScopedCredit`,
+    // `addScopedCredits`) seeded from 0 even though `getScopedCredits`
+    // returned the mirror value — UI showed credits, the next relay 429'd
+    // with "no credits". Mirror seed keeps mutation in sync with reads.
+    store.set(`sub:${ADDR}`, {
+      paidAt: "", apiKey: "", plan: "starter", txHash: "", amountUSD: 0,
+      trialQuotaBonus: 100,
+      paidQuotaBonus:  50,
+    });
+
+    expect(await seedFromLegacy(ADDR, "trial")).toBe(100);
+    expect(await seedFromLegacy(ADDR, "paid")).toBe(50);
+  });
+
+  it("mirror fallback respects opposite scope (trial mirror does not leak to paid seed)", async () => {
+    store.set(`sub:${ADDR}`, {
+      paidAt: "", apiKey: "", plan: "trial", txHash: "", amountUSD: 0,
+      trialQuotaBonus: 1500,
+      // No paidQuotaBonus
+    });
+
+    expect(await seedFromLegacy(ADDR, "trial")).toBe(1500);
     expect(await seedFromLegacy(ADDR, "paid")).toBe(0);
   });
 
