@@ -50,6 +50,10 @@ const transferSponsoredV2Source = readFileSync(
   resolve(REPO_ROOT, "scripts", "transfer-sponsored-v2.mjs"),
   "utf8",
 );
+const adminGrantSource = readFileSync(
+  resolve(REPO_ROOT, "scripts", "admin-grant.mjs"),
+  "utf8",
+);
 
 // ── In-memory KV (shared shape with credit-pool-isolation.test.ts) ───────────
 const store = new Map<string, unknown>();
@@ -191,6 +195,37 @@ describe("hasMultichainScope — access axis predicate", () => {
       paidQuotaBonus: undefined,
       quotaBonus: 2000,
       trialExpiresAt: "2026-06-18T17:14:23.134Z",
+    };
+    expect(hasMultichainScope(sub)).toBe(false);
+  });
+
+  it("legacy sponsored shape: plan='sponsored' + apiKey, amountUSD=0, paidAt='' → true", () => {
+    // Mirror of the production sponsored orphan (0xfe7b…) BEFORE its
+    // manual amountUSD=1 nudge. seedFromLegacy admits this as a paid
+    // signal; hasMultichainScope must agree or the dashboard renders
+    // the Multichain card as Locked while reads succeed — the exact
+    // conflation the access/money split is meant to eliminate.
+    const sub: Subscription = {
+      apiKey: "q402_live_sponsoredkey",
+      sandboxApiKey: "q402_test_sponsoredsbox",
+      plan: "sponsored",
+      paidAt: "",
+      amountUSD: 0,
+      txHash: "provisioned",
+      quotaBonus: 50000,
+    };
+    expect(hasMultichainScope(sub)).toBe(true);
+    // The cash predicate stays strict — sponsored is access, not cash.
+    expect(isCashPaidSubscription(sub)).toBe(false);
+  });
+
+  it("sponsored without apiKey → false (malformed sub stays locked)", () => {
+    const sub: Subscription = {
+      apiKey: "",
+      plan: "sponsored",
+      paidAt: "",
+      amountUSD: 0,
+      txHash: "",
     };
     expect(hasMultichainScope(sub)).toBe(false);
   });
@@ -503,6 +538,48 @@ describe("scan-clobbered-grants source guards", () => {
     );
     expect(matches).toBeTruthy();
     expect(matches!.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("admin-grant.mjs seed-first parity", () => {
+  // The production helper app/lib/db.ts:addScopedCredits seeds the scoped
+  // pool from any legacy quota:{addr} balance BEFORE adding the new
+  // grant. Without parity in the script, an admin-grant against a
+  // legacy sponsored wallet would silently drop the legacy 50k. These
+  // guards lock the behaviour at source-grep level so a future
+  // refactor cannot quietly remove the seed call.
+
+  it("imports the legacy quota key helper", () => {
+    // Inline mirror needs the legacyQuotaKey accessor to read the
+    // legacy single-pool value before computing the seed amount.
+    expect(adminGrantSource).toMatch(/legacyQuotaKey\s*=\s*\(addr\)\s*=>/);
+    expect(adminGrantSource).toMatch(/`quota:\$\{addr\.toLowerCase\(\)\}`/);
+  });
+
+  it("defines inlineSeedFromLegacy with the sponsored paid signal", () => {
+    // Sync requirement: matches the structured branches added to
+    // app/lib/db.ts seedFromLegacy in this PR (cash-paid + sponsored).
+    const fn = adminGrantSource.match(
+      /async function inlineSeedFromLegacy\([\s\S]+?\n\}/,
+    );
+    expect(fn).toBeTruthy();
+    const body = fn![0];
+    expect(body).toMatch(/hasCashPaidSignal/);
+    expect(body).toMatch(/hasSponsoredLegacyPaidSignal/);
+    expect(body).toMatch(/sub\?\.plan\s*===\s*["']sponsored["']\s*&&\s*!!sub\?\.apiKey/);
+  });
+
+  it("calls inlineSeedFromLegacy before SET NX on the scoped key", () => {
+    // The seed call must precede `kv.set(scopedQuotaKey(...), 0|seed, { nx: true })`
+    // and feed its return value INTO that SET. Otherwise the SET NX
+    // initialises with 0 and the legacy balance is lost.
+    const seedCallIdx = adminGrantSource.indexOf("inlineSeedFromLegacy(ADDR");
+    expect(seedCallIdx).toBeGreaterThan(-1);
+
+    const seedNxBlock = adminGrantSource.match(
+      /const\s+seed\s*=\s*await\s+inlineSeedFromLegacy\(ADDR[\s\S]+?kv\.set\(\s*scopedQuotaKey\(ADDR,\s*flags\.scope\),\s*seed,\s*\{\s*nx:\s*true\s*\}/,
+    );
+    expect(seedNxBlock).toBeTruthy();
   });
 });
 

@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rotateApiKey } from "@/app/lib/db";
+import { rotateApiKey, type RotateScope } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 /**
  * POST /api/keys/rotate
  *
- * Deactivates the current live API key and issues a new one.
- * Requires a fresh one-time challenge (GET /api/auth/challenge) — not the session nonce.
- * The challenge is consumed on first use and cannot be replayed.
+ * Deactivates the current live API key in the requested scope and issues
+ * a new one. Requires a fresh one-time challenge (GET /api/auth/challenge)
+ * — not the session nonce. The challenge is consumed on first use and
+ * cannot be replayed.
  *
- * Body: { address, challenge, signature }
- *   challenge obtained from GET /api/auth/challenge?address={addr}
+ * Body: { address, challenge, signature, scope?: "paid" | "trial" }
+ *   - scope defaults to "paid" so existing clients keep working.
+ *   - "trial" rotates sub.trialApiKey (or the pre-Phase-1 sub.apiKey
+ *     when the sub still holds the trial key in the paid slot).
  */
 export async function POST(req: NextRequest) {
   const ip = getClientIP(req);
@@ -19,7 +22,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  let body: { address?: string; challenge?: string; signature?: string };
+  let body: {
+    address?: string;
+    challenge?: string;
+    signature?: string;
+    scope?: string;
+  };
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
 
@@ -32,9 +40,13 @@ export async function POST(req: NextRequest) {
   }
   const addr = authResult;
 
+  // Accept "paid" / "trial" / undefined. Unknown values fall back to
+  // "paid" so a malformed client never silently rotates the wrong slot.
+  const scope: RotateScope = body.scope === "trial" ? "trial" : "paid";
+
   try {
-    const newKey = await rotateApiKey(addr);
-    return NextResponse.json({ apiKey: newKey });
+    const newKey = await rotateApiKey(addr, scope);
+    return NextResponse.json({ apiKey: newKey, scope });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Rotation failed";
     return NextResponse.json({ error: msg }, { status: 400 });
