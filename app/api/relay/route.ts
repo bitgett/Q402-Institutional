@@ -130,10 +130,10 @@ export async function POST(req: NextRequest) {
   // of truth and the asymmetric defense (SDK strict, server tolerant) is closed.
   //
   // The full multi-chain matrix below is what the protocol shipped on v1.27.
-  // During a sprint window the feature flag BNB_FOCUS_MODE collapses the
-  // matrix to a single chain/token pair (see app/lib/feature-flags.ts) — the
-  // 8-chain entries remain in this file so removing the flag (or pointing
-  // Vercel back at main) restores the full surface with zero code churn.
+  // The emergency feature flag BNB_FOCUS_MODE (see app/lib/feature-flags.ts)
+  // can collapse the matrix to BNB+USDC/USDT for incident response; the
+  // 8-chain entries stay in this file so flipping the flag back to false
+  // (current default) restores the full surface with zero code churn.
   //
   //   - Injective: USDT only. Native USDC via Circle CCTP is announced for Q2 2026.
   //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18).
@@ -407,9 +407,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 6. Gas Tank balance check (sandbox + active trial skip this) ─────────
-  // Trial users don't fund their own gas tank — Q402 covers the gas during
-  // the sprint window. The relayer hot wallet still pays gas on-chain, but
-  // we don't debit a per-user balance the user never deposited into.
+  // Trial users don't fund their own gas tank — the Free Trial program is
+  // gas-sponsored by Q402. The relayer hot wallet still pays gas on-chain,
+  // but we don't debit a per-user balance the user never deposited into.
   //
   // Scoped on the KEY's plan, not the subscription's — a paid user using
   // their old trial key still hits trial-scope gas behaviour for that key

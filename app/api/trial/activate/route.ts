@@ -1,7 +1,7 @@
 /**
  * POST /api/trial/activate
  *
- * Free 30-day / 2,000 TX trial entry point (BNB-focus sprint launch).
+ * Free 30-day / 2,000 TX trial entry point (Free Trial program).
  *
  * Differences from /api/payment/activate:
  *   - No on-chain TX scan (it's free)
