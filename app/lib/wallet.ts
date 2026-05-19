@@ -1,10 +1,57 @@
 import { Interface, parseEther, parseUnits } from "ethers";
 
-type EthProvider = { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> };
-type WindowWithWallets = typeof window & {
-  ethereum?: EthProvider & { isMetaMask?: boolean };
-  okxwallet?: EthProvider;
+// Wallet identity flags vary by vendor and have weak deduplication semantics
+// when multiple extensions inject at once. EIP-1193 was tightened by EIP-6963
+// (multi injected provider discovery) but most installed wallets in the wild
+// still rely on namespaced window globals + provider-flag detection:
+//
+//   MetaMask         window.ethereum                    isMetaMask
+//   OKX              window.okxwallet                   (own namespace)
+//   Binance Web3 W.  window.ethereum.providers[]        isBinance / isBNBWallet
+//                    or window.BinanceChain (legacy)    isOneInch is a known
+//                                                       co-injector to ignore
+//   Coinbase Wallet  window.coinbaseWalletExtension     isCoinbaseWallet
+//                    or window.ethereum.providers[]
+//   Bitget Wallet    window.bitkeep.ethereum            isBitKeep
+//                    or window.ethereum.providers[]
+//
+// Each branch below falls through: namespaced global first (most reliable
+// when a vendor specifically isolates itself), then the providers array
+// scan (when a vendor coexists with MetaMask), then the bare flag on
+// window.ethereum (when the vendor is the only injection). If both
+// namespaced and array hits are present they point at the same provider.
+
+type EthProvider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
 };
+type ProviderFlags = {
+  isMetaMask?: boolean;
+  isCoinbaseWallet?: boolean;
+  isBinance?: boolean;
+  isBNBWallet?: boolean;
+  isBitKeep?: boolean;
+};
+type FlaggedProvider = EthProvider & ProviderFlags & {
+  providers?: (EthProvider & ProviderFlags)[];
+};
+type WindowWithWallets = typeof window & {
+  ethereum?: FlaggedProvider;
+  okxwallet?: EthProvider;
+  coinbaseWalletExtension?: EthProvider;
+  BinanceChain?: EthProvider;
+  bitkeep?: { ethereum?: EthProvider };
+};
+
+export type WalletType = "metamask" | "okx" | "binance" | "coinbase" | "bitget";
+
+function findInProviders(
+  flag: keyof ProviderFlags,
+  w: WindowWithWallets,
+): EthProvider | null {
+  const list = w.ethereum?.providers;
+  if (!Array.isArray(list)) return null;
+  return list.find((p) => p?.[flag]) ?? null;
+}
 
 const ERC20 = new Interface(["function transfer(address to,uint256 amount) returns (bool)"]);
 
@@ -79,22 +126,55 @@ function asProviderError(err: unknown): { code?: number; message?: string } {
   return { code: e.code, message: e.message };
 }
 
-function getProvider(type: "metamask" | "okx" | "auto"): EthProvider | null {
+function getProvider(type: WalletType | "auto"): EthProvider | null {
   if (typeof window === "undefined") return null;
   const w = window as WindowWithWallets;
-  if (type === "okx")      return w.okxwallet ?? null;
-  if (type === "metamask") return w.ethereum ?? null;
-  return w.ethereum ?? w.okxwallet ?? null;
+  switch (type) {
+    case "okx":
+      return w.okxwallet ?? null;
+    case "metamask":
+      // Prefer the providers-array entry when multiple extensions coexist;
+      // raw window.ethereum may belong to a different wallet that won the
+      // injection race.
+      return (
+        findInProviders("isMetaMask", w) ??
+        (w.ethereum?.isMetaMask ? w.ethereum : null)
+      );
+    case "binance":
+      return (
+        findInProviders("isBinance", w) ??
+        findInProviders("isBNBWallet", w) ??
+        w.BinanceChain ??
+        (w.ethereum?.isBinance || w.ethereum?.isBNBWallet ? w.ethereum : null)
+      );
+    case "coinbase":
+      return (
+        w.coinbaseWalletExtension ??
+        findInProviders("isCoinbaseWallet", w) ??
+        (w.ethereum?.isCoinbaseWallet ? w.ethereum : null)
+      );
+    case "bitget":
+      return (
+        w.bitkeep?.ethereum ??
+        findInProviders("isBitKeep", w) ??
+        (w.ethereum?.isBitKeep ? w.ethereum : null)
+      );
+    case "auto":
+    default:
+      return w.ethereum ?? w.okxwallet ?? null;
+  }
 }
 
 export function getActiveProvider(): EthProvider | null {
   if (typeof window === "undefined") return null;
-  const savedType = localStorage.getItem("q402_wallet_type") as "metamask" | "okx" | null;
+  const savedType = localStorage.getItem("q402_wallet_type") as WalletType | null;
   if (savedType) return getProvider(savedType) ?? getProvider("auto");
   return getProvider("auto");
 }
 
-export async function connectWallet(type: "metamask" | "okx" | "auto" = "auto"): Promise<string | null> {
+export async function connectWallet(
+  type: WalletType | "auto" = "auto",
+): Promise<string | null> {
   const provider = getProvider(type);
   if (!provider) return null;
   try {
@@ -116,12 +196,8 @@ export async function getConnectedAccount(): Promise<string | null> {
   }
 }
 
-export function isWalletInstalled(type: "metamask" | "okx"): boolean {
-  if (typeof window === "undefined") return false;
-  const w = window as WindowWithWallets;
-  if (type === "okx")      return !!w.okxwallet;
-  if (type === "metamask") return !!w.ethereum;
-  return false;
+export function isWalletInstalled(type: WalletType): boolean {
+  return !!getProvider(type);
 }
 
 export function walletErrorMessage(err: unknown): string {
