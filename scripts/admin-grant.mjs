@@ -346,6 +346,19 @@ if (scopedBefore === null) {
 }
 const newScopedTotal = await kv.incrby(scopedQuotaKey(ADDR, flags.scope), flags.amount);
 
+// Mirror sync — re-read both scoped pools so the subscription's
+// paidQuotaBonus / trialQuotaBonus / quotaBonus fields reflect the
+// TRUE post-grant balances (legacy seed + this grant), not just
+// `flags.amount`. plan.newSub was built earlier without knowing the
+// seed amount, so a sponsored or already-paid grant with a non-zero
+// legacy quota would otherwise under-report on mirror readers
+// (usage-alert, topup endpoint, seedFromLegacy's final fallback).
+const finalPaid  = (await kv.get(scopedQuotaKey(ADDR, "paid")))  ?? 0;
+const finalTrial = (await kv.get(scopedQuotaKey(ADDR, "trial"))) ?? 0;
+plan.newSub.paidQuotaBonus  = finalPaid;
+plan.newSub.trialQuotaBonus = finalTrial;
+plan.newSub.quotaBonus      = finalPaid + finalTrial;
+
 await kv.set(subKey(ADDR), plan.newSub);
 
 console.log(`✓ Granted ${flags.amount.toLocaleString()} ${flags.scope} credits to ${ADDR}`);

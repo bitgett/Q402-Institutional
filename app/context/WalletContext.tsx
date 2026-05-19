@@ -62,10 +62,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // walletType is only needed to bias getActiveProvider's lookup, which
   // reads localStorage directly — no React state needed.
 
+  // Explicit-disconnect sentinel. EIP-1193 wallets don't revoke the
+  // dapp's `eth_accounts` permission on disconnect — that permission
+  // is granted via `eth_requestAccounts` and lives in the wallet
+  // extension's own state. So after the user clicks "Sign out", the
+  // disconnect handler clears our localStorage but the next
+  // `eth_accounts` call (during init / after reload) still returns
+  // the authorized address. The init useEffect would then re-save it
+  // and the user is right back in the connected state — the "X
+  // pressed, still connected" UX bug.
+  //
+  // Sentinel approach: disconnect() writes this key, init() short-
+  // circuits when it sees the key, and connect/connectWith remove it
+  // on a fresh user-initiated authorization. The key is intentionally
+  // scoped to the browser tab's localStorage so a different machine /
+  // private window is not blocked.
+  const DISCONNECT_SENTINEL = "q402_wallet_explicit_disconnect";
+
   const disconnect = useCallback(() => {
     setAddress(null);
     localStorage.removeItem("q402_wallet");
     localStorage.removeItem("q402_wallet_type");
+    localStorage.setItem(DISCONNECT_SENTINEL, "1");
   }, []);
 
   const connect = useCallback(async () => {
@@ -73,6 +91,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (addr) {
       setAddress(addr);
       localStorage.setItem("q402_wallet", addr);
+      localStorage.removeItem(DISCONNECT_SENTINEL);
     }
   }, []);
 
@@ -82,6 +101,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       setAddress(addr);
       localStorage.setItem("q402_wallet", addr);
       localStorage.setItem("q402_wallet_type", type);
+      localStorage.removeItem(DISCONNECT_SENTINEL);
     }
     return addr;
   }, []);
@@ -111,6 +131,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // Restore on mount
   useEffect(() => {
     const init = async () => {
+      // Sentinel honored before anything else: an explicit disconnect
+      // must survive a reload. Without this check the eth_accounts
+      // probe below would happily re-authorize from the wallet's
+      // standing permission grant, undoing the user's intent.
+      if (localStorage.getItem(DISCONNECT_SENTINEL)) {
+        setMounted(true);
+        return;
+      }
       const saved = localStorage.getItem("q402_wallet");
       // Immediately restore from localStorage so pages don't flash "disconnected"
       if (saved) setAddress(saved);
