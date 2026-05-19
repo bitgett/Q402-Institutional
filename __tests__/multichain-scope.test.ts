@@ -54,6 +54,10 @@ const adminGrantSource = readFileSync(
   resolve(REPO_ROOT, "scripts", "admin-grant.mjs"),
   "utf8",
 );
+const connectModalSource = readFileSync(
+  resolve(REPO_ROOT, "app", "components", "ConnectModal.tsx"),
+  "utf8",
+);
 
 // ── In-memory KV (shared shape with credit-pool-isolation.test.ts) ───────────
 const store = new Map<string, unknown>();
@@ -580,6 +584,46 @@ describe("admin-grant.mjs seed-first parity", () => {
       /const\s+seed\s*=\s*await\s+inlineSeedFromLegacy\(ADDR[\s\S]+?kv\.set\(\s*scopedQuotaKey\(ADDR,\s*flags\.scope\),\s*seed,\s*\{\s*nx:\s*true\s*\}/,
     );
     expect(seedNxBlock).toBeTruthy();
+  });
+
+  it("syncs sub mirror fields from the actual scoped pools after INCRBY", () => {
+    // After the legacy seed + INCRBY, the script's plan.newSub object
+    // (built earlier with `flags.amount` only) under-reports the
+    // post-grant balance whenever a non-zero legacy quota was seeded
+    // in. Re-reading both scoped pools right before `kv.set(subKey,
+    // plan.newSub)` and overwriting the three mirror fields keeps
+    // mirror readers (usage-alert, topup, seedFromLegacy's final
+    // fallback) aligned with the truth.
+    const mirrorSyncBlock = adminGrantSource.match(
+      /const\s+finalPaid[\s\S]+?const\s+finalTrial[\s\S]+?plan\.newSub\.paidQuotaBonus\s*=\s*finalPaid[\s\S]+?plan\.newSub\.trialQuotaBonus\s*=\s*finalTrial[\s\S]+?plan\.newSub\.quotaBonus\s*=\s*finalPaid\s*\+\s*finalTrial[\s\S]+?kv\.set\(\s*subKey\(ADDR\),\s*plan\.newSub\s*\)/,
+    );
+    expect(mirrorSyncBlock).toBeTruthy();
+  });
+});
+
+describe("ConnectModal — responsive Google button width", () => {
+  // The GIS rendered button takes a pixel-width API, so we can't just
+  // make it `w-full`. On narrow mobile viewports the desktop-ideal
+  // 392px width used to overflow the modal panel. ConnectModal now
+  // measures the actual rendered rail and clamps the GIS button to
+  // it via a ResizeObserver. These guards keep that wiring intact.
+
+  it("uses a ResizeObserver to track the Google+Email rail width", () => {
+    expect(connectModalSource).toMatch(/new\s+ResizeObserver/);
+  });
+
+  it("clamps the dynamic width between the GIS min and the desktop ideal", () => {
+    expect(connectModalSource).toMatch(/GOOGLE_DESKTOP_WIDTH\s*=\s*392/);
+    expect(connectModalSource).toMatch(/GOOGLE_MIN_WIDTH\s*=\s*200/);
+    expect(connectModalSource).toMatch(/Math\.max\(GOOGLE_MIN_WIDTH/);
+    expect(connectModalSource).toMatch(/Math\.min\(GOOGLE_DESKTOP_WIDTH/);
+  });
+
+  it("passes the measured width into GoogleSigninButton (no hard-coded 392)", () => {
+    // The earlier hard-coded `width={392}` was the regression — the
+    // rail size now flows through state.
+    expect(connectModalSource).toMatch(/<GoogleSigninButton[\s\S]*?width=\{\s*googleWidth\s*\}/);
+    expect(connectModalSource).not.toMatch(/<GoogleSigninButton[\s\S]*?width=\{\s*392\s*\}/);
   });
 });
 

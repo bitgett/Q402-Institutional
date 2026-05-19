@@ -21,12 +21,21 @@
  * Navbar's backdrop-filter can't trap us as a fixed-position root.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import GoogleSigninButton from "./GoogleSigninButton";
 import WalletList from "./WalletList";
+
+// Desktop-ideal width for the Google + Email rail. The modal panel is
+// max-w-md (448px) minus p-7 (56px) → 392px inner. On narrow viewports
+// (sub-448px after backdrop padding) the inner content shrinks and the
+// fixed-pixel GIS button used to overflow the panel; the ResizeObserver
+// below tracks the actual rendered content width and clamps the Google
+// button to it.
+const GOOGLE_DESKTOP_WIDTH = 392;
+const GOOGLE_MIN_WIDTH = 200;  // GIS docs: minimum allowed renderButton width
 
 interface Props {
   onClose: () => void;
@@ -43,6 +52,28 @@ export default function ConnectModal({ onClose }: Props) {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Tracks the rendered width of the Google+Email rail so the
+  // fixed-pixel GIS button never exceeds it on narrow viewports.
+  // Initialised to the desktop ideal so the first paint matches the
+  // common case; the observer updates within a frame when smaller.
+  const railRef = useRef<HTMLDivElement>(null);
+  const [googleWidth, setGoogleWidth] = useState<number>(GOOGLE_DESKTOP_WIDTH);
+  useEffect(() => {
+    if (!railRef.current) return;
+    if (typeof ResizeObserver === "undefined") return;
+    const measure = (target: HTMLElement) => {
+      const w = Math.floor(target.getBoundingClientRect().width);
+      if (w <= 0) return;
+      setGoogleWidth(Math.max(GOOGLE_MIN_WIDTH, Math.min(GOOGLE_DESKTOP_WIDTH, w)));
+    };
+    measure(railRef.current);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) measure(entry.target as HTMLElement);
+    });
+    observer.observe(railRef.current);
+    return () => observer.disconnect();
+  }, [view]);
 
   async function submitEmail() {
     if (!email.trim()) {
@@ -147,11 +178,13 @@ export default function ConnectModal({ onClose }: Props) {
                 <h2 className="text-2xl font-bold mb-1.5">Welcome to Q402</h2>
                 <p className="text-white/40 text-xs mb-5">Pick how you want to sign in.</p>
 
-                {/* Google + Email — fixed 392-px width to share a single
-                    visual rail. max-w-md (448) − p-7 (56) = 392px inner. */}
-                <div className="space-y-2.5 flex flex-col items-stretch">
+                {/* Google + Email — width tracked on `railRef` so the
+                    pixel-driven GIS button clamps to the actual rail
+                    on narrow viewports. The other two CTAs are
+                    `w-full` so they shrink naturally. */}
+                <div ref={railRef} className="space-y-2.5 flex flex-col items-stretch">
                   <GoogleSigninButton
-                    width={392}
+                    width={googleWidth}
                     onSuccess={() => {
                       onClose();
                       router.push("/dashboard?signin=google");
