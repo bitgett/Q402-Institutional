@@ -30,6 +30,26 @@
  * isolates the cash axis for paid-expiry math.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const REPO_ROOT = resolve(__dirname, "..");
+const scanClobberSource = readFileSync(
+  resolve(REPO_ROOT, "scripts", "scan-clobbered-grants.mjs"),
+  "utf8",
+);
+const grantSponsoredSource = readFileSync(
+  resolve(REPO_ROOT, "scripts", "grant-sponsored-credits.mjs"),
+  "utf8",
+);
+const transferSponsoredSource = readFileSync(
+  resolve(REPO_ROOT, "scripts", "transfer-sponsored.mjs"),
+  "utf8",
+);
+const transferSponsoredV2Source = readFileSync(
+  resolve(REPO_ROOT, "scripts", "transfer-sponsored-v2.mjs"),
+  "utf8",
+);
 
 // ── In-memory KV (shared shape with credit-pool-isolation.test.ts) ───────────
 const store = new Map<string, unknown>();
@@ -438,5 +458,82 @@ describe("scan-clobbered-grants predicate (mirror of scripts/scan-clobbered-gran
       quotaBonus: 50000,
     };
     expect(matchesClobberShape(freshGrant)).toBe(false);
+  });
+});
+
+// ── source-grep guards on the operational scripts ────────────────────────────
+//
+// The inlined predicate above covers stage-1 behavior; the script's stage-2
+// (read apikey:{sub.apiKey} and reject when the record's plan === "trial")
+// is the second half of the false-positive defence. Source-grep makes both
+// halves load-bearing: removing the kv.get or the plan filter trips a test.
+// Likewise, the deprecated sponsored entry points must stay aborting before
+// any kv.set runs — drop the exit guard and we silently regress to creating
+// legacy single-pool subs again.
+
+describe("scan-clobbered-grants source guards", () => {
+  it("stage-1 filter requires plan='trial' AND txHash='trial' AND apiKey AND trialApiKey", () => {
+    // matchesClobberShape function body — anchor on the function declaration
+    // so we measure the actual filter, not a doc-block.
+    const fnBlock = scanClobberSource.match(
+      /function\s+matchesClobberShape\s*\(\s*sub\s*\)\s*\{[\s\S]+?\n\}/,
+    );
+    expect(fnBlock).toBeTruthy();
+    const body = fnBlock![0];
+    expect(body).toMatch(/sub\.plan\s*===\s*["']trial["']/);
+    expect(body).toMatch(/sub\.txHash\s*===\s*["']trial["']/);
+    expect(body).toMatch(/typeof\s+sub\.apiKey\s*===\s*["']string["']/);
+    expect(body).toMatch(/typeof\s+sub\.trialApiKey\s*===\s*["']string["']/);
+  });
+
+  it("stage-2 reads apikey:{sub.apiKey} record and rejects when record.plan === 'trial'", () => {
+    // The reviewer's specific lock-in: this stage is the unforgable check
+    // (paid-side key in the apiKey slot) and must not be skippable.
+    expect(scanClobberSource).toMatch(/kv\.get\(\s*`apikey:\$\{\s*sub\.apiKey\s*\}`\s*\)/);
+    expect(scanClobberSource).toMatch(/keyRecord\.plan\s*===\s*["']trial["']/);
+  });
+
+  it("stage-2 check runs in BOTH the scan loop and the apply-restore loop", () => {
+    // Both passes must filter — otherwise a candidate that passed stage-2
+    // at scan time but had its apikey record rotated mid-script could be
+    // restored as a paid sub with a stale apikey. Count occurrences:
+    // we expect at least two kv.get calls against the apikey record.
+    const matches = scanClobberSource.match(
+      /kv\.get\(\s*`apikey:\$\{\s*sub\.apiKey\s*\}`\s*\)/g,
+    );
+    expect(matches).toBeTruthy();
+    expect(matches!.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("legacy sponsored entry points stay blocked", () => {
+  // The three scripts that historically wrote the legacy single-pool
+  // sponsored shape. seedFromLegacy's plan === "sponsored" escape hatch
+  // exists solely to keep the one production orphan operational; new
+  // sponsored subs would each require their own per-account workaround.
+  // Each script must abort before any kv.set with the DEPRECATED message
+  // and a non-zero exit so cron-style runs do not silently mint state.
+
+  it("grant-sponsored-credits.mjs aborts before any kv.set", () => {
+    expect(grantSponsoredSource).toMatch(/DEPRECATED/);
+    expect(grantSponsoredSource).toMatch(/process\.exit\(\s*2\s*\)/);
+    // No kv.set in the live code path. The original implementation lives
+    // in git history.
+    expect(grantSponsoredSource).not.toMatch(/await\s+kv\.set\(/);
+    expect(grantSponsoredSource).not.toMatch(/kv\.incrby\(/);
+  });
+
+  it("transfer-sponsored.mjs aborts before any kv.set", () => {
+    expect(transferSponsoredSource).toMatch(/DEPRECATED/);
+    expect(transferSponsoredSource).toMatch(/process\.exit\(\s*2\s*\)/);
+    expect(transferSponsoredSource).not.toMatch(/await\s+kv\.set\(/);
+    expect(transferSponsoredSource).not.toMatch(/kv\.incrby\(/);
+  });
+
+  it("transfer-sponsored-v2.mjs aborts before any kv.set", () => {
+    expect(transferSponsoredV2Source).toMatch(/DEPRECATED/);
+    expect(transferSponsoredV2Source).toMatch(/process\.exit\(\s*2\s*\)/);
+    expect(transferSponsoredV2Source).not.toMatch(/await\s+kv\.set\(/);
+    expect(transferSponsoredV2Source).not.toMatch(/kv\.incrby\(/);
   });
 });
