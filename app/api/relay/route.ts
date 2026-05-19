@@ -13,6 +13,7 @@ import {
   refundScopedCredit,
   seedFromLegacy,
   recordWebhookDelivery,
+  isCashPaidSubscription,
   type CreditScope,
 } from "@/app/lib/db";
 import {
@@ -305,11 +306,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "API key has been rotated. Please use your current key." }, { status: 401 });
     }
     // Paid-scope expiry: only fires for non-trial keys on accounts that
-    // actually paid (amountUSD > 0 + real paidAt). Trial keys hit the
-    // trial-scope expiry below regardless of whether the subscription
-    // has since upgraded to a paid plan.
-    const isPaidAccount = (subscription.amountUSD ?? 0) > 0 && !!subscription.paidAt;
-    if (!isSandbox && !isTrialScopedKey && isPaidAccount) {
+    // actually paid cash (amountUSD > 0 + real paidAt). Operational grants
+    // (admin-grant.mjs) intentionally leave amountUSD === 0 so they are
+    // non-expiring — isCashPaidSubscription returns false for those and
+    // this 30-day window is skipped. Trial keys hit the trial-scope expiry
+    // below regardless of whether the subscription has since upgraded.
+    if (!isSandbox && !isTrialScopedKey && isCashPaidSubscription(subscription)) {
       const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
       if (new Date() >= expiresAt) {
         return NextResponse.json({ error: "Subscription expired. Please renew to continue." }, { status: 403 });

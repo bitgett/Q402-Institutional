@@ -39,6 +39,7 @@ import {
   getScopedCredits,
   addScopedCredits,
   addTrialSubscriptionToIndex,
+  hasMultichainScope,
 } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -130,12 +131,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // If the wallet already has a paid subscription, free trial is moot.
+  // If the wallet already has Multichain access (real cash payment OR
+  // operational grant), free trial is moot. hasMultichainScope catches
+  // admin-granted accounts too — gating on amountUSD > 0 alone let those
+  // accounts through and the activate path below clobbered their paid
+  // sub fields.
   const existing = await getSubscription(addr);
-  if (existing && existing.plan !== TRIAL_PLAN_NAME && (existing.amountUSD ?? 0) > 0) {
+  if (hasMultichainScope(existing)) {
     return NextResponse.json(
       {
-        error: "This wallet already has a paid subscription — trial activation is for new wallets only.",
+        error: "This wallet already has Multichain access — trial activation is for new wallets only.",
         code: "ALREADY_PAID",
       },
       { status: 409 },
@@ -250,22 +255,44 @@ export async function POST(req: NextRequest) {
     let trialSandboxApiKey = existing?.trialSandboxApiKey ?? null;
     if (!trialSandboxApiKey) trialSandboxApiKey = await generateSandboxKey(addr, TRIAL_PLAN_NAME);
 
+    // Defense-in-depth: if the ALREADY_PAID guard above is ever bypassed
+    // (race, refactor regression), do not let trial activation degrade
+    // paid-side fields. Preserve apiKey/plan/paidAt/amountUSD/txHash
+    // verbatim when the existing sub already has Multichain access.
+    const preserveScope = hasMultichainScope(existing);
+
     await setSubscription(addr, {
       ...(existing ?? {
         apiKey: "",
         sandboxApiKey: undefined,
       }),
-      paidAt: now.toISOString(),
+      // Trial-side slots — always set on activation:
       trialApiKey,
       trialSandboxApiKey,
-      plan: TRIAL_PLAN_NAME,
-      txHash: "trial", // sentinel — no on-chain TX backs a trial activation
-      amountUSD: 0,
       trialQuotaBonus: trialTxs,
       paidQuotaBonus:  paidTxs,
       quotaBonus:      totalTxs, // legacy sum mirror
       trialExpiresAt: trialExpiresAt.toISOString(),
       ...(finalEmail ? { email: finalEmail } : {}),
+      // Paid-side fields — preserve if Multichain scope exists, otherwise
+      // initialize to the trial defaults. The ALREADY_PAID guard normally
+      // prevents this branch from running on paid subs, but the conditional
+      // shields against future refactors that move the guard.
+      ...(preserveScope
+        ? {
+            apiKey:        existing!.apiKey,
+            sandboxApiKey: existing!.sandboxApiKey,
+            plan:          existing!.plan,
+            paidAt:        existing!.paidAt,
+            amountUSD:     existing!.amountUSD ?? 0,
+            txHash:        existing!.txHash || "admin_grant:unknown",
+          }
+        : {
+            plan:      TRIAL_PLAN_NAME,
+            paidAt:    now.toISOString(),
+            amountUSD: 0,
+            txHash:    "trial", // sentinel — no on-chain TX backs a trial activation
+          }),
     });
 
     // Permanent used marker — released only by the next paid activation

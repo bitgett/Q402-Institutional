@@ -8,9 +8,10 @@
  */
 import { kv } from "@vercel/kv";
 import { TIER_CREDITS, TIER_PLANS } from "@/app/lib/blockchain";
+import { TRIAL_PLAN_NAME } from "@/app/lib/feature-flags";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 
-interface Subscription {
+export interface Subscription {
   paidAt: string;
   // Paid-plan live key. Only minted by /api/payment/activate. Empty string
   // on a freshly provisioned (unpaid) account. NEVER reused as a trial key —
@@ -127,6 +128,69 @@ export async function getSubscription(address: string): Promise<Subscription | n
 
 export async function setSubscription(address: string, data: Subscription) {
   await kv.set(subKey(address), data);
+}
+
+// ── Subscription state predicates ────────────────────────────────────────────
+//
+// The codebase historically used `(sub.amountUSD ?? 0) > 0` as a single
+// signal for both "did the wallet pay?" (cash accounting) and "can the
+// wallet use Multichain?" (product access). Those are different axes:
+//
+//   money   — amountUSD / paidAt              (cash accounting)
+//   access  — hasMultichainScope()             (product permission)
+//   balance — quota:paid:{addr} scoped read    (current credit balance)
+//
+// Operational grants (admin-grant.mjs, partnership credits, hackathon
+// prizes) deliberately leave amountUSD === 0 so the books stay honest,
+// but they DO confer Multichain access. Likewise, a paid customer who has
+// drained their credits still owns Multichain access — the dashboard
+// should show "0 credits, top up needed", not "Locked".
+//
+// Mixing the two axes silently locked out admin-granted accounts and
+// would have locked out paid customers the moment their balance hit 0.
+// Always use hasMultichainScope() for permission gates; reserve
+// isCashPaidSubscription() for expiry/billing logic that genuinely needs
+// to know whether real money changed hands.
+
+/**
+ * Returns true if the wallet currently has access to the Multichain paid
+ * scope (paid API key slot, paid pool credit reads, 8-chain settlement).
+ *
+ * Access is conferred by any one of:
+ *   - a real cash payment (amountUSD > 0)
+ *   - a recorded paidAt timestamp (paid OR grant activation stamps this)
+ *   - the paidQuotaBonus mirror existing (set the moment any paid pool
+ *     credit is minted — including when subsequent usage drains it to 0)
+ *   - an admin-grant txHash sentinel
+ *
+ * Trial plan and missing apiKey short-circuit to false: a trial-only
+ * account or a half-provisioned stub cannot use the Multichain surface
+ * regardless of the other signals.
+ */
+export function hasMultichainScope(sub?: Subscription | null): boolean {
+  if (!sub) return false;
+  if (sub.plan === TRIAL_PLAN_NAME) return false;
+  if (!sub.apiKey) return false;
+
+  return (
+    (sub.amountUSD ?? 0) > 0 ||
+    !!sub.paidAt ||
+    typeof sub.paidQuotaBonus === "number" ||
+    (sub.txHash ?? "").startsWith("admin_grant:")
+  );
+}
+
+/**
+ * Returns true only when an actual on-chain cash payment backs the
+ * subscription. Used by paid-expiry math (paidAt + 30d window),
+ * billing surfaces, and renewal banners — anything that should NOT
+ * apply to admin-granted accounts (intentional non-expiring operational
+ * grants).
+ *
+ * For "can this wallet use Multichain?" checks use hasMultichainScope().
+ */
+export function isCashPaidSubscription(sub?: Subscription | null): boolean {
+  return !!sub && (sub.amountUSD ?? 0) > 0 && !!sub.paidAt;
 }
 
 // ── API Keys ─────────────────────────────────────────────────────────────────

@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSubscription, setSubscription, generateSandboxKey, getScopedCredits } from "@/app/lib/db";
+import {
+  getSubscription,
+  setSubscription,
+  generateSandboxKey,
+  getScopedCredits,
+  hasMultichainScope,
+} from "@/app/lib/db";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { isOwnerWallet } from "@/app/lib/owners";
@@ -138,15 +144,13 @@ export async function POST(req: NextRequest) {
     const trialSandboxApiKey = existing.trialSandboxApiKey
       ?? (isTrialActive ? existing.sandboxApiKey : "")
       ?? "";
-    const paidApiKey =
-      (existing.amountUSD ?? 0) > 0
-        ? existing.apiKey || ""
-        : "";
-
-    // hasPaid means "paid plan active" — independent of trial. The dashboard
-    // uses this to decide whether the Multichain card shows the unlocked
-    // state or the Locked placeholder.
-    const isPaid = (existing.amountUSD ?? 0) > 0 && !!paidApiKey;
+    // Multichain access uses hasMultichainScope (defined in db.ts) so the
+    // dashboard unlocks for both real-cash subscriptions AND operational
+    // grants (admin-grant.mjs leaves amountUSD === 0 by design). The helper
+    // also handles the legacy trial-in-apiKey-slot shape by short-circuiting
+    // on plan === "trial".
+    const isPaid = hasMultichainScope(existing);
+    const paidApiKey = isPaid ? (existing.apiKey || "") : "";
 
     // Read-side bridge to the email pseudo-account, if one is linked.
     // The wallet keeps its own subscription record AND the pseudo keeps
