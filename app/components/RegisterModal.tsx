@@ -302,7 +302,7 @@ export default function RegisterModal({ onClose }: Props) {
                 <h2 className="text-lg font-bold mb-1">Pick a plan</h2>
                 <div className="flex items-center gap-2 mb-5">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-                  <p className="text-white/40 text-sm">We&apos;ll provision a <span className="text-green-400 font-medium">sandbox API key</span> right now. Your live key is issued automatically once you complete on-chain payment on <span className="text-white/70 font-mono">/payment</span>.</p>
+                  <p className="text-white/40 text-sm">We&apos;ll provision a <span className="text-green-400 font-medium">sandbox API key</span> right now. For a live key, either activate the Free Trial at <span className="text-white/70 font-mono">/event</span> (BNB-only, sponsored) or complete on-chain payment on <span className="text-white/70 font-mono">/payment</span> (Multichain).</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-5">
