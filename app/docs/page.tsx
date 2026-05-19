@@ -445,7 +445,7 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_balance</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">api key</td>
-                    <td className="px-4 py-3">Verify the configured key and report its plan tier (live vs sandbox).</td>
+                    <td className="px-4 py-3">Verify the configured API key(s) and report each one&apos;s plan tier. When both <code className="text-white/60 text-xs">Q402_TRIAL_API_KEY</code> and <code className="text-white/60 text-xs">Q402_MULTICHAIN_API_KEY</code> are set, returns Trial + Multichain summaries in one read.</td>
                   </tr>
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_pay</code></td>
@@ -468,7 +468,7 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · Sandbox vs live mode</h3>
             <p className="text-white/55 text-sm mb-3">
-              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a deterministic-looking fake transaction hash, no funds move, no gas-tank credit is consumed. To enable real on-chain transactions, all three environment variables must be set:
+              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a random fake transaction hash, no funds move, no gas-tank credit is consumed. To enable real on-chain transactions, the resolved live API key (a Trial key, a Multichain key, or the legacy <code className="text-yellow text-xs">Q402_API_KEY</code> fallback), <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code>, and <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=1</code> must all be set:
             </p>
             <CodeBlock lang="bash" code={`# Trial / Multichain split — set whichever applies (or both).
 # The MCP server auto-routes by chain: BNB → trial key (if present),
@@ -590,7 +590,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
           {/* ── AUTHENTICATION ── */}
           <Section id="auth" title="Authentication">
             <p className="text-white/55 text-sm mb-5">
-              All relay requests require your API key in the <span className="font-mono text-white/70">apiKey</span> field of the request body. Connect your wallet to get a sandbox key (<span className="font-mono text-white/70">q402_test_*</span>) immediately. Your live key (<span className="font-mono text-white/70">q402_live_*</span>) is issued automatically once your on-chain payment is confirmed on <span className="font-mono text-white/70">/payment</span>.
+              All relay requests require your API key in the <span className="font-mono text-white/70">apiKey</span> field of the request body. Connect your wallet to get a sandbox key (<span className="font-mono text-white/70">q402_test_*</span>) immediately. There are two paths to a live key (<span className="font-mono text-white/70">q402_live_*</span>): activate the Free Trial at <a className="text-yellow hover:underline" href="/event"><span className="font-mono">/event</span></a> for a BNB-only sponsored key (2,000 TX, no card), or complete an on-chain payment on <a className="text-yellow hover:underline" href="/payment"><span className="font-mono">/payment</span></a> for a Multichain key (8 chains, per-chain Gas Tank).
             </p>
             <CodeBlock lang="json" code={`// POST /api/relay
 {
@@ -851,7 +851,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "How do I get an API key?",
-                a: "Connect your wallet on the dashboard — a sandbox API key (q402_test_ prefix) is provisioned for free so you can test the integration. To get a live key, complete an on-chain payment on the /payment page. Your live key is issued automatically after the payment is confirmed."
+                a: "Connect your wallet on the dashboard — a sandbox API key (q402_test_ prefix) is provisioned for free so you can test the integration. There are two paths to a live key (q402_live_): activate the Free Trial at /event for a BNB-only sponsored key (2,000 TX over 30 days, no card), or complete an on-chain payment on /payment for a Multichain key with 8-chain support. Both keys are issued automatically after their respective activation step."
               },
               {
                 q: "How does billing work? Can I upgrade my plan?",
