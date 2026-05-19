@@ -303,10 +303,23 @@ export async function rotateApiKey(
       oldKey = hasModernTrialKey ? sub.trialApiKey! : sub.apiKey;
       newKey = await generateApiKey(address, TRIAL_PLAN_NAME);
       // Always write the new key into trialApiKey. For legacy shape this
-      // also clears the apiKey slot — once a trial-only account is
-      // rotated, the trial key lives in its canonical post-Phase-1 slot.
+      // also clears the apiKey slot AND migrates the sandbox key.
+      // Pre-Phase-1 trial subs put both keys in the paid slots
+      // (apiKey + sandboxApiKey were the trial pair); the sandbox half
+      // is not rotated — it's just moved to its canonical
+      // trialSandboxApiKey slot. Without this move the trial sandbox
+      // key keeps occupying the paid-sandbox slot and the next
+      // /api/payment/activate would treat it as the paid sandbox key
+      // (since that activation reuses `existing.sandboxApiKey` when
+      // present), mixing trial and paid scopes.
       const nextSub: Subscription = { ...sub, trialApiKey: newKey };
-      if (hasLegacyTrialKey) nextSub.apiKey = "";
+      if (hasLegacyTrialKey) {
+        nextSub.apiKey = "";
+        if (sub.sandboxApiKey) {
+          nextSub.trialSandboxApiKey = sub.sandboxApiKey;
+          nextSub.sandboxApiKey = undefined;
+        }
+      }
       await setSubscription(address, nextSub);
     } else {
       oldKey = sub.apiKey;
