@@ -1,20 +1,22 @@
 "use client";
 
 /**
- * GoogleSigninButton — renders the "Continue with Google" button using
- * Google Identity Services (GIS). On click, GIS pops Google's consent
- * sheet, returns an ID token, and we POST it to /api/auth/google to
- * complete the session.
+ * GoogleSigninButton — custom-styled "Continue with Google" button backed
+ * by Google Identity Services (GIS).
  *
- * Why GIS instead of NextAuth / a server-redirect flow:
- *   - Zero dependencies (script tag only)
- *   - Stays a SPA flow — no full-page redirect breaks the Hero animation
- *   - Token verification lives entirely on our backend (lib/google-auth.ts)
+ * Why the overlay pattern: GIS only ships its own rendered button widget
+ * with a fixed theme/size/shape API (filled_blue/large/pill). The large
+ * white circular G mark on that widget reads as visually heavy next to
+ * our other dark-glass buttons. To get full visual control without
+ * losing GIS's verified ID-token flow, we render the GIS button at
+ * opacity 0 so it still receives the click + handles the consent
+ * popup, then layer our own styled markup on top with
+ * `pointer-events: none` so clicks fall through.
  *
  * Env required:
  *   NEXT_PUBLIC_GOOGLE_CLIENT_ID — OAuth 2.0 Client ID from Google Cloud
  *   Console. Set "Authorized JavaScript origins" to the production +
- *   localhost URLs that will render this button.
+ *   localhost URLs that render this button.
  *
  * When the env is missing we render a disabled stub with a console.warn —
  * preview deploys never throw on load, the operator sees the gap in logs.
@@ -57,14 +59,9 @@ declare global {
   }
 }
 
-// Force English copy on the Google-rendered button regardless of the
-// visitor's browser language. The `hl` query param is the documented hook
-// for GIS i18n; without it Korean visitors see "Google 계정으로 계속하기"
-// in mid-flow English UI, which reads as broken locale.
 const GIS_SCRIPT = "https://accounts.google.com/gsi/client?hl=en";
 
 interface Props {
-  /** Called after successful POST /api/auth/google. */
   onSuccess?: (data: {
     email: string;
     sandboxApiKey: string;
@@ -72,12 +69,35 @@ interface Props {
     name?: string;
   }) => void;
   onError?: (error: string) => void;
-  /** Width in pixels, default 320 — Google's button has a fixed pixel-width API. */
+  /** Width in pixels — the GIS rendered button takes a fixed pixel-width API. */
   width?: number;
 }
 
+function GoogleGIcon({ className = "w-[18px] h-[18px]" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path
+        fill="#4285F4"
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      />
+    </svg>
+  );
+}
+
 export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: Props) {
-  const ref = useRef<HTMLDivElement | null>(null);
+  const gisRef = useRef<HTMLDivElement | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -87,9 +107,6 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
       console.warn("[GoogleSigninButton] NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set");
       return;
     }
-
-    // Idempotent script-tag inject. GIS notifies via `window.google` once
-    // its bundle has parsed. Multiple mounts share the same load.
     if (window.google?.accounts?.id) {
       setLoaded(true);
       return;
@@ -112,7 +129,7 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
   }, [clientId, onError]);
 
   useEffect(() => {
-    if (!loaded || !clientId || !ref.current || !window.google) return;
+    if (!loaded || !clientId || !gisRef.current || !window.google) return;
 
     window.google.accounts.id.initialize({
       client_id: clientId,
@@ -139,19 +156,21 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
       },
       auto_select: false,
       cancel_on_tap_outside: true,
-      // Force English regardless of browser language. ?hl=en on the script
-      // URL is the official hook but doesn't always override the auto-
-      // detected locale once the runtime is loaded; the IdConfiguration
-      // locale field is the second belt that actually wins.
       locale: "en",
     });
-    window.google.accounts.id.renderButton(ref.current, {
+
+    // Render the GIS button at the parent's full width — it sits beneath
+    // our overlay at opacity 0 and accepts the actual click that triggers
+    // the consent popup. We pick the most neutral GIS theme so its
+    // computed size matches our overlay's footprint roughly; visual
+    // styling comes from the overlay regardless.
+    window.google.accounts.id.renderButton(gisRef.current, {
       type: "standard",
       theme: "filled_blue",
       size: "large",
       text: "continue_with",
       shape: "pill",
-      logo_alignment: "center",
+      logo_alignment: "left",
       width,
       locale: "en",
     });
@@ -163,19 +182,50 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
         className="inline-flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white/30 text-xs font-medium px-6 py-3 cursor-not-allowed"
         style={{ width }}
       >
-        Google sign-in unavailable (admin: set NEXT_PUBLIC_GOOGLE_CLIENT_ID)
+        Google sign-in unavailable
       </div>
     );
   }
 
   return (
-    <div className="relative inline-block" style={{ width }}>
-      <div ref={ref} />
-      {submitting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full">
-          <span className="text-white/70 text-xs font-medium">Signing in…</span>
-        </div>
-      )}
+    <div
+      className="relative inline-block"
+      style={{ width, height: 44 }}
+    >
+      {/* Hidden GIS button — receives the real click. Opacity 0 + auto
+          pointer events keeps it operable while invisible. */}
+      <div
+        ref={gisRef}
+        className="absolute inset-0 opacity-0"
+        style={{ pointerEvents: "auto" }}
+        aria-hidden="true"
+      />
+
+      {/* Visible styled overlay — pointer-events: none so clicks fall
+          through to the hidden GIS button. group on the parent gives
+          hover state via :group-hover descendants. */}
+      <div
+        className="absolute inset-0 flex items-center justify-center gap-2.5 rounded-full border transition-all"
+        style={{
+          pointerEvents: "none",
+          background: "rgba(255,255,255,0.06)",
+          borderColor: "rgba(255,255,255,0.10)",
+        }}
+      >
+        <GoogleGIcon />
+        <span className="text-white font-medium text-sm">
+          {submitting ? "Signing in…" : loaded ? "Continue with Google" : "Loading…"}
+        </span>
+      </div>
+
+      {/* Hover state — re-applied on the outer wrapper since :hover
+          on a pointer-events: none element doesn't fire. */}
+      <style jsx>{`
+        div:hover > div:last-of-type {
+          background: rgba(255, 255, 255, 0.1) !important;
+          border-color: rgba(255, 255, 255, 0.18) !important;
+        }
+      `}</style>
     </div>
   );
 }

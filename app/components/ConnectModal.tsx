@@ -80,7 +80,18 @@ export default function ConnectModal({ onClose }: Props) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[60] flex items-center justify-center px-4"
-          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)" }}
+          style={{
+            // Two soft radial gradients sit behind the backdrop blur so
+            // the ambient color reads through the panel without competing
+            // with the panel's own gradient border. WalletModal uses the
+            // same composition so opening the wallet picker from here
+            // feels continuous.
+            background:
+              "radial-gradient(60% 60% at 20% 30%, rgba(245,197,24,0.10) 0%, rgba(0,0,0,0) 60%), " +
+              "radial-gradient(50% 60% at 80% 80%, rgba(99,102,241,0.12) 0%, rgba(0,0,0,0) 60%), " +
+              "rgba(0,0,0,0.78)",
+            backdropFilter: "blur(14px)",
+          }}
           onClick={onClose}
         >
           <motion.div
@@ -88,33 +99,65 @@ export default function ConnectModal({ onClose }: Props) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.96 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
-            className="w-full max-w-md rounded-2xl border border-white/8 p-7 relative"
-            style={{
-              background: "linear-gradient(180deg, #0F1626 0%, #080E1C 100%)",
-              boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
-            }}
+            className="relative w-full max-w-md rounded-2xl"
             onClick={e => e.stopPropagation()}
           >
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 text-white/40 hover:text-white/80 text-lg"
-              aria-label="Close"
+            {/* Soft ambient glow behind the panel for depth. */}
+            <div
+              className="pointer-events-none absolute -inset-4 rounded-3xl blur-2xl opacity-50"
+              aria-hidden="true"
+              style={{
+                background:
+                  "radial-gradient(40% 40% at 20% 20%, rgba(245,197,24,0.30) 0%, rgba(0,0,0,0) 70%), " +
+                  "radial-gradient(40% 40% at 80% 80%, rgba(99,102,241,0.30) 0%, rgba(0,0,0,0) 70%)",
+              }}
+            />
+
+            {/* Gradient border — wrapper + inner div trick since CSS does
+                not give us linear-gradient borders directly. */}
+            <div
+              className="absolute inset-0 rounded-2xl"
+              aria-hidden="true"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(245,197,24,0.45) 0%, rgba(245,197,24,0.05) 30%, rgba(99,102,241,0.05) 70%, rgba(99,102,241,0.35) 100%)",
+                padding: 1,
+              }}
             >
-              ×
-            </button>
+              <div className="w-full h-full rounded-2xl" style={{ background: "#070B14" }} />
+            </div>
+
+            <div
+              className="relative p-7"
+              style={{
+                background: "rgba(7,11,20,0.92)",
+                backdropFilter: "blur(20px) saturate(140%)",
+                WebkitBackdropFilter: "blur(20px) saturate(140%)",
+                borderRadius: "1rem",
+                boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
+              }}
+            >
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 text-white/30 hover:text-white text-xl leading-none w-7 h-7 rounded-full hover:bg-white/5 flex items-center justify-center transition-colors"
+                aria-label="Close"
+              >
+                ×
+              </button>
 
             {view === "pick" && (
               <div>
-                <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-yellow font-bold mb-2">
                   Connect
                 </div>
-                <h2 className="text-2xl font-bold mb-6">Welcome to Q402</h2>
+                <h2 className="text-2xl font-bold mb-1.5">Welcome to Q402</h2>
+                <p className="text-white/40 text-xs mb-6">Pick how you want to sign in.</p>
 
-                {/* All three buttons share a 392-px width — the modal is
+                {/* All three rails share a 392-px width — the modal is
                     max-w-md (448) minus p-7 padding (56) so inner width is
                     392. Google's button takes a pixel width prop; the other
                     two are w-full of the same parent → identical line. */}
-                <div className="space-y-3 mb-2 flex flex-col items-stretch">
+                <div className="space-y-2.5 mb-2 flex flex-col items-stretch">
                   <GoogleSigninButton
                     width={392}
                     onSuccess={() => {
@@ -125,19 +168,60 @@ export default function ConnectModal({ onClose }: Props) {
                   />
                   <button
                     onClick={() => setView("email-form")}
-                    className="w-full bg-white/5 border border-white/10 text-white font-medium text-sm py-3 rounded-full hover:bg-white/10 transition-colors"
+                    className="w-full flex items-center justify-center gap-2.5 border text-white font-medium text-sm py-3 rounded-full transition-all"
+                    style={{
+                      background: "rgba(255,255,255,0.04)",
+                      borderColor: "rgba(255,255,255,0.10)",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
+                    }}
                   >
+                    <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                      <path d="M3 7l9 6 9-6" />
+                    </svg>
                     Continue with email
                   </button>
                   <button
                     onClick={() => setShowWalletPicker(true)}
-                    className="w-full bg-yellow/8 border border-yellow/30 text-yellow font-medium text-sm py-3 rounded-full hover:bg-yellow/15 transition-colors"
+                    className="w-full flex items-center justify-center gap-2.5 border font-medium text-sm py-3 rounded-full transition-all"
+                    style={{
+                      background: "rgba(245,197,24,0.08)",
+                      borderColor: "rgba(245,197,24,0.30)",
+                      color: "#F5C518",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "rgba(245,197,24,0.16)";
+                      e.currentTarget.style.borderColor = "rgba(245,197,24,0.50)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "rgba(245,197,24,0.08)";
+                      e.currentTarget.style.borderColor = "rgba(245,197,24,0.30)";
+                    }}
                   >
+                    <svg viewBox="0 0 24 24" className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 010-4h12" />
+                      <circle cx="16.5" cy="13" r="1.2" fill="currentColor" stroke="none" />
+                    </svg>
                     Continue with wallet
                   </button>
                 </div>
 
-                {error && <p className="text-red-400 text-xs mt-3">{error}</p>}
+                {error && (
+                  <p className="text-red-400 text-xs text-center mt-3 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
+                    {error}
+                  </p>
+                )}
+
+                <p className="text-white/25 text-[11px] text-center mt-5 leading-relaxed">
+                  By continuing, you agree to Q402&apos;s terms of service.
+                </p>
               </div>
             )}
 
@@ -210,6 +294,7 @@ export default function ConnectModal({ onClose }: Props) {
                 </button>
               </div>
             )}
+            </div>
           </motion.div>
         </motion.div>
       </AnimatePresence>
