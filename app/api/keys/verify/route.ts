@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiKeyRecord, getSubscription, getScopedCredits, type CreditScope } from "@/app/lib/db";
+import {
+  getApiKeyRecord,
+  getSubscription,
+  getScopedCredits,
+  isCashPaidSubscription,
+  type CreditScope,
+} from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
@@ -43,9 +49,12 @@ export async function POST(req: NextRequest) {
     }
     const isSandboxKey     = record.isSandbox === true;
     const isTrialScopedKey = record.plan === "trial";
-    const isPaidAccount    = (subscription.amountUSD ?? 0) > 0 && !!subscription.paidAt;
-    // Paid-scope expiry — only for non-trial keys on accounts that paid.
-    if (!isSandboxKey && !isTrialScopedKey && isPaidAccount) {
+    // Paid-scope expiry — only for non-trial keys on accounts that paid
+    // real cash. Operational grants (admin-grant.mjs) hold Multichain
+    // access without an amountUSD entry and are intentionally
+    // non-expiring; isCashPaidSubscription returns false for those, so
+    // this 30-day window does not apply to them.
+    if (!isSandboxKey && !isTrialScopedKey && isCashPaidSubscription(subscription)) {
       const expiresAt = new Date(new Date(subscription.paidAt).getTime() + 30 * 24 * 60 * 60 * 1000);
       if (new Date() >= expiresAt) {
         return NextResponse.json({ valid: false, error: "Subscription expired" });

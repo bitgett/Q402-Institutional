@@ -203,12 +203,14 @@ describe("trial — /api/keys/provision exposes trial + paid keys separately", (
     );
   });
 
-  it("only marks hasPaid true when amountUSD > 0 AND a paid apiKey is set", () => {
-    // Active trials are NOT counted as paid — the dashboard's Multichain
-    // card relies on hasPaid to decide unlocked vs Locked state.
-    expect(provisionSource).toMatch(
-      /isPaid\s*=\s*\(existing\.amountUSD\s*\?\?\s*0\)\s*>\s*0\s*&&\s*!!paidApiKey/,
-    );
+  it("isPaid is derived from hasMultichainScope (access axis, not raw amountUSD)", () => {
+    // The dashboard's Multichain unlock signal must read off the access
+    // axis — hasMultichainScope() — not the cash axis (amountUSD > 0).
+    // Operational grants leave amountUSD === 0 by design, and paid
+    // customers who drain their pool still own the access; gating on
+    // amountUSD alone broke both cases.
+    expect(provisionSource).toMatch(/isPaid\s*=\s*hasMultichainScope\(existing\)/);
+    expect(provisionSource).toMatch(/paidApiKey\s*=\s*isPaid\s*\?\s*\(?existing\.apiKey/);
   });
 });
 
