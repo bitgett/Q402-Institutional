@@ -101,6 +101,50 @@ const NOW_ISO = NOW.toISOString();
 const subKey         = (addr) => `sub:${addr.toLowerCase()}`;
 const apiKeyRecKey   = (key)  => `apikey:${key}`;
 const scopedQuotaKey = (addr, scope) => `quota:${scope}:${addr.toLowerCase()}`;
+const legacyQuotaKey = (addr) => `quota:${addr.toLowerCase()}`;
+
+/**
+ * Inline mirror of `seedFromLegacy` in app/lib/db.ts so the script can
+ * preserve a legacy `quota:{addr}` balance when seeding the scoped pool.
+ * Without seed-first parity, a sponsored or pre-migration paid wallet
+ * with a non-zero legacy balance would have those credits silently
+ * discarded the moment admin-grant.mjs writes `SET NX 0` to the scoped
+ * key.
+ *
+ * Keep this in sync with seedFromLegacy(); the source-grep test in
+ * __tests__/multichain-scope.test.ts asserts both signatures contain
+ * the sponsored-plan paid signal.
+ */
+async function inlineSeedFromLegacy(addr, scope, sub) {
+  // Short-circuit: if the scoped key already has a value the seed is
+  // a no-op (parity with the production helper's first guard).
+  const scoped = await kv.get(scopedQuotaKey(addr, scope));
+  if (scoped !== null) return 0;
+
+  const legacyVal = await kv.get(legacyQuotaKey(addr));
+  if (typeof legacyVal !== "number" || legacyVal <= 0) return 0;
+
+  const hasModernTrialSignal =
+    !!sub?.trialApiKey &&
+    !!sub?.trialExpiresAt &&
+    new Date(sub.trialExpiresAt) > new Date();
+  const hasLegacyTrialSignal =
+    sub?.plan === "trial" &&
+    (sub?.amountUSD ?? 0) === 0 &&
+    !!sub?.apiKey &&
+    !sub?.trialApiKey;
+  const hasTrialSignal = hasModernTrialSignal || hasLegacyTrialSignal;
+  const hasCashPaidSignal =
+    (sub?.amountUSD ?? 0) > 0 && !!sub?.paidAt && sub?.plan !== "trial";
+  const hasSponsoredLegacyPaidSignal =
+    sub?.plan === "sponsored" && !!sub?.apiKey;
+  const hasPaidSignal = hasCashPaidSignal || hasSponsoredLegacyPaidSignal;
+
+  if (hasTrialSignal && !hasPaidSignal) return scope === "trial" ? legacyVal : 0;
+  if (!hasTrialSignal && hasPaidSignal) return scope === "paid"  ? legacyVal : 0;
+  if (hasTrialSignal && hasPaidSignal)  return scope === "paid"  ? legacyVal : 0;
+  return 0;
+}
 
 function mintKey(prefix, plan, isSandbox = false) {
   const rand = randomBytes(24).toString("hex");
@@ -286,9 +330,19 @@ for (const m of plan.mintedKeys) {
   await kv.set(apiKeyRecKey(m.key), m.record);
 }
 
-// Seed scoped pool if missing (mirrors initScopedQuotaIfNeeded semantics).
+// Seed scoped pool with the legacy balance first (parity with the
+// production addScopedCredits seed-first behaviour), then INCRBY the
+// grant on top. Without this, a wallet with a non-zero quota:{addr}
+// (legacy sponsored grants, pre-migration paid activations) would have
+// its existing balance dropped: the scoped key would start at 0 and
+// later reads would never see the legacy value because the scoped key
+// takes precedence over the legacy fallback.
 if (scopedBefore === null) {
-  await kv.set(scopedQuotaKey(ADDR, flags.scope), 0, { nx: true });
+  const seed = await inlineSeedFromLegacy(ADDR, flags.scope, existing);
+  await kv.set(scopedQuotaKey(ADDR, flags.scope), seed, { nx: true });
+  if (seed > 0) {
+    console.log(`  seeded scoped pool with legacy balance: ${seed.toLocaleString()}`);
+  }
 }
 const newScopedTotal = await kv.incrby(scopedQuotaKey(ADDR, flags.scope), flags.amount);
 

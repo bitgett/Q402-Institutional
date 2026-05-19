@@ -172,6 +172,17 @@ export function hasMultichainScope(sub?: Subscription | null): boolean {
   if (sub.plan === TRIAL_PLAN_NAME) return false;
   if (!sub.apiKey) return false;
 
+  // Legacy sponsored shape: scripts/grant-sponsored-credits.mjs (now
+  // blocked — see seedFromLegacy for the matching escape hatch) wrote
+  // plan: "sponsored" with amountUSD: 0 and paidAt: "" into sub. The
+  // sponsored plan + apiKey combination is the unforgable signal that
+  // a paid-scope key was minted for that wallet. Keep this branch in
+  // lockstep with seedFromLegacy's hasSponsoredLegacyPaidSignal —
+  // diverging them would let the dashboard show Locked while reads
+  // return credits, the exact conflation hasMultichainScope was
+  // introduced to eliminate.
+  if (sub.plan === "sponsored") return true;
+
   return (
     (sub.amountUSD ?? 0) > 0 ||
     !!sub.paidAt ||
@@ -244,27 +255,68 @@ export async function generateSandboxKey(address: string, plan: string): Promise
   return key;
 }
 
-export async function rotateApiKey(address: string): Promise<string> {
+export type RotateScope = "paid" | "trial";
+
+/**
+ * Rotates the API key in the requested scope and returns the new key.
+ *
+ *   scope: "paid"  → rotates sub.apiKey using the sub's current plan.
+ *   scope: "trial" → rotates sub.trialApiKey using TRIAL_PLAN_NAME so the
+ *                    new apikey record gets the trial-scope plan tag,
+ *                    regardless of sub.plan (a paid customer's legacy
+ *                    trial key still rotates with trial semantics).
+ *
+ * The trial branch also handles the pre-Phase-1 shape where the trial
+ * key lived in the apiKey slot (sub.plan === "trial" + sub.apiKey set +
+ * !trialApiKey). In that case the new key is minted into trialApiKey
+ * and the apiKey slot is cleared, migrating the record forward.
+ *
+ * The distributed lock is scoped to (address, scope) so trial + paid
+ * rotations can run independently without one blocking the other.
+ */
+export async function rotateApiKey(
+  address: string,
+  scope: RotateScope = "paid",
+): Promise<string> {
   const sub = await getSubscription(address);
   if (!sub) throw new Error("No subscription found");
 
-  // Distributed lock — prevent concurrent rotations for the same address.
-  const rotLockKey = `rotation_pending:${address.toLowerCase()}`;
+  const rotLockKey = `rotation_pending:${scope}:${address.toLowerCase()}`;
   const locked = await kv.set(rotLockKey, "1", { nx: true, ex: 30 });
   if (!locked) throw new Error("Key rotation already in progress. Please wait a moment.");
 
   try {
-    const oldKey = sub.apiKey;
+    let oldKey: string;
+    let newKey: string;
 
-    // Step 1: Create new key (immediately active).
-    const newKey = await generateApiKey(address, sub.plan);
+    if (scope === "trial") {
+      const hasModernTrialKey = !!sub.trialApiKey;
+      // Pre-Phase-1 trial subs wrote the trial key into the apiKey slot
+      // and set plan="trial" directly. Treat that as a trial slot for
+      // rotation purposes so the dashboard's Trial view button rotates
+      // the right key on legacy accounts too.
+      const hasLegacyTrialKey =
+        sub.plan === TRIAL_PLAN_NAME && !!sub.apiKey && !sub.trialApiKey;
+      if (!hasModernTrialKey && !hasLegacyTrialKey) {
+        throw new Error("No trial key to rotate");
+      }
+      oldKey = hasModernTrialKey ? sub.trialApiKey! : sub.apiKey;
+      newKey = await generateApiKey(address, TRIAL_PLAN_NAME);
+      // Always write the new key into trialApiKey. For legacy shape this
+      // also clears the apiKey slot — once a trial-only account is
+      // rotated, the trial key lives in its canonical post-Phase-1 slot.
+      const nextSub: Subscription = { ...sub, trialApiKey: newKey };
+      if (hasLegacyTrialKey) nextSub.apiKey = "";
+      await setSubscription(address, nextSub);
+    } else {
+      oldKey = sub.apiKey;
+      if (!oldKey) throw new Error("No paid key to rotate");
+      newKey = await generateApiKey(address, sub.plan);
+      await setSubscription(address, { ...sub, apiKey: newKey });
+    }
 
-    // Step 2: Point subscription at new key.
-    // If this throws, old key is still valid — user can retry safely.
-    await setSubscription(address, { ...sub, apiKey: newKey });
-
-    // Step 3: Deactivate old key (best-effort — new key is already live).
-    // Non-fatal: a dangling active old key is preferable to a user locked out.
+    // Best-effort deactivation of the old key. Non-fatal: a dangling
+    // active old key is preferable to a user locked out.
     if (oldKey) {
       deactivateApiKey(oldKey).catch(e =>
         console.error(`[rotate] old key deactivation failed (non-fatal): ${e}`)
