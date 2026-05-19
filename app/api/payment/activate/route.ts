@@ -86,6 +86,29 @@ export async function POST(req: NextRequest) {
         await initScopedQuotaIfNeeded(addr, "trial", legacy);
       }
     }
+
+    // ── Promote legacy-shape trial key to trialApiKey slot ─────────────────
+    // Pre-Phase-1 trial accounts wrote the trial key into the `apiKey` slot
+    // (no trialApiKey field existed). If we don't migrate it now, the paid
+    // activation below will reuse the same key as the paid live key (line
+    // ~304's `let apiKey = existing?.apiKey`) AND updateApiKeyPlan will
+    // change its record from plan="trial" to the paid tier — severing the
+    // trial-scope routing. Trial credits stay in the pool but the user
+    // loses the key to spend them.
+    //
+    // Mutate `existing` in-place: copy apiKey → trialApiKey, clear apiKey
+    // so the assignment below generates a FRESH paid key. Same for the
+    // sandbox slot. The mutated `existing` propagates into setSubscription
+    // via the spread at line ~344, so trial + paid keys end up cleanly
+    // split per the post-Phase-1 schema.
+    if (hasLegacyTrialKey && existing.apiKey) {
+      existing.trialApiKey = existing.apiKey;
+      if (existing.sandboxApiKey) {
+        existing.trialSandboxApiKey = existing.sandboxApiKey;
+      }
+      existing.apiKey = "";
+      existing.sandboxApiKey = undefined;
+    }
   }
 
   // ── Verify payment intent (chain + expectedUSD must match TX) ───────────

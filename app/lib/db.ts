@@ -651,7 +651,20 @@ export async function seedFromLegacy(
   if (scopedVal !== null) return 0;
 
   const legacyVal = await kv.get<number>(legacyQuotaKey(address));
-  if (legacyVal === null || legacyVal <= 0) return 0;
+  if (legacyVal === null || legacyVal <= 0) {
+    // ── Subscription mirror fallback (last resort) ─────────────────────────
+    // Mirrors the read-side fallback in `getScopedCredits` so mutation seed
+    // matches what reads return. Without this, an orphan-shape account
+    // (no scoped key, no legacy key, mirror still populated — possible
+    // post-cleanup or KV eviction) would render correctly on the dashboard
+    // but the first relay/topup would see scoped=0 and 429 "no credits".
+    // Mirror values are last-known-good display state; trusting them as a
+    // seed costs at most one over-grant bounded by the mirror value, which
+    // is preferable to silently dropping the user's credits.
+    const sub = await getSubscription(address);
+    if (scope === "trial") return Math.max(0, sub?.trialQuotaBonus ?? 0);
+    return Math.max(0, sub?.paidQuotaBonus ?? sub?.quotaBonus ?? 0);
+  }
 
   // Real fallback path. On a clean reconciliation this should be unreachable;
   // getting here means an account slipped through. Best-effort alert — don't
