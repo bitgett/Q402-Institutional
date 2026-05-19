@@ -618,15 +618,23 @@ const legacyQuotaKey = (addr: string) => `quota:${addr.toLowerCase()}`;
 
 /**
  * Decide which pool unmigrated legacy quota belongs to for `addr` / `scope`.
- * Used by `getScopedCredits` (read fallback) and `initScopedQuotaIfNeeded`
- * (mutation seed). Fires an ops alert when invoked — on a clean reconciliation
- * sequence this path should be unreachable, so any hit is a signal that
- * `scripts/reconcile-credit-pools.mjs` needs to be re-run.
+ * Used by `getScopedCredits` (read fallback) and the seed-first guard in
+ * `decrementScopedCredit` / `addScopedCredits`.
+ *
+ * Two paths:
+ *   1. Scoped key already exists for `scope` → short-circuit, return 0
+ *      silently. Post-reconciliation this is the normal case; the legacy
+ *      `quota:{addr}` is intentionally preserved until the +2w cleanup phase
+ *      and shouldn't trigger an alert on every mutation.
+ *   2. Scoped key missing AND legacy non-zero → real fallback. THIS path
+ *      fires `sendOpsAlert` because on a clean reconciliation it should be
+ *      unreachable, so any hit is a signal that reconcile-credit-pools.mjs
+ *      missed an account.
  *
  * Returns the legacy value when scope matches the account's signal, 0 otherwise.
- * Hybrid (both signals) biases the legacy value to the paid scope so the
- * account stays functional; the alert prompts the operator to do an honest
- * TX-history split via the reconciliation script.
+ * Hybrid (both trial and paid signals) biases the legacy value to the paid
+ * scope so the account stays functional; the alert prompts the operator to
+ * do an honest TX-history split via the reconciliation script.
  */
 export async function seedFromLegacy(
   address: string,
