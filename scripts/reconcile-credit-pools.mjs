@@ -125,9 +125,21 @@ function classifyAccount(sub) {
   const hasLegacyTrialSignal = sub?.plan === TRIAL_PLAN_NAME
     && (sub?.amountUSD ?? 0) === 0;
   const hasTrialSignal = hasModernTrialSignal || hasLegacyTrialSignal;
-  const hasPaidSignal = (sub?.amountUSD ?? 0) > 0
+
+  // Cash-paid signal: real on-chain payment recorded.
+  const hasCashPaidSignal = (sub?.amountUSD ?? 0) > 0
     && !!sub?.paidAt
     && sub?.plan !== TRIAL_PLAN_NAME;
+
+  // Legacy sponsored signal: scripts/grant-sponsored-credits.mjs wrote
+  // plan="sponsored" with amountUSD: 0 and paidAt: "". Those accounts
+  // hold paid scope semantics (paid-side apiKey, 50k credits in legacy
+  // single-pool) and must be reconciled into the paid pool, not skipped
+  // as orphans. The same exception lives in app/lib/db.ts seedFromLegacy
+  // — keep them in sync if either is touched.
+  const hasSponsoredLegacyPaidSignal = sub?.plan === "sponsored" && !!sub?.apiKey;
+
+  const hasPaidSignal = hasCashPaidSignal || hasSponsoredLegacyPaidSignal;
   if (hasTrialSignal && !hasPaidSignal) return "trial-only";
   if (!hasTrialSignal && hasPaidSignal) return "paid-only";
   if (hasTrialSignal && hasPaidSignal)  return "hybrid";

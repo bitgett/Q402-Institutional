@@ -296,3 +296,147 @@ describe("trial-activate guard + preserve-path semantics", () => {
     expect(next.amountUSD).toBe(0);
   });
 });
+
+// ── scan-clobbered-grants predicate ──────────────────────────────────────────
+//
+// Mirrors `matchesClobberShape` in scripts/scan-clobbered-grants.mjs. The
+// scan script's stage-1 filter must (a) catch every drained clobber whose
+// paidQuotaBonus mirror has fallen to 0, and (b) avoid false positives on
+// legitimate post-Phase-1 trial-only accounts that explicitly write
+// paidQuotaBonus: 0 into the mirror. Stage-2 in the script does an extra
+// apikey-record plan check; we cover that path narratively below since
+// the stage-1 predicate is the bulk of the false-positive surface.
+//
+// IMPORTANT: if you change matchesClobberShape in the script, update the
+// inlined copy in this test to match.
+
+describe("scan-clobbered-grants predicate (mirror of scripts/scan-clobbered-grants.mjs)", () => {
+  function matchesClobberShape(sub: Partial<Subscription> | null | undefined): boolean {
+    if (!sub || typeof sub !== "object") return false;
+    return (
+      sub.plan === "trial" &&
+      sub.txHash === "trial" &&
+      typeof sub.apiKey === "string" &&
+      sub.apiKey.length > 0 &&
+      typeof sub.trialApiKey === "string" &&
+      sub.trialApiKey.length > 0
+    );
+  }
+
+  it("drained clobber (paidQuotaBonus=0, both keys set) → flagged", () => {
+    // The case that escaped the previous `paidQuotaBonus > 0` filter:
+    // admin-grant minted the paid keys + 50k credits, the user drained
+    // the pool, then /event trial-activate ran and overwrote
+    // plan/txHash/amountUSD. paidQuotaBonus mirror reflects the drained
+    // pool (0). apiKey still holds the paid live key; trialApiKey was
+    // added by trial-activate.
+    const drainedClobber: Partial<Subscription> = {
+      plan: "trial",
+      txHash: "trial",
+      amountUSD: 0,
+      paidAt: "2026-05-15T06:58:23.970Z",
+      apiKey: "q402_live_paidkey",
+      sandboxApiKey: "q402_test_paidsbox",
+      trialApiKey: "q402_live_trialkey",
+      trialSandboxApiKey: "q402_test_trialsbox",
+      paidQuotaBonus: 0,
+      trialQuotaBonus: 2000,
+      quotaBonus: 2000,
+      trialExpiresAt: "2026-06-14T06:58:23.970Z",
+    };
+    expect(matchesClobberShape(drainedClobber)).toBe(true);
+  });
+
+  it("post-Phase-1 trial-only (apiKey='', paidQuotaBonus=0) → not flagged", () => {
+    // The false-positive case to avoid: a wallet that signed up for the
+    // trial via /event without any prior paid scope. trial-activate
+    // writes paidQuotaBonus: 0 (from a paid-pool scoped read on an
+    // account that never had paid scope) but leaves apiKey empty.
+    const trialOnly: Partial<Subscription> = {
+      plan: "trial",
+      txHash: "trial",
+      amountUSD: 0,
+      paidAt: "2026-05-19T17:14:23.134Z",
+      apiKey: "",
+      sandboxApiKey: undefined,
+      trialApiKey: "q402_live_trialkey",
+      trialSandboxApiKey: "q402_test_trialsbox",
+      paidQuotaBonus: 0,
+      trialQuotaBonus: 2000,
+      quotaBonus: 2000,
+      trialExpiresAt: "2026-06-18T17:14:23.134Z",
+    };
+    expect(matchesClobberShape(trialOnly)).toBe(false);
+  });
+
+  it("legacy pre-Phase-1 trial-in-apiKey-slot → not flagged by stage-1", () => {
+    // The other false-positive to consider: pre-Phase-1 trial subs
+    // wrote the trial key into the apiKey slot with no trialApiKey.
+    // The trialApiKey requirement filters them out at stage 1; the
+    // stage-2 apikey-record plan check is a redundant guard.
+    const legacyTrial: Partial<Subscription> = {
+      plan: "trial",
+      txHash: "trial",
+      amountUSD: 0,
+      paidAt: "2026-02-10T00:00:00.000Z",
+      apiKey: "q402_live_legacytrial",
+      sandboxApiKey: "q402_test_legacysbox",
+      trialApiKey: undefined,
+      trialSandboxApiKey: undefined,
+      paidQuotaBonus: undefined,
+      trialQuotaBonus: 1234,
+      quotaBonus: 1234,
+    };
+    expect(matchesClobberShape(legacyTrial)).toBe(false);
+  });
+
+  it("fresh clobber with paidQuotaBonus>0 still flagged (regression for v1 scan)", () => {
+    // Same sub shape as 0x8eae... before its hot-patch — both the
+    // narrow (paidQuotaBonus > 0) and the tightened (apiKey +
+    // trialApiKey both set) signatures must catch this.
+    const freshClobber: Partial<Subscription> = {
+      plan: "trial",
+      txHash: "trial",
+      amountUSD: 0,
+      paidAt: "2026-05-19T17:14:23.134Z",
+      apiKey: "q402_live_paidkey",
+      trialApiKey: "q402_live_trialkey",
+      paidQuotaBonus: 50000,
+      trialQuotaBonus: 2000,
+      quotaBonus: 52000,
+    };
+    expect(matchesClobberShape(freshClobber)).toBe(true);
+  });
+
+  it("paid customer mid-window → not flagged", () => {
+    // Sanity check: a normal paying customer is not a clobber candidate.
+    const paidCustomer: Partial<Subscription> = {
+      plan: "starter",
+      txHash: "0x" + "a".repeat(64),
+      amountUSD: 29,
+      paidAt: "2026-05-01T00:00:00.000Z",
+      apiKey: "q402_live_paidkey",
+      paidQuotaBonus: 500,
+      trialQuotaBonus: 0,
+      quotaBonus: 500,
+    };
+    expect(matchesClobberShape(paidCustomer)).toBe(false);
+  });
+
+  it("admin-grant pre-clobber (plan='starter') → not flagged", () => {
+    // The state immediately after admin-grant.mjs runs, before any
+    // /event activation. plan="starter" and txHash="admin_grant:..."
+    // both differ from the clobber signature.
+    const freshGrant: Partial<Subscription> = {
+      plan: "starter",
+      txHash: "admin_grant:1747671132478",
+      amountUSD: 0,
+      paidAt: "2026-05-19T17:12:12.478Z",
+      apiKey: "q402_live_grantkey",
+      paidQuotaBonus: 50000,
+      trialQuotaBonus: 0,
+      quotaBonus: 50000,
+    };
+    expect(matchesClobberShape(freshGrant)).toBe(false);
+  });
+});

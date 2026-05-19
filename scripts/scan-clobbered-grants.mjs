@@ -21,12 +21,20 @@
  * Clobber signature
  *   plan === "trial"
  *   txHash === "trial"
- *   paidQuotaBonus > 0
- *   apiKey set (the admin-grant paid key survived)
+ *   apiKey set (non-empty — admin-grant's paid key survived the spread)
+ *   trialApiKey set (trial-activate added the trial-side key)
+ *   apikey:{sub.apiKey} record exists AND record.plan !== "trial"
  *
- *   Real trial-only subscriptions miss the paidQuotaBonus condition;
- *   pre-clobber admin-grants (plan === "starter") miss the plan/txHash
- *   conditions. The signature is tight.
+ *   The first four conditions catch every known clobber shape including
+ *   drained grants where paidQuotaBonus mirror has fallen to 0; the
+ *   apikey-record plan check eliminates any residual false positive
+ *   (a legacy pre-Phase-1 trial-in-apiKey-slot account would have its
+ *   apikey record's plan === "trial" and be filtered out).
+ *
+ *   The previous narrower check (paidQuotaBonus > 0) missed drained
+ *   clobbers; the broader alternative (typeof paidQuotaBonus === "number")
+ *   false-positives on legitimate post-Phase-1 trial-only accounts that
+ *   write paidQuotaBonus: 0 explicitly into the mirror.
  *
  * Restore plan
  *   plan      → "starter" (admin-grant default — overridable via --plan)
@@ -60,21 +68,28 @@ const flags = {
   execute: args.includes("--execute"),
   json:    args.includes("--json"),
   plan:    "starter",
+  planExplicit: false,
 };
 for (const a of args) {
-  if (a.startsWith("--plan=")) flags.plan = a.slice("--plan=".length);
+  if (a.startsWith("--plan=")) {
+    flags.plan = a.slice("--plan=".length);
+    flags.planExplicit = true;
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-function isClobbered(sub) {
+// Stage-1 candidate filter, all sub-record fields only. The apikey-record
+// confirmation happens in the scan loop so we do not pay the extra KV read
+// for every sub on the system.
+function matchesClobberShape(sub) {
   if (!sub || typeof sub !== "object") return false;
   return (
     sub.plan === "trial" &&
     sub.txHash === "trial" &&
-    typeof sub.paidQuotaBonus === "number" &&
-    sub.paidQuotaBonus > 0 &&
     typeof sub.apiKey === "string" &&
-    sub.apiKey.length > 0
+    sub.apiKey.length > 0 &&
+    typeof sub.trialApiKey === "string" &&
+    sub.trialApiKey.length > 0
   );
 }
 
@@ -86,16 +101,25 @@ const subKeys = await kv.keys("sub:*");
 const findings = [];
 for (const key of subKeys) {
   const sub = await kv.get(key);
-  if (!isClobbered(sub)) continue;
+  if (!matchesClobberShape(sub)) continue;
+
+  // Stage-2: confirm the apiKey slot holds a paid-side key (record.plan
+  // would be "starter", "sponsored", or any non-trial plan). A legacy
+  // pre-Phase-1 trial-in-apiKey-slot account would have its apikey record's
+  // plan === "trial" and be filtered out here.
+  const keyRecord = await kv.get(`apikey:${sub.apiKey}`);
+  if (!keyRecord || keyRecord.plan === "trial") continue;
+
   findings.push({
     key,
     address: key.replace(/^sub:/, ""),
-    paidPoolMirror: sub.paidQuotaBonus,
+    paidPoolMirror: sub.paidQuotaBonus ?? null,
     trialPoolMirror: sub.trialQuotaBonus ?? 0,
     currentPlan: sub.plan,
     currentTxHash: sub.txHash,
     currentPaidAt: sub.paidAt,
     apiKey: sub.apiKey,
+    apiKeyRecordPlan: keyRecord.plan,
   });
 }
 
@@ -117,6 +141,7 @@ if (flags.json) {
     console.log(`    trial pool mirror: ${f.trialPoolMirror}`);
     console.log(`    paidAt (current) : ${f.currentPaidAt}`);
     console.log(`    apiKey           : ${f.apiKey.slice(0, 14)}…${f.apiKey.slice(-4)}`);
+    console.log(`    apikey rec plan  : ${f.apiKeyRecordPlan}`);
   }
   if (findings.length === 0) {
     console.log("  (no clobbered subs detected)");
@@ -135,13 +160,23 @@ if (findings.length === 0 || !flags.execute) {
 let repaired = 0;
 for (const f of findings) {
   const sub = await kv.get(f.key);
-  if (!isClobbered(sub)) {
+  if (!matchesClobberShape(sub)) {
     // Raced — someone fixed it between scan and apply. Skip silently.
     continue;
   }
+  const keyRecord = await kv.get(`apikey:${sub.apiKey}`);
+  if (!keyRecord || keyRecord.plan === "trial") {
+    // Same race: apiKey rotated or apikey record updated mid-scan.
+    continue;
+  }
+  // Restore plan from the apikey record's plan (the unforged paid-side
+  // identifier) when the operator did not pass an explicit override. This
+  // preserves "sponsored" vs "starter" tier accurately rather than
+  // collapsing every clobbered grant into "starter".
+  const restoredPlan = flags.planExplicit ? flags.plan : keyRecord.plan;
   const restored = {
     ...sub,
-    plan: flags.plan,
+    plan: restoredPlan,
     amountUSD: 0,
     txHash: "admin_grant:unknown",
     // paidAt, apiKey, sandboxApiKey, paidQuotaBonus, trialApiKey,
@@ -149,6 +184,6 @@ for (const f of findings) {
   };
   await kv.set(f.key, restored);
   repaired += 1;
-  console.log(`✓ Restored ${f.address} — plan="${flags.plan}", amountUSD=0, txHash="admin_grant:unknown"`);
+  console.log(`✓ Restored ${f.address} — plan="${restoredPlan}", amountUSD=0, txHash="admin_grant:unknown"`);
 }
 console.log(`\nDone. ${repaired} sub(s) restored.\n`);

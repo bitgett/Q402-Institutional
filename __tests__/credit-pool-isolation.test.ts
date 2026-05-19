@@ -287,6 +287,42 @@ describe("seedFromLegacy — safety net routing", () => {
     expect(await seedFromLegacy(ADDR, "trial")).toBe(0);
   });
 
+  it("legacy sponsored signal: returns legacy value for paid, 0 for trial", async () => {
+    // scripts/grant-sponsored-credits.mjs wrote sub records with
+    // plan="sponsored", amountUSD=0, paidAt="". Without the
+    // sponsored-plan branch in seedFromLegacy.hasPaidSignal, these
+    // accounts get classified as orphan and their first relay
+    // decrement seeds the scoped paid pool to 0 — the dashboard
+    // shows the mirror's quotaBonus but the relay returns 429.
+    // The branch is a narrow legacy escape hatch and is mirrored in
+    // scripts/reconcile-credit-pools.mjs — keep them in sync.
+    store.set(`quota:${ADDR}`, 50000);
+    store.set(`sub:${ADDR}`, {
+      paidAt:     "",
+      apiKey:     "q402_live_sponsored_x",
+      plan:       "sponsored",
+      txHash:     "provisioned",
+      amountUSD:  0,
+      quotaBonus: 50000,
+    });
+
+    expect(await seedFromLegacy(ADDR, "paid")).toBe(50000);
+    expect(await seedFromLegacy(ADDR, "trial")).toBe(0);
+  });
+
+  it("sponsored plan WITHOUT apiKey: still classified as orphan", async () => {
+    // The sponsored escape hatch requires a paid-side apiKey. A
+    // sponsored sub with apiKey unset is a malformed record — do not
+    // route legacy credits into the paid pool from it.
+    store.set(`quota:${ADDR}`, 50000);
+    store.set(`sub:${ADDR}`, {
+      paidAt: "", apiKey: "", plan: "sponsored", txHash: "", amountUSD: 0,
+    });
+
+    expect(await seedFromLegacy(ADDR, "paid")).toBe(0);
+    expect(await seedFromLegacy(ADDR, "trial")).toBe(0);
+  });
+
   it("orphan account (no signals): returns 0 for both scopes", async () => {
     store.set(`quota:${ADDR}`, 500);
     store.set(`sub:${ADDR}`, {

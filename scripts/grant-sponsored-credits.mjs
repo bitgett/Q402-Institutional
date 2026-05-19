@@ -1,67 +1,37 @@
 /**
- * grant-sponsored-credits.mjs — admin one-shot
+ * grant-sponsored-credits.mjs — DEPRECATED / BLOCKED
  *
- * Grants a sponsored allotment of relay credits to a single address.
+ * Superseded by scripts/admin-grant.mjs, which writes the post-Phase-1
+ * scoped credit pool (`quota:paid:{addr}`) and the modern subscription
+ * mirror fields (paidQuotaBonus).
  *
- * Writes three KV records (matching the schema in app/lib/db.ts):
- *   1. `apikey:<key>`  — fresh q402_live_ key bound to ADDRESS
- *   2. `sub:<addr>`    — subscription record (paidAt="" + amountUSD=0,
- *                        which the verify route treats as non-paid /
- *                        no-expiry, mirroring the sandbox-key path)
- *   3. `quota:<addr>`  — INCRBY by AMOUNT (atomic; rerunning topups up)
+ * The original implementation wrote the legacy single-pool schema:
  *
- * Usage:
- *   1. vercel env pull /tmp/.env.q402 --environment=production
- *   2. node --env-file=/tmp/.env.q402 scripts/grant-sponsored-credits.mjs
- *   3. (note the printed apiKey — that's what the recipient uses)
+ *   apikey:<key>  plan: "sponsored"
+ *   sub:<addr>    plan: "sponsored", amountUSD: 0, paidAt: "", quotaBonus
+ *   quota:<addr>  INCRBY  (legacy, not the scoped pool)
  *
- * Required env (KV credentials, present in production env):
- *   - KV_REST_API_URL
- *   - KV_REST_API_TOKEN
+ * That shape is incompatible with the two-pool credit model: the
+ * subscription's paid scope cannot be reconciled into `quota:paid:{addr}`
+ * by seedFromLegacy without a sponsored-plan escape hatch (kept solely to
+ * keep the one production sponsored orphan, 0xfe7ba1cd..., functional).
+ * Recreating accounts in that shape today would force more such hatches.
+ *
+ * If a future ops case genuinely needs the legacy schema, recover the
+ * original implementation from git history and rewire it onto the scoped
+ * pool. For routine grants, use admin-grant.mjs:
+ *
+ *   node --env-file=.env.local scripts/admin-grant.mjs \
+ *     --address=0x... --amount=50000 --execute
  */
 
-import { kv } from "@vercel/kv";
-import { randomBytes } from "node:crypto";
-
-// ── config ──────────────────────────────────────────────────────────────────
-const ADDRESS = "0x10fb078594b70ee8024b2ded3d67fc3aa9ea747a";
-const AMOUNT  = 50000;
-const PLAN    = "sponsored";
-
-// ── derived ─────────────────────────────────────────────────────────────────
-const addr   = ADDRESS.toLowerCase();
-const apiKey = `q402_live_${randomBytes(24).toString("hex")}`;
-const now    = new Date().toISOString();
-
-// ── execute ─────────────────────────────────────────────────────────────────
-console.log(`Granting ${AMOUNT.toLocaleString()} sponsored credits to ${addr}…`);
-
-// 1. Bind a fresh API key to this address.
-await kv.set(`apikey:${apiKey}`, {
-  address:   addr,
-  createdAt: now,
-  active:    true,
-  plan:      PLAN,
-});
-
-// 2. Subscription record. paidAt="" + amountUSD=0 keeps the verify route
-//    from imposing an expiry — same path sandbox-only / provisioned accounts
-//    take. quotaBonus is mirrored on the subscription JSON for display only;
-//    the atomic source of truth is the quota counter below.
-await kv.set(`sub:${addr}`, {
-  apiKey,
-  plan:        PLAN,
-  paidAt:      "",
-  amountUSD:   0,
-  quotaBonus:  AMOUNT,
-});
-
-// 3. Atomic credit counter. INCRBY so the script is rerunnable as a topup.
-const newTotal = await kv.incrby(`quota:${addr}`, AMOUNT);
-
-console.log("\n✓ done");
-console.log(`  address:        ${addr}`);
-console.log(`  api key:        ${apiKey}`);
-console.log(`  granted now:    ${AMOUNT.toLocaleString()}`);
-console.log(`  total credits:  ${Number(newTotal).toLocaleString()}`);
-console.log(`  plan:           ${PLAN}`);
+console.error(
+  "\n⚠ grant-sponsored-credits.mjs is DEPRECATED and intentionally blocked.\n" +
+  "  This script wrote the legacy single-pool schema, which is no longer\n" +
+  "  functional with the two-pool credit model. Running it would create a\n" +
+  "  non-functional sub.\n\n" +
+  "  Use scripts/admin-grant.mjs instead:\n\n" +
+  "    node --env-file=.env.local scripts/admin-grant.mjs \\\n" +
+  "      --address=0x... --amount=50000 --execute\n",
+);
+process.exit(2);
