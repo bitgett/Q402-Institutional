@@ -1,13 +1,18 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { connectWallet, getConnectedAccount } from "../lib/wallet";
+import {
+  connectWallet,
+  getConnectedAccount,
+  getActiveProvider,
+  type WalletType,
+} from "../lib/wallet";
 
 interface WalletCtx {
   address: string | null;
   isConnected: boolean;
   connect: () => Promise<void>;
-  connectWith: (type: "metamask" | "okx") => Promise<string | null>;
+  connectWith: (type: WalletType) => Promise<string | null>;
   disconnect: () => void;
   /** Sign an arbitrary message with the connected wallet (personal_sign). */
   signMessage: (message: string) => Promise<string | null>;
@@ -22,21 +27,43 @@ const WalletContext = createContext<WalletCtx>({
   signMessage: async () => null,
 });
 
-type EthProvider = { request: (args: { method: string; params: unknown[] }) => Promise<string> };
+type EvProvider = {
+  on: (e: string, cb: (a: string[]) => void) => void;
+  removeListener: (e: string, cb: (a: string[]) => void) => void;
+};
 
-function getProviders() {
-  const w = window as unknown as { ethereum?: EthProvider; okxwallet?: EthProvider };
-  return { eth: w.ethereum, okx: w.okxwallet };
+// Collect every distinct injected provider we know about, so accountsChanged
+// fires regardless of which one the user picked. Providers from the same
+// vendor that appear in both window.ethereum AND window.ethereum.providers[]
+// are deduped by reference.
+function listInjectedProviders(): EvProvider[] {
+  const w = window as unknown as {
+    ethereum?: EvProvider & { providers?: EvProvider[] };
+    okxwallet?: EvProvider;
+    BinanceChain?: EvProvider;
+    coinbaseWalletExtension?: EvProvider;
+    bitkeep?: { ethereum?: EvProvider };
+  };
+  const set = new Set<EvProvider>();
+  if (w.ethereum) set.add(w.ethereum);
+  if (Array.isArray(w.ethereum?.providers)) {
+    for (const p of w.ethereum.providers) if (p) set.add(p);
+  }
+  if (w.okxwallet) set.add(w.okxwallet);
+  if (w.BinanceChain) set.add(w.BinanceChain);
+  if (w.coinbaseWalletExtension) set.add(w.coinbaseWalletExtension);
+  if (w.bitkeep?.ethereum) set.add(w.bitkeep.ethereum);
+  return Array.from(set);
 }
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
-  const [walletType, setWalletType] = useState<"metamask" | "okx" | null>(null);
+  // walletType is only needed to bias getActiveProvider's lookup, which
+  // reads localStorage directly — no React state needed.
 
   const disconnect = useCallback(() => {
     setAddress(null);
-    setWalletType(null);
     localStorage.removeItem("q402_wallet");
     localStorage.removeItem("q402_wallet_type");
   }, []);
@@ -49,11 +76,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const connectWith = useCallback(async (type: "metamask" | "okx"): Promise<string | null> => {
+  const connectWith = useCallback(async (type: WalletType): Promise<string | null> => {
     const addr = await connectWallet(type);
     if (addr) {
       setAddress(addr);
-      setWalletType(type);
       localStorage.setItem("q402_wallet", addr);
       localStorage.setItem("q402_wallet_type", type);
     }
@@ -61,18 +87,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /**
-   * Sign a message with the connected wallet using personal_sign.
-   * Uses the same wallet type that was used to connect.
+   * Sign a message with the connected wallet using personal_sign. Routes
+   * through getActiveProvider() so the signature comes from the same
+   * vendor the user originally picked, even when several wallet
+   * extensions are installed side by side.
    */
   const signMessage = useCallback(async (message: string): Promise<string | null> => {
     if (!address) return null;
-    const { eth, okx } = getProviders();
-    // Use whichever wallet the user connected with; fall back to whatever is available
-    const savedType = walletType ?? (localStorage.getItem("q402_wallet_type") as "metamask" | "okx" | null);
-    let provider: EthProvider | undefined;
-    if (savedType === "okx") provider = okx ?? eth;
-    else if (savedType === "metamask") provider = eth ?? okx;
-    else provider = eth ?? okx;
+    const provider = getActiveProvider() as
+      | { request: (a: { method: string; params: unknown[] }) => Promise<string> }
+      | null;
     if (!provider) return null;
     try {
       return await provider.request({
@@ -82,16 +106,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     } catch {
       return null;
     }
-  }, [address, walletType]);
+  }, [address]);
 
   // Restore on mount
   useEffect(() => {
     const init = async () => {
       const saved = localStorage.getItem("q402_wallet");
-      const savedType = localStorage.getItem("q402_wallet_type") as "metamask" | "okx" | null;
       // Immediately restore from localStorage so pages don't flash "disconnected"
       if (saved) setAddress(saved);
-      if (savedType) setWalletType(savedType);
       // Verify wallet is still connected — but only update, never clear from here.
       // The accountsChanged event (empty array) handles actual disconnections.
       // Clearing from init causes wallet to flash-disconnect on page navigation.
@@ -105,10 +127,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     init();
   }, []);
 
-  // Listen for account changes on both providers
+  // Listen for account changes across every injected provider. Vendors
+  // that won the window.ethereum slot AND vendors that only expose a
+  // namespaced global both need to be subscribed — otherwise a disconnect
+  // in (e.g.) Binance Web3 Wallet wouldn't propagate to our context.
   useEffect(() => {
-    type EvProvider = { on: (e: string, cb: (a: string[]) => void) => void; removeListener: (e: string, cb: (a: string[]) => void) => void };
-    const w = window as unknown as { ethereum?: EvProvider; okxwallet?: EvProvider };
     const handler = (accounts: string[]) => {
       if (accounts.length === 0) { disconnect(); }
       else {
@@ -116,7 +139,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("q402_wallet", accounts[0]);
       }
     };
-    const providers = [w.ethereum, w.okxwallet].filter(Boolean) as EvProvider[];
+    const providers = listInjectedProviders();
     for (const p of providers) p.on("accountsChanged", handler);
     return () => { for (const p of providers) p.removeListener("accountsChanged", handler); };
   }, [disconnect]);
