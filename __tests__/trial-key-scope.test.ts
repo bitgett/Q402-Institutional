@@ -55,8 +55,14 @@ describe("/api/relay — trial keys recognised as current keys", () => {
     expect(relaySource).toMatch(/isTrialScopedKey\s*=\s*keyRecord\.plan\s*===\s*["']trial["']/);
   });
 
-  it("paid expiry skips trial-scoped keys (no paid-expiry on trial keys)", () => {
-    expect(relaySource).toMatch(/!isSandbox\s*&&\s*!isTrialScopedKey\s*&&\s*isPaidAccount/);
+  it("paid expiry skips trial-scoped keys and admin-granted accounts", () => {
+    // The paid-expiry 30-day window is keyed on the money axis
+    // (isCashPaidSubscription). admin-grants leave amountUSD === 0 and
+    // so are intentionally non-expiring; trial-scoped keys hit the
+    // trial-expiry gate below.
+    expect(relaySource).toMatch(
+      /!isSandbox\s*&&\s*!isTrialScopedKey\s*&&\s*isCashPaidSubscription\(subscription\)/,
+    );
   });
 
   it("trial expiry fires for trial-scoped keys (not gated on subscription.plan)", () => {
@@ -95,8 +101,13 @@ describe("/api/keys/verify — trial keys verified correctly", () => {
     expect(verifySource).toMatch(/isTrialScopedKey\s*=\s*record\.plan\s*===\s*["']trial["']/);
   });
 
-  it("paid expiry gate excludes trial-scoped keys", () => {
-    expect(verifySource).toMatch(/!isSandboxKey\s*&&\s*!isTrialScopedKey\s*&&\s*isPaidAccount/);
+  it("paid expiry gate excludes trial-scoped keys and admin-granted accounts", () => {
+    // Mirrors the relay-side gate: money-axis predicate
+    // (isCashPaidSubscription) — operational grants stay non-expiring,
+    // trial-scoped keys flow into the trial-expiry gate below.
+    expect(verifySource).toMatch(
+      /!isSandboxKey\s*&&\s*!isTrialScopedKey\s*&&\s*isCashPaidSubscription\(subscription\)/,
+    );
   });
 
   it("trial expiry gate fires on key scope, not subscription plan", () => {

@@ -1,0 +1,298 @@
+/**
+ * multichain-scope.test.ts
+ *
+ * Regression cover for the three-axis subscription model:
+ *
+ *   money   — amountUSD / paidAt
+ *   access  — hasMultichainScope()
+ *   balance — quota:paid:{addr} scoped read
+ *
+ * Prior to this split, both the dashboard's "Multichain Locked vs unlocked"
+ * gate and the trial-activate ALREADY_PAID guard checked the cash signal
+ * `amountUSD > 0`. That conflation meant:
+ *
+ *   1. Operational grants (admin-grant.mjs leaves amountUSD === 0 by
+ *      design so the books stay honest) rendered as "Locked" on the
+ *      Multichain card — credits intact in KV but UI showed 0.
+ *
+ *   2. A grant recipient who then hit /event was waved past the
+ *      ALREADY_PAID guard and the trial-activate path overwrote their
+ *      paid sub fields (plan, paidAt, amountUSD, txHash) with trial
+ *      defaults, eliminating the grant trace from the audit trail.
+ *
+ *   3. Even after a v1 fix that recognized paidQuotaBonus > 0, any paid
+ *      customer who drained their pool would silently revert to "Locked"
+ *      the moment their balance hit 0 — credits are balance, not access.
+ *
+ * hasMultichainScope() encodes the access axis: scope is conferred once
+ * (real cash, grant timestamp, mirror slot existence, or admin-grant
+ * txHash) and persists regardless of current balance. isCashPaidSubscription()
+ * isolates the cash axis for paid-expiry math.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ── In-memory KV (shared shape with credit-pool-isolation.test.ts) ───────────
+const store = new Map<string, unknown>();
+
+const mockKv = vi.hoisted(() => ({
+  get: vi.fn(),
+  set: vi.fn(),
+  del: vi.fn(),
+  incrby: vi.fn(),
+  decrby: vi.fn(),
+  sadd: vi.fn(),
+  srem: vi.fn(),
+  smembers: vi.fn(),
+  hset: vi.fn(),
+  hget: vi.fn(),
+  hgetall: vi.fn(),
+  hincrbyfloat: vi.fn(),
+}));
+
+vi.mock("@vercel/kv", () => ({ kv: mockKv }));
+vi.mock("@/app/lib/ops-alerts", () => ({
+  sendOpsAlert: vi.fn(() => Promise.resolve()),
+}));
+
+import {
+  hasMultichainScope,
+  isCashPaidSubscription,
+  type Subscription,
+} from "@/app/lib/db";
+
+beforeEach(() => {
+  store.clear();
+  vi.clearAllMocks();
+  mockKv.get.mockImplementation((key: string) => Promise.resolve(store.get(key) ?? null));
+  mockKv.set.mockImplementation((key: string, value: unknown, opts?: { nx?: boolean }) => {
+    if (opts?.nx && store.has(key)) return Promise.resolve(null);
+    store.set(key, value);
+    return Promise.resolve("OK");
+  });
+  mockKv.incrby.mockImplementation((key: string, n: number) => {
+    const cur = (store.get(key) as number | undefined) ?? 0;
+    const next = cur + n;
+    store.set(key, next);
+    return Promise.resolve(next);
+  });
+  mockKv.decrby.mockImplementation((key: string, n: number) => {
+    const cur = (store.get(key) as number | undefined) ?? 0;
+    const next = cur - n;
+    store.set(key, next);
+    return Promise.resolve(next);
+  });
+});
+
+// Factory — returns a fully-populated Subscription record so tests can
+// vary the one or two fields under inspection without re-typing the rest.
+function makeSub(overrides: Partial<Subscription> = {}): Subscription {
+  return {
+    apiKey: "q402_live_abcdef000000000000000000000000000000000000000000",
+    sandboxApiKey: "q402_test_abcdef000000000000000000000000000000000000000000",
+    plan: "starter",
+    paidAt: "2026-05-19T17:12:12.000Z",
+    amountUSD: 29,
+    txHash: "0x" + "a".repeat(64),
+    paidQuotaBonus: 500,
+    trialQuotaBonus: 0,
+    quotaBonus: 500,
+    ...overrides,
+  };
+}
+
+// ── hasMultichainScope — access axis ─────────────────────────────────────────
+
+describe("hasMultichainScope — access axis predicate", () => {
+  it("admin-grant: amountUSD=0 + paidQuotaBonus mirror + apiKey → true", () => {
+    const sub = makeSub({
+      amountUSD: 0,
+      paidQuotaBonus: 50000,
+      txHash: "admin_grant:1747671132478",
+    });
+    expect(hasMultichainScope(sub)).toBe(true);
+  });
+
+  it("admin-grant after credits drained: paidQuotaBonus=0 but apiKey + admin_grant txHash → still true", () => {
+    // Critical case the v1 fix (`paidQuotaBonus > 0`) would have failed:
+    // the wallet legitimately holds Multichain access but burned through
+    // the granted credits. Dashboard should show "0 credits, top up
+    // needed" — not regress to Locked.
+    const sub = makeSub({
+      amountUSD: 0,
+      paidQuotaBonus: 0,
+      txHash: "admin_grant:1747671132478",
+    });
+    expect(hasMultichainScope(sub)).toBe(true);
+  });
+
+  it("legacy trial-in-apiKey-slot: plan='trial' + apiKey set → false", () => {
+    // Pre-Phase-1 trial activations wrote the trial key into the apiKey
+    // slot. The plan === "trial" short-circuit keeps them from being
+    // misclassified as paid even though every other signal is benign.
+    const sub = makeSub({
+      plan: "trial",
+      amountUSD: 0,
+      paidAt: "",
+      paidQuotaBonus: undefined,
+      trialExpiresAt: "2026-06-18T00:00:00.000Z",
+    });
+    expect(hasMultichainScope(sub)).toBe(false);
+  });
+
+  it("cash-paid customer mid-window: amountUSD>0 + paidAt + paidQuotaBonus set → true", () => {
+    expect(hasMultichainScope(makeSub())).toBe(true);
+  });
+
+  it("cash-paid customer with drained pool: paidQuotaBonus=0 + apiKey + amountUSD>0 → still true", () => {
+    const sub = makeSub({ paidQuotaBonus: 0, quotaBonus: 0 });
+    expect(hasMultichainScope(sub)).toBe(true);
+  });
+
+  it("null sub (brand-new wallet) → false", () => {
+    expect(hasMultichainScope(null)).toBe(false);
+    expect(hasMultichainScope(undefined)).toBe(false);
+  });
+
+  it("sub without apiKey (half-provisioned stub) → false", () => {
+    const sub = makeSub({ apiKey: "" });
+    expect(hasMultichainScope(sub)).toBe(false);
+  });
+
+  it("trial-only sub with no paid signals → false", () => {
+    const sub: Subscription = {
+      apiKey: "",
+      plan: "trial",
+      paidAt: "2026-05-19T17:14:23.134Z",
+      amountUSD: 0,
+      txHash: "trial",
+      trialApiKey: "q402_live_71f63415d826239c69902a6441bcb99a1ebea6df2d126413",
+      trialSandboxApiKey: "q402_test_535468012b77ed22346876778450ad211df5183b72af2a1e",
+      trialQuotaBonus: 2000,
+      paidQuotaBonus: undefined,
+      quotaBonus: 2000,
+      trialExpiresAt: "2026-06-18T17:14:23.134Z",
+    };
+    expect(hasMultichainScope(sub)).toBe(false);
+  });
+});
+
+// ── isCashPaidSubscription — money axis ──────────────────────────────────────
+
+describe("isCashPaidSubscription — money axis predicate", () => {
+  it("real payment (amountUSD>0 + paidAt) → true", () => {
+    expect(isCashPaidSubscription(makeSub())).toBe(true);
+  });
+
+  it("admin-grant (amountUSD=0) → false even with paidAt + Multichain scope", () => {
+    // Defines the invariant that admin-grants are NOT subject to the
+    // paid-expiry 30-day window — that policy lives in relay/route.ts
+    // and keys/verify/route.ts via this predicate.
+    const sub = makeSub({
+      amountUSD: 0,
+      txHash: "admin_grant:1747671132478",
+    });
+    expect(isCashPaidSubscription(sub)).toBe(false);
+    // And the same sub still has Multichain access:
+    expect(hasMultichainScope(sub)).toBe(true);
+  });
+
+  it("missing paidAt → false even with amountUSD>0", () => {
+    const sub = makeSub({ paidAt: "" });
+    expect(isCashPaidSubscription(sub)).toBe(false);
+  });
+
+  it("null sub → false", () => {
+    expect(isCashPaidSubscription(null)).toBe(false);
+    expect(isCashPaidSubscription(undefined)).toBe(false);
+  });
+});
+
+// ── Trial-activate sequence regression ───────────────────────────────────────
+//
+// These exercise the two guards in app/api/trial/activate/route.ts that were
+// upgraded to use hasMultichainScope:
+//
+//   - the ALREADY_PAID guard near the top, which must reject admin-granted
+//     wallets so the path below never runs against them
+//
+//   - the preserve-path inside setSubscription, defense-in-depth that
+//     ensures even if the guard is bypassed the paid-side fields are not
+//     clobbered
+//
+// We do not call the route handler directly (too much auth ceremony for
+// this test surface); we exercise the helpers and the conditional shape
+// the route implements. Real end-to-end coverage lives in the relay/
+// activate integration tests.
+
+describe("trial-activate guard + preserve-path semantics", () => {
+  it("hasMultichainScope flags admin-granted wallet → ALREADY_PAID guard fires", () => {
+    // Sub shape after admin-grant.mjs against a brand-new wallet:
+    const sub = makeSub({
+      amountUSD: 0,
+      paidQuotaBonus: 50000,
+      paidAt: "2026-05-19T17:12:12.478Z",
+      txHash: "admin_grant:1747671132478",
+    });
+    expect(hasMultichainScope(sub)).toBe(true);
+    // Translation: route.ts returns 409 with code "ALREADY_PAID".
+  });
+
+  it("preserve-path: write conditional keeps paid-side fields verbatim", () => {
+    // Simulate the spread that trial/activate route.ts performs when the
+    // guard is bypassed (race condition, refactor regression).
+    const existing = makeSub({
+      amountUSD: 0,
+      paidQuotaBonus: 50000,
+      paidAt: "2026-05-19T17:12:12.478Z",
+      txHash: "admin_grant:1747671132478",
+      apiKey: "q402_live_grant1",
+      sandboxApiKey: "q402_test_grant1",
+    });
+
+    const preserveScope = hasMultichainScope(existing);
+    expect(preserveScope).toBe(true);
+
+    // Reproduce the conditional from route.ts:
+    const next: Partial<Subscription> = preserveScope
+      ? {
+          apiKey:        existing.apiKey,
+          sandboxApiKey: existing.sandboxApiKey,
+          plan:          existing.plan,
+          paidAt:        existing.paidAt,
+          amountUSD:     existing.amountUSD ?? 0,
+          txHash:        existing.txHash || "admin_grant:unknown",
+        }
+      : {
+          plan:      "trial",
+          paidAt:    new Date().toISOString(),
+          amountUSD: 0,
+          txHash:    "trial",
+        };
+
+    expect(next.apiKey).toBe("q402_live_grant1");
+    expect(next.sandboxApiKey).toBe("q402_test_grant1");
+    expect(next.plan).toBe("starter");
+    expect(next.paidAt).toBe("2026-05-19T17:12:12.478Z");
+    expect(next.amountUSD).toBe(0);
+    expect(next.txHash).toBe("admin_grant:1747671132478");
+  });
+
+  it("preserve-path: brand-new sub falls through to trial defaults", () => {
+    const existing: Subscription | null = null;
+    const preserveScope = hasMultichainScope(existing);
+    expect(preserveScope).toBe(false);
+
+    const next: Partial<Subscription> = preserveScope
+      ? { /* unreachable */ }
+      : {
+          plan:      "trial",
+          paidAt:    "2026-05-19T17:14:23.134Z",
+          amountUSD: 0,
+          txHash:    "trial",
+        };
+
+    expect(next.plan).toBe("trial");
+    expect(next.txHash).toBe("trial");
+    expect(next.amountUSD).toBe(0);
+  });
+});
