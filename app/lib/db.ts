@@ -762,9 +762,27 @@ export async function seedFromLegacy(
     && !!sub?.apiKey
     && !sub?.trialApiKey;
   const hasTrialSignal = hasModernTrialSignal || hasLegacyTrialSignal;
-  const hasPaidSignal = (sub?.amountUSD ?? 0) > 0
+
+  // Cash-paid signal: real on-chain payment recorded. The exclusion of
+  // plan === "trial" prevents a paid customer who then activated a trial
+  // (legacy sequence pre-Phase-1) from being misclassified.
+  const hasCashPaidSignal = (sub?.amountUSD ?? 0) > 0
     && !!sub?.paidAt
     && sub?.plan !== "trial";
+
+  // Legacy sponsored signal: scripts/grant-sponsored-credits.mjs (now
+  // blocked at the top — see admin-grant.mjs for the canonical path)
+  // wrote `plan: "sponsored"` with amountUSD: 0 and paidAt: "" into
+  // sub records, leaving the 50k credits in the legacy `quota:{addr}`
+  // pool. Without this branch, those accounts get classified as orphan
+  // by seedFromLegacy and their first relay decrement fails: dashboard
+  // shows the mirror balance but the scoped pool seeds to 0 and the
+  // relay route returns 429. plan === "sponsored" is a strict
+  // narrow-purpose marker — do NOT generalize this branch unless you
+  // are intentionally re-enabling sponsored grants.
+  const hasSponsoredLegacyPaidSignal = sub?.plan === "sponsored" && !!sub?.apiKey;
+
+  const hasPaidSignal = hasCashPaidSignal || hasSponsoredLegacyPaidSignal;
 
   // Single-scope accounts: legacy belongs unambiguously to the active scope.
   if (hasTrialSignal && !hasPaidSignal) return scope === "trial" ? legacyVal : 0;
