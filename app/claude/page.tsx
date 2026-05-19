@@ -418,7 +418,7 @@ export default function ClaudePage() {
                 color: "rgba(245,158,11,0.32)",
                 bg: "rgba(245,158,11,0.06)",
                 description:
-                  "Send one signed batch to up to 20 recipients on a single chain × token (trial: 5). Same sandbox gating as q402_pay; agent must confirm the full batch in chat first.",
+                  "Send one signed batch to up to 20 recipients on a single chain × token (trial: 5). Same auto-routing as q402_pay (BNB + Trial key set → Trial; else Multichain). 6+ recipient BNB batches return status=\"ambiguous\" so the agent can ask the user to pick: 5 free (trial), all paid (multichain), or split. Same sandbox gating as q402_pay; agent must confirm the full batch in chat first.",
               },
               {
                 name: "q402_receipt",

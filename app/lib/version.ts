@@ -26,4 +26,4 @@ export const SDK_VERSION = "1.7.3-bnbfocus" as const;
  * registry.npmjs.org, but UI labels reference *this* constant — so a
  * forgotten label after publish trips on screenshot review, not silently.
  */
-export const MCP_VERSION = "0.4.7" as const;
+export const MCP_VERSION = "0.4.8" as const;
