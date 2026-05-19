@@ -33,8 +33,8 @@ const WALLETS: WalletDef[] = [
     desc: "Browser extension wallet",
     installUrl: "https://metamask.io/download/",
     icon: (
-      <div className="w-9 h-9 rounded-lg flex-shrink-0 overflow-hidden" style={{ background: "#F6851B" }}>
-        <svg viewBox="0 0 35 33" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full p-0.5" aria-hidden="true">
+      <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center">
+        <svg viewBox="0 0 35 33" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8" aria-hidden="true">
           <path d="M32.958 1L19.862 10.765l2.388-5.637L32.958 1z" fill="#E17726" stroke="#E17726" strokeWidth=".25" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M2.042 1l12.986 9.848-2.27-5.72L2.042 1z" fill="#E27625" stroke="#E27625" strokeWidth=".25" strokeLinecap="round" strokeLinejoin="round" />
           <path d="M28.16 23.533l-3.488 5.338 7.463 2.054 2.143-7.27-6.118-.122zM.744 23.655l2.131 7.27 7.451-2.054-3.476-5.338-6.106.122z" fill="#E27625" stroke="#E27625" strokeWidth=".25" strokeLinecap="round" strokeLinejoin="round" />
