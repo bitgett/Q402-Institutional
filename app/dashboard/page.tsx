@@ -1341,13 +1341,37 @@ export default function DashboardPage() {
     const chal = await getFreshChallenge(address, signMessage);
     if (!chal) return;
     const { challenge, signature } = chal;
+    // Route to the slot the user is actually looking at. The Trial view's
+    // card displays sub.trialApiKey (or the pre-Phase-1 sub.apiKey when
+    // plan === "trial" and trialApiKey is empty); the Multichain view
+    // shows sub.apiKey. Without this scope the rotate endpoint always
+    // touched the paid slot, so the trial view's rotate button left the
+    // displayed key unchanged.
+    const scope = trialViewActive ? "trial" : "paid";
     setRotatingKey(true);
     try {
-      const res = await fetch("/api/keys/rotate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, challenge, signature }) });
+      const res = await fetch("/api/keys/rotate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, challenge, signature, scope }),
+      });
       const data = await res.json();
       if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
       if (data.apiKey) {
-        setSubscription(prev => prev ? { ...prev, apiKey: data.apiKey } : null);
+        setSubscription(prev => {
+          if (!prev) return null;
+          // Mirror the server-side write: trial rotation lands in
+          // trialApiKey and (for legacy pre-Phase-1 subs) clears the
+          // paid apiKey slot since the key just migrated forward.
+          if (scope === "trial") {
+            return {
+              ...prev,
+              trialApiKey: data.apiKey,
+              ...(prev.plan === "trial" ? { apiKey: "" } : {}),
+            };
+          }
+          return { ...prev, apiKey: data.apiKey };
+        });
         setRotateConfirm(false);
       }
     } catch { /* ignore */ } finally { setRotatingKey(false); }
