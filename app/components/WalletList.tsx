@@ -95,20 +95,14 @@ const WALLETS: WalletDef[] = [
     name: "Bitget Wallet",
     desc: "Multi-chain Web3 wallet",
     installUrl: "https://web3.bitget.com/",
-    // TODO: swap to /bitget.png once the brand asset is added under public/
-    // — the inline SVG below is a minimal stand-in (rounded square, cyan
-    // gradient, dark-blue B) so the picker renders without a missing-image
-    // tile until the official PNG lands.
     icon: (
-      <div className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden relative">
-        <div className="absolute inset-0" style={{ background: "linear-gradient(135deg, #00F0FF 0%, #2D5BFF 100%)" }} />
-        <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 relative" aria-hidden="true">
-          <path
-            d="M9 8h12.5c4 0 7 2.5 7 6.2 0 2.4-1.4 4.5-3.4 5.4 2.5 1 4.1 3.3 4.1 6.1 0 3.9-3.1 6.5-7.3 6.5H9V8zm5 5v5h7c1.7 0 2.9-1 2.9-2.5S22.7 13 21 13h-7zm0 10v6.2h7.7c1.9 0 3.2-1.2 3.2-3.1S22.6 23 20.7 23H14z"
-            fill="#0F1419"
-          />
-        </svg>
-      </div>
+      <Image
+        src="/bitget.png"
+        alt="Bitget Wallet"
+        width={36}
+        height={36}
+        className="w-9 h-9 rounded-lg flex-shrink-0 object-cover"
+      />
     ),
   },
 ];
