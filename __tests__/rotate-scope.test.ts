@@ -163,7 +163,14 @@ describe("rotateApiKey — scope='trial' (modern post-Phase-1)", () => {
 });
 
 describe("rotateApiKey — scope='trial' (pre-Phase-1 legacy shape)", () => {
-  it("legacy sub (plan='trial' + apiKey + no trialApiKey) rotates the apiKey slot AND migrates the new key into trialApiKey", async () => {
+  it("legacy sub (plan='trial' + apiKey + no trialApiKey) rotates the apiKey slot AND migrates both keys forward", async () => {
+    // Both halves of a pre-Phase-1 trial sub sat in the paid slots
+    // (apiKey + sandboxApiKey were the trial pair). After rotation the
+    // live key is replaced AND the sandbox key is moved — not minted
+    // fresh — into trialSandboxApiKey. Without that move, the next
+    // /api/payment/activate would treat the stale trial sandbox key
+    // as the paid sandbox key (it reuses existing.sandboxApiKey when
+    // populated), mixing trial and paid scopes on the Dashboard.
     store.set(`sub:${ADDR}`, {
       apiKey: "q402_live_legacy_trial",
       sandboxApiKey: "q402_test_legacy_sb",
@@ -172,7 +179,7 @@ describe("rotateApiKey — scope='trial' (pre-Phase-1 legacy shape)", () => {
       amountUSD: 0,
       txHash: "trial",
       trialExpiresAt: "2026-03-10T00:00:00Z",
-      // no trialApiKey
+      // no trialApiKey / trialSandboxApiKey
     });
     store.set(`apikey:q402_live_legacy_trial`, {
       address: ADDR, createdAt: "x", active: true, plan: "trial",
@@ -180,10 +187,42 @@ describe("rotateApiKey — scope='trial' (pre-Phase-1 legacy shape)", () => {
 
     const newKey = await rotateApiKey(ADDR, "trial");
     const updated = store.get(`sub:${ADDR}`) as Subscription;
-    // The new key lives in the canonical post-Phase-1 slot…
+
+    // Live half: rotated into trialApiKey, paid slot cleared.
     expect(updated.trialApiKey).toBe(newKey);
-    // …and the legacy apiKey slot is cleared since it was a trial key.
     expect(updated.apiKey).toBe("");
+
+    // Sandbox half: MOVED (not rotated) from paid slot into trial slot
+    // so a future paid activation will mint a fresh paid sandbox key
+    // into the now-empty sandboxApiKey slot instead of reusing the
+    // legacy trial sandbox value.
+    expect(updated.trialSandboxApiKey).toBe("q402_test_legacy_sb");
+    expect(updated.sandboxApiKey).toBeUndefined();
+  });
+
+  it("legacy sub without sandboxApiKey leaves the trial sandbox slot untouched", async () => {
+    // The rare legacy variant where the sandbox key was never written
+    // (older accounts before sandbox keys were standard). Make sure
+    // the migration doesn't synthesize a value.
+    store.set(`sub:${ADDR}`, {
+      apiKey: "q402_live_legacy_trial",
+      plan: "trial",
+      paidAt: "2026-02-10T00:00:00Z",
+      amountUSD: 0,
+      txHash: "trial",
+      trialExpiresAt: "2026-03-10T00:00:00Z",
+      // no sandboxApiKey, no trialApiKey
+    });
+    store.set(`apikey:q402_live_legacy_trial`, {
+      address: ADDR, createdAt: "x", active: true, plan: "trial",
+    });
+
+    const newKey = await rotateApiKey(ADDR, "trial");
+    const updated = store.get(`sub:${ADDR}`) as Subscription;
+    expect(updated.trialApiKey).toBe(newKey);
+    expect(updated.apiKey).toBe("");
+    expect(updated.trialSandboxApiKey).toBeUndefined();
+    expect(updated.sandboxApiKey).toBeUndefined();
   });
 
   it("throws when no trial key exists in either slot", async () => {
