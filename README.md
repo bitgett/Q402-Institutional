@@ -96,7 +96,7 @@ Add to your Claude Desktop / Claude Code config:
 }
 ```
 
-> Set whichever applies — both is best. The server auto-routes by chain: BNB single payments → Trial key (free 2k TX sponsored), everything else (including 6+ row batches on BNB) → Multichain key. Set `keyScope: "trial"` or `"multichain"` on a tool call to force one. Pre-v0.4.4 users with only `Q402_API_KEY` set keep working — that env var stays supported as a legacy fallback.
+> Set whichever applies — both is best. The server auto-routes by chain: `chain="bnb"` + Q402_TRIAL_API_KEY set → Trial (free 2k TX sponsored, same rule for `q402_pay` and `q402_batch_pay` up to 5 recipients); anything else → Multichain. **Ambiguity gate:** 6+ recipient BNB batches return `status="ambiguous"` instead of executing so the agent can ask the user to pick `keyScope="trial"` (first 5), `"multichain"` (all paid), or two calls (5 free + remainder paid). Set `keyScope` on a tool call to force one explicitly. Pre-v0.4.4 users with only `Q402_API_KEY` set keep working — that env var stays supported as a legacy fallback.
 
 The agent can now `q402_quote` (compare gas across all 8 chains), `q402_balance` (verify key + remaining credits), `q402_pay` (single-recipient gasless transfer), `q402_batch_pay` (one signed batch to up to 20 recipients on a single chain × token), and `q402_receipt` (fetch + cryptographically verify a Trust Receipt). Sandbox mode is the default — only the simultaneous presence of all three live-mode env vars switches `q402_pay` and `q402_batch_pay` into real on-chain settlement.
 
