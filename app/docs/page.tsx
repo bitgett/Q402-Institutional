@@ -455,7 +455,7 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_batch_pay</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
-                    <td className="px-4 py-3">Send one signed batch to up to 20 recipients on a single chain × token (trial keys: 5 max). Supported chains: avax, bnb, eth, mantle, injective, monad. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</td>
+                    <td className="px-4 py-3">Send one signed batch to up to 20 recipients on a single chain × token (trial keys: 5 max). Auto-routing follows the same rule as <code className="text-yellow text-xs">q402_pay</code> (BNB + Trial key set → Trial; else Multichain). 6+ recipient BNB batches with a Trial key return <code className="text-yellow text-xs">status=&quot;ambiguous&quot;</code> so the agent can ask the user to pick: trim to 5 (free), all-paid Multichain, or split into two calls. Supported chains: avax, bnb, eth, mantle, injective, monad. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_receipt</code></td>
@@ -471,9 +471,12 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
               By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a random fake transaction hash, no funds move, no gas-tank credit is consumed. To enable real on-chain transactions, the resolved live API key (a Trial key, a Multichain key, or the legacy <code className="text-yellow text-xs">Q402_API_KEY</code> fallback), <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code>, and <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=1</code> must all be set:
             </p>
             <CodeBlock lang="bash" code={`# Trial / Multichain split — set whichever applies (or both).
-# The MCP server auto-routes by chain: BNB → trial key (if present),
-# anything else → multichain key. Set keyScope: "trial" | "multichain"
-# on a tool call to force one explicitly.
+# Auto-routing rule (same for q402_pay AND q402_batch_pay):
+#   chain="bnb" + Q402_TRIAL_API_KEY set  → Trial (free sponsored)
+#   anything else                          → Multichain (paid 8-chain)
+# Batch ambiguity: 6+ recipient BNB batch with Trial set returns
+#   status="ambiguous" so the agent can ask the user which path to take.
+# Override per call with keyScope: "auto" | "trial" | "multichain".
 Q402_TRIAL_API_KEY=q402_live_...              # BNB-only sponsored Trial key (from /event)
 Q402_MULTICHAIN_API_KEY=q402_live_...         # paid 8-chain key (per-chain Gas Tank)
 

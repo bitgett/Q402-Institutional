@@ -28,9 +28,11 @@ function readLF(p: string): string {
 const ROOT = resolve(__dirname, "..");
 const PAY_PATH   = resolve(ROOT, "mcp-server", "src", "tools", "pay.ts");
 const QUOTE_PATH = resolve(ROOT, "mcp-server", "src", "tools", "quote.ts");
-const available = existsSync(PAY_PATH) && existsSync(QUOTE_PATH);
+const BATCH_PATH = resolve(ROOT, "mcp-server", "src", "tools", "batch-pay.ts");
+const available = existsSync(PAY_PATH) && existsSync(QUOTE_PATH) && existsSync(BATCH_PATH);
 const paySrc   = available ? readLF(PAY_PATH)   : "";
 const quoteSrc = available ? readLF(QUOTE_PATH) : "";
+const batchSrc = available ? readLF(BATCH_PATH) : "";
 
 describe.skipIf(!available)("MCP tool descriptions match actual server policy", () => {
   describe("PAY_TOOL.description", () => {
@@ -92,6 +94,60 @@ describe.skipIf(!available)("MCP tool descriptions match actual server policy", 
       // new "any non-BNB row as informational" wording.
       expect(quoteSrc).toMatch(/Trial[- ]tier|trial.+BNB[- ]only|Trial API Key/i);
       expect(quoteSrc).toMatch(/BNB/);
+    });
+  });
+
+  describe("BATCH_PAY_TOOL.description (v0.4.7 unified routing + ambiguity gate)", () => {
+    it("does NOT claim batches always pick Multichain", () => {
+      // v0.4.6 wording. Replaced in 0.4.7 with the unified rule + ambiguity
+      // gate so the description matches the actual auto-routing behavior.
+      expect(batchSrc).not.toMatch(/ALWAYS picks (the )?Multichain/i);
+      expect(batchSrc).not.toMatch(/ALWAYS routes batches to the (\s)*Multichain/i);
+      expect(batchSrc).not.toMatch(/silently break(s)? 6\+ row batches/);
+    });
+
+    it("documents the unified auto-routing rule (same as q402_pay)", () => {
+      // The auto rule: BNB + Q402_TRIAL_API_KEY set → Trial; else Multichain.
+      // Must mention "same rule as q402_pay" so an agent reading either tool
+      // description gets the same mental model. Names must both appear in
+      // the source — order and case don't matter.
+      expect(batchSrc).toMatch(/same rule as q402_pay/i);
+      expect(batchSrc).toMatch(/BNB/i);
+      expect(batchSrc).toMatch(/Q402_TRIAL_API_KEY/);
+    });
+
+    it("documents the ambiguity gate for 6+ recipient BNB batches", () => {
+      // When auto would land on Trial AND the batch exceeds the Trial cap
+      // (5), the tool must NOT execute — return status="ambiguous" and let
+      // the agent ask the user. Pin the wording so a future refactor can't
+      // silently bring back the v0.4.6 "always multichain" path.
+      expect(batchSrc).toMatch(/status=?["']ambiguous["']|status: ?["']ambiguous["']/);
+      expect(batchSrc).toMatch(/ambigui|ambiguous/i);
+      expect(batchSrc).toMatch(/recipients\.length > 5|exceeds the Trial cap/i);
+    });
+
+    it("describes the three resolution paths for an ambiguous batch", () => {
+      // Agent surfaces the choice list to the human. Must mention all three:
+      // (a) trim to 5 with keyScope=trial, (b) all paid with keyScope=multichain,
+      // (c) split via two calls.
+      expect(batchSrc).toMatch(/keyScope=?["']trial["']/);
+      expect(batchSrc).toMatch(/keyScope=?["']multichain["']/);
+      expect(batchSrc).toMatch(/split|two calls/i);
+    });
+
+    it("keeps the recipient caps explicit (5 trial / 20 paid)", () => {
+      expect(batchSrc).toMatch(/RECIPIENT_LIMIT_TRIAL.*5|max 5 recipients|5 recipients per call/);
+      expect(batchSrc).toMatch(/RECIPIENT_LIMIT_PAID.*20|max 20 recipients|20 recipients per call/);
+    });
+
+    it("keeps the sandbox-by-default safety contract", () => {
+      expect(batchSrc).toMatch(/SANDBOX BY DEFAULT/);
+      expect(batchSrc).toMatch(/Q402_ENABLE_REAL_PAYMENTS=1/);
+    });
+
+    it("keeps the explicit-user-confirmation contract for batches", () => {
+      expect(batchSrc).toMatch(/explicit user confirmation/);
+      expect(batchSrc).toMatch(/full batch.*not the individual rows|individual rows/);
     });
   });
 });
