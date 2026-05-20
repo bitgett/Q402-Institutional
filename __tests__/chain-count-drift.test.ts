@@ -111,6 +111,10 @@ describe(`stale chain-count guard (no "${STALE_COUNT}" leftovers)`, () => {
     new RegExp(`\\ball\\s+${STALE_COUNT}\\b`, "i"),
     new RegExp(`\\bpaid\\s+${STALE_COUNT}-chain\\b`, "i"),
     new RegExp(`\\b${STALE_COUNT}-CHAIN\\b`),
+    // "8 supported chains" / "8 evm-compatible chains" / "8 live chains" —
+    // a single modifier word can slip past the bare "N chains" form. Allows
+    // up to two intervening words so we catch "all 8 active chains" too.
+    new RegExp(`\\b${STALE_COUNT}\\s+\\w+(?:\\s+\\w+)?\\s+chains?\\b`, "i"),
   ];
 
   // Recursively gather files we care about. Skips binaries + build

@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
     }
     const chain = CHAINS.find(c => c.key === body.chain);
     if (!chain) {
-      return NextResponse.json({ error: "chain required (bnb|eth|mantle|injective|avax|xlayer|stable)" }, { status: 400 });
+      return NextResponse.json({ error: `chain required (${CHAINS.map(c => c.key).join("|")})` }, { status: 400 });
     }
 
     const result = await verifyByTxHash(chain, address, body.txHash);
