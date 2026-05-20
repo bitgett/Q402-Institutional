@@ -15,6 +15,7 @@ const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   xlayer: { rpc: "https://rpc.xlayer.tech",                    token: "OKB"  },
   stable: { rpc: "https://rpc.stable.xyz",                     token: "USDT0"},
   monad:  { rpc: "https://rpc.monad.xyz",                       token: "MON"  },
+  scroll: { rpc: "https://rpc.scroll.io",                       token: "ETH"  },
 };
 
 /**

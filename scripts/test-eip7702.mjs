@@ -1,7 +1,7 @@
 /**
  * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 8 Q402 chains.
  *
- *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective|monad> [--amount 0.05] [--to 0x...]
+ *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective|monad|scroll> [--amount 0.05] [--to 0x...]
  *
  * Flow (identical for every chain — all 8 impl contracts share the same
  * TransferAuthorization witness + _domainSeparator(address(this)) scheme):
@@ -110,6 +110,14 @@ const CHAINS = {
     // Default to USDC (native Circle CCTP) on Monad. USDT0 also supported.
     token: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6, symbol: "USDC",
     explorer: "https://monadscan.com/tx/",
+  },
+  scroll: {
+    id: 534352, name: "Scroll", domainName: "Q402 Scroll",
+    rpc: "https://rpc.scroll.io",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Default to USDC (native Circle) on Scroll. USDT also supported.
+    token: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6, symbol: "USDC",
+    explorer: "https://scrollscan.com/tx/",
   },
 };
 

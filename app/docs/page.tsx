@@ -305,7 +305,7 @@ export default function DocsPage() {
               <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
                 <p className="text-white/80 font-semibold text-sm mb-1">Multichain API Key</p>
                 <p className="text-white/60 text-xs leading-relaxed">
-                  Paid plan · 8 chains (Avalanche · BNB · Ethereum · X Layer · Stable · Mantle · Injective · Monad) · USDC, USDT, Ethereum RLUSD · per-chain Gas Tank. Activate at <a className="text-yellow hover:underline" href="/payment">/payment</a>.
+                  Paid plan · 9 chains (Avalanche · BNB · Ethereum · X Layer · Stable · Mantle · Injective · Monad · Scroll) · USDC, USDT, Ethereum RLUSD · per-chain Gas Tank. Activate at <a className="text-yellow hover:underline" href="/payment">/payment</a>.
                 </p>
               </div>
             </div>
@@ -330,7 +330,7 @@ const result = await q402.pay({
 });
 // result → { success: true, txHash: "0x...", chain: "bnb", method: "eip7702" }`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2b · Multichain key — full 8-chain payment</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2b · Multichain key — full 9-chain payment</h3>
             <CodeBlock lang="javascript" code={`// Multichain keys work across all supported chains. Each chain needs
 // a funded Gas Tank — deposit at /dashboard → Gas Tank.
 const q402 = new Q402Client({
@@ -593,7 +593,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
           {/* ── AUTHENTICATION ── */}
           <Section id="auth" title="Authentication">
             <p className="text-white/55 text-sm mb-5">
-              All relay requests require your API key in the <span className="font-mono text-white/70">apiKey</span> field of the request body. Connect your wallet to get a sandbox key (<span className="font-mono text-white/70">q402_test_*</span>) immediately. There are two paths to a live key (<span className="font-mono text-white/70">q402_live_*</span>): activate the Free Trial at <a className="text-yellow hover:underline" href="/event"><span className="font-mono">/event</span></a> for a BNB-only sponsored key (2,000 TX, no card), or complete an on-chain payment on <a className="text-yellow hover:underline" href="/payment"><span className="font-mono">/payment</span></a> for a Multichain key (8 chains, per-chain Gas Tank).
+              All relay requests require your API key in the <span className="font-mono text-white/70">apiKey</span> field of the request body. Connect your wallet to get a sandbox key (<span className="font-mono text-white/70">q402_test_*</span>) immediately. There are two paths to a live key (<span className="font-mono text-white/70">q402_live_*</span>): activate the Free Trial at <a className="text-yellow hover:underline" href="/event"><span className="font-mono">/event</span></a> for a BNB-only sponsored key (2,000 TX, no card), or complete an on-chain payment on <a className="text-yellow hover:underline" href="/payment"><span className="font-mono">/payment</span></a> for a Multichain key (9 chains, per-chain Gas Tank).
             </p>
             <CodeBlock lang="json" code={`// POST /api/relay
 {

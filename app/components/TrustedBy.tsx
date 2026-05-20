@@ -1,4 +1,4 @@
-// Chain order: BNB → Ethereum → Mantle → Avalanche → Injective → X Layer → Stable → Monad → USDC → USDT → RLUSD → Scroll
+// Chain order: BNB → Ethereum → Mantle → Avalanche → Injective → X Layer → Stable → Monad → Scroll → USDC → USDT → RLUSD
 const chains = [
   {
     name: "BNB Chain",
@@ -114,7 +114,6 @@ const chains = [
   {
     name: "Scroll",
     color: "#EEB431",
-    status: "deploying",
     icon: (
       // eslint-disable-next-line @next/next/no-img-element
       <img src="/scroll.png" alt="Scroll" className="w-6 h-6 rounded-md" />

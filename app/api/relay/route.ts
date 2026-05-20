@@ -66,6 +66,10 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
   // here also lets the gas-tank exhaustion alert fire well before relayer
   // settles dip into the user-side reserve range.
   monad:  0.05,      // ~$0.10 at $2/MON (rough launch-day price; tune later)
+  // Scroll L2: data-availability cost dominates, ~$0.001 effective gas per
+  // relay. ETH-denominated floor kept conservative — gas-tank alert window
+  // would otherwise trigger more often than makes operational sense.
+  scroll: 0.00005,   // ~$0.20 at $4000/ETH; tune once on-chain history accrues
 };
 
 
@@ -78,7 +82,7 @@ export async function POST(req: NextRequest) {
     to:           string;
     amount:       string;
     deadline:     number;
-    nonce?:       string;  // uint256 nonce for avax/bnb/eth/mantle/injective/monad (v1.2 contract)
+    nonce?:       string;  // uint256 nonce for avax/bnb/eth/mantle/injective/monad/scroll (v1.2 contract)
     witnessSig:   string;
     authorization?: {
       chainId:  number;
@@ -133,7 +137,7 @@ export async function POST(req: NextRequest) {
   // The full multi-chain matrix below is what the protocol shipped on v1.27.
   // The emergency feature flag BNB_FOCUS_MODE (see app/lib/feature-flags.ts)
   // can collapse the matrix to BNB+USDC/USDT for incident response; the
-  // 8-chain entries stay in this file so flipping the flag back to false
+  // 9-chain entries stay in this file so flipping the flag back to false
   // (current default) restores the full surface with zero code churn.
   //
   //   - Injective: USDT only. Native USDC via Circle CCTP is announced for Q2 2026.
@@ -151,6 +155,7 @@ export async function POST(req: NextRequest) {
     mantle:    ["USDC", "USDT"],
     stable:    ["USDC", "USDT"],
     monad:     ["USDC", "USDT"],
+    scroll:    ["USDC", "USDT"],
   };
   const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
     bnb: ["USDC", "USDT"],
@@ -217,16 +222,16 @@ export async function POST(req: NextRequest) {
   }
   if (!isXLayer && !isStable && !authorization) {
     return NextResponse.json(
-      { error: "EIP-7702 chains (avax/bnb/eth/mantle/injective/monad) require authorization object" },
+      { error: "EIP-7702 chains (avax/bnb/eth/mantle/injective/monad/scroll) require authorization object" },
       { status: 400 }
     );
   }
-  // avax/bnb/eth/mantle/injective/monad also require `nonce` — it's part of the signed witness, so a
+  // avax/bnb/eth/mantle/injective/monad/scroll also require `nonce` — it's part of the signed witness, so a
   // server-synthesized fallback would never match the caller's signature. Fail
   // fast with a clear 400 instead of letting the onchain verify path reject it.
   if (!isXLayer && !isStable && !nonce) {
     return NextResponse.json(
-      { error: "nonce is required for avax/bnb/eth/mantle/injective/monad (uint256 string, must match the signed witness)" },
+      { error: "nonce is required for avax/bnb/eth/mantle/injective/monad/scroll (uint256 string, must match the signed witness)" },
       { status: 400 }
     );
   }
@@ -383,7 +388,7 @@ export async function POST(req: NextRequest) {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad.`,
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll.`,
     }, { status: 400 });
   }
 
@@ -444,7 +449,7 @@ export async function POST(req: NextRequest) {
     relayerAddress = key.address as Address;
   }
 
-  // ── 7b. nonce (uint256) for avax/bnb/eth/mantle/injective/monad transferWithAuthorization ─────────
+  // ── 7b. nonce (uint256) for avax/bnb/eth/mantle/injective/monad/scroll transferWithAuthorization ─────────
   // Parsed up front in section 2b so a malformed value can't escape past the
   // credit reservation in section 7c.
   const paymentNonce: bigint = parsedPaymentNonce;

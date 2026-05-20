@@ -359,7 +359,7 @@ export default function AgentsPage() {
               </span>
             </h1>
             <p className="text-white/50 text-lg leading-relaxed mb-8">
-              Stop managing gas wallets across 1,000+ agents on 8 chains.
+              Stop managing gas wallets across 1,000+ agents on 9 chains.
               Deposit once — every agent relays freely until the tank runs dry.
             </p>
 
@@ -465,7 +465,7 @@ export default function AgentsPage() {
             className="text-center mb-12"
           >
             <h2 className="text-3xl font-bold mb-3">Gas management at scale is broken</h2>
-            <p className="text-white/40 text-sm">Running 100 agents across 8 chains = 800 funded wallets to maintain</p>
+            <p className="text-white/40 text-sm">Running 100 agents across 9 chains = 800 funded wallets to maintain</p>
           </motion.div>
 
           <div className="grid md:grid-cols-2 gap-6">
@@ -507,7 +507,7 @@ export default function AgentsPage() {
                   "One Gas Tank per chain funds unlimited agents",
                   "1 API key, one deposit per chain — done",
                   "Q402 relayer handles gas estimation & retry",
-                  "Same SDK call for all 8 chains",
+                  "Same SDK call for all 9 chains",
                 ].map((t, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm text-white/70">
                     <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
@@ -623,7 +623,7 @@ const { txHash, gasCostNative } = await res.json();
               <ul className="text-left space-y-2.5 mb-8 max-w-xs mx-auto">
                 {[
                   "Unlimited TX quota",
-                  "All 8 EVM chains",
+                  "All 9 EVM chains",
                   "Gas Tank pre-pay model",
                   "Webhooks + real-time events",
                   "Sandbox mode for testing",

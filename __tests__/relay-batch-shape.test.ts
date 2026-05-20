@@ -194,12 +194,12 @@ describe.skipIf(!mcpAvailable)("MCP server q402_batch_pay registration", () => {
     expect(mcpBatchToolSrc).toMatch(/recipientAllowlistGuardBatch/);
   });
 
-  it("input schema restricts chain to the 6-chain batchable set", () => {
+  it("input schema restricts chain to the 7-chain batchable set", () => {
     // xlayer + stable must NOT appear in the Zod enum or in the JSON
     // schema enum — the server is authoritative but the tool surface
     // should fail fast for the agent. Same set as Node client + server.
-    expect(mcpBatchToolSrc).toMatch(/z\.enum\(\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective",\s*"monad"\s*\]\)/);
-    expect(mcpBatchToolSrc).toMatch(/enum:\s*\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective",\s*"monad"\s*\]/);
+    expect(mcpBatchToolSrc).toMatch(/z\.enum\(\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective",\s*"monad",\s*"scroll"\s*\]\)/);
+    expect(mcpBatchToolSrc).toMatch(/enum:\s*\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective",\s*"monad",\s*"scroll"\s*\]/);
     // Negative: xlayer / stable should NOT appear in either enum.
     // (They may still appear in comments — restrict the check to the
     // schema declarations only via tight surrounding context.)

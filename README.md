@@ -1,13 +1,13 @@
 # Q402 — Gasless Payments on EVM
 
-> Pay USDC, USDT, or RLUSD across **8 EVM chains** with $0 in gas.
+> Pay USDC, USDT, or RLUSD across **9 EVM chains** with $0 in gas.
 > Built on EIP-7702 + EIP-712. Callable from a browser, a Node.js
 > backend, or any MCP-compatible AI client (Claude Desktop, Claude
 > Code, Cline).
 
-[![sdk](https://img.shields.io/badge/sdk-v1.7.3-yellow)](public/q402-sdk.js)
+[![sdk](https://img.shields.io/badge/sdk-v1.8.0-yellow)](public/q402-sdk.js)
 [![mcp](https://img.shields.io/badge/npm-@quackai/q402--mcp-blue)](https://www.npmjs.com/package/@quackai/q402-mcp)
-[![chains](https://img.shields.io/badge/chains-8-green)](#supported-chains)
+[![chains](https://img.shields.io/badge/chains-9-green)](#supported-chains)
 
 **Live**: https://q402.quackai.ai &nbsp;·&nbsp; **Free trial**: https://q402.quackai.ai/event &nbsp;·&nbsp; **Docs**: https://q402.quackai.ai/docs
 
@@ -46,6 +46,7 @@ All eight chains share the same witness type, the same signing rule (`verifyingC
 | Mantle | 5000 | USDC, USDT (USDT0) | live |
 | Injective EVM | 1776 | USDT | live |
 | Monad | 143 | USDC, USDT (USDT0) | live |
+| Scroll | 534352 | USDC, USDT | live |
 
 RLUSD (Ripple USD, NY DFS regulated, 18 decimals) is Ethereum-only by issuer design. Native USDC on Injective EVM is announced for Q2 2026 via Circle CCTP and will be added when it ships.
 
@@ -98,7 +99,7 @@ Add to your Claude Desktop / Claude Code config:
 
 > Set whichever applies — both is best. The server auto-routes by chain: `chain="bnb"` + Q402_TRIAL_API_KEY set → Trial (free 2k TX sponsored, same rule for `q402_pay` and `q402_batch_pay` up to 5 recipients); anything else → Multichain. **Ambiguity gate:** 6+ recipient BNB batches return `status="ambiguous"` instead of executing so the agent can ask the user to pick `keyScope="trial"` (first 5), `"multichain"` (all paid), or two calls (5 free + remainder paid). Set `keyScope` on a tool call to force one explicitly. Single-env setups (only `Q402_API_KEY` set) keep working unchanged — that env var stays supported as a legacy fallback.
 
-The agent can now `q402_quote` (compare gas across all 8 chains), `q402_balance` (verify key + remaining credits), `q402_pay` (single-recipient gasless transfer), `q402_batch_pay` (one signed batch to up to 20 recipients on a single chain × token), and `q402_receipt` (fetch + cryptographically verify a Trust Receipt). Sandbox mode is the default — only the simultaneous presence of all three live-mode env vars switches `q402_pay` and `q402_batch_pay` into real on-chain settlement.
+The agent can now `q402_quote` (compare gas across all 9 chains), `q402_balance` (verify key + remaining credits), `q402_pay` (single-recipient gasless transfer), `q402_batch_pay` (one signed batch to up to 20 recipients on a single chain × token), and `q402_receipt` (fetch + cryptographically verify a Trust Receipt). Sandbox mode is the default — only the simultaneous presence of all three live-mode env vars switches `q402_pay` and `q402_batch_pay` into real on-chain settlement.
 
 ---
 
@@ -112,7 +113,7 @@ Any developer can sign up at [/event](https://q402.quackai.ai/event) and immedia
 
 Trial credits are real settlements — the relayer's hot wallet pays the gas, the recipient receives the full amount, and the trial counter atomically decrements on every transfer. Trial credentials live in their own key slot (`trialApiKey` / `trialSandboxApiKey`) so they keep working until the trial window or credits are exhausted; upgrading on [/payment](https://q402.quackai.ai/payment) provisions a separate paid key (`apiKey` / `sandboxApiKey`) drawn against a self-funded Gas Tank.
 
-The trial is BNB-Chain-only by server-side policy (`TRIAL_BNB_ONLY` gate). Paid keys see the full 8-chain matrix.
+The trial is BNB-Chain-only by server-side policy (`TRIAL_BNB_ONLY` gate). Paid keys see the full 9-chain matrix.
 
 ---
 

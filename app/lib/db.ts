@@ -154,7 +154,7 @@ export async function setSubscription(address: string, data: Subscription) {
 
 /**
  * Returns true if the wallet currently has access to the Multichain paid
- * scope (paid API key slot, paid pool credit reads, 8-chain settlement).
+ * scope (paid API key slot, paid pool credit reads, 9-chain settlement).
  *
  * Access is conferred by any one of:
  *   - a real cash payment (amountUSD > 0)

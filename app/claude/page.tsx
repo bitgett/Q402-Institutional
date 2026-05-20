@@ -8,7 +8,7 @@ import { MCP_VERSION } from "@/app/lib/version";
 /**
  * /claude — landing page for the @quackai/q402-mcp Claude integration.
  *
- * Live `q402_quote` simulation that re-ranks 8 chains as the visitor changes
+ * Live `q402_quote` simulation that re-ranks 9 chains as the visitor changes
  * the amount, animated install line with one-click copy + npm/GitHub deeplinks,
  * gradient tool cards.
  *
@@ -185,7 +185,7 @@ export default function ClaudePage() {
             className="text-base md:text-lg text-white/55 mt-6 max-w-2xl leading-relaxed"
           >
             Q402 ships as a Model Context Protocol server. One install and Claude can quote
-            stablecoin transfers across <span className="text-white/85 font-semibold">8 EVM chains</span>,
+            stablecoin transfers across <span className="text-white/85 font-semibold">9 EVM chains</span>,
             settle them gaslessly, and confirm on-chain — all from a single prompt. The recipient
             gets the full amount. The sender pays $0 in gas. The agent never holds a key it
             shouldn&apos;t.
@@ -394,7 +394,7 @@ export default function ClaudePage() {
                 color: "rgba(74,222,128,0.30)",
                 bg: "rgba(74,222,128,0.05)",
                 description:
-                  "Compare gas + supported tokens across all 8 chains. Read-only, no key. Perfect first call before anything signs.",
+                  "Compare gas + supported tokens across all 9 chains. Read-only, no key. Perfect first call before anything signs.",
               },
               {
                 name: "q402_balance",

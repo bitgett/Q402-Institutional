@@ -27,6 +27,8 @@ const RPCS = {
   stable: "https://rpc.stable.xyz",
   mantle: "https://rpc.mantle.xyz",
   injective: "https://sentry.evm-rpc.injective.network/",
+  monad:  "https://rpc.monad.xyz",
+  scroll: "https://rpc.scroll.io",
 };
 
 // Human-readable TransferAuthorization typehash (matches local source)
