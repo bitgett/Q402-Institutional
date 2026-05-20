@@ -37,7 +37,7 @@ const CHAINS = [
   { id: "stable",   name: "Stable",    color: "#4AE54A", img: "/stable.jpg",     rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "injective", name: "Injective", color: "#0082FA", img: "/injective.png", rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "monad",    name: "Monad",     color: "#836EF9", img: "/monad.png",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
+  { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
 ];
 
 // value = credits granted at that price tier. Must stay in sync with
