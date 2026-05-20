@@ -100,7 +100,7 @@ export default function HowItWorks() {
         >
           <h2 className="text-3xl md:text-4xl font-bold mb-4">How Q402 works</h2>
           <p className="text-white/40 max-w-lg mx-auto text-sm leading-relaxed">
-            Three addresses. One transaction. Works on any EVM chain — BNB, Ethereum, Avalanche, Mantle, Injective, X Layer, Stable.
+            Three addresses. One transaction. Works on any EVM chain — BNB, Ethereum, Avalanche, X Layer, Mantle, Injective, Stable, Monad, Scroll.
           </p>
         </motion.div>
 
