@@ -29,7 +29,6 @@ const NAV: { heading: string; links: { label: string; href: string; external?: b
     heading: "Developers",
     links: [
       { label: "Documentation",    href: "/docs" },
-      { label: "JavaScript SDK",   href: "/q402-sdk.js" },
       { label: "MCP Server",       href: "https://www.npmjs.com/package/@quackai/q402-mcp", external: true },
       { label: "Trust Receipts",   href: "/docs#trust-receipts" },
       { label: "GitHub",           href: "https://github.com/bitgett", external: true },
