@@ -49,6 +49,7 @@ const CHAINS = {
   injective: { id: 1776, rpc: "https://sentry.evm-rpc.injective.network/", explorer: "https://blockscout.injective.network/tx/" },
   stable: { id: 988,   rpc: "https://rpc.stable.xyz",               explorer: "https://stablescan.org/tx/" },
   monad:  { id: 143,   rpc: "https://rpc.monad.xyz",                explorer: "https://monadscan.com/tx/" },
+  scroll: { id: 534352, rpc: "https://rpc.scroll.io",                explorer: "https://scrollscan.com/tx/" },
 };
 
 const args = process.argv.slice(2);

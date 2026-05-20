@@ -1,7 +1,7 @@
 /**
  * test-receipt.mjs — End-to-end Trust Receipt smoke test against production.
  *
- *   node scripts/test-receipt.mjs --chain <bnb|avax|eth|xlayer|stable|mantle|injective> \
+ *   node scripts/test-receipt.mjs --chain <bnb|avax|eth|xlayer|stable|mantle|injective|monad|scroll> \
  *                                 [--token USDC|USDT] [--amount 0.10] [--to 0x...]
  *
  * Unlike test-eip7702.mjs (which broadcasts the Type-4 TX directly to the
@@ -123,6 +123,20 @@ const CHAINS = {
     rpc: "https://sentry.evm-rpc.injective.network/",
     impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     USDT: { addr: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
+  },
+  monad: {
+    id: 143, name: "Monad", domainName: "Q402 Monad",
+    rpc: "https://rpc.monad.xyz",
+    impl: "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+    USDC: { addr: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6 },
+    USDT: { addr: "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", decimals: 6 },
+  },
+  scroll: {
+    id: 534352, name: "Scroll", domainName: "Q402 Scroll",
+    rpc: "https://rpc.scroll.io",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    USDC: { addr: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6 },
+    USDT: { addr: "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", decimals: 6 },
   },
 };
 

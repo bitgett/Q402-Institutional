@@ -53,7 +53,7 @@ const CHAIN_META: Record<string, { name: string; token: string; color: string; i
 
 const STEPS = [
   { n: "01", title: "Load the SDK (browser)", code: `<script src="https://q402.quackai.ai/q402-sdk.js"></script>\n<!-- or: import { Q402Client } from "q402-sdk" -->` },
-  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad\n});\n// Note: chain "injective" is USDT-only until Circle CCTP native USDC ships (Q2 2026).` },
+  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll\n});\n// Note: chain "injective" is USDT-only until Circle CCTP native USDC ships (Q2 2026).` },
   { n: "03", title: "One-line gasless payment", code: `const result = await q402.pay({\n  to:     "0xRecipient...",\n  amount: "5.00",\n  token:  "USDC",  // use "USDT" for chain: "injective"\n});\nconsole.log(result.txHash);` },
   { n: "04", title: "Settlement confirmed", code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: "5", token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0` },
 ];
@@ -441,7 +441,7 @@ export default function DashboardPage() {
   const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
   const [thisMonthCount, setThisMonthCount] = useState(0); // for chart only
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
-  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0, mantle: 0, injective: 0, monad: 0 });
+  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0, mantle: 0, injective: 0, monad: 0, scroll: 0 });
   const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
@@ -1805,7 +1805,7 @@ export default function DashboardPage() {
                     <p className="text-white/35 text-xs mt-2 leading-relaxed">
                       Multichain keys unlock with a paid plan — full 9-chain
                       relay (Avalanche · BNB · Ethereum · X Layer · Stable ·
-                      Mantle · Injective).
+                      Mantle · Injective · Monad · Scroll).
                     </p>
                     <Link href="/#pricing" className="mt-3 inline-flex items-center gap-1.5 text-xs text-yellow hover:text-yellow/80 transition-colors font-semibold">
                       View pricing
