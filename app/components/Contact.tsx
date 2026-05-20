@@ -134,7 +134,7 @@ export default function Contact() {
         style={{ background: "radial-gradient(ellipse 50% 70% at 50% 0%, rgba(245,197,24,0.07), transparent 70%)" }}
       />
 
-      <div className="relative max-w-6xl mx-auto">
+      <div className="relative max-w-7xl mx-auto">
 
         {/* ── Hero block — wide enough that the 38-char headline lands on a
             single line at lg+ breakpoints. Mobile/tablet still wrap naturally
@@ -177,11 +177,11 @@ export default function Contact() {
               Six cards: four LIVE (single transfer, batch payouts, cheapest
               route via q402_quote, receipt audit via q402_receipt) and two
               ROADMAP (scheduled recurring, treasury automation). */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-7xl mx-auto">
           {PROMPTS.map((p) => (
             <div
               key={p.category}
-              className="rounded-xl p-5"
+              className="rounded-xl p-6"
               style={{
                 background: "linear-gradient(180deg, rgba(10,16,30,0.85) 0%, rgba(6,11,20,0.85) 100%)",
                 border:     "1px solid rgba(255,255,255,0.07)",
@@ -211,7 +211,7 @@ export default function Contact() {
               </div>
 
               {/* Prompt body — user's natural-language ask */}
-              <p className="text-white/90 text-[14.5px] leading-relaxed mb-3">
+              <p className="text-white/90 text-[15px] leading-relaxed mb-3">
                 {p.prompt.map((seg, i) =>
                   seg.hl ? (
                     <span key={i} className="text-yellow font-medium">{seg.t}</span>
