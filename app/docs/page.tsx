@@ -335,7 +335,7 @@ const result = await q402.pay({
 // a funded Gas Tank — deposit at /dashboard → Gas Tank.
 const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
-  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective" | "monad"
+  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective" | "monad" | "scroll"
 });
 // Note: when chain is "injective", only token: "USDT" is supported.
 // Native USDC via Circle CCTP is announced for Q2 2026.
@@ -455,7 +455,7 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_batch_pay</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
-                    <td className="px-4 py-3">Send one signed batch to up to 20 recipients on a single chain × token (trial keys: 5 max). Auto-routing follows the same rule as <code className="text-yellow text-xs">q402_pay</code> (BNB + Trial key set → Trial; else Multichain). 6+ recipient BNB batches with a Trial key return <code className="text-yellow text-xs">status=&quot;ambiguous&quot;</code> so the agent can ask the user to pick: trim to 5 (free), all-paid Multichain, or split into two calls. Supported chains: avax, bnb, eth, mantle, injective, monad. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</td>
+                    <td className="px-4 py-3">Send one signed batch to up to 20 recipients on a single chain × token (trial keys: 5 max). Auto-routing follows the same rule as <code className="text-yellow text-xs">q402_pay</code> (BNB + Trial key set → Trial; else Multichain). 6+ recipient BNB batches with a Trial key return <code className="text-yellow text-xs">status=&quot;ambiguous&quot;</code> so the agent can ask the user to pick: trim to 5 (free), all-paid Multichain, or split into two calls. Supported chains: avax, bnb, eth, mantle, injective, monad, scroll. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_receipt</code></td>
@@ -622,7 +622,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
               <CodeBlock lang="json" code={`// Request body
 {
   "apiKey":      "q402_live_YOUR_API_KEY",
-  "chain":       "avax",           // avax | bnb | eth | xlayer | stable | mantle | injective | monad
+  "chain":       "avax",           // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll
   "token":       "USDC",           // USDC | USDT
   "from":        "0xUserWallet...",
   "to":          "0xRecipient...",
@@ -682,6 +682,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
                     { name: "Mantle",     color: "#000000", param: "mantle", id: "5000",  gasToken: "MNT",              gas: "~$0.001", stableNote: false },
                     { name: "Injective",  color: "#0082FA", param: "injective", id: "1776", gasToken: "INJ",            gas: "~$0.10",  stableNote: false },
                     { name: "Monad",      color: "#836EF9", param: "monad", id: "143",   gasToken: "MON",              gas: "~$0.001", stableNote: false },
+                    { name: "Scroll",     color: "#EEB431", param: "scroll", id: "534352", gasToken: "ETH",             gas: "~$0.001", stableNote: false },
                   ].map((chain) => (
                     <tr key={chain.param} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="py-3 pr-6">
@@ -730,6 +731,7 @@ const CONTRACTS = {
   mantle: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Mantle    (chainId: 5000)
   injective: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Injective (chainId: 1776)
   monad:  "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC", // Q402 Monad     (chainId: 143)
+  scroll: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Scroll    (chainId: 534352)
 };
 
 // EIP-712 domain name — must match contract NAME constant exactly
@@ -742,6 +744,7 @@ const DOMAIN_NAMES = {
   mantle:    "Q402 Mantle",
   injective: "Q402 Injective",
   monad:     "Q402 Monad",
+  scroll:    "Q402 Scroll",
 };
 
 // verifyingContract:
@@ -787,7 +790,7 @@ const signature = await signer.signTypedData(domain, types, {
   deadline:    BigInt(Math.floor(Date.now() / 1000) + 600),
 });`} />
             <Callout type="info">
-              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable, Mantle, Injective, Monad) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
+              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable, Mantle, Injective, Monad, Scroll) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
             </Callout>
             <Callout type="warn">
               <strong className="text-white/80">Stable chain:</strong> USDT0 here has 18 decimals (not 6). Use <code>ethers.parseUnits(amount, 18)</code>. The gas pool must also be funded in USDT0 — there is no separate native gas coin. (Note: USDT0 on Mantle uses the same OFT address but 6 decimals, matching the other chains.)
