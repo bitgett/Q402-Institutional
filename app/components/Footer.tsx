@@ -1,3 +1,8 @@
+"use client";
+
+import { useState } from "react";
+import RegisterModal from "./RegisterModal";
+
 // Infrastructure-style footer: 4-column nav grid, dedicated chain strip,
 // and a thin metadata bar at the bottom. Replaces the prior single-row
 // sprawl where chain pills, status, and legal links were jammed together.
@@ -14,7 +19,11 @@ const CHAINS = [
   { name: "Scroll",     img: "/scroll.png"    },
 ];
 
-const NAV: { heading: string; links: { label: string; href: string; external?: boolean }[] }[] = [
+// `action: "openContactModal"` triggers the same RegisterModal the Contact
+// section's "Talk to Us" / "Get an API key" button opens. Used by Contact
+// Sales so the footer entry mirrors the in-page conversion path instead of
+// dropping the user into an external mailto: client.
+const NAV: { heading: string; links: { label: string; href?: string; external?: boolean; action?: "openContactModal" }[] }[] = [
   {
     heading: "Product",
     links: [
@@ -38,7 +47,7 @@ const NAV: { heading: string; links: { label: string; href: string; external?: b
     heading: "Company",
     links: [
       { label: "Grant Program",    href: "/grant"   },
-      { label: "Contact Sales",    href: "mailto:business@quackai.ai" },
+      { label: "Contact Sales",    action: "openContactModal" },
       { label: "Terms",            href: "/terms"   },
       { label: "Privacy",          href: "/privacy" },
     ],
@@ -46,6 +55,8 @@ const NAV: { heading: string; links: { label: string; href: string; external?: b
 ];
 
 export default function Footer() {
+  const [showModal, setShowModal] = useState(false);
+
   return (
     <footer className="border-t border-white/[0.08] pt-20 pb-10 px-6 mt-16">
       <div className="max-w-6xl mx-auto">
@@ -88,18 +99,27 @@ export default function Footer() {
               <ul className="space-y-3">
                 {col.links.map((link) => (
                   <li key={link.label}>
-                    <a
-                      href={link.href}
-                      {...(link.external
-                        ? { target: "_blank", rel: "noopener noreferrer" }
-                        : {})}
-                      className="inline-flex items-center gap-1.5 text-white/60 text-sm hover:text-yellow transition-colors"
-                    >
-                      <span>{link.label}</span>
-                      {link.external && (
-                        <span className="text-[10px] opacity-40">↗</span>
-                      )}
-                    </a>
+                    {link.action === "openContactModal" ? (
+                      <button
+                        onClick={() => setShowModal(true)}
+                        className="inline-flex items-center gap-1.5 text-white/60 text-sm hover:text-yellow transition-colors cursor-pointer text-left"
+                      >
+                        {link.label}
+                      </button>
+                    ) : (
+                      <a
+                        href={link.href}
+                        {...(link.external
+                          ? { target: "_blank", rel: "noopener noreferrer" }
+                          : {})}
+                        className="inline-flex items-center gap-1.5 text-white/60 text-sm hover:text-yellow transition-colors"
+                      >
+                        <span>{link.label}</span>
+                        {link.external && (
+                          <span className="text-[10px] opacity-40">↗</span>
+                        )}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -179,6 +199,8 @@ export default function Footer() {
         </div>
 
       </div>
+
+      {showModal && <RegisterModal onClose={() => setShowModal(false)} />}
     </footer>
   );
 }
