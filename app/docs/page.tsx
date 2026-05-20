@@ -567,13 +567,13 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
           {/* ── GAS POOL ── */}
           <Section id="gaspool" title="Gas Pool">
             <p className="text-white/55 text-sm mb-6">
-              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, MNT, AVAX, INJ, OKB, or USDT0 on Stable) into a single Q402-managed Gas Tank address that is shared across all customers — your balance is tracked off-chain, per wallet, in our ledger. Every time a user transaction is relayed, the gas fee is automatically deducted from your per-wallet balance.
+              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, MNT, AVAX, INJ, OKB, MON, or USDT0 on Stable; Scroll uses ETH) into a single Q402-managed Gas Tank address that is shared across all customers — your balance is tracked off-chain, per wallet, in our ledger. Every time a user transaction is relayed, the gas fee is automatically deducted from your per-wallet balance.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-yellow text-xs font-semibold mb-2">Deposit</div>
-                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / MNT / AVAX / INJ / OKB / USDT0 on Stable) to the Q402 Gas Tank address shown in your dashboard. Your balance is tracked per wallet address. Note: the Gas Tank is a separate cold wallet from the hot relayer — never send funds to the relayer address directly.</p>
+                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / MNT / AVAX / INJ / OKB / MON / USDT0 on Stable; Scroll uses ETH) to the Q402 Gas Tank address shown in your dashboard. Your balance is tracked per wallet address. Note: the Gas Tank is a separate cold wallet from the hot relayer — never send funds to the relayer address directly.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-blue-400 text-xs font-semibold mb-2">Auto-deduction</div>
