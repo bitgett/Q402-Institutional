@@ -29,6 +29,8 @@ export default function Footer() {
               { name: "Mantle",    color: "#FFFFFF" },
               { name: "Injective", color: "#0082FA" },
               { name: "Stable",    color: "#4AE54A" },
+              { name: "Monad",     color: "#836EF9" },
+              { name: "Scroll",    color: "#EEB431" },
             ].map((c) => (
               <span
                 key={c.name}
@@ -54,7 +56,7 @@ export default function Footer() {
           </div>
           <div className="w-px h-4 bg-white/10 hidden sm:block" />
           <div className="flex items-center gap-2">
-            <span className="text-white font-bold text-sm">7</span>
+            <span className="text-white font-bold text-sm">9</span>
             <span className="text-white/30 text-xs">EVM chains live</span>
           </div>
           <div className="w-px h-4 bg-white/10 hidden sm:block" />
