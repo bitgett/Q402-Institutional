@@ -80,6 +80,15 @@ const chains = [
     ),
   },
   {
+    name: "Scroll",
+    color: "#EEB431",
+    status: "live",
+    icon: (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/scroll.png" alt="Scroll" className="w-6 h-6 rounded-md" />
+    ),
+  },
+  {
     name: "USDC",
     color: "#2775CA",
     status: "stable",
@@ -109,14 +118,6 @@ const chains = [
     icon: (
       // eslint-disable-next-line @next/next/no-img-element
       <img src="/rlusd.png" alt="RLUSD" className="w-6 h-6 rounded-full" />
-    ),
-  },
-  {
-    name: "Scroll",
-    color: "#EEB431",
-    icon: (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src="/scroll.png" alt="Scroll" className="w-6 h-6 rounded-md" />
     ),
   },
 ];
