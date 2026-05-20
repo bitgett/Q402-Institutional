@@ -111,7 +111,7 @@ function AgentNetwork() {
 
 // ─── Live TX Feed ─────────────────────────────────────────────────────────────
 
-const CHAINS_FEED = ["AVAX","BNB","ETH","MANTLE","INJECTIVE","XLAYER","STABLE"];
+const CHAINS_FEED = ["AVAX","BNB","ETH","MANTLE","INJECTIVE","XLAYER","STABLE","MONAD","SCROLL"];
 const TOKENS_FEED = ["USDC","USDT"];
 
 function randomHex(len: number) {

@@ -19,7 +19,7 @@
  * not exclusivity.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(__dirname, "..");
@@ -69,5 +69,86 @@ describe(`chain-count drift (${chainCount} EVM chains)`, () => {
     expect(Object.keys(manifest.chains).sort()).toEqual(
       ["avax", "bnb", "eth", "injective", "mantle", "monad", "scroll", "stable", "xlayer"],
     );
+  });
+});
+
+// ── Negative drift guard — repo-wide ────────────────────────────────────────
+//
+// The positive guard above catches missing-mention regressions on a hand-
+// curated allowlist. The negative guard below catches the opposite mistake:
+// a stale "(N-1) chains" / "(N-1)-chain" string left somewhere in the
+// codebase after a chain rollout. Past releases (Injective → 8, Monad →
+// 8 retained, Scroll → 9) each shipped with at least one site still
+// reading the old count; this test makes that class of bug fail the
+// build. Once the next chain ships the constant below bumps by 1 and the
+// stale-count grep follows automatically.
+//
+// Scope: source-bearing trees only. `node_modules`, `.next`, `dist`, and
+// the MCP package's bundled `dist/index.js` are excluded — the published
+// bundle is rebuilt from source as part of the release flow, so source
+// is authoritative.
+
+const STALE_COUNT = chainCount - 1;
+const SOURCE_DIRS = [
+  "app",
+  "public",
+  "scripts",
+  "mcp-server/src",
+  "mcp-server/README.md",
+  "mcp-server/server.json",
+  "mcp-server/.codex-plugin/plugin.json",
+  "README.md",
+  "contracts.manifest.json",
+];
+
+describe(`stale chain-count guard (no "${STALE_COUNT}" leftovers)`, () => {
+  // Patterns the chain-rollout history has actually broken on. Add new
+  // shapes here if the next reviewer catches a phrasing this list misses.
+  const STALE_PATTERNS = [
+    new RegExp(`\\b${STALE_COUNT}\\s+EVM\\s+chains?\\b`, "i"),
+    new RegExp(`\\b${STALE_COUNT}\\s+chains?\\b`, "i"),
+    new RegExp(`\\b${STALE_COUNT}-chain\\b`, "i"),
+    new RegExp(`\\ball\\s+${STALE_COUNT}\\b`, "i"),
+    new RegExp(`\\bpaid\\s+${STALE_COUNT}-chain\\b`, "i"),
+    new RegExp(`\\b${STALE_COUNT}-CHAIN\\b`),
+  ];
+
+  // Recursively gather files we care about. Skips binaries + build
+  // artifacts. Reads each once; for the repo's current scale (a few
+  // hundred source files) this is fast enough that the test runs in
+  // well under a second.
+  function collect(dir: string, out: string[]) {
+    const stat = statSync(dir);
+    if (stat.isFile()) { out.push(dir); return; }
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        // Skip nested build / dependency output.
+        if (entry.name === "node_modules" || entry.name === ".next"
+            || entry.name === "dist" || entry.name === ".git"
+            || entry.name === "cache" || entry.name === "artifacts"
+            || entry.name === "typechain-types") continue;
+        collect(full, out);
+      } else if (entry.isFile()) {
+        // Source files only — skip lockfiles, images, etc.
+        if (/\.(ts|tsx|js|mjs|cjs|json|md)$/.test(entry.name)) out.push(full);
+      }
+    }
+  }
+
+  const files: string[] = [];
+  for (const d of SOURCE_DIRS) collect(resolve(ROOT, d), files);
+
+  it.each(STALE_PATTERNS)("no file matches %s", (pattern) => {
+    const hits: string[] = [];
+    for (const f of files) {
+      const src = readFileSync(f, "utf8");
+      if (pattern.test(src)) hits.push(f.replace(ROOT + "/", "").replace(ROOT + "\\", ""));
+    }
+    expect(
+      hits,
+      `Found stale "${STALE_COUNT}-chain" references in:\n  ${hits.join("\n  ")}\n\n` +
+      `Update to "${chainCount}" so the marketing copy matches the manifest.`,
+    ).toEqual([]);
   });
 });

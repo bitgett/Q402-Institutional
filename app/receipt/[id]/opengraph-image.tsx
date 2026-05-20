@@ -18,6 +18,8 @@ const CHAIN_LABELS: Record<string, string> = {
   stable:    "Stable",
   mantle:    "Mantle",
   injective: "Injective EVM",
+  monad:     "Monad",
+  scroll:    "Scroll",
 };
 
 export default async function OgImage({

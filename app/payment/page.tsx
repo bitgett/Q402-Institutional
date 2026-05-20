@@ -666,7 +666,7 @@ export default function PaymentPage() {
                 <div className="mt-5 pt-4 border-t border-white/6 flex gap-2">
                   <span className="text-yellow/40 text-xs flex-shrink-0">🔒</span>
                   <p className="text-white/20 text-[10px] leading-relaxed">
-                    API key tied to your wallet. Pay in USDC / USDT / RLUSD on BNB Chain or Ethereum (RLUSD is Ethereum-only) — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable · Mantle · Injective).
+                    API key tied to your wallet. Pay in USDC / USDT / RLUSD on BNB Chain or Ethereum (RLUSD is Ethereum-only) — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable · Mantle · Injective · Monad · Scroll).
                   </p>
                 </div>
               </div>

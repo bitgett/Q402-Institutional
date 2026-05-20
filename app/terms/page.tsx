@@ -31,8 +31,8 @@ export default function TermsPage() {
               fees on the customer&apos;s behalf.
             </p>
             <p>
-              Supported chains include Avalanche, BNB Chain, Ethereum, X Layer, Stable, Mantle, and Injective
-              EVM (subject to change). RLUSD is supported only on Ethereum mainnet. Q402 does not custody,
+              Supported chains include Avalanche, BNB Chain, Ethereum, X Layer, Stable, Mantle, Injective
+              EVM, Monad, and Scroll (subject to change). RLUSD is supported only on Ethereum mainnet. Q402 does not custody,
               hold, or control any customer or end-user funds at any time.
             </p>
           </section>

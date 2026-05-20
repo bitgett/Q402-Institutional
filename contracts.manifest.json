@@ -189,7 +189,7 @@
         "domainName": "Q402 Scroll",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
-        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Scroll mainnet via the Euclid upgrade (phase 1 2025-04-16, phase 2 2025-04-22 — see docs.scroll.io/en/technology/overview/scroll-upgrades/euclid-upgrade). Same impl address as Stable/Mantle/Injective via deterministic CREATE (deployer 0xfc77...f466, nonce 0); distinguished at signing time by chainId 534352 + domainName 'Q402 Scroll'. Address remains TBD until the production deploy lands — if the deployer's first Scroll TX is anything other than the Q402 deploy the manifest must be updated to the real CREATE address before traffic is routed here."
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Scroll mainnet via the Euclid upgrade (phase 1 2025-04-16, phase 2 2025-04-22 — see docs.scroll.io/en/technology/overview/scroll-upgrades/euclid-upgrade). Same impl address as Stable/Mantle/Injective via deterministic CREATE (deployer 0xfc77...f466, nonce 0); distinguished at signing time by chainId 534352 + domainName 'Q402 Scroll'. Deployed 2026-05-20 in tx 0xa31456ab4bb9d6f8e44b21e4050affb1a5529e8a6189ae2cce296895f5ac6e64 (block 33770350); verified on Sourcify (full_match) and auto-mirrored on Scroll Blockscout."
       },
       "tokens": {
         "USDC": { "address": "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", "decimals": 6, "notes": "Native Circle USDC on Scroll mainnet (confirmed with Scroll team)." },

@@ -727,7 +727,7 @@ export async function patchRelayedTxReceiptId(
 // remaining trial allotment.
 //
 //   quota:trial:{addr}  — trial credits remaining (BNB-only, relayer-sponsored)
-//   quota:paid:{addr}   — paid credits remaining  (8 chains, user-funded gas tank)
+//   quota:paid:{addr}   — paid credits remaining  (9 chains, user-funded gas tank)
 //
 // The relay route picks the pool based on `keyRecord.plan === "trial"` — an
 // immutable per-key signal set at generation time. Trial relay decrements
