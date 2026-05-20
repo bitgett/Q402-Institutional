@@ -196,7 +196,7 @@ const Q402_CHAIN_CONFIG = {
 // ─── Apply BNB-only narrowing when the flag is set ───────────────────────────
 // Every non-BNB chain's supportedTokens is rewritten to []. The runtime check
 // in `pay()` rejects any token not in supportedTokens, so this single
-// mutation cascades to RLUSD on Ethereum, USDC/USDT on the other 5 chains,
+// mutation cascades to RLUSD on Ethereum and USDC/USDT on every non-BNB chain,
 // and any chain a future caller might try. BNB itself keeps its original
 // ["USDC","USDT"]. The original arrays stay in the config above so the
 // narrowing is a one-flag revert.
@@ -360,11 +360,11 @@ class Q402Client {
    * fails the batch aborts; later failures surface in the result array
    * without aborting.
    *
-   * Only the default EIP-7702 mode (avax / bnb / eth / mantle / injective)
-   * supports batchPay. X Layer (USDC EIP-3009 fallback), Stable, and the
-   * xlayer EIP-7702 variant route through chain-specific nonce fields
-   * that the batch endpoint doesn't fan out cleanly — those chains throw
-   * here and should use pay() in a client-side loop instead.
+   * Only the default EIP-7702 mode (avax / bnb / eth / mantle / injective /
+   * monad / scroll) supports batchPay. X Layer (USDC EIP-3009 fallback)
+   * and Stable route through chain-specific nonce fields that the batch
+   * endpoint doesn't fan out cleanly — those chains throw here and should
+   * use pay() in a client-side loop instead.
    *
    * @returns {Promise<{ok, scope, limit, totalSuccess, totalFailed, aborted, results}>}
    */
