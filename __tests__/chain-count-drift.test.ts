@@ -89,6 +89,17 @@ describe(`chain-count drift (${chainCount} EVM chains)`, () => {
 // is authoritative.
 
 const STALE_COUNT = chainCount - 1;
+
+// English word form for the stale count. The numeric guard misses prose
+// like "Zero gas. Eight EVM chains." or "All eight chains share…" because
+// the source spells the count out instead of using a digit. The map covers
+// the realistic range of chain counts; missing entries skip the word-form
+// guard rather than crash. Case-insensitive matching catches Eight/eight/
+// EIGHT in one pattern.
+const STALE_WORD: Record<number, string> = {
+  6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten",
+  11: "eleven", 12: "twelve",
+};
 const SOURCE_DIRS = [
   "app",
   "public",
@@ -115,6 +126,15 @@ describe(`stale chain-count guard (no "${STALE_COUNT}" leftovers)`, () => {
     // a single modifier word can slip past the bare "N chains" form. Allows
     // up to two intervening words so we catch "all 8 active chains" too.
     new RegExp(`\\b${STALE_COUNT}\\s+\\w+(?:\\s+\\w+)?\\s+chains?\\b`, "i"),
+    // Word-form variants — "Eight EVM chains" / "All eight chains" / etc.
+    // Only added when STALE_WORD has a mapping for the current STALE_COUNT.
+    ...(STALE_WORD[STALE_COUNT]
+      ? [
+          new RegExp(`\\b${STALE_WORD[STALE_COUNT]}\\s+EVM\\s+chains?\\b`, "i"),
+          new RegExp(`\\b${STALE_WORD[STALE_COUNT]}\\s+chains?\\b`, "i"),
+          new RegExp(`\\ball\\s+${STALE_WORD[STALE_COUNT]}\\s+chains?\\b`, "i"),
+        ]
+      : []),
   ];
 
   // Recursively gather files we care about. Skips binaries + build

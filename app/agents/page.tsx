@@ -313,7 +313,7 @@ function ContactModal({ onClose }: { onClose: () => void }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const CHAIN_COLORS: Record<string, string> = {
-  AVAX: "#E84142", BNB: "#F0B90B", ETH: "#627EEA", MANTLE: "#FFFFFF", INJECTIVE: "#0082FA", XLAYER: "#CCCCCC", STABLE: "#4AE54A",
+  AVAX: "#E84142", BNB: "#F0B90B", ETH: "#627EEA", MANTLE: "#FFFFFF", INJECTIVE: "#0082FA", XLAYER: "#CCCCCC", STABLE: "#4AE54A", MONAD: "#836EF9", SCROLL: "#EEB431",
 };
 
 export default function AgentsPage() {
@@ -479,7 +479,7 @@ export default function AgentsPage() {
               <div className="text-red-400 text-xs font-bold uppercase tracking-widest mb-4">Traditional approach</div>
               <div className="space-y-3">
                 {[
-                  "Each agent holds AVAX + BNB + ETH + OKB + USDT0 + MNT + INJ",
+                  "Each agent holds AVAX + BNB + ETH + OKB + USDT0 + MNT + INJ + MON + Scroll ETH",
                   "Gas spikes drain wallets → agents go silent",
                   "700 wallets to monitor, refill, rotate keys",
                   "Failed TX when gas runs out mid-execution",

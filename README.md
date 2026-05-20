@@ -30,7 +30,7 @@ User signs EIP-712 off-chain
       → recipient receives 100%, sender pays $0
 ```
 
-All eight chains share the same witness type, the same signing rule (`verifyingContract = user EOA`), and the same on-wire body shape. The chain-specific parts are the deployed implementation contract and the EIP-712 domain name.
+All nine chains share the same witness type, the same signing rule (`verifyingContract = user EOA`), and the same on-wire body shape. The chain-specific parts are the deployed implementation contract and the EIP-712 domain name.
 
 ---
 
