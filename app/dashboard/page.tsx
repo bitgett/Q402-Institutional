@@ -48,6 +48,7 @@ const CHAIN_META: Record<string, { name: string; token: string; color: string; i
   avax:   { name: "Avalanche",  token: "AVAX",  color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
   // Stable: USDT0 is both the gas token and the payment token — no separate native coin
   stable: { name: "Stable",     token: "USDT0", color: "#4AE54A", img: "/stable.jpg", rounded: "rounded-full" },
+  scroll: { name: "Scroll",     token: "ETH",   color: "#EEB431", img: "/scroll.png", rounded: "rounded-full" },
 };
 
 const STEPS = [

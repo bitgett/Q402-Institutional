@@ -36,6 +36,8 @@ const CHAINS: ChainRow[] = [
   { key: "mantle",    name: "Mantle",            chainId: 5000,  gas: "MNT",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
   { key: "avax",      name: "Avalanche C-Chain", chainId: 43114, gas: "AVAX",  approxGasCostUsd: 0.003,  tokens: ["USDC", "USDT"] },
   { key: "injective", name: "Injective EVM",     chainId: 1776,  gas: "INJ",   approxGasCostUsd: 0.004,  tokens: ["USDT"], note: "USDT only — Circle CCTP USDC announced for Q2 2026" },
+  { key: "monad",     name: "Monad",             chainId: 143,   gas: "MON",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
+  { key: "scroll",    name: "Scroll",            chainId: 534352, gas: "ETH",  approxGasCostUsd: 0.001,  tokens: ["USDC", "USDT"], note: "zkEVM L2 — EIP-7702 live since Euclid Phase 2 (2025-04-22)." },
   { key: "eth",       name: "Ethereum Mainnet",  chainId: 1,     gas: "ETH",   approxGasCostUsd: 1.2,    tokens: ["USDC", "USDT", "RLUSD"], note: "L1 — gas is volatile. RLUSD (Ripple USD, NY DFS regulated) Ethereum-only." },
 ];
 
@@ -538,7 +540,7 @@ export default function ClaudePage() {
                     Without a live key (
                     <code className="text-yellow text-xs">Q402_TRIAL_API_KEY</code> for BNB
                     sponsored or <code className="text-yellow text-xs">Q402_MULTICHAIN_API_KEY</code>{" "}
-                    for paid 8-chain — the legacy{" "}
+                    for paid 9-chain — the legacy{" "}
                     <code className="text-yellow text-xs">Q402_API_KEY</code> works as a
                     fallback) plus <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code>{" "}
                     and <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=1</code>,

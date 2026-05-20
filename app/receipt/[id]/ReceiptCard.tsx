@@ -21,6 +21,8 @@ const EXPLORERS: Record<string, { name: string; tx: (h: string) => string }> = {
   stable:    { name: "Stable Explorer", tx: h => `https://stable-explorer.io/tx/${h}` },
   mantle:    { name: "Mantlescan", tx: h => `https://mantlescan.xyz/tx/${h}` },
   injective: { name: "Blockscout", tx: h => `https://blockscout.injective.network/tx/${h}` },
+  monad:     { name: "Monadscan",  tx: h => `https://monadscan.com/tx/${h}` },
+  scroll:    { name: "Scrollscan", tx: h => `https://scrollscan.com/tx/${h}` },
 };
 
 const CHAIN_LABELS: Record<string, string> = {
@@ -31,6 +33,8 @@ const CHAIN_LABELS: Record<string, string> = {
   stable:    "Stable",
   mantle:    "Mantle",
   injective: "Injective EVM",
+  monad:     "Monad",
+  scroll:    "Scroll",
 };
 
 const POLL_INTERVAL_MS      = 2_500;

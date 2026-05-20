@@ -264,7 +264,7 @@ class Q402Client {
   /**
    * @param {object} opts
    * @param {string} opts.apiKey     - Your Q402 API key (q402_live_xxx)
-   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"|"injective"} opts.chain - Target chain
+   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"|"injective"|"monad"|"scroll"} opts.chain - Target chain
    * @param {string} [opts.relayUrl] - Override relay endpoint (default: https://q402.quackai.ai/api/relay)
    */
   constructor({ apiKey, chain = "avax", relayUrl = "https://q402.quackai.ai/api/relay" }) {

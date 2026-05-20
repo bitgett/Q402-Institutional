@@ -473,12 +473,12 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
             <CodeBlock lang="bash" code={`# Trial / Multichain split — set whichever applies (or both).
 # Auto-routing rule (same for q402_pay AND q402_batch_pay):
 #   chain="bnb" + Q402_TRIAL_API_KEY set  → Trial (free sponsored)
-#   anything else                          → Multichain (paid 8-chain)
+#   anything else                          → Multichain (paid 9-chain)
 # Batch ambiguity: 6+ recipient BNB batch with Trial set returns
 #   status="ambiguous" so the agent can ask the user which path to take.
 # Override per call with keyScope: "auto" | "trial" | "multichain".
 Q402_TRIAL_API_KEY=q402_live_...              # BNB-only sponsored Trial key (from /event)
-Q402_MULTICHAIN_API_KEY=q402_live_...         # paid 8-chain key (per-chain Gas Tank)
+Q402_MULTICHAIN_API_KEY=q402_live_...         # paid 9-chain key (per-chain Gas Tank)
 
 # Legacy single-env path — kept for back-compat. If only Q402_API_KEY is
 # set, both trial and multichain calls fall back to it.
@@ -854,7 +854,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "How do I get an API key?",
-                a: "Connect your wallet on the dashboard — a sandbox API key (q402_test_ prefix) is provisioned for free so you can test the integration. There are two paths to a live key (q402_live_): activate the Free Trial at /event for a BNB-only sponsored key (2,000 TX over 30 days, no card), or complete an on-chain payment on /payment for a Multichain key with 8-chain support. Both keys are issued automatically after their respective activation step."
+                a: "Connect your wallet on the dashboard — a sandbox API key (q402_test_ prefix) is provisioned for free so you can test the integration. There are two paths to a live key (q402_live_): activate the Free Trial at /event for a BNB-only sponsored key (2,000 TX over 30 days, no card), or complete an on-chain payment on /payment for a Multichain key with 9-chain support. Both keys are issued automatically after their respective activation step."
               },
               {
                 q: "How does billing work? Can I upgrade my plan?",

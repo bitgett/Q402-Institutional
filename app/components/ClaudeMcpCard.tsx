@@ -143,7 +143,7 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
           </span>
           Real on-chain payments need a live key set as{" "}
           <code className="text-white/55">Q402_TRIAL_API_KEY</code> (BNB-only sponsored) or{" "}
-          <code className="text-white/55">Q402_MULTICHAIN_API_KEY</code> (paid 8-chain), plus{" "}
+          <code className="text-white/55">Q402_MULTICHAIN_API_KEY</code> (paid 9-chain), plus{" "}
           <code className="text-white/55">Q402_PRIVATE_KEY</code> and{" "}
           <code className="text-white/55">Q402_ENABLE_REAL_PAYMENTS=1</code>{" "}
           <strong className="text-white/65">all set in your shell environment</strong> — not in

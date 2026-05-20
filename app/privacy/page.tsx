@@ -145,7 +145,7 @@ export default function PrivacyPage() {
             <h2 className="text-white font-semibold text-base mb-3">10. Third-Party Services</h2>
             <ul className="list-disc list-inside space-y-2">
               <li><strong className="text-white/60">Vercel</strong> — hosting and KV storage (<a href="https://vercel.com/legal/privacy-policy" className="text-yellow/80 hover:text-yellow" target="_blank" rel="noopener noreferrer">Vercel Privacy Policy</a>)</li>
-              <li><strong className="text-white/60">Public RPC providers</strong> — on-chain data reads (Avalanche, BSC, Ethereum, X Layer, Stable public endpoints)</li>
+              <li><strong className="text-white/60">Public RPC providers</strong> — on-chain data reads (Avalanche, BSC, Ethereum, X Layer, Stable, Mantle, Injective, Monad, Scroll public endpoints)</li>
               <li><strong className="text-white/60">CoinGecko</strong> — token price data for Gas Tank USD display (no user data sent)</li>
               <li><strong className="text-white/60">Telegram</strong> — internal inquiry notifications only</li>
             </ul>

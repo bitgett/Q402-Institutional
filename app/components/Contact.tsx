@@ -41,7 +41,7 @@ const TERMINAL_LINES = [
   { text: "✓ Confirmed  block #38,482,910",                    color: "text-green-400", delay: 4900 },
   { text: "",                                                  color: "",               delay: 5200 },
   { text: "  result.txHash     0xd4e8…a3f1",                   color: "text-white/25",  delay: 5400 },
-  { text: "  result.method     eip7702  ← 8-chain unified",    color: "text-white/25",  delay: 5600 },
+  { text: "  result.method     eip7702  ← 9-chain unified",    color: "text-white/25",  delay: 5600 },
   { text: "  result.success    true   50.00 USDC settled",     color: "text-yellow",    delay: 5800 },
 ];
 
@@ -177,7 +177,7 @@ export default function Contact() {
             {[
               { value: "99.99%", label: "Uptime" },
               { value: "<0.9 sec", label: "Inclusion time" },
-              { value: "8 chains", label: "Mainnet live" },
+              { value: "9 chains", label: "Mainnet live" },
             ].map((stat, i) => (
               <div key={stat.label} className="flex items-center gap-8">
                 {i > 0 && <div className="w-px h-8 bg-white/10" />}

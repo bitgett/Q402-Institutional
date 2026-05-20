@@ -65,6 +65,8 @@ function chainLabel(chain: string): string {
     case "stable":    return "Stable";
     case "mantle":    return "Mantle";
     case "injective": return "Injective EVM";
+    case "monad":     return "Monad";
+    case "scroll":    return "Scroll";
     default:          return chain;
   }
 }

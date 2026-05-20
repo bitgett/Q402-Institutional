@@ -1,6 +1,6 @@
 /**
  * agent-example.mjs
- * Q402 Node.js Agent SDK — unified example for all 8 Q402 chains.
+ * Q402 Node.js Agent SDK — unified example for all 9 Q402 chains.
  *
  * Signing scheme (identical for every chain):
  *   - Witness type: TransferAuthorization(owner, facilitator, token, recipient,
