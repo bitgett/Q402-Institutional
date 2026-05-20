@@ -1,84 +1,184 @@
+// Infrastructure-style footer: 4-column nav grid, dedicated chain strip,
+// and a thin metadata bar at the bottom. Replaces the prior single-row
+// sprawl where chain pills, status, and legal links were jammed together.
+
+const CHAINS = [
+  { name: "BNB Chain",  img: "/bnb.png"       },
+  { name: "Ethereum",   img: "/eth.png"       },
+  { name: "Avalanche",  img: "/avax.png"      },
+  { name: "X Layer",    img: "/xlayer.png"    },
+  { name: "Mantle",     img: "/mantle.png"    },
+  { name: "Injective",  img: "/injective.png" },
+  { name: "Stable",     img: "/stable.jpg"    },
+  { name: "Monad",      img: "/monad.png"     },
+  { name: "Scroll",     img: "/scroll.png"    },
+];
+
+const NAV: { heading: string; links: { label: string; href: string; external?: boolean }[] }[] = [
+  {
+    heading: "Product",
+    links: [
+      { label: "Dashboard",        href: "/dashboard" },
+      { label: "Pricing",          href: "/payment"   },
+      { label: "Free Trial",       href: "/event"     },
+      { label: "Q402 for Claude",  href: "/claude"    },
+      { label: "For AI Agents",    href: "/agents"    },
+    ],
+  },
+  {
+    heading: "Developers",
+    links: [
+      { label: "Documentation",    href: "/docs" },
+      { label: "JavaScript SDK",   href: "/q402-sdk.js" },
+      { label: "MCP Server",       href: "https://www.npmjs.com/package/@quackai/q402-mcp", external: true },
+      { label: "Trust Receipts",   href: "/docs#trust-receipts" },
+      { label: "GitHub",           href: "https://github.com/bitgett", external: true },
+    ],
+  },
+  {
+    heading: "Company",
+    links: [
+      { label: "Grant Program",    href: "/grant"   },
+      { label: "Contact Sales",    href: "mailto:business@quackai.ai" },
+      { label: "Terms",            href: "/terms"   },
+      { label: "Privacy",          href: "/privacy" },
+    ],
+  },
+];
+
 export default function Footer() {
   return (
-    <footer className="border-t border-white/10 py-10 px-6">
+    <footer className="border-t border-white/[0.08] pt-20 pb-10 px-6 mt-16">
       <div className="max-w-6xl mx-auto">
-        {/* Top row */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              {/* Same yellow square logo as the Navbar, kept identical so
-                  brand mark looks consistent top + bottom of every page. */}
-              <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
-                <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
+
+        {/* ── Top: brand col (wide) + 3 nav cols ─────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-12 md:gap-10 mb-14">
+
+          {/* Brand col — spans 2/5 on desktop so the description has room
+              to breathe; nav columns each take 1/5. */}
+          <div className="md:col-span-2">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-7 h-7 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_18px_rgba(245,197,24,0.4)]">
+                <span className="w-3 h-3 rounded-sm bg-navy/90" />
               </span>
-              <span className="text-yellow font-bold text-lg leading-none">Q402</span>
-              <span className="text-white/30 text-sm leading-none">by Quack AI</span>
+              <span className="text-yellow font-bold text-xl leading-none tracking-tight">Q402</span>
+              <span className="text-white/35 text-sm leading-none ml-1">by Quack AI</span>
             </div>
-            <p className="text-white/30 text-xs max-w-xs leading-relaxed mt-2">
-              Gasless Payment Protocol · EIP-712 + EIP-7702 · Multi-chain EVM
+
+            <p className="text-white/45 text-sm leading-relaxed max-w-xs mb-5">
+              Gasless payment infrastructure for AI agents and Web3 apps. EIP-712 + EIP-7702, live on mainnet.
             </p>
+
+            <div className="flex items-center gap-2">
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"
+                style={{ boxShadow: "0 0 6px #4ade80" }}
+              />
+              <span className="text-white/40 text-[10px] font-mono uppercase tracking-[0.25em]">
+                Live · Mainnet
+              </span>
+            </div>
           </div>
 
-          {/* Chain badges */}
-          <div className="flex flex-wrap gap-2">
-            {[
-              { name: "Avalanche", color: "#E84142" },
-              { name: "BNB Chain", color: "#F0B90B" },
-              { name: "X Layer",   color: "#CCCCCC" },
-              { name: "Ethereum",  color: "#627EEA" },
-              { name: "Mantle",    color: "#FFFFFF" },
-              { name: "Injective", color: "#0082FA" },
-              { name: "Stable",    color: "#4AE54A" },
-              { name: "Monad",     color: "#836EF9" },
-              { name: "Scroll",    color: "#EEB431" },
-            ].map((c) => (
-              <span
-                key={c.name}
-                className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border border-white/8 bg-white/3 text-white/40"
-              >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.color }} />
-                {c.name}
-              </span>
+          {/* Nav cols */}
+          {NAV.map((col) => (
+            <div key={col.heading}>
+              <h4 className="text-white/30 text-[10px] font-semibold uppercase tracking-[0.22em] mb-5">
+                {col.heading}
+              </h4>
+              <ul className="space-y-3">
+                {col.links.map((link) => (
+                  <li key={link.label}>
+                    <a
+                      href={link.href}
+                      {...(link.external
+                        ? { target: "_blank", rel: "noopener noreferrer" }
+                        : {})}
+                      className="inline-flex items-center gap-1.5 text-white/60 text-sm hover:text-yellow transition-colors"
+                    >
+                      <span>{link.label}</span>
+                      {link.external && (
+                        <span className="text-[10px] opacity-40">↗</span>
+                      )}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Chain strip ────────────────────────────────────────────────── */}
+        {/* No header above the strip — the page already states the chain
+            count twice in the hero and once in the section above. The logos
+            speak for themselves. */}
+        <div className="border-t border-white/[0.06] pt-9 pb-9">
+          <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
+            {CHAINS.map((c) => (
+              <div key={c.name} className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={c.img} alt={c.name} className="w-full h-full object-cover" />
+                </span>
+                <span className="text-white/50 text-xs">{c.name}</span>
+              </div>
             ))}
           </div>
         </div>
 
-        {/* Stats bar */}
-        <div className="flex flex-wrap items-center gap-6 py-5 border-y border-white/8 mb-6">
-          <div className="flex items-center gap-2">
-            <span className="text-yellow font-bold font-mono text-sm">99.99%</span>
-            <span className="text-white/30 text-xs">Uptime</span>
-          </div>
-          <div className="w-px h-4 bg-white/10 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-yellow font-bold font-mono text-sm">&lt;0.9 sec</span>
-            <span className="text-white/30 text-xs">Inclusion time</span>
-          </div>
-          <div className="w-px h-4 bg-white/10 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="text-white font-bold text-sm">9</span>
-            <span className="text-white/30 text-xs">EVM chains live</span>
-          </div>
-          <div className="w-px h-4 bg-white/10 hidden sm:block" />
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-            <span className="text-white/30 text-xs">Protocol live on mainnet</span>
-          </div>
-        </div>
+        {/* ── Bottom legal + socials strip ───────────────────────────────── */}
+        <div className="border-t border-white/[0.06] pt-7 flex flex-col sm:flex-row items-center justify-between gap-5">
 
-        {/* Bottom row */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-white/20 text-xs">
-            © 2026 Quack AI. All rights reserved.
-          </p>
-          <div className="flex items-center gap-4">
-            <a href="/terms" className="text-white/25 text-xs hover:text-white/60 transition-colors">Terms</a>
-            <a href="/privacy" className="text-white/25 text-xs hover:text-white/60 transition-colors">Privacy</a>
-            <a href="mailto:business@quackai.ai" className="text-white/30 text-xs hover:text-white transition-colors">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-1 text-[11px]">
+            <span className="text-white/35">© 2026 Quack AI</span>
+            <span className="text-white/12">·</span>
+            <span className="text-white/35 font-mono">99.99% uptime</span>
+            <span className="text-white/12 hidden sm:inline">·</span>
+            <span className="text-white/35 font-mono hidden sm:inline">&lt;0.9 s settle</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <a
+              href="https://x.com/QuackAI_AI"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="X / Twitter"
+              className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white/45 hover:text-yellow hover:border-yellow/45 transition-colors"
+            >
+              {/* X (Twitter) glyph */}
+              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="currentColor" aria-hidden>
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.834l4.713 6.231 5.443-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"/>
+              </svg>
+            </a>
+            <a
+              href="https://github.com/bitgett"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="GitHub"
+              className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-white/45 hover:text-yellow hover:border-yellow/45 transition-colors"
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor" aria-hidden>
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.72-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.2.08 1.83 1.24 1.83 1.24 1.07 1.83 2.81 1.3 3.49.99.11-.77.42-1.3.76-1.6-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.29 0 .32.22.7.83.58C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/>
+              </svg>
+            </a>
+            <a
+              href="https://www.npmjs.com/package/@quackai/q402-mcp"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="npm package @quackai/q402-mcp"
+              className="h-8 px-3 rounded-full border border-white/10 flex items-center justify-center text-white/45 hover:text-yellow hover:border-yellow/45 transition-colors text-[10px] font-bold font-mono uppercase tracking-wider"
+            >
+              npm
+            </a>
+            <a
+              href="mailto:business@quackai.ai"
+              className="text-white/45 text-xs hover:text-yellow transition-colors hidden sm:inline"
+            >
               business@quackai.ai
             </a>
           </div>
         </div>
+
       </div>
     </footer>
   );
