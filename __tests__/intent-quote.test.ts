@@ -139,5 +139,7 @@ describe("INTENT_CHAIN_MAP", () => {
     expect(INTENT_CHAIN_MAP["stable"]).toBe("Stable");
     expect(INTENT_CHAIN_MAP["mantle"]).toBe("Mantle");
     expect(INTENT_CHAIN_MAP["injective"]).toBe("Injective");
+    expect(INTENT_CHAIN_MAP["monad"]).toBe("Monad");
+    expect(INTENT_CHAIN_MAP["scroll"]).toBe("Scroll");
   });
 });

@@ -15,7 +15,7 @@
 
 ## Why
 
-On every EVM chain, users need to hold a native gas token (BNB, ETH, AVAX, OKB, MNT, INJ, USDT0) just to move USDC/USDT. A user holding $100 of USDC on BNB Chain cannot transfer anything without first acquiring BNB — that's where Web3 onboarding collapses. Q402 removes that step entirely: the sender signs an EIP-712 authorization off-chain, Q402's relayer submits the on-chain transaction and pays the gas, and the recipient receives 100% of the stablecoin.
+On every EVM chain, users need to hold a native gas token (BNB, ETH, AVAX, OKB, MNT, INJ, USDT0, MON) just to move USDC/USDT. A user holding $100 of USDC on BNB Chain cannot transfer anything without first acquiring BNB — that's where Web3 onboarding collapses. Q402 removes that step entirely: the sender signs an EIP-712 authorization off-chain, Q402's relayer submits the on-chain transaction and pays the gas, and the recipient receives 100% of the stablecoin.
 
 The same primitive serves AI agents. Managing gas across multiple chains for many autonomous agents is operationally painful; one Q402 account covers all of them through a single API key.
 
