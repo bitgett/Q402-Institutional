@@ -372,6 +372,7 @@ const CHAIN_THRESHOLDS: Record<string, number[]> = {
   "Mantle":     [  29,  49,  89,  149,  449,   799,  1999 ],
   "Injective":  [  29,  49,  89,  149,  449,   799,  1999 ],
   "Monad":      [  29,  49,  89,  149,  449,   799,  1999 ],
+  "Scroll":     [  29,  49,  89,  149,  449,   799,  1999 ],
   "Avalanche":  [  29,  49,  99,  159,  489,   879,  2199 ],
   "Ethereum":   [  39,  69, 129,  219,  669,  1199,  2999 ],
 };
@@ -421,6 +422,8 @@ const CHAIN_MULTIPLIERS: Record<string, number> = {
   "Stable":    1.0,
   "Mantle":    1.0,
   "Injective": 1.0,
+  "Monad":     1.0,
+  "Scroll":    1.0,
   "Avalanche": 1.1,
   "Ethereum":  1.5,
 };
