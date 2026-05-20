@@ -71,10 +71,12 @@ describe("/api/relay/batch route", () => {
 
   it("rejects non-batchable chains (xlayer / stable) with CHAIN_NOT_BATCHABLE", () => {
     // The server is the authoritative chain gate for batching. Browser
-    // SDK + Node client + MCP tool schema all agree on the same 5-chain
-    // set; this assertion locks the server in lockstep.
+    // SDK + Node client + MCP tool schema all agree on the same 7-chain
+    // set (avax / bnb / eth / mantle / injective / monad / scroll); this
+    // assertion locks the server in lockstep. Adding a new batchable
+    // chain means updating this regex AND the SDK/MCP allowlists.
     expect(batchRouteSrc).toMatch(/CHAIN_NOT_BATCHABLE/);
-    expect(batchRouteSrc).toMatch(/BATCHABLE_CHAINS[\s\S]*?"avax"[\s\S]*?"bnb"[\s\S]*?"eth"[\s\S]*?"mantle"[\s\S]*?"injective"/);
+    expect(batchRouteSrc).toMatch(/BATCHABLE_CHAINS[\s\S]*?"avax"[\s\S]*?"bnb"[\s\S]*?"eth"[\s\S]*?"mantle"[\s\S]*?"injective"[\s\S]*?"monad"[\s\S]*?"scroll"/);
     expect(batchRouteSrc).not.toMatch(/BATCHABLE_CHAINS[^)]*"xlayer"/);
     expect(batchRouteSrc).not.toMatch(/BATCHABLE_CHAINS[^)]*"stable"/);
   });

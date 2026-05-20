@@ -32,7 +32,8 @@
  *                         SUBSCRIPTION_DEPLOYED_CHAINS — the test will
  *                         fail if step (2) is done before step (1).
  *
- *   GASTANK_ADDRESS       user-deposited relay credits (BNB/ETH/MNT/INJ/AVAX/OKB/USDT0).
+ *   GASTANK_ADDRESS       user-deposited relay credits (BNB/ETH/MNT/INJ/AVAX/OKB/USDT0/MON;
+ *                         Scroll uses ETH so it shares the ETH entry).
  *                         KV ledger tracks per-user balance; on-chain balance
  *                         MUST equal sum(KV gas balance) at all times. No
  *                         server-side private key — hot relayer is topped up

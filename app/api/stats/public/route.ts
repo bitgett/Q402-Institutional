@@ -114,10 +114,12 @@ async function computeStats(): Promise<PublicStats> {
   for (const key of keys) {
     const rows = await loadRelayedTxKey(key);
     for (const tx of rows) {
-      if (isSandboxRow(tx)) continue;
       // Defensive: skip malformed rows rather than throwing — a single
       // corrupt history entry must not turn the whole panel into a 500.
+      // MUST run before isSandboxRow() because that helper dereferences
+      // tx.apiKey, which would itself throw on a null / non-object row.
       if (!tx || typeof tx !== "object") continue;
+      if (isSandboxRow(tx)) continue;
       const chain = typeof tx.chain === "string" && tx.chain.length > 0 ? tx.chain : "unknown";
       const fromUser = typeof tx.fromUser === "string" ? tx.fromUser.toLowerCase() : "";
       const toUser   = typeof tx.toUser   === "string" ? tx.toUser.toLowerCase()   : "";

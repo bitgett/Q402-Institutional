@@ -14,9 +14,10 @@
  *   - `token` is ALWAYS the ERC-20 symbol string "USDC" or "USDT" — never an
  *     address. The server looks up the address from CHAIN_CONFIG[chain][token].
  *   - `amount` is an atomic uint256 string (e.g. "50000" for 0.05 USDC @ 6dp).
- *   - avax / bnb / eth → send `nonce` (uint256 string) + `authorization`.
- *   - xlayer          → send `xlayerNonce` (uint256 string) + `authorization`.
- *   - stable          → send `stableNonce` (uint256 string) + `authorization`.
+ *   - avax / bnb / eth / mantle / injective / monad / scroll →
+ *       send `nonce` (uint256 string) + `authorization`.
+ *   - xlayer → send `xlayerNonce` (uint256 string) + `authorization`.
+ *   - stable → send `stableNonce` (uint256 string) + `authorization`.
  *   - X Layer's EIP-3009 fallback uses `eip3009Nonce` (bytes32 hex) and omits
  *     `authorization`; not shown here because EIP-7702 is the primary path.
  *
