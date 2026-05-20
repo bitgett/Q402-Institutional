@@ -587,17 +587,37 @@ describe("admin-grant.mjs seed-first parity", () => {
   });
 
   it("syncs sub mirror fields from the actual scoped pools after INCRBY", () => {
-    // After the legacy seed + INCRBY, the script's plan.newSub object
-    // (built earlier with `flags.amount` only) under-reports the
-    // post-grant balance whenever a non-zero legacy quota was seeded
-    // in. Re-reading both scoped pools right before `kv.set(subKey,
-    // plan.newSub)` and overwriting the three mirror fields keeps
-    // mirror readers (usage-alert, topup, seedFromLegacy's final
-    // fallback) aligned with the truth.
+    // After the legacy seed + INCRBY, the script re-reads both scoped
+    // pools and writes them onto plan.newSub so the mirror matches
+    // what dashboard reads see.
     const mirrorSyncBlock = adminGrantSource.match(
-      /const\s+finalPaid[\s\S]+?const\s+finalTrial[\s\S]+?plan\.newSub\.paidQuotaBonus\s*=\s*finalPaid[\s\S]+?plan\.newSub\.trialQuotaBonus\s*=\s*finalTrial[\s\S]+?plan\.newSub\.quotaBonus\s*=\s*finalPaid\s*\+\s*finalTrial[\s\S]+?kv\.set\(\s*subKey\(ADDR\),\s*plan\.newSub\s*\)/,
+      /const\s+paidScopedNow[\s\S]+?const\s+trialScopedNow[\s\S]+?plan\.newSub\.paidQuotaBonus\s*=\s*finalPaid[\s\S]+?plan\.newSub\.trialQuotaBonus\s*=\s*finalTrial[\s\S]+?plan\.newSub\.quotaBonus\s*=\s*finalPaid\s*\+\s*finalTrial[\s\S]+?kv\.set\(\s*subKey\(ADDR\),\s*plan\.newSub\s*\)/,
     );
     expect(mirrorSyncBlock).toBeTruthy();
+  });
+
+  it("mirror sync falls back to plan.newSub mirrors when a scoped pool is null (does not clobber to 0)", () => {
+    // The earlier `?? 0` version of this sync ran a trial-only user's
+    // trialQuotaBonus mirror from 2000 to 0 the moment ops issued a
+    // paid grant — quota:trial:{addr} was not yet seeded for that
+    // user, so the kv.get returned null and the `?? 0` defaulted
+    // before the assignment. The current fallback chain reads the
+    // value plan.newSub already carries (inherited from `existing`
+    // or the brand-new default) so the OTHER scope's mirror survives.
+    expect(adminGrantSource).toMatch(
+      /finalPaid\s*=\s*paidScopedNow\s*\?\?\s*plan\.newSub\.paidQuotaBonus\s*\?\?\s*0/,
+    );
+    expect(adminGrantSource).toMatch(
+      /finalTrial\s*=\s*trialScopedNow\s*\?\?\s*plan\.newSub\.trialQuotaBonus\s*\?\?\s*0/,
+    );
+    // And the buggy direct `?? 0` from the previous iteration must
+    // not creep back.
+    expect(adminGrantSource).not.toMatch(
+      /finalPaid\s*=\s*\(await\s+kv\.get\(scopedQuotaKey\(ADDR,\s*["']paid["']\)\)\)\s*\?\?\s*0/,
+    );
+    expect(adminGrantSource).not.toMatch(
+      /finalTrial\s*=\s*\(await\s+kv\.get\(scopedQuotaKey\(ADDR,\s*["']trial["']\)\)\)\s*\?\?\s*0/,
+    );
   });
 });
 
