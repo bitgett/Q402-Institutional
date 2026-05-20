@@ -168,7 +168,7 @@ export default function Hero() {
                 transition={{ duration: 0.6, delay: 0.3 }}
                 className="mt-7 text-base sm:text-lg lg:text-lg xl:text-xl text-white/65 font-light leading-relaxed lg:whitespace-nowrap"
               >
-                <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Eight EVM chains.{" "}
+                <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Nine EVM chains.{" "}
                 <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
               </motion.p>
             </div>

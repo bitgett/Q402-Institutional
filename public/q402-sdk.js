@@ -115,7 +115,7 @@ const Q402_CHAIN_CONFIG = {
     usdt: { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 },
     // Ripple USD (RLUSD) — NY DFS regulated, ERC-20 + EIP-2612 permit, decimals 18.
     // UUPS proxy; implementation at 0x9747a0d261c2d56eb93f542068e5d1e23170fa9e.
-    // Ethereum-only. Other 7 chains reject token:"RLUSD" via supportedTokens absence.
+    // Ethereum-only. Non-Ethereum chains reject token:"RLUSD" via supportedTokens absence.
     rlusd: { address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", decimals: 18 },
     supportedTokens: ["USDC", "USDT", "RLUSD"],
   },
