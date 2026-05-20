@@ -1,212 +1,264 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useState } from "react";
 import RegisterModal from "./RegisterModal";
 
-const CODE_LINES = [
-  { tokens: [{ t: "// ",          c: "text-white/25" }, { t: "Drop-in script, no bundler required", c: "text-white/45" }] },
-  { tokens: [{ t: "<script src=", c: "text-white/40" }, { t: '"https://q402.quackai.ai/q402-sdk.js"', c: "text-orange-300" }, { t: "></script>", c: "text-white/40" }] },
-  { tokens: [] },
-  { tokens: [{ t: "const",        c: "text-purple-400" }, { t: " q402 ",         c: "text-blue-300" }, { t: "= ",   c: "text-white/40" }, { t: "new",        c: "text-yellow" }, { t: " Q402Client", c: "text-blue-300" }, { t: "({", c: "text-white/40" }] },
-  { tokens: [{ t: "  apiKey",     c: "text-green-300" }, { t: ": ",              c: "text-white/40" }, { t: '"q402_live_..."', c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
-  { tokens: [{ t: "  chain",      c: "text-green-300" }, { t: ":  ",             c: "text-white/40" }, { t: '"bnb"', c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
-  { tokens: [{ t: "});",          c: "text-white/40" }] },
-  { tokens: [] },
-  { tokens: [{ t: "const",        c: "text-purple-400" }, { t: " result ",       c: "text-blue-300" }, { t: "= ",   c: "text-white/40" }, { t: "await",      c: "text-yellow" }, { t: " q402",       c: "text-blue-300" }, { t: ".", c: "text-white/40" }, { t: "pay",   c: "text-blue-300" }, { t: "({", c: "text-white/40" }] },
-  { tokens: [{ t: "  to",         c: "text-green-300" }, { t: ":     recipient", c: "text-white/60" }, { t: ",", c: "text-white/40" }] },
-  { tokens: [{ t: "  amount",     c: "text-green-300" }, { t: ": ",              c: "text-white/40" }, { t: '"50.00"', c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
-  { tokens: [{ t: "  token",      c: "text-green-300" }, { t: ":  ",             c: "text-white/40" }, { t: '"USDC"',  c: "text-orange-300" }, { t: ",", c: "text-white/40" }] },
-  { tokens: [{ t: "});",          c: "text-white/40" }] },
-  { tokens: [] },
-  { tokens: [{ t: "// ✓ ",        c: "text-white/25" }, { t: "result.success",   c: "text-green-400" }, { t: "  true",         c: "text-white/40" }] },
-  { tokens: [{ t: "// ✓ ",        c: "text-white/25" }, { t: "result.txHash",    c: "text-green-400" }, { t: "   0xd4e8…a3f1",  c: "text-white/40" }] },
-  { tokens: [{ t: "// ✓ ",        c: "text-white/25" }, { t: "result.method",    c: "text-green-400" }, { t: "   eip7702",      c: "text-white/40" }] },
-  { tokens: [{ t: "// ✓ ",        c: "text-white/25" }, { t: "gas paid by user", c: "text-yellow"      }, { t: "  $0.000000",    c: "text-yellow font-bold" }] },
+// ─── AI client chips ─────────────────────────────────────────────────────────
+// Real brand marks served from /public/logos/. Anthropic Claude in brand
+// orange, OpenAI mark for Codex, Cursor white, Cline light grey — sourced
+// from simple-icons + iconify and saved locally so the page works offline.
+
+const AI_CLIENTS: { name: string; src: string }[] = [
+  { name: "Claude", src: "/logos/claude.svg" },
+  { name: "Codex",  src: "/logos/codex.svg"  },
+  { name: "Cursor", src: "/logos/cursor.svg" },
+  { name: "Cline",  src: "/logos/cline.svg"  },
 ];
 
-const TERMINAL_LINES = [
-  { text: "$ q402.pay({ to, amount: \"50.00\", token: \"USDC\" })", color: "text-white/70",  delay: 0    },
-  { text: "",                                                  color: "",               delay: 500  },
-  { text: "  Fetching facilitator · /api/relay/info",          color: "text-white/30",  delay: 800  },
-  { text: "✓ Facilitator resolved",                            color: "text-green-400", delay: 1400 },
-  { text: "",                                                  color: "",               delay: 1600 },
-  { text: "  Signing EIP-712 TransferAuthorization",           color: "text-white/30",  delay: 1800 },
-  { text: "✓ witnessSig  0x5a3f…bc19",                         color: "text-green-400", delay: 2300 },
-  { text: "",                                                  color: "",               delay: 2500 },
-  { text: "  Signing EIP-7702 authorization",                  color: "text-white/30",  delay: 2700 },
-  { text: "✓ Authorization signed  gas: $0.000000",            color: "text-green-400", delay: 3400 },
-  { text: "",                                                  color: "",               delay: 3600 },
-  { text: "  Relaying via Q402 facilitator",                   color: "text-white/30",  delay: 3800 },
-  { text: "✓ Submitted",                                       color: "text-green-400", delay: 4300 },
-  { text: "✓ Confirmed  block #38,482,910",                    color: "text-green-400", delay: 4900 },
-  { text: "",                                                  color: "",               delay: 5200 },
-  { text: "  result.txHash     0xd4e8…a3f1",                   color: "text-white/25",  delay: 5400 },
-  { text: "  result.method     eip7702  ← 9-chain unified",    color: "text-white/25",  delay: 5600 },
-  { text: "  result.success    true   50.00 USDC settled",     color: "text-yellow",    delay: 5800 },
+// ─── Mini-conversation cards ─────────────────────────────────────────────────
+// Each card is a self-contained YOU → Q402 dialogue: the user describes the
+// intent in natural language, the agent responds with what the settlement
+// layer actually does. Two LIVE (single transfer, batch) ground the section
+// in shipping product; two ROADMAP (scheduled, treasury routing) show where
+// it's headed. The LIVE/ROADMAP pill keeps the line between the two honest.
+
+type PromptCard = {
+  category: string;
+  status:   "LIVE" | "ROADMAP";
+  prompt:   ({ t: string; hl?: boolean })[];
+  reply:    string;     // one-line description of what Q402 does
+  tags:     string[];
+};
+
+const PROMPTS: PromptCard[] = [
+  {
+    category: "Single transfer",
+    status:   "LIVE",
+    prompt: [
+      { t: "“Send "                 },
+      { t: "1 USDT",       hl: true },
+      { t: " on "                   },
+      { t: "BNB Chain",    hl: true },
+      { t: " to "                   },
+      { t: "0xf5cd…5c28",  hl: true },
+      { t: " and show me the Trust Receipt.”" },
+    ],
+    reply: "Single gasless transfer. Settled in under a second, signed Trust Receipt attached.",
+    tags:  ["q402_pay", "$0 payer gas", "Trust Receipt"],
+  },
+  {
+    category: "Batch payouts",
+    status:   "LIVE",
+    prompt: [
+      { t: "“Send "                 },
+      { t: "0.5 USDC",     hl: true },
+      { t: " to these "             },
+      { t: "20 winners",   hl: true },
+      { t: " and export the receipt list as CSV.”" },
+    ],
+    reply: "20 recipients in one signed batch. Receipts exported.",
+    tags:  ["q402_batch_pay", "≤20 recipients", "CSV export"],
+  },
+  {
+    category: "Cheapest route",
+    status:   "LIVE",
+    prompt: [
+      { t: "“Find the cheapest chain to send "         },
+      { t: "100 USDC",       hl: true                  },
+      { t: " to "                                      },
+      { t: "0x9c4f…7e2a",    hl: true                  },
+      { t: " right now.”"                              },
+    ],
+    reply: "Live gas quotes across all 9 chains, ranked by total cost.",
+    tags:  ["q402_quote", "gas ranking", "multichain"],
+  },
+  {
+    category: "Receipt audit",
+    status:   "LIVE",
+    prompt: [
+      { t: "“Verify "                                              },
+      { t: "rct_a3f1…4d8b", hl: true                               },
+      { t: " was signed by Q402’s facilitator on-chain.”"          },
+    ],
+    reply: "ECDSA recovered from on-chain state — verifiable without Q402.",
+    tags:  ["q402_receipt", "ECDSA recovery", "local verify"],
+  },
+  {
+    category: "Scheduled recurring",
+    status:   "ROADMAP",
+    prompt: [
+      { t: "“Every month on the "  },
+      { t: "7th",         hl: true },
+      { t: ", send "               },
+      { t: "25 USDT",     hl: true },
+      { t: " to my contractor — unless I cancel by the " },
+      { t: "5th",         hl: true },
+      { t: ".”"                    },
+    ],
+    reply: "Recurring payout with a cancel window. Your agent confirms before each run.",
+    tags:  ["scheduled", "cancel window", "agent notify"],
+  },
+  {
+    category: "Treasury automation",
+    status:   "ROADMAP",
+    prompt: [
+      { t: "“On the "                          },
+      { t: "3rd of every month",   hl: true    },
+      { t: ", sweep my idle "                  },
+      { t: "USDC",                 hl: true    },
+      { t: " into the "                        },
+      { t: "highest-yielding Morpho vault",
+                                    hl: true   },
+      { t: ".”"                                },
+    ],
+    reply: "Scheduled yield routing into the top-performing vault.",
+    tags:  ["scheduled", "vault routing", "auto-rebalance"],
+  },
 ];
-
-function BigTerminal() {
-  const [termLines, setTermLines] = useState(0);
-  const [showCursor, setShowCursor] = useState(true);
-  const ref = useRef<HTMLDivElement>(null);
-  const started = useRef(false);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const timerList = timers.current;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !started.current) {
-          started.current = true;
-          TERMINAL_LINES.forEach((_, i) => {
-            const t = setTimeout(() => setTermLines(i + 1), TERMINAL_LINES[i].delay);
-            timerList.push(t);
-          });
-        }
-      },
-      { threshold: 0.2 }
-    );
-    observer.observe(el);
-    return () => { observer.disconnect(); timerList.forEach(clearTimeout); };
-  }, []);
-
-  useEffect(() => {
-    const id = setInterval(() => setShowCursor(v => !v), 530);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div ref={ref} className="w-full rounded-2xl overflow-hidden shadow-2xl shadow-black/70" style={{ border: "1px solid rgba(245,197,24,0.12)", background: "#070D18" }}>
-
-      {/* Title bar */}
-      <div className="flex items-center gap-2 px-5 py-3.5 border-b" style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.07)" }}>
-        <span className="w-3 h-3 rounded-full bg-red-500/60" />
-        <span className="w-3 h-3 rounded-full" style={{ background: "rgba(245,197,24,0.5)" }} />
-        <span className="w-3 h-3 rounded-full bg-green-400/50" />
-        {/* Tabs */}
-        <div className="ml-6 flex items-center gap-1">
-          <div className="px-4 py-1 rounded-md text-xs font-mono text-white/70 border" style={{ background: "rgba(255,255,255,0.05)", borderColor: "rgba(255,255,255,0.10)" }}>
-            gasless.js
-          </div>
-          <div className="px-4 py-1 rounded-md text-xs font-mono text-white/25">
-            .env
-          </div>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-          <span className="text-[10px] text-white/25 font-mono">bnb mainnet · connected</span>
-        </div>
-      </div>
-
-      {/* Split pane */}
-      <div className="grid md:grid-cols-2 divide-x divide-white/[0.06]">
-
-        {/* LEFT: code editor */}
-        <div className="p-5 font-mono text-xs leading-[1.9] border-r" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-          <div className="text-white/15 text-[10px] uppercase tracking-widest mb-3 font-sans">gasless.js</div>
-          {CODE_LINES.map((line, i) => (
-            <div key={i} className="flex">
-              <span className="text-white/15 w-6 flex-shrink-0 select-none text-right mr-4">{i + 1}</span>
-              <span>
-                {line.tokens.map((tok, j) => (
-                  <span key={j} className={tok.c}>{tok.t}</span>
-                ))}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* RIGHT: terminal */}
-        <div className="p-5 font-mono text-xs leading-[1.9]" style={{ background: "rgba(0,0,0,0.3)" }}>
-          <div className="text-white/15 text-[10px] uppercase tracking-widest mb-3 font-sans">terminal</div>
-          {TERMINAL_LINES.slice(0, termLines).map((line, i) => (
-            <div key={i} className={line.color}>{line.text}</div>
-          ))}
-          {termLines < TERMINAL_LINES.length && (
-            <span className={`inline-block w-2 h-[13px] align-middle ${showCursor ? "bg-white/60" : "bg-transparent"}`} />
-          )}
-          {termLines >= TERMINAL_LINES.length && (
-            <div className="mt-1">
-              <span className="text-white/35">$ </span>
-              <span className={`inline-block w-2 h-[13px] align-middle ${showCursor ? "bg-white/50" : "bg-transparent"}`} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom status bar */}
-      <div className="flex items-center justify-between px-5 py-2 border-t text-[10px] font-mono" style={{ background: "rgba(245,197,24,0.04)", borderColor: "rgba(245,197,24,0.08)" }}>
-        <div className="flex items-center gap-4 text-white/25">
-          <span>EIP-712 + EIP-7702</span>
-          <span>·</span>
-          <span>USDC · BNB Chain</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-yellow/60">
-          <span className="w-1.5 h-1.5 rounded-full bg-yellow/60" />
-          <span>gasUsed: $0.000000</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function Contact() {
   const [showModal, setShowModal] = useState(false);
 
   return (
-    <section id="contact" className="py-24 px-6 overflow-hidden" style={{ background: "linear-gradient(180deg, transparent 0%, rgba(245,197,24,0.025) 50%, transparent 100%)" }}>
-      <div className="max-w-6xl mx-auto">
+    <section
+      id="contact"
+      className="relative py-20 lg:py-24 px-6 overflow-hidden"
+      style={{ background: "linear-gradient(180deg, transparent 0%, rgba(245,197,24,0.025) 50%, transparent 100%)" }}
+    >
+      {/* Soft top-of-section halo behind the headline. Compact so the
+          section doesn't visually push another 200px of empty atmosphere
+          above the content. */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-0 h-[360px] pointer-events-none"
+        style={{ background: "radial-gradient(ellipse 50% 70% at 50% 0%, rgba(245,197,24,0.07), transparent 70%)" }}
+      />
 
-        {/* Top: headline + stats */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center gap-2 bg-yellow/10 border border-yellow/20 text-yellow text-xs font-semibold px-4 py-2 rounded-full mb-7 uppercase tracking-widest">
-            Early Access
+      <div className="relative max-w-6xl mx-auto">
+
+        {/* ── Hero block — wide enough that the 38-char headline lands on a
+            single line at lg+ breakpoints. Mobile/tablet still wrap naturally
+            because the headline is long. */}
+        <div className="text-center max-w-5xl mx-auto mb-10">
+
+          <div className="inline-flex items-center gap-2.5 text-[11px] font-mono text-green-400/90 mb-5 uppercase tracking-[0.28em]">
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"
+              style={{ boxShadow: "0 0 8px #4ade80" }}
+            />
+            Ask your agent
           </div>
-          <h2 className="text-4xl md:text-5xl font-extrabold leading-[1.1] mb-4 tracking-tight">
-            Scale your product to{" "}
+
+          <h2 className="text-3xl md:text-4xl lg:text-[2.5rem] xl:text-[2.75rem] font-extrabold leading-[1.04] tracking-[-0.02em] mb-4">
+            <span className="text-white">Scale your product to </span>
             <span className="text-shimmer">100M Web3 users.</span>
           </h2>
-          <p className="text-white/40 text-lg font-light mb-8 max-w-xl mx-auto">
-            Without asking them to buy gas.
+
+          <p className="text-white/55 text-base font-light leading-relaxed mb-6 max-w-xl mx-auto">
+            Without asking them to buy gas. Your agent describes the intent;
+            Q402 carries it to settlement.
           </p>
 
-          {/* Stats */}
-          <div className="inline-flex items-center gap-8 bg-white/[0.03] border border-white/8 rounded-2xl px-8 py-4 mb-10">
-            {[
-              { value: "99.99%", label: "Uptime" },
-              { value: "<0.9 sec", label: "Inclusion time" },
-              { value: "9 chains", label: "Mainnet live" },
-            ].map((stat, i) => (
-              <div key={stat.label} className="flex items-center gap-8">
-                {i > 0 && <div className="w-px h-8 bg-white/10" />}
-                <div className="text-center">
-                  <div className="text-2xl font-extrabold text-yellow font-mono">{stat.value}</div>
-                  <div className="text-white/30 text-xs mt-0.5">{stat.label}</div>
-                </div>
-              </div>
+          <div className="flex flex-wrap justify-center gap-2">
+            {AI_CLIENTS.map((c) => (
+              <span
+                key={c.name}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/[0.03] text-white/75 text-[11px] font-medium"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={c.src} alt={c.name} className="w-3 h-3" />
+                {c.name}
+              </span>
             ))}
           </div>
-
-          {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button
-              onClick={() => setShowModal(true)}
-              className="inline-flex items-center gap-3 bg-yellow text-navy font-bold text-sm px-8 py-4 rounded-full hover:bg-yellow-hover transition-all hover:scale-105 shadow-lg shadow-yellow/20"
-            >
-              Talk to Us →
-            </button>
-            <a href="/docs" className="inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors">
-              <span className="w-8 h-8 rounded-full border border-white/12 flex items-center justify-center text-xs">↗</span>
-              Read the docs
-            </a>
-          </div>
-          <p className="text-white/20 text-xs mt-4">We typically respond within 24 hours.</p>
         </div>
 
-        {/* Full-width terminal */}
-        <BigTerminal />
+        {/* ── Conversation grid — 1-col mobile, 2-col tablet, 3×2 desktop.
+              Six cards: four LIVE (single transfer, batch payouts, cheapest
+              route via q402_quote, receipt audit via q402_receipt) and two
+              ROADMAP (scheduled recurring, treasury automation). */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto">
+          {PROMPTS.map((p) => (
+            <div
+              key={p.category}
+              className="rounded-xl p-5"
+              style={{
+                background: "linear-gradient(180deg, rgba(10,16,30,0.85) 0%, rgba(6,11,20,0.85) 100%)",
+                border:     "1px solid rgba(255,255,255,0.07)",
+                boxShadow:  "0 14px 32px -16px rgba(0,0,0,0.5)",
+              }}
+            >
+              {/* Card header — category + status pill in a single tight row */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-3.5 h-3.5 rounded-[3px] bg-yellow flex items-center justify-center shadow-[0_0_6px_rgba(245,197,24,0.4)]">
+                    <span className="w-1 h-1 rounded-[1px] bg-navy/90" />
+                  </span>
+                  <span className="text-yellow text-[10px] font-mono uppercase tracking-[0.22em] font-semibold">
+                    {p.category}
+                  </span>
+                </div>
+                {p.status === "LIVE" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-green-400/30 bg-green-400/5 text-green-400 text-[9px] font-mono font-bold uppercase tracking-[0.18em]">
+                    <span className="w-1 h-1 rounded-full bg-green-400" />
+                    Live
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/15 bg-white/[0.02] text-white/45 text-[9px] font-mono font-bold uppercase tracking-[0.18em]">
+                    Roadmap
+                  </span>
+                )}
+              </div>
+
+              {/* Prompt body — user's natural-language ask */}
+              <p className="text-white/90 text-[14.5px] leading-relaxed mb-3">
+                {p.prompt.map((seg, i) =>
+                  seg.hl ? (
+                    <span key={i} className="text-yellow font-medium">{seg.t}</span>
+                  ) : (
+                    <span key={i}>{seg.t}</span>
+                  )
+                )}
+              </p>
+
+              {/* Reply + tag row — Q402's response, one line + tags inline */}
+              <div className="pt-3 border-t" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                <p className="text-white/55 text-[12.5px] leading-relaxed mb-2.5">
+                  {p.reply}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {p.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-white/45 text-[10px] font-mono"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── CTA — moved to the section bottom so the demonstration leads
+              and the action follows. */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-5 mt-12">
+          <button
+            onClick={() => setShowModal(true)}
+            className="group inline-flex items-center gap-3 bg-yellow text-navy font-bold text-sm px-8 py-3.5 rounded-full hover:bg-yellow-hover transition-all hover:scale-[1.03] shadow-[0_0_28px_rgba(245,197,24,0.28)]"
+          >
+            Talk to us
+            <span className="text-base transition-transform group-hover:translate-x-0.5">→</span>
+          </button>
+          <a
+            href="/docs"
+            className="inline-flex items-center gap-2 text-sm text-white/55 hover:text-white transition-colors font-medium"
+          >
+            Read the docs
+            <span className="text-[10px] opacity-50">↗</span>
+          </a>
+        </div>
       </div>
 
       {showModal && <RegisterModal onClose={() => setShowModal(false)} />}
