@@ -11,6 +11,7 @@ const CHAINS = [
   { key: "xlayer", token: "OKB",  rpc: "https://rpc.xlayer.tech",                cgId: "okb"         },
   { key: "stable", token: "USDT0", rpc: "https://rpc.stable.xyz",               cgId: "tether"      },
   { key: "monad",  token: "MON",  rpc: "https://rpc.monad.xyz",                  cgId: "monad-2"     },
+  { key: "scroll", token: "ETH",  rpc: "https://rpc.scroll.io",                  cgId: "ethereum"    },
 ];
 
 async function getBalance(rpc: string, address: string): Promise<string> {

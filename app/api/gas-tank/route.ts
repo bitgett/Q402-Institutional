@@ -13,6 +13,7 @@ const CHAINS = [
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                     cgId: "okb"          },
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                      cgId: "tether"       },
   { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                       cgId: "monad-2"      },
+  { key: "scroll", name: "Scroll",    token: "ETH",   rpc: "https://rpc.scroll.io",                       cgId: "ethereum"     },
 ];
 
 // Minimum USD thresholds — alert when below these
@@ -29,6 +30,10 @@ const ALERT_THRESHOLD_USD: Record<string, number> = {
   // threshold above 15 MON so a top-up happens well before operational
   // headroom shrinks under the 10-MON tripwire.
   monad:  15,
+  // Scroll: ETH-denominated, L2 fees dominate. $5 floor ≈ 0.00125 ETH at
+  // $4000/ETH — enough headroom for the alert to fire long before any
+  // realistic burst would drain the facilitator's balance.
+  scroll: 5,
 };
 
 async function getNativeBalance(rpc: string, address: string): Promise<string> {

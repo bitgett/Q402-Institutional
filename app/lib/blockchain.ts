@@ -131,9 +131,24 @@ const CHAINS = [
       { symbol: "USDT", address: "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", decimals: 6 },
     ],
   },
+  {
+    name: "Scroll",
+    rpcs: [
+      "https://rpc.scroll.io",
+      "https://scroll-mainnet.public.blastapi.io",
+      "https://scroll.drpc.org",
+    ],
+    blockWindow: 1200,   // Scroll ~3s block, ~60 min window
+    // Native Circle USDC + canonical Tether on Scroll mainnet (addresses
+    // confirmed with Scroll team), both 6 decimals.
+    tokens: [
+      { symbol: "USDC", address: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6 },
+      { symbol: "USDT", address: "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", decimals: 6 },
+    ],
+  },
 ];
 
-/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad") to CHAINS[].name */
+/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad","scroll") to CHAINS[].name */
 export const INTENT_CHAIN_MAP: Record<string, string> = {
   bnb:       "BNB Chain",
   eth:       "Ethereum",
@@ -143,6 +158,7 @@ export const INTENT_CHAIN_MAP: Record<string, string> = {
   mantle:    "Mantle",
   injective: "Injective",
   monad:     "Monad",
+  scroll:    "Scroll",
 };
 
 /**

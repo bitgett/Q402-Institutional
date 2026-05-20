@@ -155,6 +155,24 @@ const CHAINS = {
     explorerBase: "https://monadscan.com/tx/",
     nonceField: "nonce",
   },
+  scroll: {
+    id: 534352, name: "Scroll", domainName: "Q402 Scroll",
+    rpc: envVars.SCROLL_RPC_URL ?? "https://rpc.scroll.io",
+    impl: envVars.SCROLL_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Scroll mainnet (chainId 534352). Native Circle USDC + canonical Tether USDT,
+    // both 6 decimals (addresses confirmed with the Scroll team during the
+    // integration handshake). EIP-7702 is live on Scroll mainnet via the Euclid
+    // Phase 2 upgrade (2025-04-22) — set-code transactions verify through the
+    // same prover stack as every other Scroll tx, so the relayer flow matches
+    // Avalanche / BNB / Ethereum exactly.
+    tokens: {
+      USDC: { address: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6 },
+      USDT: { address: "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", decimals: 6 },
+    },
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    explorerBase: "https://scrollscan.com/tx/",
+    nonceField: "nonce",
+  },
 };
 
 const TRANSFER_AUTH_TYPES = {

@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts.manifest.schema.json",
-  "version": "1.7.0",
-  "updatedAt": "2026-05-12",
+  "version": "1.8.0",
+  "updatedAt": "2026-05-20",
   "notes": [
     "Single source of truth for Q402 deployed contracts and EIP-712 signing conventions.",
     "If values in this file differ from app/lib/relayer.ts, public/q402-sdk.js, or README.md — this file wins.",
@@ -177,6 +177,27 @@
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://monadscan.com",
       "verifyUrl": "https://monadscan.com/address/0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC"
+    },
+    "scroll": {
+      "name": "Scroll",
+      "chainId": 534352,
+      "relayMode": "eip7702",
+      "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+      "witness": {
+        "type": "TransferAuthorization",
+        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "domainName": "Q402 Scroll",
+        "domainVersion": "1",
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Scroll mainnet via the Euclid upgrade (phase 1 2025-04-16, phase 2 2025-04-22 — see docs.scroll.io/en/technology/overview/scroll-upgrades/euclid-upgrade). Same impl address as Stable/Mantle/Injective via deterministic CREATE (deployer 0xfc77...f466, nonce 0); distinguished at signing time by chainId 534352 + domainName 'Q402 Scroll'. Address remains TBD until the production deploy lands — if the deployer's first Scroll TX is anything other than the Q402 deploy the manifest must be updated to the real CREATE address before traffic is routed here."
+      },
+      "tokens": {
+        "USDC": { "address": "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", "decimals": 6, "notes": "Native Circle USDC on Scroll mainnet (confirmed with Scroll team)." },
+        "USDT": { "address": "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", "decimals": 6, "notes": "Tether's canonical Scroll deployment (confirmed with Scroll team)." }
+      },
+      "supportedApiTokens": ["USDC", "USDT"],
+      "explorer": "https://scrollscan.com",
+      "verifyUrl": "https://scrollscan.com/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
     }
   },
   "authorizationGuard": {

@@ -64,7 +64,7 @@ export default function EventPage() {
             <p className="text-white/45 text-sm mb-6">
               The BNB-focus free-trial sprint has wrapped. The full multichain
               Q402 product is back to its usual home on the main landing —
-              8 chains, USDC / USDT / RLUSD, gasless as always.
+              9 chains, USDC / USDT / RLUSD, gasless as always.
             </p>
             <Link
               href="/"

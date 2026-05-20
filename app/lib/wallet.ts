@@ -112,6 +112,13 @@ const WALLET_CHAINS = {
     rpcUrls: ["https://rpc.monad.xyz"],
     blockExplorerUrls: ["https://monadscan.com"],
   },
+  scroll: {
+    chainId: "0x82750",
+    chainName: "Scroll",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://rpc.scroll.io"],
+    blockExplorerUrls: ["https://scrollscan.com"],
+  },
 } as const;
 
 export type WalletChainKey = keyof typeof WALLET_CHAINS;

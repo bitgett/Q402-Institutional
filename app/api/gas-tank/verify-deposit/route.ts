@@ -19,6 +19,7 @@ const CHAINS = [
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                  blockWindow: 200, explorer: "https://www.oklink.com/xlayer/tx/" },
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 600, explorer: "https://stable-explorer.io/tx/" },
   { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                    blockWindow: 6000, explorer: "https://monadscan.com/tx/" },
+  { key: "scroll", name: "Scroll",    token: "ETH",   rpc: "https://rpc.scroll.io",                    blockWindow: 1200, explorer: "https://scrollscan.com/tx/" },
 ];
 
 /**
@@ -216,7 +217,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ newDeposits: added ? 1 : 0, balances, alreadyCredited: !added });
   }
 
-  // ── Default path: recent-block scan across all 8 chains ──────────────────
+  // ── Default path: recent-block scan across all 9 chains ──────────────────
   const results = await Promise.allSettled(
     CHAINS.map(chain => scanNativeDeposits(chain, address).then(txs => ({ chain, txs })))
   );

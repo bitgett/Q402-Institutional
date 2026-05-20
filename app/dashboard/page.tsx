@@ -1137,7 +1137,7 @@ export default function DashboardPage() {
               <p className="text-white/45 text-sm mb-4">
                 Your wallet is already paired with this email account. Reconnect it
                 in this browser to unlock the Multichain dashboard (gas tank, paid
-                plans, transaction history across all 8 chains).
+                plans, transaction history across all 9 chains).
               </p>
               <button
                 onClick={() => setShowWalletConnectFromEmail(true)}
@@ -1802,7 +1802,7 @@ export default function DashboardPage() {
                       <span className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg text-white/35">🔒</span>
                     </div>
                     <p className="text-white/35 text-xs mt-2 leading-relaxed">
-                      Multichain keys unlock with a paid plan — full 8-chain
+                      Multichain keys unlock with a paid plan — full 9-chain
                       relay (Avalanche · BNB · Ethereum · X Layer · Stable ·
                       Mantle · Injective).
                     </p>
@@ -2106,7 +2106,7 @@ export default function DashboardPage() {
                 What ships in the package
               </div>
               <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
-                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 8 chains."} Read-only, no auth.</li>
+                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 9 chains."} Read-only, no auth.</li>
                 <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
                 <li>• <code className="text-yellow text-xs">q402_pay</code> — send a single-recipient gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
                 <li>• <code className="text-yellow text-xs">q402_batch_pay</code> — one signed batch to up to 20 recipients on a single chain × token (trial keys: 5). Same auto-routing as <code className="text-yellow text-xs">q402_pay</code>; 6+ recipient BNB batches return <code className="text-yellow text-xs">status=&quot;ambiguous&quot;</code> so the agent can ask the user to pick: 5 free, all paid, or split. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</li>
