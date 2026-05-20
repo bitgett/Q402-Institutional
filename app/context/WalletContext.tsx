@@ -165,6 +165,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       else {
         setAddress(accounts[0]);
         localStorage.setItem("q402_wallet", accounts[0]);
+        // Clear the explicit-disconnect sentinel so the next reload's
+        // init useEffect auto-restores the wallet normally. Without
+        // this, a user who clicks our Sign Out (sentinel set) and
+        // then re-permissions the dapp via the wallet extension's own
+        // UI would see the wallet connected for this session but
+        // silently disconnected after the next reload — same UX bug
+        // the sentinel was added to prevent, just on a different
+        // reconnect path.
+        localStorage.removeItem(DISCONNECT_SENTINEL);
       }
     };
     const providers = listInjectedProviders();

@@ -90,6 +90,33 @@ describe("WalletContext disconnect sentinel — contract", () => {
     expect(shouldAutoRestore()).toBe(true);
   });
 
+  it("wallet-side reconnect (accountsChanged with non-empty array) clears the sentinel", () => {
+    // The regression caught in self-audit: after the user clicks
+    // Sign Out, re-permissioning via the wallet extension's own UI
+    // (Connect to this site) fires accountsChanged([addr]). The
+    // provider's handler sets address + localStorage but used to
+    // leave the sentinel in place, so the next reload's init
+    // short-circuited and the wallet looked disconnected again.
+    //
+    // Mirror of the handler's non-empty branch — must clear the
+    // sentinel alongside the address write.
+    function accountsChangedNonEmpty(addr: string) {
+      localStorage.setItem("q402_wallet", addr);
+      localStorage.removeItem(SENTINEL);
+    }
+
+    // Sentinel is present from an earlier explicit disconnect.
+    disconnect();
+    expect(localStorage.getItem(SENTINEL)).toBe("1");
+
+    // User re-permissions in the wallet extension.
+    accountsChangedNonEmpty("0xabc");
+
+    // Sentinel cleared → next reload auto-restores normally.
+    expect(localStorage.getItem(SENTINEL)).toBeNull();
+    expect(shouldAutoRestore()).toBe(true);
+  });
+
   it("typical X-then-reload-then-reconnect cycle behaves correctly", () => {
     // 1. user connects
     connectAndStore("0xabc", "metamask");
@@ -154,6 +181,22 @@ describe("WalletContext source guards", () => {
       /const\s+connectWith\s*=\s*useCallback\([\s\S]+?\n\s*\},\s*\[\]\);/,
     );
     expect(block).toBeTruthy();
+    expect(block![0]).toMatch(/localStorage\.removeItem\(\s*DISCONNECT_SENTINEL/);
+  });
+
+  it("accountsChanged non-empty branch also removes the sentinel", () => {
+    // Lock the second clear site so a future refactor can't silently
+    // drop it. The wallet-side reconnect path (user re-permissions
+    // through the extension UI rather than our Connect button) feeds
+    // into this branch, and without the clear the next reload would
+    // hide the wallet despite the live permission grant.
+    const block = walletContextSource.match(
+      /accountsChanged[\s\S]+?const\s+handler\s*=\s*\([\s\S]+?\n\s*\};/,
+    );
+    expect(block).toBeTruthy();
+    // The handler body contains BOTH the disconnect call (empty
+    // array branch) AND the sentinel removal (non-empty branch).
+    expect(block![0]).toMatch(/disconnect\(\)/);
     expect(block![0]).toMatch(/localStorage\.removeItem\(\s*DISCONNECT_SENTINEL/);
   });
 });
