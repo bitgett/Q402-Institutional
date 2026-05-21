@@ -6,18 +6,33 @@ import { useMemo, useState } from "react";
 import { MCP_VERSION } from "@/app/lib/version";
 
 /**
- * /claude — landing page for the @quackai/q402-mcp Claude integration.
+ * /claude — landing page for the @quackai/q402-mcp MCP server.
  *
- * Live `q402_quote` simulation that re-ranks 9 chains as the visitor changes
- * the amount, animated install line with one-click copy + npm/GitHub deeplinks,
- * gradient tool cards.
+ * URL kept as `/claude` for backlink stability (npm README, Anthropic
+ * Registry, prior tweets all link here), but the page itself is MCP-
+ * canonical — same package runs in Claude, Codex, Cursor, and Cline
+ * (and any other stdio MCP client).
+ *
+ * Live `q402_quote` simulation that re-ranks 9 chains as the visitor
+ * changes the amount, animated install line with one-click copy +
+ * npm/GitHub deeplinks, gradient tool cards.
  *
  * Fully static (no fetches) — the chain table mirrors the manifest in
- * mcp-server/src/chains.ts and contracts.manifest.json so the simulation is
- * authoritative without round-tripping the relayer.
+ * mcp-server/src/chains.ts and contracts.manifest.json so the
+ * simulation is authoritative without round-tripping the relayer.
  */
 
 const INSTALL_CMD = "claude mcp add q402 -- npx -y @quackai/q402-mcp";
+
+/** Logo row under the install line — same package, four clients, one row.
+ *  Mirrors the pattern in app/components/Contact.tsx (AI_CLIENTS).
+ *  Logo SVGs live in public/logos/. */
+const MCP_CLIENTS: { name: string; src: string }[] = [
+  { name: "Claude", src: "/logos/claude.svg" },
+  { name: "Codex",  src: "/logos/codex.svg"  },
+  { name: "Cursor", src: "/logos/cursor.svg" },
+  { name: "Cline",  src: "/logos/cline.svg"  },
+];
 
 interface ChainRow {
   key: string;
@@ -87,7 +102,7 @@ export default function ClaudePage() {
             </span>
             <span className="text-yellow font-bold text-base tracking-tight">Q402</span>
             <span className="text-white/20 text-xs">/</span>
-            <span className="text-orange-300/70 text-xs font-medium">claude</span>
+            <span className="text-orange-300/70 text-xs font-medium">mcp</span>
           </Link>
           <div className="flex items-center gap-4 text-xs text-white/45">
             <Link href="/docs#claude-mcp" className="hover:text-white">Docs</Link>
@@ -154,7 +169,7 @@ export default function ClaudePage() {
           >
             <span className="w-1.5 h-1.5 rounded-full bg-orange-300 animate-pulse" />
             <span className="text-[10px] uppercase tracking-[0.22em] text-orange-300/95 font-bold">
-              Claude × Quack AI
+              MCP × Quack AI
             </span>
             <span className="text-white/20 text-xs">·</span>
             <span className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold">
@@ -186,8 +201,9 @@ export default function ClaudePage() {
             transition={{ duration: 0.6, delay: 0.18 }}
             className="text-base md:text-lg text-white/55 mt-6 max-w-2xl leading-relaxed"
           >
-            Q402 ships as a Model Context Protocol server. One install and Claude can quote
-            stablecoin transfers across <span className="text-white/85 font-semibold">9 EVM chains</span>,
+            Q402 ships as a Model Context Protocol server. One install and your agent —
+            in <span className="text-white/85 font-semibold">Claude, Codex, Cursor, or Cline</span> —
+            can quote stablecoin transfers across <span className="text-white/85 font-semibold">9 EVM chains</span>,
             settle them gaslessly, and confirm on-chain — all from a single prompt. The recipient
             gets the full amount. The sender pays $0 in gas. The agent never holds a key it
             shouldn&apos;t.
@@ -229,6 +245,30 @@ export default function ClaudePage() {
               Sandbox-default — no API key, no signup, no funds at risk to try{" "}
               <code className="text-yellow/80">q402_quote</code>.
             </p>
+
+            {/* Multi-client logo row — same package, four clients. */}
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] uppercase tracking-[0.18em] text-white/30 font-semibold mr-1">
+                Works in
+              </span>
+              {MCP_CLIENTS.map(c => (
+                <span
+                  key={c.name}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/[0.03] text-white/75 text-[11px] font-medium"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={c.src} alt={c.name} className="w-3 h-3" />
+                  {c.name}
+                </span>
+              ))}
+              <span className="text-[10px] text-white/30 ml-1">
+                + any stdio MCP client
+              </span>
+            </div>
+            <p className="text-[11px] text-white/30 mt-2">
+              The install command above is the Claude Code CLI. For Codex / Cursor / Cline
+              snippets, see <Link href="/docs#claude-mcp" className="text-yellow/70 hover:text-yellow underline-offset-2 hover:underline">/docs → MCP for AI Clients</Link>.
+            </p>
           </motion.div>
         </div>
       </section>
@@ -242,11 +282,11 @@ export default function ClaudePage() {
                 live demo · q402_quote
               </div>
               <h2 className="text-2xl md:text-4xl font-bold">
-                The exact tool Claude calls.
+                The exact tool your agent calls.
               </h2>
               <p className="text-white/50 text-sm mt-2 max-w-xl">
                 Change the amount or token filter — the table re-ranks every chain by gas the same
-                way the MCP server returns to Claude in real time.
+                way the MCP server returns to the agent in real time.
               </p>
             </div>
           </div>
@@ -367,7 +407,7 @@ export default function ClaudePage() {
               style={{ borderColor: "rgba(255,255,255,0.04)" }}
             >
               {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC, USDT, or RLUSD" : tokenFilter}` +
-                ` — Claude picks ${ranked[0]?.name ?? "—"} by default. Sender always pays $0;` +
+                ` — your agent picks ${ranked[0]?.name ?? "—"} by default. Sender always pays $0;` +
                 " gas comes from the developer's pre-funded gas tank."}
             </div>
           </div>
@@ -629,7 +669,7 @@ export default function ClaudePage() {
             {" · "}
             <a className="text-yellow/70 hover:text-yellow" href="https://github.com/bitgett/q402-mcp">github.com/bitgett/q402-mcp</a>
             {" · "}
-            <Link className="text-yellow/70 hover:text-yellow" href="/docs#claude-mcp">/docs → Claude MCP</Link>
+            <Link className="text-yellow/70 hover:text-yellow" href="/docs#claude-mcp">/docs → MCP for AI Clients</Link>
           </p>
         </div>
       </section>

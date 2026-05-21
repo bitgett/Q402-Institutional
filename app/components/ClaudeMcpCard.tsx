@@ -62,7 +62,7 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
     >
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">Claude MCP</span>
+          <span className="text-sm font-semibold">MCP for AI Clients</span>
           <span className="text-[10px] bg-orange-300/10 text-orange-300 border border-orange-300/30 px-2 py-0.5 rounded-full font-bold tracking-widest">
             NEW
           </span>

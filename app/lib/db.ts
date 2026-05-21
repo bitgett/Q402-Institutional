@@ -12,6 +12,15 @@ import { TRIAL_PLAN_NAME } from "@/app/lib/feature-flags";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 
 export interface Subscription {
+  /**
+   * Window-start timestamp (NOT a literal "when the user last paid" stamp).
+   * The 30-day billing window ends at `paidAt + 30d`. On a top-up while the
+   * window is still active, /api/payment/activate writes `paidAt = priorExpiry`
+   * (extending from the old expiry, not from now) so the user gets a fresh 30
+   * days starting where the previous window ended. The literal payment time
+   * is not persisted today — a separate `lastPaymentAt` field is the right
+   * fix if any caller ever needs it, but no surface currently depends on it.
+   */
   paidAt: string;
   // Paid-plan live key. Only minted by /api/payment/activate. Empty string
   // on a freshly provisioned (unpaid) account. NEVER reused as a trial key —

@@ -1,0 +1,133 @@
+/**
+ * mcp-config-dotenv.test.ts
+ *
+ * Locks in the contract of `loadQ402EnvFileFromPath()` — the dotenv-style
+ * parser that backs the `~/.q402/mcp.env` auto-load. This is the file users
+ * edit during the `q402_doctor` setup flow; if the parser silently drops a
+ * value, the user sees "still in sandbox" with no way to debug why.
+ *
+ * What we lock down:
+ *   - missing file is non-fatal (returns {})
+ *   - `#` comments + blank lines are ignored
+ *   - `Q402_` prefix filter excludes stray vars (e.g. `PATH=`, `OPENAI_API_KEY=`)
+ *   - simple `KEY=value` parsing, including values with `=` inside (URLs)
+ *   - quoted values have surrounding quotes stripped (single OR double)
+ *   - whitespace around the `=` is tolerated
+ *   - precedence: process.env > file (verified via ENV constant indirectly —
+ *     too invasive to mock at module-load time, so the parser test only
+ *     covers parsing; the merge layer is covered by integration usage
+ *     inside `loadConfig()` which the existing config tests exercise)
+ */
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadQ402EnvFileFromPath } from "../mcp-server/src/config.js";
+
+let scratchDir: string;
+let envFile:    string;
+
+beforeEach(() => {
+  scratchDir = mkdtempSync(join(tmpdir(), "q402-mcp-env-"));
+  envFile    = join(scratchDir, "mcp.env");
+});
+
+afterEach(() => {
+  rmSync(scratchDir, { recursive: true, force: true });
+});
+
+describe("loadQ402EnvFileFromPath", () => {
+  it("returns empty object when the file does not exist", () => {
+    expect(loadQ402EnvFileFromPath(join(scratchDir, "nope.env"))).toEqual({});
+  });
+
+  it("parses simple KEY=value pairs", () => {
+    writeFileSync(envFile, "Q402_TRIAL_API_KEY=q402_live_abc\nQ402_PRIVATE_KEY=0xdeadbeef\n");
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(out).toEqual({
+      Q402_TRIAL_API_KEY: "q402_live_abc",
+      Q402_PRIVATE_KEY:   "0xdeadbeef",
+    });
+  });
+
+  it("ignores blank lines and `#` comments", () => {
+    writeFileSync(envFile, [
+      "# top-level comment",
+      "",
+      "Q402_TRIAL_API_KEY=q402_live_abc",
+      "   # indented comment",
+      "",
+      "Q402_PRIVATE_KEY=0xdead",
+      "",
+    ].join("\n"));
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(out).toEqual({
+      Q402_TRIAL_API_KEY: "q402_live_abc",
+      Q402_PRIVATE_KEY:   "0xdead",
+    });
+  });
+
+  it("filters out non-Q402_ keys (namespace hygiene)", () => {
+    writeFileSync(envFile, [
+      "Q402_TRIAL_API_KEY=q402_live_abc",
+      "PATH=/usr/local/bin",
+      "OPENAI_API_KEY=sk-evil",
+      "Q402_PRIVATE_KEY=0xdead",
+    ].join("\n"));
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(Object.keys(out).sort()).toEqual([
+      "Q402_PRIVATE_KEY",
+      "Q402_TRIAL_API_KEY",
+    ]);
+    expect(out).not.toHaveProperty("PATH");
+    expect(out).not.toHaveProperty("OPENAI_API_KEY");
+  });
+
+  it("keeps `=` inside values intact (URLs, base64, etc.)", () => {
+    writeFileSync(envFile, "Q402_RELAY_BASE_URL=https://example.com/api?k=v&x=1\n");
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(out.Q402_RELAY_BASE_URL).toBe("https://example.com/api?k=v&x=1");
+  });
+
+  it("strips a single pair of surrounding double or single quotes", () => {
+    writeFileSync(envFile, [
+      `Q402_TRIAL_API_KEY="q402_live_quoted"`,
+      `Q402_MULTICHAIN_API_KEY='q402_live_single'`,
+      `Q402_PRIVATE_KEY=0xbare`,
+    ].join("\n"));
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(out.Q402_TRIAL_API_KEY).toBe("q402_live_quoted");
+    expect(out.Q402_MULTICHAIN_API_KEY).toBe("q402_live_single");
+    expect(out.Q402_PRIVATE_KEY).toBe("0xbare");
+  });
+
+  it("tolerates whitespace around the `=`", () => {
+    writeFileSync(envFile, "Q402_TRIAL_API_KEY   =   q402_live_abc   \n");
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(out.Q402_TRIAL_API_KEY).toBe("q402_live_abc");
+  });
+
+  it("skips lines without an `=` separator", () => {
+    writeFileSync(envFile, [
+      "Q402_TRIAL_API_KEY=q402_live_abc",
+      "Q402_BROKEN_LINE_NO_EQUALS",
+      "Q402_PRIVATE_KEY=0xdead",
+    ].join("\n"));
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(out).toEqual({
+      Q402_TRIAL_API_KEY: "q402_live_abc",
+      Q402_PRIVATE_KEY:   "0xdead",
+    });
+    expect(out).not.toHaveProperty("Q402_BROKEN_LINE_NO_EQUALS");
+  });
+
+  it("handles CRLF line endings (Windows-friendly)", () => {
+    writeFileSync(envFile, "Q402_TRIAL_API_KEY=q402_live_abc\r\nQ402_PRIVATE_KEY=0xdead\r\n");
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(out).toEqual({
+      Q402_TRIAL_API_KEY: "q402_live_abc",
+      Q402_PRIVATE_KEY:   "0xdead",
+    });
+  });
+});
