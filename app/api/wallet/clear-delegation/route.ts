@@ -28,7 +28,10 @@ import { rateLimit } from "@/app/lib/ratelimit";
 import {
   broadcastClear,
   getDelegationState,
+  isOfficialQ402Impl,
+  recoverAuthorizationAddress,
   CHAIN_IDS,
+  Q402_IMPL_PER_CHAIN,
   type SignedAuthorization,
 } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -111,12 +114,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "INVALID_AUTHORIZATION_SIGNATURE" }, { status: 400 });
   }
 
+  // ── Signature recovery — auth MUST be signed by body.address ──────────
+  // Runs BEFORE rate-limit and pre-flight RPC so:
+  //   (1) malformed sigs don't burn the victim's hourly clear quota
+  //   (2) the sponsor relayer doesn't broadcast type-0x04 TXs carrying
+  //       authorizations the chain will silently skip (EIP-7702 ignores
+  //       bad auths instead of reverting — sponsor gas is wasted either
+  //       way, so we have to verify here).
+  let recovered: string;
+  try {
+    recovered = recoverAuthorizationAddress(auth);
+  } catch {
+    return NextResponse.json({ error: "INVALID_AUTHORIZATION_SIGNATURE" }, { status: 400 });
+  }
+  if (recovered.toLowerCase() !== body.address.toLowerCase()) {
+    return NextResponse.json(
+      {
+        error:  "AUTHORIZATION_SIGNER_MISMATCH",
+        reason: "Recovered signer does not match the claimed target address. Only the EOA that holds the matching private key can sign a valid authorization.",
+      },
+      { status: 401 },
+    );
+  }
+
   // ── Rate limit: 1 clear per (address, chain) per hour ─────────────────
-  // The wallet-clear UX is "click once, wait for confirm, done" — no
-  // legitimate flow requires more. Failing replays cost the sponsor
-  // gas, so the limiter caps that exposure. Identifier scopes to BOTH
-  // address AND chain so a user clearing 9 chains in a minute isn't
-  // blocked.
+  // Sig recovery already proved the caller controls the EOA, so the
+  // quota is keyed on the legitimate owner. Earlier order (limit before
+  // recovery) let a malicious caller burn a victim's quota by submitting
+  // garbage sigs targeting the victim's address.
   const rlKey = `${body.address.toLowerCase()}:${body.chain}`;
   const allowed = await rateLimit(rlKey, "wallet-clear-delegation", 1, 3600);
   if (!allowed) {
@@ -126,16 +151,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── Pre-flight: is this EOA actually delegated? ────────────────────────
-  // No point burning sponsor gas on a no-op. The browser UI never offers
-  // a Clear button for a non-delegated chain, but MCP / CLI callers might
-  // hit this without checking first.
+  // ── Pre-flight: is this EOA actually delegated to OUR impl? ───────────
+  // Two checks here. (a) The EOA must have a non-empty 7702 delegation —
+  // no point burning sponsor gas on a no-op. (b) That delegation must
+  // point at the Q402 impl for the chain, NOT some other 7702-using
+  // service's impl. Otherwise our sponsor relayer becomes a free 7702-
+  // cleanup utility for any unrelated delegation a caller wants gone.
   const state = await getDelegationState(body.chain, body.address);
   if (!state.delegated) {
     return NextResponse.json(
       {
         error:  "NOT_DELEGATED",
         reason: `EOA ${body.address} on chain ${body.chain} is already a plain EOA (eth_getCode = 0x).`,
+      },
+      { status: 409 },
+    );
+  }
+  if (!isOfficialQ402Impl(body.chain, state.impl)) {
+    return NextResponse.json(
+      {
+        error:    "NOT_Q402_DELEGATION",
+        reason:   `EOA is delegated to ${state.impl}, which is not Q402's official impl on ${body.chain}. This endpoint only sponsors cleanup of Q402 delegations.`,
+        expected: Q402_IMPL_PER_CHAIN[body.chain],
+        actual:   state.impl,
       },
       { status: 409 },
     );
@@ -147,21 +185,41 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ethers tx promise rejects — we surface a generic 502 + log details
   // to stderr so we don't leak internal error shape to abusers.
   try {
-    const result = await broadcastClear(body.chain, body.address, auth);
-    return NextResponse.json(
-      {
-        ok:          true,
-        chain:       body.chain,
-        address:     body.address,
-        txHash:      result.txHash,
-        blockNumber: result.blockNumber,
-        gasUsed:     result.gasUsed,
-        finalCode:   result.finalCode,
-        cleared:     result.finalCode === "0x",
-        explorerUrl: result.explorerUrl,
-      },
-      { status: 200 },
-    );
+    const result  = await broadcastClear(body.chain, body.address, auth);
+    const cleared = result.finalCode === "0x";
+    const responseBody = {
+      ok:          cleared,
+      chain:       body.chain,
+      address:     body.address,
+      txHash:      result.txHash,
+      blockNumber: result.blockNumber,
+      gasUsed:     result.gasUsed,
+      finalCode:   result.finalCode,
+      cleared,
+      explorerUrl: result.explorerUrl,
+    };
+    // When the TX confirmed but the on-chain state didn't update (stale
+    // authorization nonce is the typical cause — user's nonce moved
+    // between our `eth_getTransactionCount` read and broadcast), return
+    // 422 Unprocessable Entity rather than 200. Callers branch on status,
+    // not on a payload flag they might miss.
+    if (!cleared) {
+      console.warn(`[wallet/clear-delegation] tx confirmed but delegation NOT cleared`, {
+        chain:     body.chain,
+        address:   body.address,
+        txHash:    result.txHash,
+        finalCode: result.finalCode,
+      });
+      return NextResponse.json(
+        {
+          ...responseBody,
+          error:  "CLEAR_DID_NOT_APPLY",
+          reason: "Sponsored TX confirmed but the EOA's code is still non-empty. Most likely the authorization nonce was stale; refresh and retry.",
+        },
+        { status: 422 },
+      );
+    }
+    return NextResponse.json(responseBody, { status: 200 });
   } catch (e) {
     console.error(`[wallet/clear-delegation] broadcast failed`, {
       chain:   body.chain,
