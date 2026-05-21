@@ -25,19 +25,24 @@ const PAY_TOKENS = [
   { id: "eth-rlusd", label: "ETH RLUSD", chain: "Ethereum",  chainId: "eth", token: "RLUSD", decimals: 18, address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", color: "#627EEA", img: "/eth.png"  },
 ];
 
-// `multiplier` is display-only for the "+X% rate" badge and must mirror
-// CHAIN_MULTIPLIERS in app/lib/blockchain.ts (used for cumulative-tier
-// normalization). Actual per-tier USD prices live in CHAIN_PRICES below.
+// `multiplier` was the +X% surcharge displayed on Ethereum/Avalanche tiles.
+// As of 0.5.8 we ship one price for every chain — the surcharge mechanic
+// was abandoned because (a) it made the cheapest path artificially confusing
+// for users picking a non-BNB service chain, and (b) cumulative cross-chain
+// tier math via toBnbEquivUSD() became trivial once all multipliers are 1.0.
+// Keeping the field as a constant `1.0` so any consumer that previously read
+// it still gets a defined number (badge rendering is simply suppressed when
+// the value === 1.0).
 const CHAINS = [
-  { id: "bnb",      name: "BNB Chain", color: "#F0B90B", img: "/bnb.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "eth",      name: "Ethereum",  color: "#627EEA", img: "/eth.png",      rounded: "rounded-full", multiplier: 1.5, comingSoon: false },
-  { id: "mantle",   name: "Mantle",    color: "#FFFFFF", img: "/mantle.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "avax",     name: "Avalanche", color: "#E84142", img: "/avax.png",     rounded: "rounded-full", multiplier: 1.1, comingSoon: false },
-  { id: "xlayer",   name: "X Layer",   color: "#CCCCCC", img: "/xlayer.png",   rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
-  { id: "stable",   name: "Stable",    color: "#4AE54A", img: "/stable.jpg",     rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "bnb",       name: "BNB Chain", color: "#F0B90B", img: "/bnb.png",       rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "eth",       name: "Ethereum",  color: "#627EEA", img: "/eth.png",       rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "mantle",    name: "Mantle",    color: "#FFFFFF", img: "/mantle.png",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "avax",      name: "Avalanche", color: "#E84142", img: "/avax.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "xlayer",    name: "X Layer",   color: "#CCCCCC", img: "/xlayer.png",    rounded: "rounded-sm",   multiplier: 1.0, comingSoon: false },
+  { id: "stable",    name: "Stable",    color: "#4AE54A", img: "/stable.jpg",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "injective", name: "Injective", color: "#0082FA", img: "/injective.png", rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "monad",    name: "Monad",     color: "#836EF9", img: "/monad.png",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
-  { id: "scroll",   name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",   rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "monad",     name: "Monad",     color: "#836EF9", img: "/monad.png",     rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "scroll",    name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
 ];
 
 // value = credits granted at that price tier. Must stay in sync with
@@ -58,16 +63,25 @@ const VOLUMES = [
 // app/lib/blockchain.ts — the server resolves plan/credits from this exact
 // value, so the UI and server MUST agree to the dollar.
 // Order: [500, 1K, 5K, 10K, 50K, 100K, 500K]
-const CHAIN_PRICES: Record<string, number[]> = {
-  bnb:       [  29,  49,  89,  149,  449,   799,  1999 ],
-  xlayer:    [ 29,  49,  89,  149,  449,   799,  1999 ],
-  stable:    [ 29,  49,  89,  149,  449,   799,  1999 ],
-  mantle:    [ 29,  49,  89,  149,  449,   799,  1999 ],
-  injective: [ 29,  49,  89,  149,  449,   799,  1999 ],
-  monad:     [ 29,  49,  89,  149,  449,   799,  1999 ],
-  scroll:    [ 29,  49,  89,  149,  449,   799,  1999 ],
-  avax:      [ 29,  49,  99,  159,  489,   879,  2199 ],
-  eth:       [ 39,  69, 129,  219,  669,  1199,  2999 ],
+//
+// MCP v0.5.8 unified prices across the supported chains. Previously Ethereum carried a
+// 1.5× surcharge and Avalanche 1.1×, which produced subtly different
+// per-tx unit prices depending on which "service chain" the user clicked.
+// We dropped the per-chain pricing because the marginal infra cost
+// difference is real for us but a confusing first-impression detail for
+// the user — and the cumulative cross-chain tier math (toBnbEquivUSD)
+// becomes trivial once every multiplier is 1.0.
+const UNIFIED_PRICES = [29, 49, 89, 149, 449, 799, 1999] as const;
+const CHAIN_PRICES: Record<string, readonly number[]> = {
+  bnb:       UNIFIED_PRICES,
+  xlayer:    UNIFIED_PRICES,
+  stable:    UNIFIED_PRICES,
+  mantle:    UNIFIED_PRICES,
+  injective: UNIFIED_PRICES,
+  monad:     UNIFIED_PRICES,
+  scroll:    UNIFIED_PRICES,
+  avax:      UNIFIED_PRICES,
+  eth:       UNIFIED_PRICES,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

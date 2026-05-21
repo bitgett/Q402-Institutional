@@ -6,8 +6,15 @@
  * A subscriber can reach a higher tier by paying more within an active
  * 30-day window; the window resets when the prior expiry has lapsed before
  * the next payment. Cross-chain payments are normalized to BNB-equivalent
- * USD (divide out the chain's price multiplier) so cumulative spend is
- * fair regardless of which chain the user paid on.
+ * USD via toBnbEquivUSD() so cumulative spend is fair regardless of which
+ * chain the user paid on.
+ *
+ * As of 0.5.8 the per-chain price multipliers are all 1.0 (every chain
+ * uses the same tier prices), so toBnbEquivUSD() is the identity function
+ * and the "BNB-equivalent" normalization becomes a no-op. The tests are
+ * kept against the activate route's actual code path so the wiring is
+ * still exercised — if a future release reintroduces per-chain pricing,
+ * these tests are the canary.
  *
  * The function under test is the pure tier-selection logic that the
  * activate route performs before writing the subscription. We replicate
@@ -77,12 +84,13 @@ describe("first payment sets initial tier from quotedPlan", () => {
     expect(r.plan).toBe("pro");
   });
 
-  it("$219 ETH first payment → pro (via thisTier, even though BNB-equiv < $149)", () => {
-    // This is the critical rounding case: $219 / 1.5 = $146 < $149 Pro threshold.
-    // Without thisTier we'd wrongly return growth. thisTier rescues it.
+  it("$149 ETH first payment → pro (unified pricing — ETH no longer surcharged)", () => {
+    // Pre-0.5.8 ETH carried a 1.5× surcharge so Pro tier cost $219 there.
+    // Unified pricing: Pro is $149 on every chain, ETH included. thisTier
+    // and cumulative resolution agree.
     const r = pickTier({
       existing: null, now: NOW,
-      paymentUSD: 219, paymentChain: "Ethereum", thisTier: "pro",
+      paymentUSD: 149, paymentChain: "Ethereum", thisTier: "pro",
     });
     expect(r.plan).toBe("pro");
   });
@@ -142,24 +150,29 @@ describe("cumulative upgrade — active window", () => {
 // ── Cross-chain cumulative (normalization) ─────────────────────────────────
 
 describe("cross-chain cumulative — BNB-equivalent normalization", () => {
-  it("$149 BNB + $219 ETH → cumulative $149 + $146 = $295 → still Pro (Scale = $449)", () => {
+  it("$149 BNB + $149 ETH → cumulative $298 → still Pro (Scale = $449)", () => {
+    // Unified pricing: ETH at 1.0× multiplier means the BNB-equiv of
+    // a $149 ETH payment is $149 (identity). Cumulative window = $298,
+    // still below Scale's $449 threshold.
     const existing = ACTIVE_SUB("pro", 149, 149);
     const r = pickTier({
       existing, now: NOW,
-      paymentUSD: 219, paymentChain: "Ethereum", thisTier: "pro",
+      paymentUSD: 149, paymentChain: "Ethereum", thisTier: "pro",
     });
     expect(r.plan).toBe("pro");
-    expect(r.newWindow).toBeCloseTo(149 + 219 / 1.5, 1);
+    expect(r.newWindow).toBe(298);
   });
 
-  it("$149 BNB + $489 AVAX (Scale on avax) → stays Scale via thisTier", () => {
-    // $489 / 1.1 = $444.5 BNB-equiv + $149 = $593.5 → Scale ($449 threshold)
+  it("$149 BNB + $449 AVAX (Scale on avax) → upgrades to Scale", () => {
+    // Unified pricing: $449 AVAX = $449 BNB-equiv. $149 prior + $449
+    // = $598, comfortably above Scale's $449 threshold.
     const existing = ACTIVE_SUB("pro", 149, 149);
     const r = pickTier({
       existing, now: NOW,
-      paymentUSD: 489, paymentChain: "Avalanche", thisTier: "scale",
+      paymentUSD: 449, paymentChain: "Avalanche", thisTier: "scale",
     });
     expect(r.plan).toBe("scale");
+    expect(r.newWindow).toBe(598);
   });
 });
 
@@ -213,17 +226,21 @@ describe("legacy sub bootstrap — windowPaidBnbUSD missing", () => {
 
 // ── Helper behavior ─────────────────────────────────────────────────────────
 
-describe("toBnbEquivUSD", () => {
+describe("toBnbEquivUSD — unified pricing makes this the identity function", () => {
+  // Pre-0.5.8 Ethereum divided by 1.5 and Avalanche by 1.1. Now every chain
+  // is 1.0 multiplier, so cross-chain payments don't get re-scaled. The
+  // function stays as a wired-up no-op so the activate route's call-site
+  // doesn't need a feature flag if per-chain pricing ever returns.
   it("BNB Chain — passthrough", () => {
     expect(toBnbEquivUSD(149, "BNB Chain")).toBe(149);
   });
 
-  it("Ethereum — divides by 1.5", () => {
-    expect(toBnbEquivUSD(219, "Ethereum")).toBeCloseTo(146, 0);
+  it("Ethereum — identity (was 1.5× in earlier releases)", () => {
+    expect(toBnbEquivUSD(149, "Ethereum")).toBe(149);
   });
 
-  it("Avalanche — divides by 1.1", () => {
-    expect(toBnbEquivUSD(489, "Avalanche")).toBeCloseTo(444.5, 1);
+  it("Avalanche — identity (was 1.1× in earlier releases)", () => {
+    expect(toBnbEquivUSD(449, "Avalanche")).toBe(449);
   });
 
   it("undefined chain — passthrough", () => {

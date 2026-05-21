@@ -25,7 +25,9 @@
  * USDC/USDT (or USDT0 on Stable) without holding gas on the source chain.
  *
  * Run:     node scripts/agent-example.mjs
- * Needs:   .env.local with Q402_API_KEY and TEST_PAYER_KEY (agent wallet key).
+ * Needs:   .env.local with Q402_MULTICHAIN_API_KEY and TEST_PAYER_KEY
+ *          (agent wallet key). Legacy Q402_API_KEY also resolves silently
+ *          for back-compat — new setups should use the scoped name.
  */
 
 import { ethers } from "ethers";
@@ -44,7 +46,7 @@ const envVars = Object.fromEntries(
 );
 
 // ── Configuration ───────────────────────────────────────────────────────────────
-const API_KEY   = envVars.Q402_API_KEY;
+const API_KEY   = envVars.Q402_MULTICHAIN_API_KEY ?? envVars.Q402_API_KEY;
 const AGENT_KEY = envVars.TEST_PAYER_KEY;
 const API_BASE  = envVars.Q402_API_BASE ?? "https://q402.quackai.ai";
 
@@ -297,7 +299,7 @@ async function submitToRelay({
 
 // ── High-level: Send gasless payment on any chain ─────────────────────────────
 async function sendGaslessPayment({ chain, token = "USDC", recipient, amount }) {
-  if (!API_KEY)   throw new Error("Q402_API_KEY not set in .env.local");
+  if (!API_KEY)   throw new Error("Q402_MULTICHAIN_API_KEY not set in .env.local");
   if (!AGENT_KEY) throw new Error("TEST_PAYER_KEY not set in .env.local");
 
   const cfg = CHAINS[chain];

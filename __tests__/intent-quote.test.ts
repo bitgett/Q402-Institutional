@@ -24,25 +24,26 @@ function computeQuote(expectedUSD: number, planChainId: string, _payChainId = pl
 // ── Core correctness: planChain drives the quote, not payChain ───────────────
 
 describe("planChain vs payChain — quote must follow planChain", () => {
-  it("BNB plan ($150) paid with ETH → pro/10K (BNB thresholds, not ETH)", () => {
-    // selectedChain="bnb" (1.0×), price=$150, user pays on ETH.
-    // If we incorrectly used ETH thresholds: planFromAmount(150,"Ethereum") → growth/5K ✗
-    // Correct: planChain="bnb" → planFromAmount(150,"BNB Chain") → pro/10K ✓
-    const quote = computeQuote(150, "bnb", "eth");
+  // Unified pricing (since v0.5.8) means every chain shares the same tier
+  // thresholds, so the planChain-vs-payChain split is now operationally a
+  // no-op for the dollar amounts. We keep these tests as a forward-compat
+  // canary — if per-chain pricing returns, the wiring is still being
+  // exercised against the activate route's actual call path. The Pro tier
+  // threshold is $149 on every chain — we test against the exact threshold
+  // value rather than $1 over so a future off-by-one in planFromAmount
+  // also fails the test.
+  it("BNB plan ($149) paid with ETH → pro/10K (planChain=bnb)", () => {
+    const quote = computeQuote(149, "bnb", "eth");
     expect(quote).toEqual({ quotedPlan: "pro", quotedCredits: 10_000 });
   });
 
-  it("avax plan ($160) paid with BNB → pro/10K (avax thresholds)", () => {
-    // selectedChain="avax" (1.1×), 10K volume → $160, paying on BNB.
-    // avax threshold for pro = $159 → 160 >= 159 → pro ✓
-    const quote = computeQuote(160, "avax", "bnb");
+  it("avax plan ($149) paid with BNB → pro/10K (planChain=avax)", () => {
+    const quote = computeQuote(149, "avax", "bnb");
     expect(quote).toEqual({ quotedPlan: "pro", quotedCredits: 10_000 });
   });
 
-  it("eth plan ($220) paid with ETH → pro/10K (ETH thresholds)", () => {
-    // selectedChain="eth" (1.5×), 10K volume → $220, paying on ETH.
-    // ETH threshold for pro = $219 → 220 >= 219 → pro ✓
-    const quote = computeQuote(220, "eth", "eth");
+  it("eth plan ($149) paid with ETH → pro/10K (planChain=eth)", () => {
+    const quote = computeQuote(149, "eth", "eth");
     expect(quote).toEqual({ quotedPlan: "pro", quotedCredits: 10_000 });
   });
 
@@ -72,27 +73,27 @@ describe("intent quote — BNB plan chain", () => {
   });
 });
 
-// ── ETH plan chain thresholds ─────────────────────────────────────────────────
+// ── ETH plan chain thresholds (unified pricing — same as BNB since 0.5.8) ───
 
-describe("intent quote — ETH plan chain", () => {
-  it("$39 → starter / 500 credits", () => {
-    expect(computeQuote(39, "eth")).toEqual({ quotedPlan: "starter", quotedCredits: 500 });
+describe("intent quote — ETH plan chain (unified pricing)", () => {
+  it("$29 → starter / 500 credits", () => {
+    expect(computeQuote(29, "eth")).toEqual({ quotedPlan: "starter", quotedCredits: 500 });
   });
 
-  it("$219 → pro / 10,000 credits", () => {
-    expect(computeQuote(219, "eth")).toEqual({ quotedPlan: "pro", quotedCredits: 10_000 });
+  it("$149 → pro / 10,000 credits", () => {
+    expect(computeQuote(149, "eth")).toEqual({ quotedPlan: "pro", quotedCredits: 10_000 });
   });
 
-  it("$38 (below ETH minimum) → null / 0 credits", () => {
-    expect(computeQuote(38, "eth")).toEqual({ quotedPlan: null, quotedCredits: 0 });
+  it("$28 (below minimum) → null / 0 credits", () => {
+    expect(computeQuote(28, "eth")).toEqual({ quotedPlan: null, quotedCredits: 0 });
   });
 });
 
 // ── Avax / Stable / XLayer plan chains ───────────────────────────────────────
 
 describe("intent quote — Avax / Stable / XLayer / Mantle plan chains", () => {
-  it("avax $99 → growth / 5,000 (avax threshold = $99)", () => {
-    expect(computeQuote(99, "avax")).toEqual({ quotedPlan: "growth", quotedCredits: 5_000 });
+  it("avax $89 → growth / 5,000 (unified threshold = $89, same as BNB)", () => {
+    expect(computeQuote(89, "avax")).toEqual({ quotedPlan: "growth", quotedCredits: 5_000 });
   });
 
   it("stable $89 → growth / 5,000 (stable = BNB thresholds)", () => {

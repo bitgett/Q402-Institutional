@@ -356,30 +356,37 @@ export async function verifyPaymentTx(txHash: string, fromAddress: string): Prom
 }
 
 // ── Chain-aware pricing ────────────────────────────────────────────────────────
-// Mirrors calcPrice() in payment/page.tsx: Math.round(basePrice * multiplier / 10) * 10
-// Thresholds = calcPrice - 1  (floor that any correct payment comfortably exceeds)
-//
-// Tier order: [500tx, 1K, 5K, 10K, 50K, 100K, 300K]
+// Tier order: [500tx, 1K, 5K, 10K, 50K, 100K, 500K]
 export const TIER_CREDITS = [500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000];
 export const TIER_PLANS   = ["starter", "basic", "growth", "pro", "scale", "business", "enterprise_flex"];
 
-// calcPrice output per chain per tier (pre-computed from payment/page.tsx formula)
-const CHAIN_THRESHOLDS: Record<string, number[]> = {
-  //                  500  1K   5K    10K   50K   100K   300K
-  "BNB Chain":  [  29,  49,  89,  149,  449,   799,  1999 ],
-  "X Layer":    [  29,  49,  89,  149,  449,   799,  1999 ],
-  "Stable":     [  29,  49,  89,  149,  449,   799,  1999 ],
-  "Mantle":     [  29,  49,  89,  149,  449,   799,  1999 ],
-  "Injective":  [  29,  49,  89,  149,  449,   799,  1999 ],
-  "Monad":      [  29,  49,  89,  149,  449,   799,  1999 ],
-  "Scroll":     [  29,  49,  89,  149,  449,   799,  1999 ],
-  "Avalanche":  [  29,  49,  99,  159,  489,   879,  2199 ],
-  "Ethereum":   [  39,  69, 129,  219,  669,  1199,  2999 ],
+// MCP v0.5.8 — every supported chain ships at the same tier prices.
+// Previously Ethereum carried a 1.5× surcharge and Avalanche 1.1× to
+// reflect their higher relayer-gas cost, but cross-chain tier confusion at the
+// checkout was worse than the marginal margin. Server resolution stays
+// identical because the dollar values are unchanged on the BNB path —
+// the other chains just snapped down to match.
+//
+// Keep the per-chain map (not a single array) so future per-chain
+// adjustments don't require restructuring callers + tests.
+const UNIFIED_THRESHOLDS = [29, 49, 89, 149, 449, 799, 1999] as const;
+const CHAIN_THRESHOLDS: Record<string, readonly number[]> = {
+  //                  500  1K   5K    10K   50K   100K   500K
+  "BNB Chain":  UNIFIED_THRESHOLDS,
+  "X Layer":    UNIFIED_THRESHOLDS,
+  "Stable":     UNIFIED_THRESHOLDS,
+  "Mantle":     UNIFIED_THRESHOLDS,
+  "Injective":  UNIFIED_THRESHOLDS,
+  "Monad":      UNIFIED_THRESHOLDS,
+  "Scroll":     UNIFIED_THRESHOLDS,
+  "Avalanche":  UNIFIED_THRESHOLDS,
+  "Ethereum":   UNIFIED_THRESHOLDS,
 };
-// Fallback = cheapest chain (BNB)
-const DEFAULT_THRESHOLDS = CHAIN_THRESHOLDS["BNB Chain"];
+// Fallback = any chain (all rows equal now). Kept as a named export so
+// callers don't have to know about the per-chain map being constant.
+const DEFAULT_THRESHOLDS = UNIFIED_THRESHOLDS;
 
-function getThresholds(chain?: string): number[] {
+function getThresholds(chain?: string): readonly number[] {
   if (!chain) return DEFAULT_THRESHOLDS;
   return CHAIN_THRESHOLDS[chain] ?? DEFAULT_THRESHOLDS;
 }
@@ -412,9 +419,16 @@ export function txQuotaFromAmount(usd: number, chain?: string): number {
 
 // ── Cumulative tier helpers (v1.18) ────────────────────────────────────────
 // The activate route uses these to let users reach a higher tier by paying
-// more within an active 30-day window. Payments on non-BNB chains cost more
-// nominal USD (AVAX 1.1×, ETH 1.5×) but represent the same "value"; we
-// normalize to BNB-equivalent so cumulative thresholds are fair.
+// more within an active 30-day window. Under the previous per-chain pricing
+// (AVAX 1.1×, ETH 1.5× of the BNB base), a $99 payment on AVAX represented
+// less "value" than a $99 BNB payment, so cumulative tier math first
+// normalized to BNB-equivalent USD via toBnbEquivUSD().
+//
+// MCP v0.5.8 unified per-chain pricing, so the normalization
+// is a no-op (CHAIN_MULTIPLIERS all 1.0 → toBnbEquivUSD is identity). The
+// function + table stay exported so the activate route's call-site doesn't
+// need to change and so we have a single place to flip the values back if
+// per-chain pricing returns later.
 
 const CHAIN_MULTIPLIERS: Record<string, number> = {
   "BNB Chain": 1.0,
@@ -424,14 +438,15 @@ const CHAIN_MULTIPLIERS: Record<string, number> = {
   "Injective": 1.0,
   "Monad":     1.0,
   "Scroll":    1.0,
-  "Avalanche": 1.1,
-  "Ethereum":  1.5,
+  "Avalanche": 1.0,
+  "Ethereum":  1.0,
 };
 
 /**
  * Convert a raw payment USD to BNB-equivalent USD by dividing out the chain's
- * price multiplier. Used to sum cross-chain payments against BNB-base tier
- * thresholds.
+ * price multiplier. With every chain at 1.0 multiplier this is currently the
+ * identity function — kept for forward-compat with the cumulative-tier
+ * machinery in /api/payment/activate.
  */
 export function toBnbEquivUSD(usd: number, chain?: string): number {
   if (!chain) return usd;

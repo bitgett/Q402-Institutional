@@ -18,12 +18,13 @@
  * publicly-shareable receipt page anchored to a real on-chain TX.
  *
  * Required .env.local:
- *   TEST_PAYER_KEY      — payer (token owner) private key, with USDC/USDT
- *                         on the chosen chain
- *   Q402_API_KEY        — your q402_live_… key
+ *   TEST_PAYER_KEY              — payer (token owner) private key, with
+ *                                 USDC/USDT on the chosen chain
+ *   Q402_MULTICHAIN_API_KEY     — your q402_live_… key. Legacy Q402_API_KEY
+ *                                 also resolves silently for back-compat.
  *
  * Optional:
- *   Q402_RELAY_BASE     — defaults to https://q402.quackai.ai
+ *   Q402_RELAY_BASE             — defaults to https://q402.quackai.ai
  */
 
 import { ethers } from "ethers";
@@ -41,11 +42,11 @@ const envVars = Object.fromEntries(
 );
 
 const PAYER_KEY    = envVars.TEST_PAYER_KEY;
-const Q402_API_KEY = envVars.Q402_API_KEY;
+const Q402_API_KEY = envVars.Q402_MULTICHAIN_API_KEY ?? envVars.Q402_API_KEY;
 const RELAY_BASE   = envVars.Q402_RELAY_BASE ?? "https://q402.quackai.ai";
 
 if (!PAYER_KEY)    { console.error("Missing TEST_PAYER_KEY in .env.local"); process.exit(1); }
-if (!Q402_API_KEY) { console.error("Missing Q402_API_KEY in .env.local");    process.exit(1); }
+if (!Q402_API_KEY) { console.error("Missing Q402_MULTICHAIN_API_KEY in .env.local"); process.exit(1); }
 
 // ── CLI args ────────────────────────────────────────────────────────────────────
 const args = Object.fromEntries(
