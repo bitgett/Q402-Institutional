@@ -229,13 +229,13 @@ Test files cover relay route ordering, EIP-7702 signing shape, trial-vs-paid key
 
 ---
 
-## Clearing the EIP-7702 delegation
+## Wallet delegation (EIP-7702)
 
-When you use Q402 to pay, your EOA gets EIP-7702 delegated to the Q402 impl contract on that chain. The delegation is persistent by design — saves gas on subsequent payments — but you may want to clear it (e.g. before receiving native gas tokens to that EOA, or if your wallet UI shows a "Smart account" warning you'd rather not see).
+Q402 uses EIP-7702 delegation so your wallet can settle gasless payments without deploying a smart account per user. The delegation lives on your EOA, persists across payments (so the next one is gas-efficient), and you can inspect or clear it anytime.
 
-Two paths — both produce the same Q402-sponsored on-chain TX:
+Two ways to manage:
 
-- **From your AI client (MCP)**: ask Claude / Codex / Cursor / Cline `"Clear my Q402 delegation on BNB Chain."`. The agent calls `q402_clear_delegation`; your local `Q402_PRIVATE_KEY` signs and Q402 broadcasts.
+- **From your AI client (MCP)**: ask Claude / Codex / Cursor / Cline `"Show my Q402 wallet status"` or `"Clear my Q402 delegation on BNB Chain"`. Tools: `q402_wallet_status`, `q402_clear_delegation`. Local signing with `Q402_PRIVATE_KEY`, Q402 sponsors the on-chain TX.
 - **From the terminal (CLI)**:
 
   ```bash
@@ -243,7 +243,7 @@ Two paths — both produce the same Q402-sponsored on-chain TX:
     --chain <bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll>
   ```
 
-After clearing, `eth_getCode` returns `0x` and your wallet behaves exactly like before. The next Q402 payment creates a fresh delegation (no permanent state change). Full guide: [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation).
+Clear only when you explicitly want to reset the delegation — your next Q402 payment recreates it automatically. Full guide: [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation).
 
 ---
 
