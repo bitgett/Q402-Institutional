@@ -1,22 +1,30 @@
 /**
  * EIP-7702 delegation helpers.
  *
- * Two surfaces:
+ *   1. `getDelegationState(chain, address)` /
+ *      `getAllDelegationStates(address)` — read-only `eth_getCode`
+ *      parsing. Returns whether the EOA is currently delegated and
+ *      (if so) which impl contract it's pointed at. Consumed by the
+ *      delegation-status endpoint and, via that, by the MCP
+ *      `q402_wallet_status` tool.
  *
- *   1. `getDelegationState(chain, address)` — read-only `eth_getCode`
- *      parsing. Returns whether the EOA is currently delegated and (if so)
- *      which impl contract it's pointed at. Used by the dashboard
- *      WalletDelegationCard to render per-chain status.
+ *   2. `recoverAuthorizationAddress(auth)` — off-chain ECDSA recovery
+ *      against the canonical EIP-7702 signing digest (MAGIC || rlp([
+ *      chainId, address, nonce])). The clear-delegation endpoint uses
+ *      it to verify the submitted authorization was signed by the
+ *      claimed target EOA before forwarding to sponsored broadcast.
  *
- *   2. `broadcastClear(chain, authorization)` — server-side type-0x04 TX
- *      broadcast that clears a delegation. The caller has already
- *      collected the user's signed authorization (address = 0x0) via the
- *      browser wallet (MetaMask / OKX EIP-7702 support). Q402's relayer
- *      EOA pays gas (sponsored).
+ *   3. `broadcastClear(chain, target, authorization)` — server-side
+ *      type-0x04 TX broadcast that applies a user-signed "clear"
+ *      authorization (address = 0x0). The caller has already collected
+ *      the signature (MCP signs locally with Q402_PRIVATE_KEY; the CLI
+ *      script signs via ethers Wallet). Q402's relayer EOA pays gas.
  *
- * The browser-side counterpart (asking the wallet to sign the
- * authorization) lives in WalletDelegationCard.tsx via ethers v6's
- * `signer.authorize()` helper — same pattern as q402-sdk.js.
+ *   4. `isOfficialQ402Impl(chain, impl)` + `Q402_IMPL_PER_CHAIN` —
+ *      pre-flight gate so the sponsored broadcast only fires when the
+ *      EOA is actually delegated to Q402's impl on that chain. Stops
+ *      this endpoint from becoming a free cleanup utility for
+ *      unrelated 7702 delegations.
  */
 
 import { ethers } from "ethers";
