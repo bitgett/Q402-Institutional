@@ -3,15 +3,18 @@
  *
  * Reports the EIP-7702 delegation state of `address` across all 9 Q402
  * chains in a single response. Read-only — runs 9 parallel
- * `eth_getCode` calls behind the server's RPC fan-out (so the browser
+ * `eth_getCode` calls behind the server's RPC fan-out (so the caller
  * doesn't have to deal with CORS / rate limits on public RPCs).
  *
  * No auth — the data is fully on-chain and public. The endpoint exists
- * because (a) the dashboard wants a single round-trip, and (b) the MCP
- * `q402_wallet_status` tool returns the same shape.
+ * so the MCP `q402_wallet_status` tool (and any future client) can fetch
+ * a per-EOA snapshot in one round trip instead of fanning out itself.
  *
- * Rate limit: per-address, generous (60/hour) — this is a polling-friendly
- * read endpoint, not the actual broadcast.
+ * Rate limit: composite `ip:address`, generous (60/hour per pair) — this
+ * is a polling-friendly read endpoint, not the actual broadcast. Keying
+ * on the pair instead of address-only prevents a noisy caller from
+ * burning a victim's hourly read budget by polling
+ * `?address=<victim>` (UX DoS even though the underlying data is public).
  */
 
 import { NextRequest, NextResponse } from "next/server";

@@ -30,7 +30,7 @@ const NAV: { heading: string; links: { label: string; href?: string; external?: 
       { label: "Dashboard",        href: "/dashboard" },
       { label: "Pricing",          href: "/payment"   },
       { label: "Free Trial",       href: "/event"     },
-      { label: "Q402 for Claude",  href: "/claude"    },
+      { label: "MCP for AI Agents", href: "/claude"   },
       { label: "For AI Agents",    href: "/agents"    },
     ],
   },

@@ -1188,7 +1188,7 @@ export default function DashboardPage() {
 
           <div className="text-white/35 text-xs">
             Docs: <Link href="/docs" className="hover:text-white/60 underline-offset-2 hover:underline">/docs</Link>{" · "}
-            Claude MCP: <Link href="/claude" className="hover:text-white/60 underline-offset-2 hover:underline">/claude</Link>
+            MCP server: <Link href="/claude" className="hover:text-white/60 underline-offset-2 hover:underline">/claude</Link>
           </div>
         </div>
 
@@ -2116,7 +2116,7 @@ export default function DashboardPage() {
               </ul>
               <div className="text-[11px] text-white/30 mt-4 pt-3 border-t border-white/8">
                 Full reference in{" "}
-                <a className="text-yellow hover:underline" href="/docs#claude-mcp">/docs → Claude MCP</a>
+                <a className="text-yellow hover:underline" href="/docs#claude-mcp">/docs → MCP for AI Clients</a>
                 {" "}· npm:{" "}
                 <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
                 {" "}· source:{" "}

@@ -26,13 +26,17 @@ function readLF(p: string): string {
   return readFileSync(p, "utf8").replace(/\r\n/g, "\n");
 }
 const ROOT = resolve(__dirname, "..");
-const PAY_PATH   = resolve(ROOT, "mcp-server", "src", "tools", "pay.ts");
-const QUOTE_PATH = resolve(ROOT, "mcp-server", "src", "tools", "quote.ts");
-const BATCH_PATH = resolve(ROOT, "mcp-server", "src", "tools", "batch-pay.ts");
-const available = existsSync(PAY_PATH) && existsSync(QUOTE_PATH) && existsSync(BATCH_PATH);
-const paySrc   = available ? readLF(PAY_PATH)   : "";
-const quoteSrc = available ? readLF(QUOTE_PATH) : "";
-const batchSrc = available ? readLF(BATCH_PATH) : "";
+const PAY_PATH    = resolve(ROOT, "mcp-server", "src", "tools", "pay.ts");
+const QUOTE_PATH  = resolve(ROOT, "mcp-server", "src", "tools", "quote.ts");
+const BATCH_PATH  = resolve(ROOT, "mcp-server", "src", "tools", "batch-pay.ts");
+const DOCTOR_PATH = resolve(ROOT, "mcp-server", "src", "tools", "doctor.ts");
+const available =
+  existsSync(PAY_PATH) && existsSync(QUOTE_PATH) &&
+  existsSync(BATCH_PATH) && existsSync(DOCTOR_PATH);
+const paySrc    = available ? readLF(PAY_PATH)    : "";
+const quoteSrc  = available ? readLF(QUOTE_PATH)  : "";
+const batchSrc  = available ? readLF(BATCH_PATH)  : "";
+const doctorSrc = available ? readLF(DOCTOR_PATH) : "";
 
 describe.skipIf(!available)("MCP tool descriptions match actual server policy", () => {
   describe("PAY_TOOL.description", () => {
@@ -148,6 +152,59 @@ describe.skipIf(!available)("MCP tool descriptions match actual server policy", 
     it("keeps the explicit-user-confirmation contract for batches", () => {
       expect(batchSrc).toMatch(/explicit user confirmation/);
       expect(batchSrc).toMatch(/full batch.*not the individual rows|individual rows/);
+    });
+  });
+
+  describe("DOCTOR_TOOL.description (v0.5.6 first-install + ongoing health)", () => {
+    it("frames itself as the bootstrap tool before pay / balance", () => {
+      // Agents must reach for q402_doctor BEFORE trying q402_pay on a
+      // fresh install — that's the whole point of the tool existing.
+      // Anchor that intent in the description so future edits can't
+      // silently demote it. `[\s"+]*?` tolerates source-line breaks
+      // ("FIRST " +\n  "tool to call").
+      expect(doctorSrc).toMatch(/FIRST[\s"+]*?tool[\s"+]*?to[\s"+]*?call/i);
+      expect(doctorSrc).toMatch(/BEFORE[\s"+]*?q402_pay[\s"+]*?or[\s"+]*?q402_balance/);
+    });
+
+    it("documents the multi-turn setup conversation pattern", () => {
+      // Agents need step-by-step instructions to walk a non-tech user
+      // through edits in their editor (NOT chat). Pin the high-signal
+      // verbs so a doc rewrite can't strip them out. The `[\s"+]*?`
+      // gaps tolerate JS multi-line string concatenations
+      // (`"foo " +\n    "bar"`) in the source.
+      expect(doctorSrc).toMatch(/Want[\s"+]*?me[\s"+]*?to[\s"+]*?create/i);
+      expect(doctorSrc).toMatch(/recommendedActions/);
+      // All four editor-open commands (one per platform/client) must
+      // appear so the AI knows it has a cross-platform path to opening
+      // the file. Order doesn't matter — check each independently.
+      expect(doctorSrc).toMatch(/`code`/);
+      expect(doctorSrc).toMatch(/`open`/);
+      expect(doctorSrc).toMatch(/`start`/);
+      expect(doctorSrc).toMatch(/`xdg-open`/);
+    });
+
+    it("forbids accepting a private key via chat (paste-to-file only)", () => {
+      // Security policy — exposure already happened if the user typed
+      // the key in chat, but the AI's response shouldn't compound it by
+      // echoing the value or writing it on the user's behalf.
+      expect(doctorSrc).toMatch(/NEVER in chat|in their editor.*NEVER in chat|NEVER paste your private key into chat/i);
+      // ...but also don't refuse — help + warn is the policy.
+      expect(doctorSrc).toMatch(/DO NOT refuse/);
+      expect(doctorSrc).toMatch(/exposure already happened/);
+    });
+
+    it("documents the slot-mismatch warning surfaces (silent paid-quota burn)", () => {
+      // The most damaging footgun: Trial-tier key in Q402_MULTICHAIN
+      // slot works server-side but silently burns paid quota on BNB.
+      // The doctor MUST surface this — pin both directions.
+      expect(doctorSrc).toMatch(/slot-mismatch warnings|slotWarning/);
+      expect(doctorSrc).toMatch(/silently burns paid quota|burn your paid quota/);
+    });
+
+    it("names the env file location consistently", () => {
+      // Both the README and the doctor refer to ~/.q402/mcp.env. A
+      // future move would break first-install muscle memory — catch it.
+      expect(doctorSrc).toMatch(/~\/\.q402\/mcp\.env/);
     });
   });
 });
