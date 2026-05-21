@@ -15,7 +15,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { rateLimit } from "@/app/lib/ratelimit";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { getAllDelegationStates } from "@/app/lib/eip7702";
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
@@ -27,7 +27,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const allowed = await rateLimit(address.toLowerCase(), "wallet-delegation-status", 60, 3600);
+  // Composite IP+address quota. Address-only would let any caller burn
+  // a victim's hourly read budget (60/h) by hammering /api/wallet/
+  // delegation-status?address=victim — UX DoS even though the underlying
+  // data is public on-chain. With ip:address as the key, each (caller, target)
+  // pair has its own bucket and a noisy address can't lock out anyone else.
+  const ip   = getClientIP(req) || "unknown";
+  const rlId = `${ip}:${address.toLowerCase()}`;
+  const allowed = await rateLimit(rlId, "wallet-delegation-status", 60, 3600);
   if (!allowed) {
     return NextResponse.json(
       { error: "RATE_LIMITED", retryAfterSec: 3600 },

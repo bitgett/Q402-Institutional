@@ -1,25 +1,19 @@
 #!/usr/bin/env node
 /**
- * undelegate-7702.mjs — Clear EIP-7702 delegation from an EOA.
+ * undelegate-7702.mjs — Reset EIP-7702 delegation on an EOA.
  *
- * Why:
- *   Q402's gasless relay installs an EIP-7702 delegation on the payer's
- *   EOA so the impl contract's `transferWithAuthorization` runs with
- *   address(this) == the EOA. Per EIP-7702 spec, that delegation
- *   PERSISTS after the TX — the EOA keeps the impl's code (visible as
- *   `0xef0100 + <impl address>` in eth_getCode).
+ * Q402 settles gasless payments by installing an EIP-7702 delegation on
+ * the payer's EOA — the impl contract runs in the EOA's context for the
+ * transfer. Per spec the delegation persists after each TX (visible as
+ * `0xef0100 + <impl address>` from eth_getCode) so subsequent Q402
+ * payments are cheaper. This script lets the EOA reset that delegation
+ * when the user wants their wallet back to a plain EOA (e.g. before
+ * receiving a native gas token directly to the same address).
  *
- *   That's harmless for ERC-20 transfers (which is all our impl supports),
- *   but it has two side effects:
- *     1. Native (BNB/ETH/MON) sends INTO the delegated EOA revert if the
- *        impl has no receive()/fallback() — which our impl doesn't.
- *     2. MetaMask / OKX show a "smart account" warning on incoming
- *        transfers, even when the impl is benign.
- *
- *   This script signs an EIP-7702 authorization with address = 0x0 and
- *   submits a type-0x04 TX, which writes empty code back to the target
- *   EOA. After confirmation, eth_getCode returns "0x" again and the
- *   wallet behaves like a normal EOA.
+ * Signs an EIP-7702 authorization with address = 0x0 and submits a
+ * type-0x04 TX that writes empty code back. After confirmation,
+ * eth_getCode returns "0x" again. The next q402_pay on that chain
+ * recreates a fresh delegation automatically.
  *
  * Two modes:
  *

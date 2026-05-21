@@ -18,7 +18,7 @@ const PRODUCT_ITEMS: NavDropdownItem[] = [
 const DEVELOPER_ITEMS: NavDropdownItem[] = [
   { href: "/docs",   label: "Docs",   description: "SDK, API reference, quickstart." },
   { href: "/agents", label: "Agents", description: "Server-side EIP-712 signer for AI pipelines.", accent: "green" },
-  { href: "/claude", label: "Claude", description: "MCP server for Claude Desktop + Code.", accent: "orange", badge: { label: "NEW", color: "orange" } },
+  { href: "/claude", label: "MCP server", description: "Q402 for Claude, Codex, Cursor, Cline.", accent: "orange", badge: { label: "NEW", color: "orange" } },
   { href: "https://github.com/bitgett/Q402-Institutional", label: "GitHub", description: "Open source — landing + relayer + SDK.", external: true },
 ];
 

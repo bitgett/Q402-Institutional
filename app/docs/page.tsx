@@ -8,7 +8,7 @@ const NAV = [
   { id: "overview",       label: "Overview",        icon: "○" },
   { id: "how-it-works",   label: "How It Works",    icon: "○" },
   { id: "quickstart",     label: "Quick Start",     icon: "○" },
-  { id: "claude-mcp",     label: "Claude MCP",      icon: "○" },
+  { id: "claude-mcp",     label: "MCP for AI Clients", icon: "○" },
   { id: "trust-receipt",  label: "Trust Receipt",   icon: "○" },
   { id: "gaspool",        label: "Gas Pool",        icon: "○" },
   { id: "eip-7702-delegation", label: "EIP-7702 Delegation", icon: "○" },
@@ -623,9 +623,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
             </p>
             <CodeBlock lang="bash" code={`PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs --chain bnb`} />
             <p className="text-white/45 text-xs mt-3 mb-6 leading-relaxed">
-              Open to anyone on all 9 chains. Self-paid (~$0.001 in native gas). A{" "}
-              <code className="text-white/65 text-xs">--sponsor</code> flag with the Q402 relayer
-              key (business partners) lets the operator pick up the gas instead.
+              Open to anyone on all 9 chains. Self-paid (~$0.001 in native gas).
             </p>
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
@@ -638,27 +636,30 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
               marker on your EOA is the only on-chain trace, and it&apos;s reversible.
             </p>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
-              Things to know
-            </h3>
-            <ul className="text-white/55 text-sm space-y-2 mb-4 leading-relaxed">
-              <li>
-                • Your wallet&apos;s <span className="font-mono text-white/70">eth_getCode</span>{" "}
-                returns <span className="font-mono text-white/70">0xef0100&hellip;&lt;impl&gt;</span>{" "}
-                instead of <span className="font-mono text-white/70">0x</span> while the
-                delegation is active.
-              </li>
-              <li>
-                • MetaMask / OKX may display a{" "}
-                <span className="font-mono text-white/70">Smart account</span> indicator — the
-                delegation is to Q402&apos;s vetted impl, not a third-party contract.
-              </li>
-              <li>
-                • Native gas tokens (BNB / ETH / etc.) sent directly to a delegated EOA will not
-                land — the impl doesn&apos;t accept native receives. Clear the delegation first
-                if you want to receive native to that EOA.
-              </li>
-            </ul>
+            <details className="mt-6 group">
+              <summary className="cursor-pointer text-xs font-semibold text-white/50 uppercase tracking-widest hover:text-white/70 transition-colors select-none list-none flex items-center gap-2">
+                <span className="text-white/30 group-open:rotate-90 transition-transform inline-block">▸</span>
+                Troubleshooting (things to know)
+              </summary>
+              <ul className="text-white/55 text-sm space-y-2 mt-4 leading-relaxed pl-5">
+                <li>
+                  • Your wallet&apos;s <span className="font-mono text-white/70">eth_getCode</span>{" "}
+                  returns <span className="font-mono text-white/70">0xef0100&hellip;&lt;impl&gt;</span>{" "}
+                  instead of <span className="font-mono text-white/70">0x</span> while the
+                  delegation is active.
+                </li>
+                <li>
+                  • MetaMask / OKX may display a{" "}
+                  <span className="font-mono text-white/70">Smart account</span> indicator — the
+                  delegation is to Q402&apos;s vetted impl, not a third-party contract.
+                </li>
+                <li>
+                  • Native gas tokens (BNB / ETH / etc.) sent directly to a delegated EOA will not
+                  land — the impl doesn&apos;t accept native receives. Clear the delegation first
+                  if you want to receive native to that EOA.
+                </li>
+              </ul>
+            </details>
           </Section>
 
           {/* ── AUTHENTICATION ── */}
