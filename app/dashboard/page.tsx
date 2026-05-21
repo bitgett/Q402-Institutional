@@ -11,6 +11,7 @@ import WalletModal from "../components/WalletModal";
 import TrialActivationModal from "../components/TrialActivationModal";
 import DashboardSidebar, { type DashboardTab } from "./Sidebar";
 import ClaudeMcpCard from "../components/ClaudeMcpCard";
+import WalletDelegationCard from "../components/WalletDelegationCard";
 import ClaimWalletPrompt from "./ClaimWalletPrompt";
 import WrongWalletHardBlock from "./WrongWalletHardBlock";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
@@ -2084,6 +2085,22 @@ export default function DashboardPage() {
                 </table>
               </div>
             </div>
+          </motion.div>
+        )}
+
+        {/* ── WALLET (EIP-7702 delegation status + clear) ── */}
+        {tab === "wallet" && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+            <div className="space-y-1 mb-2">
+              <h2 className="text-lg font-semibold">Wallet</h2>
+              <p className="text-white/40 text-sm">
+                Inspect EIP-7702 delegation across all 9 Q402 chains and clear individual
+                chains as needed. Clearing a delegation returns your wallet to a plain EOA;
+                your next Q402 payment will create a fresh delegation automatically. Gas is
+                sponsored by Q402.
+              </p>
+            </div>
+            <WalletDelegationCard />
           </motion.div>
         )}
 

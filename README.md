@@ -229,6 +229,24 @@ Test files cover relay route ordering, EIP-7702 signing shape, trial-vs-paid key
 
 ---
 
+## Clearing the EIP-7702 delegation
+
+When you use Q402 to pay, your EOA gets EIP-7702 delegated to the Q402 impl contract on that chain. The delegation is persistent by design — saves gas on subsequent payments — but you may want to clear it (e.g. before receiving native gas tokens to that EOA, or if your wallet UI shows a "Smart account" warning you'd rather not see).
+
+Two ways:
+
+- **Dashboard** (recommended): connect your wallet → [/dashboard](https://q402.quackai.ai/dashboard) → **Wallet** tab → one click per chain. Q402 sponsors the gas.
+- **CLI** (headless / CI):
+
+  ```bash
+  PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs \
+    --chain <bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll>
+  ```
+
+After clearing, `eth_getCode` returns `0x` and your wallet behaves exactly like before. The next Q402 payment creates a fresh delegation (no permanent state change). Full guide: [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation).
+
+---
+
 ## Security highlights
 
 - **Replay**: every settled tx hash is sealed in KV with `used_txhash:{hash}` (10y TTL). Same on-chain tx cannot be used to activate a subscription twice.
