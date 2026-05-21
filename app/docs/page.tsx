@@ -691,14 +691,6 @@ PRIVATE_KEY=0x<yourKey> SPONSOR_PRIVATE_KEY=0x<sponsor> \\
               like before — your next Q402 payment creates a fresh delegation automatically (no
               permanent state change).
             </p>
-            <Callout type="info">
-              <strong className="text-white/80">Browser dashboard:</strong> a one-click clear UI was
-              prototyped but pulled — modern browser wallets like OKX don&apos;t yet implement the{" "}
-              <code className="text-white/70 text-xs">wallet_signAuthorization</code> RPC needed to
-              sign EIP-7702 authorizations. MetaMask 12.x+ supports it but the MCP / CLI paths
-              cover the same ground without the wallet-compat gate. We&apos;ll bring the dashboard
-              option back when wallet coverage catches up.
-            </Callout>
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
               Why we use it
