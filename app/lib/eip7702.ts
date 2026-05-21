@@ -24,6 +24,24 @@ import { getPrimaryRpc } from "./relayer";
 import type { ChainKey } from "./relayer";
 import { loadRelayerKey } from "./relayer-key";
 
+// Per-call timeout for eth_getCode probes. Public RPCs occasionally hang
+// or slow-respond for tens of seconds; without a bound, the 9-chain
+// parallel status read can sit on a single bad endpoint until the Vercel
+// function timeout (default 10s) consumes the whole request. 5s per
+// chain lets the slow chain show up as `error: timeout` while the
+// other 8 still return their state on time.
+const PROVIDER_CALL_TIMEOUT_MS = 5_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 // ── Chain id ↔ key mapping ─────────────────────────────────────────────────
 // Mirrors contracts.manifest.json. Kept local so this module has zero
 // transitive deps on the broader chain config (the eth_getCode helper is
@@ -40,6 +58,30 @@ export const CHAIN_IDS: Record<ChainKey, number> = {
   monad:     143,
   scroll:    534352,
 };
+
+// Official Q402 impl contract per chain — mirrors contracts.manifest.json.
+// Used by the clear-delegation endpoint to refuse sponsoring TXs for
+// EIP-7702 delegations that point at someone else's contract (i.e. the
+// EOA is delegated to a non-Q402 service). Otherwise our sponsor relayer
+// becomes a free 7702-cleanup utility for any caller.
+//
+// All addresses lowercased for cheap ===-comparison.
+export const Q402_IMPL_PER_CHAIN: Record<ChainKey, string> = {
+  avax:      "0x96a8c74d95a35d0c14ec60364c78ba6de99e9a4c",
+  bnb:       "0x6cf4ad62c208b6494a55a1494d497713ba013dfa",
+  eth:       "0x8e67a64989cfcb0c40556b13ea302709ccfd6aad",
+  xlayer:    "0x8d854436ab0426f5bc6cc70865c90576ad523e73",
+  stable:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+  mantle:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+  injective: "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+  monad:     "0x39ba9520718ee069d7f72882ff4c28a5ea8a2acc",
+  scroll:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+};
+
+export function isOfficialQ402Impl(chain: ChainKey, impl: string | undefined): boolean {
+  if (!impl) return false;
+  return impl.toLowerCase() === Q402_IMPL_PER_CHAIN[chain];
+}
 
 export const CHAIN_KEYS: ReadonlyArray<ChainKey> = [
   "avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll",
@@ -99,8 +141,12 @@ export async function getDelegationState(
 ): Promise<DelegationState> {
   try {
     const provider = new ethers.JsonRpcProvider(getPrimaryRpc(chain));
-    const code     = await provider.getCode(address);
-    const parsed   = parseCodeAsDelegation(code);
+    const code     = await withTimeout(
+      provider.getCode(address),
+      PROVIDER_CALL_TIMEOUT_MS,
+      `eth_getCode(${chain})`,
+    );
+    const parsed = parseCodeAsDelegation(code);
     return { chain, delegated: parsed.delegated, impl: parsed.impl, rawCode: code };
   } catch (e) {
     return {
@@ -134,6 +180,45 @@ export interface SignedAuthorization {
   yParity: 0 | 1;
   r:       string;
   s:       string;
+}
+
+// ── EIP-7702 signature recovery ────────────────────────────────────────────
+// Spec: signed message = keccak256(MAGIC || rlp([chainId, address, nonce]))
+// with MAGIC = 0x05. We re-compute that hash, recover the signer from the
+// (r, s, yParity) triple, and the caller compares the recovered address
+// against the claimed target EOA. This is the off-chain version of the
+// validation the EVM does during type-0x04 TX processing — except the EVM
+// SKIPS bad auth entries silently (sponsor still pays gas) instead of
+// rejecting the TX. So we have to verify here, before broadcast.
+
+const EIP7702_MAGIC_BYTE = "0x05";
+
+/**
+ * Recover the address that signed an EIP-7702 authorization. Returns the
+ * checksummed address; throws if signature recovery fails outright (bad
+ * point on curve, etc.). A successfully-recovered address that doesn't
+ * match the expected EOA is the caller's responsibility to reject.
+ */
+export function recoverAuthorizationAddress(auth: SignedAuthorization): string {
+  // RLP encoding requires variable-length byte arrays; toBeArray produces
+  // the minimal big-endian byte sequence for integers (no leading zeros).
+  const rlpInner = ethers.encodeRlp([
+    ethers.toBeArray(BigInt(auth.chainId)),
+    auth.address,
+    ethers.toBeArray(BigInt(auth.nonce)),
+  ]);
+  // Concatenate MAGIC (0x05) + RLP. encodeRlp already returns 0x-prefixed,
+  // so slice(2) drops the prefix before joining.
+  const prefixed = ethers.concat([EIP7702_MAGIC_BYTE, rlpInner]);
+  const digest   = ethers.keccak256(prefixed);
+
+  const signature = ethers.Signature.from({
+    r:       auth.r,
+    s:       auth.s,
+    yParity: auth.yParity,
+  });
+
+  return ethers.recoverAddress(digest, signature);
 }
 
 export interface ClearBroadcastResult {

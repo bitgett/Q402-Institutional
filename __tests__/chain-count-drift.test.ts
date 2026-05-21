@@ -19,7 +19,7 @@
  * not exclusivity.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ROOT = resolve(__dirname, "..");
@@ -142,6 +142,10 @@ describe(`stale chain-count guard (no "${STALE_COUNT}" leftovers)`, () => {
   // hundred source files) this is fast enough that the test runs in
   // well under a second.
   function collect(dir: string, out: string[]) {
+    // Optional source roots — `mcp-server/src` is a sibling repo that may
+    // not be present in a bare clone or a CI job that didn't fetch it.
+    // Skip silently rather than crash the test with ENOENT.
+    if (!existsSync(dir)) return;
     const stat = statSync(dir);
     if (stat.isFile()) { out.push(dir); return; }
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
