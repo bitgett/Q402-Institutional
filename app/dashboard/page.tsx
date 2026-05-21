@@ -2108,11 +2108,14 @@ export default function DashboardPage() {
                 What ships in the package
               </div>
               <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
+                <li>• <code className="text-yellow text-xs">q402_doctor</code> — first-install onboarding + ongoing health check. Creates <code className="text-white/60 text-xs">~/.q402/mcp.env</code> for you on first run and surfaces missing config, slot-mismatch warnings, and per-chain delegation state thereafter. Read-only, no auth.</li>
                 <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 9 chains."} Read-only, no auth.</li>
                 <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
                 <li>• <code className="text-yellow text-xs">q402_pay</code> — send a single-recipient gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires <code className="text-white/60">Q402_PRIVATE_KEY</code> + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code> alongside a live API key.</li>
                 <li>• <code className="text-yellow text-xs">q402_batch_pay</code> — one signed batch to up to 20 recipients on a single chain × token (trial keys: 5). Same auto-routing as <code className="text-yellow text-xs">q402_pay</code>; 6+ recipient BNB batches return <code className="text-yellow text-xs">status=&quot;ambiguous&quot;</code> so the agent can ask the user to pick: 5 free, all paid, or split. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</li>
                 <li>• <code className="text-yellow text-xs">q402_receipt</code> — fetch + locally verify a Trust Receipt by <code className="text-white/60 text-xs">rct_…</code> id. Read-only.</li>
+                <li>• <code className="text-yellow text-xs">q402_wallet_status</code> — per-chain EIP-7702 delegation state for the EOA derived from <code className="text-white/60">Q402_PRIVATE_KEY</code>. Read-only.</li>
+                <li>• <code className="text-yellow text-xs">q402_clear_delegation</code> — reset the EIP-7702 delegation on a single chain. Q402 sponsors the on-chain TX, so you pay $0 gas to clear.</li>
               </ul>
               <div className="text-[11px] text-white/30 mt-4 pt-3 border-t border-white/8">
                 Full reference in{" "}
