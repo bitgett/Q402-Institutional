@@ -560,7 +560,7 @@ const auth = await client.experimental_signAuthorization({
                 code: `const res = await fetch("https://q402.quackai.ai/api/relay", {
   method: "POST",
   body: JSON.stringify({
-    apiKey: process.env.Q402_API_KEY,  // shared across all agents
+    apiKey: process.env.Q402_MULTICHAIN_API_KEY,  // shared across all agents
     chain: "avax", token: "USDC",
     from: account.address, to: recipient,
     amount: "5000000",  // 5 USDC

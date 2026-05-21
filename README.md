@@ -74,32 +74,24 @@ The SDK handles the EIP-712 signature, the EIP-7702 authorization, and the POST 
 
 ### 3. AI agent — the MCP server
 
+Register with your MCP client (one-liner per client — secrets go in a separate file, not in this config):
+
 ```bash
-npx -y @quackai/q402-mcp@latest
+# Claude Code / Claude Desktop
+claude mcp add q402 -- npx -y @quackai/q402-mcp
+
+# OpenAI Codex CLI
+codex mcp add q402 -- npx -y @quackai/q402-mcp
+
+# Cursor / Cline: paste { "mcpServers": { "q402": { "command": "npx", "args": ["-y", "@quackai/q402-mcp"] } } }
+# into ~/.cursor/mcp.json (Cursor) or Cline → Settings → MCP Servers → Edit JSON.
 ```
 
-Add to your Claude Desktop / Claude Code config:
+Then ask your AI: **"Set up Q402"**. The agent calls `q402_doctor`, which creates `~/.q402/mcp.env` with placeholders and walks you through pasting in your real API key + wallet private key — in your editor, **never in chat**.
 
-```json
-{
-  "mcpServers": {
-    "q402": {
-      "command": "npx",
-      "args": ["-y", "@quackai/q402-mcp@latest"],
-      "env": {
-        "Q402_TRIAL_API_KEY": "q402_live_…",
-        "Q402_MULTICHAIN_API_KEY": "q402_live_…",
-        "Q402_PRIVATE_KEY": "0x…",
-        "Q402_ENABLE_REAL_PAYMENTS": "1"
-      }
-    }
-  }
-}
-```
+The MCP server auto-loads `~/.q402/mcp.env` at startup, so the same secrets file works for every MCP client without per-client wiring. Auto-routes by chain: `chain="bnb"` + `Q402_TRIAL_API_KEY` set → Trial (free 2k TX sponsored, same rule for `q402_pay` and `q402_batch_pay` up to 5 recipients); anything else → Multichain. 6+ recipient BNB batches return `status="ambiguous"` so the agent asks the user to pick `keyScope="trial"` (first 5), `"multichain"` (all paid), or two calls.
 
-> Set whichever applies — both is best. The server auto-routes by chain: `chain="bnb"` + Q402_TRIAL_API_KEY set → Trial (free 2k TX sponsored, same rule for `q402_pay` and `q402_batch_pay` up to 5 recipients); anything else → Multichain. **Ambiguity gate:** 6+ recipient BNB batches return `status="ambiguous"` instead of executing so the agent can ask the user to pick `keyScope="trial"` (first 5), `"multichain"` (all paid), or two calls (5 free + remainder paid). Set `keyScope` on a tool call to force one explicitly. Single-env setups (only `Q402_API_KEY` set) keep working unchanged — that env var stays supported as a legacy fallback.
-
-The agent can now `q402_quote` (compare gas across all 9 chains), `q402_balance` (verify key + remaining credits), `q402_pay` (single-recipient gasless transfer), `q402_batch_pay` (one signed batch to up to 20 recipients on a single chain × token), and `q402_receipt` (fetch + cryptographically verify a Trust Receipt). Sandbox mode is the default — only the simultaneous presence of all three live-mode env vars switches `q402_pay` and `q402_batch_pay` into real on-chain settlement.
+The agent gets eight tools: `q402_doctor` (first-install + health check), `q402_quote` (compare gas across all 9 chains), `q402_balance` (verify key + remaining credits), `q402_pay` (single-recipient gasless transfer), `q402_batch_pay` (one signed batch to up to 20 recipients on a single chain × token), `q402_receipt` (fetch + cryptographically verify a Trust Receipt), `q402_wallet_status` (per-chain EIP-7702 delegation state), and `q402_clear_delegation` (reset delegation on a chain, Q402-sponsored gas). Sandbox mode is the default — `q402_pay` returns a test response until the live env triple is set and `Q402_PRIVATE_KEY` parses as a valid 32-byte hex key.
 
 ---
 

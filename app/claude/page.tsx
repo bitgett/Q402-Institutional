@@ -6,54 +6,117 @@ import { useMemo, useState } from "react";
 import { MCP_VERSION } from "@/app/lib/version";
 
 /**
- * /claude — landing page for the @quackai/q402-mcp MCP server.
+ * /claude — landing page for @quackai/q402-mcp.
  *
  * URL kept as `/claude` for backlink stability (npm README, Anthropic
  * Registry, prior tweets all link here), but the page itself is MCP-
- * canonical — same package runs in Claude, Codex, Cursor, and Cline
- * (and any other stdio MCP client).
+ * canonical: Claude / Codex / Cursor / Cline are first-class equals.
  *
- * Live `q402_quote` simulation that re-ranks 9 chains as the visitor
- * changes the amount, animated install line with one-click copy +
- * npm/GitHub deeplinks, gradient tool cards.
+ * Three sections total — hero (with 4-client tabbed install), live
+ * `q402_quote` simulation, eight-tool compact list. Trust Receipt,
+ * Safety guards, and CTA all moved to /docs to keep the page from
+ * duplicating documentation that already lives there.
  *
- * Fully static (no fetches) — the chain table mirrors the manifest in
- * mcp-server/src/chains.ts and contracts.manifest.json so the
- * simulation is authoritative without round-tripping the relayer.
+ * Wider container (`max-w-[88rem]`) than the rest of the site — the
+ * live-quote table's 5 columns + the tabbed install snippet both want
+ * more horizontal room than `max-w-6xl` gives them.
  */
 
-const INSTALL_CMD = "claude mcp add q402 -- npx -y @quackai/q402-mcp";
-
-/** Logo row under the install line — same package, four clients, one row.
- *  Mirrors the pattern in app/components/Contact.tsx (AI_CLIENTS).
- *  Logo SVGs live in public/logos/. */
-const MCP_CLIENTS: { name: string; src: string }[] = [
-  { name: "Claude", src: "/logos/claude.svg" },
-  { name: "Codex",  src: "/logos/codex.svg"  },
-  { name: "Cursor", src: "/logos/cursor.svg" },
-  { name: "Cline",  src: "/logos/cline.svg"  },
-];
-
 interface ChainRow {
-  key: string;
-  name: string;
-  chainId: number;
-  gas: string;
-  approxGasCostUsd: number;
-  tokens: ReadonlyArray<"USDC" | "USDT" | "RLUSD">;
-  note?: string;
+  key:               string;
+  name:              string;
+  chainId:           number;
+  gas:               string;
+  approxGasCostUsd:  number;
+  tokens:            ReadonlyArray<"USDC" | "USDT" | "RLUSD">;
+  note?:             string;
 }
 
 const CHAINS: ChainRow[] = [
-  { key: "stable",    name: "Stable",            chainId: 988,   gas: "USDT0", approxGasCostUsd: 0.0005, tokens: ["USDC", "USDT"], note: "USDC and USDT both alias to USDT0" },
-  { key: "bnb",       name: "BNB Chain",         chainId: 56,    gas: "BNB",   approxGasCostUsd: 0.001,  tokens: ["USDC", "USDT"] },
-  { key: "xlayer",    name: "X Layer",           chainId: 196,   gas: "OKB",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
-  { key: "mantle",    name: "Mantle",            chainId: 5000,  gas: "MNT",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
-  { key: "avax",      name: "Avalanche C-Chain", chainId: 43114, gas: "AVAX",  approxGasCostUsd: 0.003,  tokens: ["USDC", "USDT"] },
-  { key: "injective", name: "Injective EVM",     chainId: 1776,  gas: "INJ",   approxGasCostUsd: 0.004,  tokens: ["USDT"], note: "USDT only — Circle CCTP USDC announced for Q2 2026" },
-  { key: "monad",     name: "Monad",             chainId: 143,   gas: "MON",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
-  { key: "scroll",    name: "Scroll",            chainId: 534352, gas: "ETH",  approxGasCostUsd: 0.001,  tokens: ["USDC", "USDT"], note: "zkEVM L2 — EIP-7702 live since Euclid Phase 2 (2025-04-22)." },
-  { key: "eth",       name: "Ethereum Mainnet",  chainId: 1,     gas: "ETH",   approxGasCostUsd: 1.2,    tokens: ["USDC", "USDT", "RLUSD"], note: "L1 — gas is volatile. RLUSD (Ripple USD, NY DFS regulated) Ethereum-only." },
+  { key: "stable",    name: "Stable",            chainId: 988,    gas: "USDT0", approxGasCostUsd: 0.0005, tokens: ["USDC", "USDT"], note: "USDC and USDT both alias to USDT0" },
+  { key: "bnb",       name: "BNB Chain",         chainId: 56,     gas: "BNB",   approxGasCostUsd: 0.001,  tokens: ["USDC", "USDT"] },
+  { key: "xlayer",    name: "X Layer",           chainId: 196,    gas: "OKB",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
+  { key: "mantle",    name: "Mantle",            chainId: 5000,   gas: "MNT",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
+  { key: "avax",      name: "Avalanche C-Chain", chainId: 43114,  gas: "AVAX",  approxGasCostUsd: 0.003,  tokens: ["USDC", "USDT"] },
+  { key: "injective", name: "Injective EVM",     chainId: 1776,   gas: "INJ",   approxGasCostUsd: 0.004,  tokens: ["USDT"], note: "USDT only — Circle CCTP USDC announced for Q2 2026" },
+  { key: "monad",     name: "Monad",             chainId: 143,    gas: "MON",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
+  { key: "scroll",    name: "Scroll",            chainId: 534352, gas: "ETH",   approxGasCostUsd: 0.001,  tokens: ["USDC", "USDT"], note: "zkEVM L2 — EIP-7702 live since Euclid Phase 2 (2025-04-22)." },
+  { key: "eth",       name: "Ethereum Mainnet",  chainId: 1,      gas: "ETH",   approxGasCostUsd: 1.2,    tokens: ["USDC", "USDT", "RLUSD"], note: "L1 — gas is volatile. RLUSD (Ripple USD, NY DFS regulated) Ethereum-only." },
+];
+
+// ── 4-client install matrix ─────────────────────────────────────────────────
+// Each client has either a one-line CLI command (Claude / Codex) or a JSON
+// snippet pasted into a config file (Cursor / Cline). Same npm package
+// underneath — no client-specific server code.
+type ClientKey = "claude" | "codex" | "cursor" | "cline";
+
+interface ClientInstall {
+  key:     ClientKey;
+  name:    string;
+  logo:    string;
+  /** "cli" → snippet is a one-liner; "json" → snippet is a JSON config. */
+  kind:    "cli" | "json";
+  snippet: string;
+  /** One-line guidance shown under the snippet. */
+  hint:    string;
+}
+
+const SHARED_JSON = `{
+  "mcpServers": {
+    "q402": {
+      "command": "npx",
+      "args": ["-y", "@quackai/q402-mcp"]
+    }
+  }
+}`;
+
+const CLIENTS: ClientInstall[] = [
+  {
+    key:     "claude",
+    name:    "Claude",
+    logo:    "/logos/claude.svg",
+    kind:    "cli",
+    snippet: "claude mcp add q402 -- npx -y @quackai/q402-mcp",
+    hint:    "Claude Code CLI or Claude Desktop. Restart the app after running.",
+  },
+  {
+    key:     "codex",
+    name:    "Codex",
+    logo:    "/logos/codex.svg",
+    kind:    "cli",
+    snippet: "codex mcp add q402 -- npx -y @quackai/q402-mcp",
+    hint:    "OpenAI Codex CLI. Restart Codex after running.",
+  },
+  {
+    key:     "cursor",
+    name:    "Cursor",
+    logo:    "/logos/cursor.svg",
+    kind:    "json",
+    snippet: SHARED_JSON,
+    hint:    "Paste into ~/.cursor/mcp.json (or .cursor/mcp.json for per-project scope). Restart Cursor.",
+  },
+  {
+    key:     "cline",
+    name:    "Cline",
+    logo:    "/logos/cline.svg",
+    kind:    "json",
+    snippet: SHARED_JSON,
+    hint:    "Cline → Settings → MCP Servers → Edit JSON. Reload VS Code.",
+  },
+];
+
+// ── 8-tool flat list ────────────────────────────────────────────────────────
+// Compact row layout (NOT the previous card grid) — the cards burned a lot
+// of vertical space + duplicated content from /docs#claude-mcp.
+const TOOLS: Array<{ name: string; auth: string; note: string }> = [
+  { name: "q402_doctor",           auth: "no auth",     note: "First-install onboarding + ongoing health check. Call this when the user says \"set up Q402\" or \"is Q402 working\"." },
+  { name: "q402_quote",            auth: "no auth",     note: "Compare gas + supported tokens across 9 chains. Read-only — works without any setup." },
+  { name: "q402_balance",          auth: "api key",     note: "Verify the configured API key(s) and report each one's plan tier + remaining quota credits." },
+  { name: "q402_pay",              auth: "live mode",   note: "Send a gasless USDC, USDT, or RLUSD payment to a single recipient. Sandbox by default." },
+  { name: "q402_batch_pay",        auth: "live mode",   note: "Up to 20 recipients in one signed batch on a single chain × token (trial keys: 5)." },
+  { name: "q402_receipt",          auth: "no auth",     note: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery against the relayer EOA)." },
+  { name: "q402_wallet_status",    auth: "private key", note: "Per-chain EIP-7702 delegation status for the EOA derived from Q402_PRIVATE_KEY. Read-only." },
+  { name: "q402_clear_delegation", auth: "private key", note: "Clear the EIP-7702 delegation on a single chain. Local signing; Q402 sponsors the on-chain TX." },
 ];
 
 function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
@@ -78,8 +141,11 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
 }
 
 export default function ClaudePage() {
-  const [amount, setAmount] = useState("50");
+  const [amount, setAmount]           = useState("50");
   const [tokenFilter, setTokenFilter] = useState<"USDC" | "USDT" | "RLUSD" | "ANY">("ANY");
+  const [activeClient, setActiveClient] = useState<ClientKey>("claude");
+
+  const current = CLIENTS.find(c => c.key === activeClient)!;
 
   const ranked = useMemo(() => {
     const filtered = CHAINS.filter(c =>
@@ -90,12 +156,12 @@ export default function ClaudePage() {
 
   return (
     <div className="min-h-screen text-white" style={{ background: "#06060C" }}>
-      {/* Top nav (slim) */}
+      {/* ── Top nav (slim) ─────────────────────────────────────────────── */}
       <header
         className="border-b sticky top-0 z-30 backdrop-blur-md"
         style={{ background: "rgba(6,6,12,0.82)", borderColor: "rgba(255,255,255,0.06)" }}
       >
-        <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-[88rem] mx-auto px-6 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
               <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
@@ -127,9 +193,9 @@ export default function ClaudePage() {
         </div>
       </header>
 
-      {/* HERO */}
+      {/* ── HERO ───────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        {/* Background atmosphere */}
+        {/* Background atmosphere — keep the existing gradient blooms; cheap and on-brand. */}
         <div className="absolute inset-0 pointer-events-none">
           <motion.div
             className="absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full blur-[160px]"
@@ -155,7 +221,7 @@ export default function ClaudePage() {
           />
         </div>
 
-        <div className="relative max-w-6xl mx-auto px-6 py-20 md:py-28">
+        <div className="relative max-w-[88rem] mx-auto px-6 py-20 md:py-24">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -163,8 +229,8 @@ export default function ClaudePage() {
             className="inline-flex items-center gap-2 mb-7 px-3 py-1 rounded-full"
             style={{
               background: "linear-gradient(120deg, rgba(245,158,11,0.10), rgba(139,92,246,0.06))",
-              border: "1px solid rgba(245,158,11,0.30)",
-              boxShadow: "0 0 30px rgba(245,158,11,0.10)",
+              border:     "1px solid rgba(245,158,11,0.30)",
+              boxShadow:  "0 0 30px rgba(245,158,11,0.10)",
             }}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-orange-300 animate-pulse" />
@@ -199,35 +265,59 @@ export default function ClaudePage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.18 }}
-            className="text-base md:text-lg text-white/55 mt-6 max-w-2xl leading-relaxed"
+            className="text-base md:text-lg text-white/55 mt-6 max-w-3xl leading-relaxed"
           >
-            Q402 ships as a Model Context Protocol server. One install and your agent —
-            in <span className="text-white/85 font-semibold">Claude, Codex, Cursor, or Cline</span> —
-            can quote stablecoin transfers across <span className="text-white/85 font-semibold">9 EVM chains</span>,
-            settle them gaslessly, and confirm on-chain — all from a single prompt. The recipient
-            gets the full amount. The sender pays $0 in gas. The agent never holds a key it
-            shouldn&apos;t.
+            Q402 makes 9 EVM chains feel like one rail — gasless, instant, from any
+            MCP client. One install, ask your agent to set it up, send your first
+            stablecoin payment.
           </motion.p>
 
-          {/* Install line */}
+          {/* ── Install — 4-client tabs ──────────────────────────────────── */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.32 }}
-            className="mt-10 max-w-2xl"
+            className="mt-10 max-w-3xl"
           >
             <div className="text-[10px] uppercase tracking-[0.22em] text-white/30 font-bold mb-2">
-              one line · install
+              install · pick your client
             </div>
+
+            {/* Tab row */}
             <div
-              className="relative flex items-center gap-3 px-4 py-3.5 rounded-xl font-mono text-sm overflow-hidden"
+              className="flex flex-wrap gap-1 p-1 rounded-xl border mb-2"
+              style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
+            >
+              {CLIENTS.map(c => {
+                const isActive = activeClient === c.key;
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => setActiveClient(c.key)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${
+                      isActive
+                        ? "bg-yellow/20 text-yellow border border-yellow/40"
+                        : "text-white/60 hover:text-white/90 border border-transparent"
+                    }`}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={c.logo} alt={c.name} className="w-4 h-4" />
+                    {c.name}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Snippet box */}
+            <div
+              className="relative px-4 py-3.5 rounded-xl font-mono text-sm overflow-hidden"
               style={{
                 background: "linear-gradient(120deg, rgba(245,158,11,0.06), rgba(255,255,255,0.02))",
-                border: "1px solid rgba(245,158,11,0.30)",
-                boxShadow: "0 0 35px rgba(245,158,11,0.08)",
+                border:     "1px solid rgba(245,158,11,0.30)",
+                boxShadow:  "0 0 35px rgba(245,158,11,0.08)",
               }}
             >
-              {/* Animated shine */}
               <motion.span
                 className="absolute inset-y-0 w-20 -skew-x-12 pointer-events-none"
                 initial={{ x: "-150%" }}
@@ -235,47 +325,50 @@ export default function ClaudePage() {
                 transition={{ duration: 4.2, repeat: Infinity, repeatDelay: 3, ease: "easeInOut" }}
                 style={{ background: "linear-gradient(90deg, transparent, rgba(255,224,160,0.18), transparent)" }}
               />
-              <span className="relative text-yellow/80">$</span>
-              <span className="relative flex-1 truncate text-white/85">{INSTALL_CMD}</span>
-              <span className="relative">
-                <CopyButton value={INSTALL_CMD} />
-              </span>
+              {current.kind === "cli" ? (
+                <div className="relative flex items-center gap-3">
+                  <span className="text-yellow/80">$</span>
+                  <span className="flex-1 truncate text-white/85">{current.snippet}</span>
+                  <CopyButton value={current.snippet} />
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] uppercase tracking-widest text-white/35 font-semibold">
+                      paste as JSON
+                    </span>
+                    <CopyButton value={current.snippet} />
+                  </div>
+                  <pre className="text-xs text-white/85 whitespace-pre overflow-x-auto leading-relaxed">{current.snippet}</pre>
+                </div>
+              )}
             </div>
-            <p className="text-[11px] text-white/35 mt-3">
-              Sandbox-default — no API key, no signup, no funds at risk to try{" "}
-              <code className="text-yellow/80">q402_quote</code>.
-            </p>
 
-            {/* Multi-client logo row — same package, four clients. */}
-            <div className="mt-6 flex flex-wrap items-center gap-2">
-              <span className="text-[10px] uppercase tracking-[0.18em] text-white/30 font-semibold mr-1">
-                Works in
-              </span>
-              {MCP_CLIENTS.map(c => (
-                <span
-                  key={c.name}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-white/10 bg-white/[0.03] text-white/75 text-[11px] font-medium"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={c.src} alt={c.name} className="w-3 h-3" />
-                  {c.name}
-                </span>
-              ))}
-              <span className="text-[10px] text-white/30 ml-1">
-                + any stdio MCP client
-              </span>
+            <p className="text-[11px] text-white/40 mt-2">{current.hint}</p>
+
+            {/* doctor-first call-to-action — the actual setup prompt */}
+            <div
+              className="mt-5 px-4 py-3 rounded-lg flex items-start gap-3"
+              style={{ background: "rgba(74,222,128,0.05)", border: "1px solid rgba(74,222,128,0.20)" }}
+            >
+              <span className="text-green-400/90 text-xs font-bold mt-0.5">→</span>
+              <p className="text-white/70 text-sm leading-relaxed">
+                After restarting, ask your agent:{" "}
+                <span className="text-white font-semibold">&ldquo;Set up Q402&rdquo;</span>.
+                <br />
+                It calls <code className="text-yellow text-xs">q402_doctor</code>, which creates
+                {" "}<code className="text-yellow text-xs">~/.q402/mcp.env</code> with placeholders
+                and walks you through pasting your API key + wallet private key — in your editor,
+                never in chat.
+              </p>
             </div>
-            <p className="text-[11px] text-white/30 mt-2">
-              The install command above is the Claude Code CLI. For Codex / Cursor / Cline
-              snippets, see <Link href="/docs#claude-mcp" className="text-yellow/70 hover:text-yellow underline-offset-2 hover:underline">/docs → MCP for AI Clients</Link>.
-            </p>
           </motion.div>
         </div>
       </section>
 
-      {/* LIVE QUOTE SIMULATION */}
+      {/* ── LIVE QUOTE SIMULATION ──────────────────────────────────────── */}
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        <div className="max-w-6xl mx-auto px-6 py-16 md:py-20">
+        <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
           <div className="flex items-end justify-between flex-wrap gap-4 mb-2">
             <div>
               <div className="text-[10px] uppercase tracking-[0.22em] text-yellow/80 font-bold mb-2">
@@ -285,8 +378,8 @@ export default function ClaudePage() {
                 The exact tool your agent calls.
               </h2>
               <p className="text-white/50 text-sm mt-2 max-w-xl">
-                Change the amount or token filter — the table re-ranks every chain by gas the same
-                way the MCP server returns to the agent in real time.
+                Change the amount or token filter — the table re-ranks every chain by gas the
+                same way the MCP server returns to the agent in real time.
               </p>
             </div>
           </div>
@@ -301,7 +394,7 @@ export default function ClaudePage() {
                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-mono text-sm"
                 style={{
                   background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.10)",
+                  border:     "1px solid rgba(255,255,255,0.10)",
                 }}
               >
                 <span className="text-white/40">$</span>
@@ -338,9 +431,8 @@ export default function ClaudePage() {
           <div
             className="rounded-2xl overflow-hidden"
             style={{
-              background:
-                "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, rgba(255,255,255,0.02) 100%)",
-              border: "1px solid rgba(255,255,255,0.06)",
+              background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, rgba(255,255,255,0.02) 100%)",
+              border:     "1px solid rgba(255,255,255,0.06)",
             }}
           >
             <div
@@ -401,7 +493,6 @@ export default function ClaudePage() {
                 ))}
               </AnimatePresence>
             </ul>
-            {/* Footer note */}
             <div
               className="px-5 py-3 text-[11px] text-white/30 border-t"
               style={{ borderColor: "rgba(255,255,255,0.04)" }}
@@ -414,11 +505,11 @@ export default function ClaudePage() {
         </div>
       </section>
 
-      {/* TOOLS */}
+      {/* ── TOOLS — flat 8-row list ─────────────────────────────────────── */}
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        <div className="max-w-6xl mx-auto px-6 py-16 md:py-20">
+        <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
           <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
-            five tools · one package
+            eight tools · one package
           </div>
           <h2 className="text-2xl md:text-4xl font-bold mb-2">
             Only what an agent should reach for.
@@ -428,255 +519,46 @@ export default function ClaudePage() {
             that can move funds outside the explicit confirm-and-sign flow.
           </p>
 
-          <div className="grid md:grid-cols-2 gap-5">
-            {[
-              {
-                name: "q402_quote",
-                auth: "no auth",
-                color: "rgba(74,222,128,0.30)",
-                bg: "rgba(74,222,128,0.05)",
-                description:
-                  "Compare gas + supported tokens across all 9 chains. Read-only, no key. Perfect first call before anything signs.",
-              },
-              {
-                name: "q402_balance",
-                auth: "api key",
-                color: "rgba(245,197,24,0.30)",
-                bg: "rgba(245,197,24,0.05)",
-                description:
-                  "Verify the configured key, report its plan tier and remaining quota credits.",
-              },
-              {
-                name: "q402_pay",
-                auth: "live mode",
-                color: "rgba(245,158,11,0.32)",
-                bg: "rgba(245,158,11,0.06)",
-                description:
-                  "Send a gasless USDC, USDT, or RLUSD payment to a single recipient. Sandbox by default — three env vars must align before a single wei moves.",
-              },
-              {
-                name: "q402_batch_pay",
-                auth: "live mode",
-                color: "rgba(245,158,11,0.32)",
-                bg: "rgba(245,158,11,0.06)",
-                description:
-                  "Send one signed batch to up to 20 recipients on a single chain × token (trial: 5). Same auto-routing as q402_pay (BNB + Trial key set → Trial; else Multichain). 6+ recipient BNB batches return status=\"ambiguous\" so the agent can ask the user to pick: 5 free (trial), all paid (multichain), or split. Same sandbox gating as q402_pay; agent must confirm the full batch in chat first.",
-              },
-              {
-                name: "q402_receipt",
-                auth: "no auth",
-                color: "rgba(96,165,250,0.32)",
-                bg: "rgba(96,165,250,0.06)",
-                description:
-                  "Fetch a Trust Receipt by rct_… id and locally verify its ECDSA signature against the relayer EOA. Read-only.",
-              },
-            ].map(t => (
-              <motion.div
+          <ul className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+            {TOOLS.map(t => (
+              <li
                 key={t.name}
-                whileHover={{ y: -3 }}
-                className="rounded-2xl p-6 flex flex-col gap-3 transition-shadow hover:shadow-[0_10px_50px_rgba(245,158,11,0.10)]"
-                style={{
-                  background: t.bg,
-                  border: `1px solid ${t.color}`,
-                }}
+                className="flex items-baseline gap-4 md:gap-6 py-3.5"
+                style={{ borderTopColor: "rgba(255,255,255,0.04)" }}
               >
-                <div className="flex items-center justify-between">
-                  <code className="text-yellow font-mono font-bold">{t.name}</code>
-                  <span className="text-[10px] uppercase tracking-widest text-white/35">
-                    {t.auth}
-                  </span>
-                </div>
-                <p className="text-sm text-white/65 leading-relaxed">{t.description}</p>
-              </motion.div>
+                <code className="text-yellow font-mono text-xs md:text-sm font-bold whitespace-nowrap min-w-[12rem] md:min-w-[14rem]">
+                  {t.name}
+                </code>
+                <span className="text-white/35 text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap hidden md:inline-block min-w-[6rem]">
+                  {t.auth}
+                </span>
+                <span className="text-white/65 text-sm leading-relaxed flex-1">
+                  {t.note}
+                </span>
+              </li>
             ))}
-          </div>
-        </div>
-      </section>
+          </ul>
 
-      {/* TRUST RECEIPT */}
-      <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        <div className="max-w-6xl mx-auto px-6 py-16 md:py-20">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
-            trust receipt
-          </div>
-          <h2 className="text-2xl md:text-4xl font-bold mb-3">
-            Receipts are how AI agents communicate.
-          </h2>
-          <p className="text-white/50 text-sm max-w-2xl mb-10">
-            Every successful Q402 settlement now produces a verifiable proof page.
-            ECDSA-signed by the relayer, recovered locally in your browser, with
-            on-chain tx + delivery trace on one URL. The receipt URL is the proof —
-            no server round-trip, no trusted UI layer.
-          </p>
-
-          <div className="grid md:grid-cols-3 gap-5 mb-10">
-            <div className="rounded-2xl p-6 border border-white/10 bg-white/[0.02]">
-              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2">01 · settlement facts</div>
-              <p className="text-sm text-white/70 leading-relaxed">
-                Payer · recipient · amount · chain · method. The actual on-chain
-                tx hash, block, and the gas Q402 sponsored on the customer&apos;s
-                behalf — all surfaced inline.
-              </p>
-            </div>
-            <div className="rounded-2xl p-6 border border-white/10 bg-white/[0.02]">
-              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2">02 · cryptographic proof</div>
-              <p className="text-sm text-white/70 leading-relaxed">
-                EIP-191 ECDSA signature over a canonical hash of the settlement
-                fields. Click <code className="text-yellow text-xs">Verify</code> —
-                the recovery runs in your browser against the relayer EOA.
-              </p>
-            </div>
-            <div className="rounded-2xl p-6 border border-white/10 bg-white/[0.02]">
-              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2">03 · live delivery trace</div>
-              <p className="text-sm text-white/70 leading-relaxed">
-                Webhook delivery state polls in real time — pending → delivered
-                or failed. Customers see exactly which downstream system saw the
-                event without grepping logs.
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border p-6 bg-yellow/5"
-               style={{ borderColor: "rgba(245,197,24,0.30)" }}>
-            <div className="text-[10px] uppercase tracking-widest text-yellow/80 font-bold mb-2">
-              live demo
-            </div>
-            <a
-              href="https://q402.quackai.ai/receipt/rct_afa5f50bc49a65ebba3b28ab"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-xs md:text-sm text-yellow hover:text-yellow/80 transition break-all"
-            >
-              q402.quackai.ai/receipt/rct_afa5f50bc49a65ebba3b28ab ↗
-            </a>
-            <p className="text-white/45 text-xs mt-3 leading-relaxed">
-              First production Trust Receipt — 0.01 USDT settled on BNB Chain via
-              EIP-7702. Click through to see the verify button in action.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* SAFETY */}
-      <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        <div className="max-w-6xl mx-auto px-6 py-16 md:py-20">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
-            safe by design
-          </div>
-          <h2 className="text-2xl md:text-4xl font-bold mb-3">
-            Four guards before any wei moves.
-          </h2>
-          <p className="text-white/50 text-sm max-w-xl mb-10">
-            Letting an LLM touch a payment rail demands more than &ldquo;the model will be
-            careful.&rdquo;
-          </p>
-          <div className="grid md:grid-cols-2 gap-4">
-            {[
-              {
-                n: "01",
-                title: "Sandbox by default",
-                body: (
-                  <>
-                    Without a live key (
-                    <code className="text-yellow text-xs">Q402_TRIAL_API_KEY</code> for BNB
-                    sponsored or <code className="text-yellow text-xs">Q402_MULTICHAIN_API_KEY</code>{" "}
-                    for paid 9-chain — the legacy{" "}
-                    <code className="text-yellow text-xs">Q402_API_KEY</code> works as a
-                    fallback) plus <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code>{" "}
-                    and <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=1</code>,
-                    every <code className="text-yellow text-xs">q402_pay</code> returns a fake
-                    hash. No funds, no quota.
-                  </>
-                ),
-              },
-              {
-                n: "02",
-                title: "Per-call hard cap",
-                body: (
-                  <>
-                    <code className="text-yellow text-xs">Q402_MAX_AMOUNT_PER_CALL</code> defaults
-                    to $5. Larger amounts are rejected before any signature happens.
-                  </>
-                ),
-              },
-              {
-                n: "03",
-                title: "Recipient allowlist",
-                body: (
-                  <>
-                    <code className="text-yellow text-xs">Q402_ALLOWED_RECIPIENTS</code> takes a
-                    comma-separated list. Unset = no restriction; set = nothing else gets through.
-                  </>
-                ),
-              },
-              {
-                n: "04",
-                title: "Confirm-in-chat contract",
-                body: (
-                  <>
-                    The tool description requires the model to obtain explicit user OK in chat
-                    before passing <code className="text-yellow text-xs">confirm: true</code>.
-                    Combine with the cap and allowlist for defense in depth.
-                  </>
-                ),
-              },
-            ].map(g => (
-              <div
-                key={g.n}
-                className="rounded-2xl p-5 flex gap-4"
-                style={{
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px solid rgba(255,255,255,0.06)",
-                }}
-              >
-                <span className="text-yellow font-mono text-xs font-bold">{g.n}</span>
-                <div>
-                  <div className="font-semibold mb-1.5">{g.title}</div>
-                  <p className="text-sm text-white/55 leading-relaxed">{g.body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        <div className="max-w-6xl mx-auto px-6 py-20 text-center">
-          <h2 className="text-3xl md:text-5xl font-bold tracking-tight mb-3">
-            Try the quote tool now.
-          </h2>
-          <p className="text-white/55 text-sm max-w-xl mx-auto mb-9">
-            No signup. No API key. Sandbox-safe. Real payments later — your first $1 of gas is on us.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              type="button"
-              onClick={() => navigator.clipboard.writeText(INSTALL_CMD)}
-              className="bg-yellow hover:bg-yellow-hover text-navy font-bold px-7 py-3.5 rounded-full transition-colors shadow-lg shadow-yellow/20"
-            >
-              Copy install command
-            </button>
-            <Link
-              href="/dashboard"
-              className="border border-white/15 hover:border-white/35 text-white/85 hover:text-white px-7 py-3.5 rounded-full transition-colors"
-            >
-              Get an API key →
+          <p className="text-[11px] text-white/35 mt-8">
+            Full reference, EIP-7702 details, Trust Receipt + safety guards:{" "}
+            <Link href="/docs#claude-mcp" className="text-yellow/80 hover:text-yellow underline-offset-2 hover:underline">
+              /docs → MCP for AI Clients
             </Link>
-          </div>
-          <p className="text-[11px] text-white/30 mt-10">
-            <a className="text-yellow/70 hover:text-yellow" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
-            {" · "}
-            <a className="text-yellow/70 hover:text-yellow" href="https://github.com/bitgett/q402-mcp">github.com/bitgett/q402-mcp</a>
-            {" · "}
-            <Link className="text-yellow/70 hover:text-yellow" href="/docs#claude-mcp">/docs → MCP for AI Clients</Link>
           </p>
         </div>
       </section>
 
+      {/* ── Footer (minimal) ─────────────────────────────────────────────── */}
       <footer className="py-10">
-        <div className="max-w-6xl mx-auto px-6 text-xs text-white/25 text-center">
-          Apache-2.0 · Built by Quack AI Labs · MCP is an open standard from Anthropic.
+        <div className="max-w-[88rem] mx-auto px-6 text-xs text-white/30 text-center">
+          <a className="text-yellow/70 hover:text-yellow" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
+          {" · "}
+          <a className="text-yellow/70 hover:text-yellow" href="https://github.com/bitgett/q402-mcp">github.com/bitgett/q402-mcp</a>
+          {" · "}
+          <Link className="text-yellow/70 hover:text-yellow" href="/docs#claude-mcp">/docs → MCP for AI Clients</Link>
+          <div className="mt-3 text-white/20">
+            Apache-2.0 · Built by Quack AI Labs · MCP is an open standard from Anthropic.
+          </div>
         </div>
       </footer>
     </div>
