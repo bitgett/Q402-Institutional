@@ -295,8 +295,12 @@ export async function POST(req: NextRequest) {
   //   priorWindow   = cumulative BNB-equiv USD already paid this window
   //                   (bootstraps from amountUSD for pre-v1.18 subs that
   //                    lack windowPaidBnbUSD — conservative, chain-blind)
-  //   thisBnbEquiv  = this payment's BNB-equivalent USD (divides out the
-  //                   chain price multiplier: ETH /1.5, AVAX /1.1, etc.)
+  //   thisBnbEquiv  = this payment's BNB-equivalent USD. As of MCP v0.5.8
+  //                   every chain ships at the same tier prices, so the
+  //                   per-chain multipliers in toBnbEquivUSD() are all
+  //                   1.0 — the function is currently the identity. We
+  //                   still route through it so the call-site stays
+  //                   feature-flag-free if per-chain pricing returns.
   //   newWindow     = priorWindow + thisBnbEquiv (carried into the sub record)
   //
   //   thisTier      = intent.quotedPlan — single-payment tier computed at
