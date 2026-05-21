@@ -22,7 +22,8 @@ export type DashboardTab =
   | "transactions"
   | "claude"
   | "gas-tank"
-  | "webhooks";
+  | "webhooks"
+  | "wallet";
 
 export interface SidebarSelection {
   view: "trial" | "multichain";
@@ -65,6 +66,7 @@ const TRIAL_TABS: TabDef[] = [
   { id: "overview",     label: "Overview",     icon: "◇" },
   { id: "developer",    label: "Developer",    icon: "{ }" },
   { id: "transactions", label: "Transactions", icon: "≡" },
+  { id: "wallet",       label: "Wallet",       icon: "◈" },
   { id: "claude",       label: "Claude",       icon: "C" },
 ];
 
@@ -73,6 +75,7 @@ const TRIAL_TABS: TabDef[] = [
 const MULTICHAIN_TABS: TabDef[] = [
   { id: "overview",     label: "Overview",     icon: "◇" },
   { id: "gas-tank",     label: "Gas Tank",     icon: "⛽" },
+  { id: "wallet",       label: "Wallet",       icon: "◈" },
   { id: "developer",    label: "Developer",    icon: "{ }" },
   { id: "transactions", label: "Transactions", icon: "≡" },
   { id: "claude",       label: "Claude",       icon: "C" },

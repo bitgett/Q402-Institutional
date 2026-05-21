@@ -11,6 +11,7 @@ const NAV = [
   { id: "claude-mcp",     label: "Claude MCP",      icon: "○" },
   { id: "trust-receipt",  label: "Trust Receipt",   icon: "○" },
   { id: "gaspool",        label: "Gas Pool",        icon: "○" },
+  { id: "eip-7702-delegation", label: "EIP-7702 Delegation", icon: "○" },
   { id: "auth",           label: "Authentication",  icon: "○" },
   { id: "api-ref",        label: "API Reference",   icon: "○" },
   { id: "chains",         label: "Chain Support",   icon: "○" },
@@ -588,6 +589,105 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
             <Callout type="warn">
               If your gas pool is empty, transactions will fail. Monitor the balance in your dashboard — and opt in to TX-credit email alerts (fire at 20 % / 10 % remaining) from the dashboard&apos;s Alerts panel. Top up via the dashboard or send native tokens directly to the Gas Tank address.
             </Callout>
+          </Section>
+
+          {/* ── EIP-7702 DELEGATION ── */}
+          <Section id="eip-7702-delegation" title="EIP-7702 Delegation">
+            <p className="text-white/55 text-sm mb-5 leading-relaxed">
+              When you make your first Q402 payment, your EOA is delegated to the Q402
+              implementation contract on that chain. This is{" "}
+              <strong className="text-white/80">EIP-7702 set-code delegation</strong>{" "}
+              (Pectra), and it&apos;s how Q402 settles gaslessly without deploying a smart
+              account per user.
+            </p>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
+              What this means
+            </h3>
+            <ul className="text-white/55 text-sm space-y-2 mb-6 leading-relaxed">
+              <li>
+                • Your wallet&apos;s <span className="font-mono text-white/70">eth_getCode</span>{" "}
+                returns <span className="font-mono text-white/70">0xef0100&hellip;&lt;impl&gt;</span>{" "}
+                instead of <span className="font-mono text-white/70">0x</span>.
+              </li>
+              <li>
+                • The delegation persists across transactions — subsequent Q402 payments on
+                the same chain reuse it (no re-authorization, no extra gas).
+              </li>
+              <li>
+                • Your wallet UI (MetaMask, OKX) may show a{" "}
+                <strong className="text-white/80">&ldquo;Smart account&rdquo;</strong>{" "}
+                indicator. This is normal — the delegation points to Q402&apos;s vetted impl
+                contract, source-verified on Sourcify and identical across all 9 supported
+                chains.
+              </li>
+            </ul>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
+              Side effects to know
+            </h3>
+            <div className="overflow-x-auto mb-6">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/8 text-left text-white/40 text-xs uppercase tracking-widest">
+                    <th className="py-2 pr-3 font-semibold">Effect</th>
+                    <th className="py-2 pr-3 font-semibold">Severity</th>
+                    <th className="py-2 font-semibold">What to do</th>
+                  </tr>
+                </thead>
+                <tbody className="text-white/65">
+                  <tr className="border-b border-white/5">
+                    <td className="py-3 pr-3">Native gas-token sends into your EOA may revert (impl has no <code className="text-white/70 text-xs">receive()</code>)</td>
+                    <td className="py-3 pr-3 text-yellow text-xs">Medium</td>
+                    <td className="py-3">Clear the delegation before receiving native gas</td>
+                  </tr>
+                  <tr className="border-b border-white/5">
+                    <td className="py-3 pr-3">Wallet UI shows &ldquo;Smart account&rdquo; warning</td>
+                    <td className="py-3 pr-3 text-white/35 text-xs">Cosmetic</td>
+                    <td className="py-3">Ignore, or clear</td>
+                  </tr>
+                  <tr>
+                    <td className="py-3 pr-3">Some DeFi apps may treat your EOA as a contract</td>
+                    <td className="py-3 pr-3 text-white/35 text-xs">Rare</td>
+                    <td className="py-3">Clear if you hit an issue</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
+              Clearing the delegation
+            </h3>
+            <p className="text-white/55 text-sm mb-4 leading-relaxed">
+              The easiest way is the{" "}
+              <Link className="text-yellow hover:underline" href="/dashboard">dashboard&apos;s Wallet tab</Link>
+              {" "}— it shows delegation status across all 9 chains and clears any chain in one
+              click (Q402 sponsors the gas). For headless / CI flows, use the CLI:
+            </p>
+            <CodeBlock lang="bash" code={`# Self-paid mode (you pay ~$0.001 in native gas)
+PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs --chain bnb
+
+# Sponsored mode (Q402 covers gas; requires our relayer key)
+PRIVATE_KEY=0x<yourKey> SPONSOR_PRIVATE_KEY=0x<sponsor> \\
+  node scripts/undelegate-7702.mjs --chain bnb --sponsor`} />
+            <p className="text-white/45 text-xs mt-3 mb-6 leading-relaxed">
+              Sponsored mode requires the Q402 relayer&apos;s private key, which we only share
+              with active business partners. Self-paid mode is open to anyone and works on all 9
+              chains. After clearing, <span className="font-mono text-white/65">eth_getCode</span>{" "}
+              returns <span className="font-mono text-white/65">0x</span> and your wallet behaves
+              exactly like before — your next Q402 payment creates a fresh delegation
+              automatically (no permanent state change).
+            </p>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
+              Why we use it
+            </h3>
+            <p className="text-white/55 text-sm leading-relaxed">
+              EIP-7702 lets us settle stablecoin payments gaslessly across 9 EVM chains with a
+              single primitive, without deploying a smart account contract per user (which would
+              cost gas on every chain × every user). The trade-off is the cosmetic delegation
+              marker on your EOA, which you can clean up anytime.
+            </p>
           </Section>
 
           {/* ── AUTHENTICATION ── */}
