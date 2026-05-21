@@ -58,7 +58,45 @@ type ClearStatus =
   | { phase: "signing" }         // wallet popup open for authorize()
   | { phase: "broadcasting" }    // server is broadcasting type-4 TX
   | { phase: "success"; txHash: string; explorerUrl: string }
-  | { phase: "error";   message: string };
+  | { phase: "error";   message: string; kind?: "wallet-unsupported" | "user-rejected" | "rate-limited" | "generic" };
+
+// Heuristic: classify a thrown error from signer.authorize() so the UI can
+// surface a targeted next step instead of a generic "Failed". OKX Wallet
+// (and pre-12.x MetaMask, and any wallet that hasn't shipped EIP-7702
+// support yet) throws something matching one of these patterns when the
+// `wallet_signAuthorization` RPC isn't implemented.
+function classifyError(msg: string): {
+  kind:    "wallet-unsupported" | "user-rejected" | "rate-limited" | "generic";
+  human:   string;
+} {
+  const lower = msg.toLowerCase();
+  if (
+    lower.includes("wallet_signauthorization") ||
+    lower.includes("method not found") ||
+    lower.includes("not supported") ||
+    lower.includes("unsupported method") ||
+    lower.includes("unknown method") ||
+    lower.includes("does not exist") ||
+    /\beip[\s-]?7702\b/.test(lower)
+  ) {
+    return {
+      kind:  "wallet-unsupported",
+      human: "Your wallet doesn't support EIP-7702 signing yet. MetaMask 12.x+ works; for OKX and other wallets, use the CLI in docs.",
+    };
+  }
+  if (
+    lower.includes("user rejected") ||
+    lower.includes("user denied")   ||
+    lower.includes("4001")          ||  // EIP-1193 user rejection
+    lower.includes("ACTION_REJECTED".toLowerCase())
+  ) {
+    return { kind: "user-rejected", human: "You declined the signature in your wallet." };
+  }
+  if (lower.includes("rate_limited") || lower.includes("rate-limited")) {
+    return { kind: "rate-limited", human: "Too many attempts. Try again in an hour." };
+  }
+  return { kind: "generic", human: msg };
+}
 
 export default function WalletDelegationCard() {
   const { address, isConnected } = useWallet();
@@ -159,8 +197,9 @@ export default function WalletDelegationCard() {
       // flipped the row's visual state via this phase.
       setTimeout(() => { void refresh(); }, 2500);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setPhase({ phase: "error", message: msg });
+      const msg  = e instanceof Error ? e.message : String(e);
+      const info = classifyError(msg);
+      setPhase({ phase: "error", message: info.human, kind: info.kind });
     }
   }
 
@@ -220,69 +259,108 @@ export default function WalletDelegationCard() {
           const isWorking = phase === "switching" || phase === "signing" || phase === "broadcasting";
           const isDelegated = !!row?.delegated;
 
+          const errorState = perChain[c.key] as { phase: "error"; message: string; kind?: string } | undefined;
+          const cliCommand = `PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs --chain ${c.key}`;
+
           return (
-            <div key={c.key} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-              <span className="w-5 h-5 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={c.img} alt={c.name} className="w-full h-full object-cover" />
-              </span>
-              <span className="text-white/85 text-sm flex-shrink-0 w-32">{c.name}</span>
+            <div key={c.key} className="py-3 first:pt-0 last:pb-0">
+              <div className="flex items-center gap-3">
+                <span className="w-5 h-5 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={c.img} alt={c.name} className="w-full h-full object-cover" />
+                </span>
+                <span className="text-white/85 text-sm flex-shrink-0 w-32">{c.name}</span>
 
-              {/* Status indicator */}
-              <span className="flex items-center gap-1.5 text-xs flex-1">
-                {row?.error ? (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
-                    <span className="text-white/40">RPC error — try refresh</span>
-                  </>
-                ) : isDelegated ? (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow" style={{ boxShadow: "0 0 4px #F5C518" }} />
-                    <span className="text-white/65">Delegated</span>
-                    {row?.impl && (
-                      <span className="text-white/30 font-mono text-[10px] ml-1 truncate">
-                        → {row.impl.slice(0, 6)}…{row.impl.slice(-4)}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-white/15" />
-                    <span className="text-white/40">Not delegated</span>
-                  </>
-                )}
-              </span>
+                {/* Status indicator */}
+                <span className="flex items-center gap-1.5 text-xs flex-1">
+                  {row?.error ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
+                      <span className="text-white/40">RPC error — try refresh</span>
+                    </>
+                  ) : isDelegated ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-yellow" style={{ boxShadow: "0 0 4px #F5C518" }} />
+                      <span className="text-white/65">Delegated</span>
+                      {row?.impl && (
+                        <span className="text-white/30 font-mono text-[10px] ml-1 truncate">
+                          → {row.impl.slice(0, 6)}…{row.impl.slice(-4)}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-white/15" />
+                      <span className="text-white/40">Not delegated</span>
+                    </>
+                  )}
+                </span>
 
-              {/* Action / phase feedback */}
-              <div className="flex-shrink-0 min-w-[140px] text-right">
-                {phase === "success" ? (
-                  <a
-                    href={(perChain[c.key] as { phase: "success"; txHash: string; explorerUrl: string }).explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-green-400 text-xs hover:text-green-300 transition-colors"
-                  >
-                    Cleared ↗
-                  </a>
-                ) : phase === "error" ? (
-                  <span className="text-red-400 text-[11px] truncate inline-block max-w-[150px]" title={(perChain[c.key] as { phase: "error"; message: string }).message}>
-                    Failed
-                  </span>
-                ) : isDelegated ? (
-                  <button
-                    onClick={() => void handleClear(c.key, c.chainId)}
-                    disabled={isWorking || !isConnected}
-                    className="px-3 py-1.5 rounded-lg border border-yellow/30 bg-yellow/5 text-yellow text-xs font-medium hover:bg-yellow/10 hover:border-yellow/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {phase === "switching"     ? "Switching…"
-                     : phase === "signing"     ? "Sign in wallet…"
-                     : phase === "broadcasting"? "Broadcasting…"
-                     :                            "Clear delegation"}
-                  </button>
-                ) : (
-                  <span className="text-white/15 text-xs">—</span>
-                )}
+                {/* Action / phase feedback */}
+                <div className="flex-shrink-0 min-w-[140px] text-right">
+                  {phase === "success" ? (
+                    <a
+                      href={(perChain[c.key] as { phase: "success"; txHash: string; explorerUrl: string }).explorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-green-400 text-xs hover:text-green-300 transition-colors"
+                    >
+                      Cleared ↗
+                    </a>
+                  ) : phase === "error" ? (
+                    <button
+                      onClick={() => void handleClear(c.key, c.chainId)}
+                      className="text-red-400 text-[11px] hover:text-red-300 transition-colors"
+                    >
+                      Retry →
+                    </button>
+                  ) : isDelegated ? (
+                    <button
+                      onClick={() => void handleClear(c.key, c.chainId)}
+                      disabled={isWorking || !isConnected}
+                      className="px-3 py-1.5 rounded-lg border border-yellow/30 bg-yellow/5 text-yellow text-xs font-medium hover:bg-yellow/10 hover:border-yellow/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {phase === "switching"     ? "Switching…"
+                       : phase === "signing"     ? "Sign in wallet…"
+                       : phase === "broadcasting"? "Broadcasting…"
+                       :                            "Clear delegation"}
+                    </button>
+                  ) : (
+                    <span className="text-white/15 text-xs">—</span>
+                  )}
+                </div>
               </div>
+
+              {/* Expanded error row — surfaces the actual message + CLI
+                  fallback when the user's wallet can't sign EIP-7702
+                  authorizations. The kind="wallet-unsupported" branch
+                  is the OKX / pre-12.x MetaMask case. */}
+              {phase === "error" && errorState && (
+                <div className="ml-8 mt-2 pl-4 border-l-2 border-red-400/30">
+                  <p className="text-red-300/80 text-[11px] leading-relaxed mb-2">
+                    {errorState.message}
+                  </p>
+                  {errorState.kind === "wallet-unsupported" && (
+                    <div className="rounded-md bg-white/[0.02] border border-white/[0.05] p-2 flex items-center gap-2">
+                      <code className="text-white/55 text-[10px] font-mono flex-1 truncate" title={cliCommand}>
+                        {cliCommand}
+                      </code>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(cliCommand)}
+                        className="text-white/45 hover:text-white text-[10px] font-medium flex-shrink-0"
+                      >
+                        Copy
+                      </button>
+                      <a
+                        href="/docs#eip-7702-delegation"
+                        className="text-yellow/80 hover:text-yellow text-[10px] flex-shrink-0"
+                      >
+                        Docs ↗
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
