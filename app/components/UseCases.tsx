@@ -46,8 +46,8 @@ const TABS: Tab[] = [
     category: "Agent Infrastructure · New",
     hook:     "Tell your agent. It pays.",
     description:
-      "Pre-fund one Gas Tank per chain and let Claude, Codex, Cline — or your own agent — call Q402 through MCP. Five tools, signed Trust Receipts on every settlement, sandbox by default, 2,000 sponsored TX to start.",
-    chips: ["5 MCP TOOLS", "BATCH × 20", "TRUST RECEIPTS", "SANDBOX DEFAULT"],
+      "Pre-fund one Gas Tank per chain and let Claude, Codex, Cursor, Cline — or your own agent — call Q402 through MCP. Eight tools (including q402_doctor for one-prompt setup), signed Trust Receipts on every settlement, sandbox by default, 2,000 sponsored TX to start.",
+    chips: ["8 MCP TOOLS", "BATCH × 20", "TRUST RECEIPTS", "SANDBOX DEFAULT"],
     transcript: [
       { role: "you",   body: "Send 5 USDC to vitalik.eth on BNB." },
       {

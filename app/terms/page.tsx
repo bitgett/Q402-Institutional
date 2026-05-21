@@ -54,7 +54,7 @@ export default function TermsPage() {
               <li>Subscriptions are activated via on-chain USDC, USDT, or RLUSD payment to the Q402 payment address (RLUSD on Ethereum mainnet only).</li>
               <li>All payments are final and non-refundable once on-chain confirmation is received.</li>
               <li>Each paid purchase grants a 30-day access window plus the transaction credits listed for the selected tier. Credits accumulate across renewals; access days stack if you renew before expiry.</li>
-              <li>Your plan level is determined by cumulative paid amount within an active 30-day window, normalized to BNB Chain base pricing (Ethereum and Avalanche payments are converted at the published chain multiplier). When cumulative spend crosses a higher tier&apos;s threshold, your plan upgrades automatically. Plans never downgrade while the window is active. If the window lapses (no payment for 30 days after the last renewal), cumulative resets and the next payment establishes a new window.</li>
+              <li>Your plan level is determined by cumulative paid amount within an active 30-day window. The same tier prices apply on every supported chain, so cumulative spend is summed in plain USD (no per-chain conversion). When cumulative spend crosses a higher tier&apos;s threshold, your plan upgrades automatically. Plans never downgrade while the window is active. If the window lapses (no payment for 30 days after the last renewal), cumulative resets and the next payment establishes a new window.</li>
               <li>Transaction credits are enforced as stated on the pricing page at purchase time.</li>
               <li>Q402 reserves the right to change pricing with 14 days&apos; notice via email or dashboard notification.</li>
             </ul>
@@ -63,10 +63,12 @@ export default function TermsPage() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">5. Gas Tank</h2>
             <p className="mb-3">
-              Some plans require customers to pre-fund a Gas Tank by depositing native tokens (BNB, ETH,
-              AVAX, OKB, or USDT0) to the Q402 Gas Tank address displayed per-chain in your Dashboard →
-              Gas Tank tab. Do not send Gas Tank deposits to the relayer (signer) address. These deposits
-              are used exclusively to cover on-chain gas costs for your relayed transactions.
+              Some plans require customers to pre-fund a Gas Tank by depositing the native gas token for
+              the selected chain to the Q402 Gas Tank address shown in your Dashboard → Gas Tank tab
+              (each chain has its own address and its own native token — refer to the dashboard for the
+              exact deposit instructions per chain). Do not send Gas Tank deposits to the relayer
+              (signer) address. These deposits are used exclusively to cover on-chain gas costs for
+              your relayed transactions.
             </p>
             <p className="mb-3">
               Gas Tank balances are non-refundable except by explicit arrangement with Q402 support.

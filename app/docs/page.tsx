@@ -965,7 +965,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "How does billing work? Can I upgrade my plan?",
-                a: "Each paid purchase grants a 30-day access window plus the transaction credits listed for that tier. Your plan tier is set by cumulative paid amount within the active window, normalized to BNB Chain base pricing (Ethereum and Avalanche are converted at the chain multiplier). Top up within 30 days and your plan upgrades automatically when cumulative spend crosses the next tier. Plans never downgrade while the window is active; if you let the window lapse, cumulative resets."
+                a: "Each paid purchase grants a 30-day access window plus the transaction credits listed for that tier. Your plan tier is set by cumulative paid amount within the active window — every supported chain uses the same tier prices, so cumulative spend is summed in plain USD with no per-chain conversion. Top up within 30 days and your plan upgrades automatically when cumulative spend crosses the next tier. Plans never downgrade while the window is active; if you let the window lapse, cumulative resets."
               },
             ].map((item, i) => (
               <div key={i} className="mb-4 p-5 rounded-xl border border-white/8">
