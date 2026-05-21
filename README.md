@@ -243,7 +243,7 @@ Two paths — both produce the same Q402-sponsored on-chain TX:
     --chain <bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll>
   ```
 
-After clearing, `eth_getCode` returns `0x` and your wallet behaves exactly like before. The next Q402 payment creates a fresh delegation (no permanent state change). A browser-dashboard option is on hold until wallet RPC coverage for `wallet_signAuthorization` is wider — see [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation) for the full explanation.
+After clearing, `eth_getCode` returns `0x` and your wallet behaves exactly like before. The next Q402 payment creates a fresh delegation (no permanent state change). Full guide: [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation).
 
 ---
 
