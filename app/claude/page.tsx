@@ -50,18 +50,8 @@ const CHAINS: ChainRow[] = [
 // underneath — no client-specific server code.
 type ClientKey = "claude" | "codex" | "cursor" | "cline";
 
-interface ClientInstall {
-  key:     ClientKey;
-  name:    string;
-  logo:    string;
-  /** "cli" → snippet is a one-liner; "json" → snippet is a JSON config. */
-  kind:    "cli" | "json";
-  snippet: string;
-  /** One-line guidance shown under the snippet. */
-  hint:    string;
-}
-
-const SHARED_JSON = `{
+// Full mcp.json shape — save as-is when the file does not yet exist.
+const SHARED_JSON_FULL = `{
   "mcpServers": {
     "q402": {
       "command": "npx",
@@ -70,6 +60,27 @@ const SHARED_JSON = `{
   }
 }`;
 
+// Inner entry — paste INSIDE an existing `mcpServers` object when the
+// file already has other MCP servers. We surface this as the safe path
+// for any user who already wired up another MCP server, since pasting
+// the full SHARED_JSON_FULL would clobber whatever else is there.
+const SHARED_JSON_INNER = `"q402": { "command": "npx", "args": ["-y", "@quackai/q402-mcp"] }`;
+
+interface ClientInstall {
+  key:           ClientKey;
+  name:          string;
+  logo:          string;
+  kind:          "cli" | "json";
+  /** Primary snippet — the one shown front-and-center in the tab. */
+  snippet:       string;
+  /** JSON-only: the safer "merge into existing config" variant. */
+  innerSnippet?: string;
+  /** Where the inner snippet lives (path or UI breadcrumb). */
+  configPath?:   string;
+  /** One-line guidance under the snippet. */
+  hint:          string;
+}
+
 const CLIENTS: ClientInstall[] = [
   {
     key:     "claude",
@@ -77,7 +88,7 @@ const CLIENTS: ClientInstall[] = [
     logo:    "/logos/claude.svg",
     kind:    "cli",
     snippet: "claude mcp add q402 -- npx -y @quackai/q402-mcp",
-    hint:    "Claude Code CLI or Claude Desktop. Restart the app after running.",
+    hint:    "Claude Code CLI or Claude Desktop. Reload / restart the app after running.",
   },
   {
     key:     "codex",
@@ -85,23 +96,27 @@ const CLIENTS: ClientInstall[] = [
     logo:    "/logos/codex.svg",
     kind:    "cli",
     snippet: "codex mcp add q402 -- npx -y @quackai/q402-mcp",
-    hint:    "OpenAI Codex CLI. Restart Codex after running.",
+    hint:    "OpenAI Codex CLI. Restart Codex (`codex` → quit, then re-launch) after running.",
   },
   {
-    key:     "cursor",
-    name:    "Cursor",
-    logo:    "/logos/cursor.svg",
-    kind:    "json",
-    snippet: SHARED_JSON,
-    hint:    "Paste into ~/.cursor/mcp.json (or .cursor/mcp.json for per-project scope). Restart Cursor.",
+    key:          "cursor",
+    name:         "Cursor",
+    logo:         "/logos/cursor.svg",
+    kind:         "json",
+    snippet:      SHARED_JSON_FULL,
+    innerSnippet: SHARED_JSON_INNER,
+    configPath:   "~/.cursor/mcp.json",
+    hint:         "Save the full snippet as ~/.cursor/mcp.json if the file is new. After saving, reload Cursor (Cmd/Ctrl+Shift+P → Developer: Reload Window).",
   },
   {
-    key:     "cline",
-    name:    "Cline",
-    logo:    "/logos/cline.svg",
-    kind:    "json",
-    snippet: SHARED_JSON,
-    hint:    "Cline → Settings → MCP Servers → Edit JSON. Reload VS Code.",
+    key:          "cline",
+    name:         "Cline",
+    logo:         "/logos/cline.svg",
+    kind:         "json",
+    snippet:      SHARED_JSON_FULL,
+    innerSnippet: SHARED_JSON_INNER,
+    configPath:   "Cline → Settings → MCP Servers → Edit JSON",
+    hint:         "Open Cline's MCP servers JSON editor and paste. Reload VS Code (Cmd/Ctrl+Shift+P → Developer: Reload Window) when done.",
   },
 ];
 
@@ -309,9 +324,10 @@ export default function ClaudePage() {
               })}
             </div>
 
-            {/* Snippet box */}
+            {/* Snippet box — same min-h across CLI / JSON so switching tabs
+                doesn't jump the layout. */}
             <div
-              className="relative px-4 py-3.5 rounded-xl font-mono text-sm overflow-hidden"
+              className="relative px-4 py-3.5 rounded-xl font-mono text-sm overflow-hidden min-h-[180px] flex flex-col"
               style={{
                 background: "linear-gradient(120deg, rgba(245,158,11,0.06), rgba(255,255,255,0.02))",
                 border:     "1px solid rgba(245,158,11,0.30)",
@@ -326,13 +342,23 @@ export default function ClaudePage() {
                 style={{ background: "linear-gradient(90deg, transparent, rgba(255,224,160,0.18), transparent)" }}
               />
               {current.kind === "cli" ? (
-                <div className="relative flex items-center gap-3">
-                  <span className="text-yellow/80">$</span>
-                  <span className="flex-1 truncate text-white/85">{current.snippet}</span>
-                  <CopyButton value={current.snippet} />
+                <div className="relative flex flex-col gap-3 flex-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-yellow/80">$</span>
+                    <span className="flex-1 truncate text-white/85">{current.snippet}</span>
+                    <CopyButton value={current.snippet} />
+                  </div>
+                  <div className="text-[11px] text-white/35 leading-relaxed">
+                    The command writes the q402 entry into{" "}
+                    <code className="text-white/55">
+                      {current.key === "claude" ? "~/.claude.json" : "~/.codex/config.toml"}
+                    </code>
+                    {" "}for you — no need to find or edit the file by hand. Existing MCP servers
+                    in that file are preserved.
+                  </div>
                 </div>
               ) : (
-                <div className="relative">
+                <div className="relative flex flex-col flex-1">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[10px] uppercase tracking-widest text-white/35 font-semibold">
                       paste as JSON
@@ -340,11 +366,28 @@ export default function ClaudePage() {
                     <CopyButton value={current.snippet} />
                   </div>
                   <pre className="text-xs text-white/85 whitespace-pre overflow-x-auto leading-relaxed">{current.snippet}</pre>
+                  {current.innerSnippet && (
+                    <details className="mt-3 group">
+                      <summary className="text-[11px] text-yellow/70 hover:text-yellow cursor-pointer select-none list-none flex items-center gap-1.5">
+                        <span className="inline-block transition-transform group-open:rotate-90 text-white/35">▸</span>
+                        Already have <code className="text-white/55 text-[11px]">{current.configPath}</code> with other MCP servers?
+                      </summary>
+                      <div className="mt-2 text-[11px] text-white/55 leading-relaxed pl-4">
+                        Don&apos;t replace the file — that&apos;d clobber your other servers. Open
+                        it and add this entry <strong className="text-white/75">inside</strong> the
+                        existing <code className="text-white/60 text-[11px]">mcpServers</code> object:
+                        <div className="mt-2 flex items-center gap-2">
+                          <pre className="flex-1 text-[11px] text-white/75 whitespace-pre overflow-x-auto leading-relaxed">{current.innerSnippet}</pre>
+                          <CopyButton value={current.innerSnippet} label="Copy entry" />
+                        </div>
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
             </div>
 
-            <p className="text-[11px] text-white/40 mt-2">{current.hint}</p>
+            <p className="text-[11px] text-white/40 mt-2 leading-relaxed">{current.hint}</p>
 
             {/* doctor-first call-to-action — the actual setup prompt */}
             <div

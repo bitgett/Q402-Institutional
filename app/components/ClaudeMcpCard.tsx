@@ -119,10 +119,12 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
         <p className="text-white/35 text-[11px] mb-2 leading-relaxed">
           Snippet ships with your <strong className="text-white/55">sandbox key</strong> in the
           {" "}<code className="text-white/50">Q402_MULTICHAIN_API_KEY</code> slot — safe to paste
-          anywhere. For live payments, swap in a real key and add{" "}
-          <code className="text-white/50">Q402_PRIVATE_KEY</code> +{" "}
-          <code className="text-white/50">Q402_ENABLE_REAL_PAYMENTS=1</code> in your shell
-          (or run <code className="text-yellow/80">q402_doctor</code> after install).
+          anywhere. For live payments, the recommended path is to ask your AI{" "}
+          <strong className="text-white/65">&ldquo;Set up Q402&rdquo;</strong> after install — it
+          calls <code className="text-yellow/80">q402_doctor</code> and walks you through
+          creating <code className="text-white/50">~/.q402/mcp.env</code> with your real key and
+          wallet private key. (The server auto-loads that file, so you never have to put live
+          secrets in this JSON.)
         </p>
         <div className="relative">
           <pre className="bg-[#060C14] border border-white/7 rounded-xl p-4 overflow-x-auto">
@@ -149,14 +151,13 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
           <span className="text-orange-300/80 font-semibold uppercase tracking-widest text-[10px] mr-2">
             Live mode
           </span>
-          Real on-chain payments need a live key set as{" "}
-          <code className="text-white/55">Q402_TRIAL_API_KEY</code> (BNB-only sponsored) or{" "}
-          <code className="text-white/55">Q402_MULTICHAIN_API_KEY</code> (paid 9-chain), plus{" "}
-          <code className="text-white/55">Q402_PRIVATE_KEY</code> and{" "}
-          <code className="text-white/55">Q402_ENABLE_REAL_PAYMENTS=1</code>{" "}
-          <strong className="text-white/65">all set in your shell environment</strong> — not in
-          the JSON above. The config file syncs through iCloud/OneDrive on most setups; keeping
-          live secrets out of it is the safer default.
+          Recommended: after restart, ask your AI{" "}
+          <strong className="text-white/75">&ldquo;Set up Q402&rdquo;</strong>. The MCP server
+          ships with a <code className="text-white/55">q402_doctor</code> tool that creates{" "}
+          <code className="text-white/55">~/.q402/mcp.env</code>, opens it in your editor, and
+          walks you through pasting your real key (Trial or Multichain) and wallet private key.
+          The server auto-loads that file on startup, so live secrets stay out of this JSON —
+          which syncs through iCloud/OneDrive on most setups and would otherwise be the leak surface.
         </div>
         <div className="text-white/30">
           See{" "}

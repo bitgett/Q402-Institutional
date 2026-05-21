@@ -498,20 +498,27 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Sandbox vs live mode</h3>
             <p className="text-white/55 text-sm mb-3">
-              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a random fake transaction hash, no funds move, no gas-tank credit is consumed. The doctor walks you through enabling live mode; the env file looks like this when fully configured:
+              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a fake transaction hash with <code className="text-yellow text-xs">success: false</code> and <code className="text-yellow text-xs">sandbox: true</code>, no funds move, no gas-tank credit is consumed. The doctor walks you through enabling live mode; the env file <code className="text-yellow text-xs">q402_doctor</code> writes starts with every secret line commented out and the live flag at <code className="text-yellow text-xs">0</code> — you uncomment the lines you need, paste real values in your editor, and flip the flag to <code className="text-yellow text-xs">1</code>:
             </p>
-            <CodeBlock lang="bash" code={`# Trial / Multichain split — set whichever applies (or both).
-# Auto-routing rule (same for q402_pay AND q402_batch_pay):
-#   chain="bnb" + Q402_TRIAL_API_KEY set  → Trial (free sponsored)
-#   anything else                          → Multichain (paid 9-chain)
-# Batch ambiguity: 6+ recipient BNB batch with Trial set returns
-#   status="ambiguous" so the agent can ask the user which path to take.
-# Override per call with keyScope: "auto" | "trial" | "multichain".
-Q402_TRIAL_API_KEY=q402_live_...              # BNB-only sponsored Trial key (from /event)
-Q402_MULTICHAIN_API_KEY=q402_live_...         # paid 9-chain key (per-chain Gas Tank)
+            <CodeBlock lang="bash" code={`# ~/.q402/mcp.env — what q402_doctor creates on first install.
+# Uncomment ONE api-key line + Q402_PRIVATE_KEY, then flip
+# Q402_ENABLE_REAL_PAYMENTS to 1 once real values are in.
 
-Q402_PRIVATE_KEY=0xabc...                     # signer for the payer EOA
-Q402_ENABLE_REAL_PAYMENTS=1                   # explicit opt-in for live mode`} />
+# Free Trial — BNB only, 2,000 sponsored TX (from /event)
+# Q402_TRIAL_API_KEY=q402_live_...
+
+# Paid Multichain — all 9 chains (from /payment)
+# Q402_MULTICHAIN_API_KEY=q402_live_...
+
+# Hex EVM private key. Use a FRESH wallet, not your main one —
+# Q402 delegates this EOA via EIP-7702 on first payment.
+# Q402_PRIVATE_KEY=0x...
+
+# Start at 0 (sandbox). Flip to 1 only after real values are pasted above.
+Q402_ENABLE_REAL_PAYMENTS=0
+
+# Default Q402 deployment. Only change for self-hosted.
+Q402_RELAY_BASE_URL=https://q402.quackai.ai/api`} />
             <p className="text-white/40 text-xs mb-6">
               Anything missing → automatic sandbox fallback with a hint pointing at what to set. Two additional guards run regardless of mode: <code className="text-white/60">Q402_MAX_AMOUNT_PER_CALL</code> (default $5) caps any single call, and <code className="text-white/60">Q402_ALLOWED_RECIPIENTS</code> optionally restricts to an address allowlist.
             </p>

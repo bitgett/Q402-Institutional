@@ -41,25 +41,25 @@ describe("planFromAmount", () => {
     });
   });
 
-  describe("Ethereum thresholds (higher multiplier)", () => {
-    it("returns null below $39", () => {
-      expect(planFromAmount(38, "Ethereum")).toBeNull();
+  describe("Ethereum thresholds (unified pricing — same as BNB since 0.5.8)", () => {
+    it("returns null below $29", () => {
+      expect(planFromAmount(28, "Ethereum")).toBeNull();
     });
 
-    it("returns starter at $39", () => {
-      expect(planFromAmount(39, "Ethereum")).toBe("starter");
+    it("returns starter at $29", () => {
+      expect(planFromAmount(29, "Ethereum")).toBe("starter");
     });
 
-    it("returns business at $1199", () => {
-      expect(planFromAmount(1199, "Ethereum")).toBe("business");
+    it("returns business at $799", () => {
+      expect(planFromAmount(799, "Ethereum")).toBe("business");
     });
 
-    it("returns enterprise_flex at $2999", () => {
-      expect(planFromAmount(2999, "Ethereum")).toBe("enterprise_flex");
+    it("returns enterprise_flex at $1999", () => {
+      expect(planFromAmount(1999, "Ethereum")).toBe("enterprise_flex");
     });
   });
 
-  describe("Avalanche thresholds", () => {
+  describe("Avalanche thresholds (unified pricing — same as BNB since 0.5.8)", () => {
     it("returns null below $29", () => {
       expect(planFromAmount(28, "Avalanche")).toBeNull();
     });
@@ -68,8 +68,8 @@ describe("planFromAmount", () => {
       expect(planFromAmount(29, "Avalanche")).toBe("starter");
     });
 
-    it("returns growth at $99 (Avalanche-specific)", () => {
-      expect(planFromAmount(99, "Avalanche")).toBe("growth");
+    it("returns growth at $89 (same threshold as BNB)", () => {
+      expect(planFromAmount(89, "Avalanche")).toBe("growth");
     });
   });
 
@@ -138,17 +138,17 @@ describe("txQuotaFromAmount", () => {
     });
   });
 
-  describe("Ethereum (higher thresholds)", () => {
-    it("returns 0 below $39", () => {
-      expect(txQuotaFromAmount(38, "Ethereum")).toBe(0);
+  describe("Ethereum (unified pricing — same as BNB since 0.5.8)", () => {
+    it("returns 0 below $29", () => {
+      expect(txQuotaFromAmount(28, "Ethereum")).toBe(0);
     });
 
-    it("returns 500 at $39", () => {
-      expect(txQuotaFromAmount(39, "Ethereum")).toBe(500);
+    it("returns 500 at $29", () => {
+      expect(txQuotaFromAmount(29, "Ethereum")).toBe(500);
     });
 
-    it("returns 100000 at $1199", () => {
-      expect(txQuotaFromAmount(1199, "Ethereum")).toBe(100_000);
+    it("returns 100000 at $799", () => {
+      expect(txQuotaFromAmount(799, "Ethereum")).toBe(100_000);
     });
   });
 
