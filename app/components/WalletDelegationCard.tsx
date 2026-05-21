@@ -74,7 +74,9 @@ function classifyError(msg: string): {
     lower.includes("wallet_signauthorization") ||
     lower.includes("method not found") ||
     lower.includes("not supported") ||
+    lower.includes("not implemented") ||      // ethers v6 raw msg ("authorization not implemented for this signer")
     lower.includes("unsupported method") ||
+    lower.includes("unsupported_operation") || // ethers v6 error code on the same case
     lower.includes("unknown method") ||
     lower.includes("does not exist") ||
     /\beip[\s-]?7702\b/.test(lower)
