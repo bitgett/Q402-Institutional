@@ -413,12 +413,17 @@ console.log("Paid! TX:", result.txHash);`} />
             </p>
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Install</h3>
-            <CodeBlock lang="bash" code={`# Claude Code CLI
+            <p className="text-white/55 text-sm mb-3">
+              Register the MCP server with your client. Same package, different one-liner per client — no secrets in any of these snippets.
+            </p>
+            <CodeBlock lang="bash" code={`# Claude Code / Claude Desktop
 claude mcp add q402 -- npx -y @quackai/q402-mcp
 
-# Or paste this into claude_desktop_config.json:
-# (macOS:   ~/Library/Application Support/Claude/claude_desktop_config.json)
-# (Windows: %APPDATA%\\Claude\\claude_desktop_config.json)
+# OpenAI Codex CLI
+codex mcp add q402 -- npx -y @quackai/q402-mcp
+
+# Cursor — paste into ~/.cursor/mcp.json (or .cursor/mcp.json for per-project scope)
+# Cline  — Cline → Settings → MCP Servers → Edit JSON. Same shape.
 {
   "mcpServers": {
     "q402": {
@@ -428,7 +433,15 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
   }
 }`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · Tools exposed</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · First-time setup — ask your AI</h3>
+            <p className="text-white/55 text-sm mb-3">
+              After restarting the client, say: <strong className="text-white/85">&ldquo;Set up Q402&rdquo;</strong>. The agent calls <code className="text-yellow text-xs">q402_doctor</code>, which offers to create <code className="text-yellow text-xs">~/.q402/mcp.env</code> with placeholder values, opens it in your editor, and walks you through pasting in your real API key and wallet private key — <em>in the file, never in chat</em>. The MCP server auto-loads this single file at startup, so the same setup works for every MCP client without per-client wiring.
+            </p>
+            <Callout type="tip">
+              🔒 Q402 never asks you to paste your private key into chat. The MCP server signs payments LOCALLY on your machine — your key never leaves your device.
+            </Callout>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">3 · Tools exposed</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <table className="w-full text-sm">
                 <thead>
@@ -439,6 +452,11 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                   </tr>
                 </thead>
                 <tbody className="text-white/65">
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_doctor</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
+                    <td className="px-4 py-3">First-install onboarding + ongoing health check. Detects what env vars are missing, offers to create <code className="text-white/60 text-xs">~/.q402/mcp.env</code> on first run, and on a configured wallet verifies per-scope quota, EIP-7702 delegation per chain, relay reachability, and surfaces slot-mismatch warnings. Call this BEFORE <code className="text-yellow text-xs">q402_pay</code> on a fresh install.</td>
+                  </tr>
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_quote</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
@@ -459,18 +477,28 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
                     <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
                     <td className="px-4 py-3">Send one signed batch to up to 20 recipients on a single chain × token (trial keys: 5 max). Auto-routing follows the same rule as <code className="text-yellow text-xs">q402_pay</code> (BNB + Trial key set → Trial; else Multichain). 6+ recipient BNB batches with a Trial key return <code className="text-yellow text-xs">status=&quot;ambiguous&quot;</code> so the agent can ask the user to pick: trim to 5 (free), all-paid Multichain, or split into two calls. Supported chains: avax, bnb, eth, mantle, injective, monad, scroll. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</td>
                   </tr>
-                  <tr>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_receipt</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
                     <td className="px-4 py-3">Fetch + locally verify a Trust Receipt by <code className="text-white/60 text-xs">rct_</code>… id. Recovers the relayer ECDSA signature client-side.</td>
+                  </tr>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_wallet_status</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">private key</td>
+                    <td className="px-4 py-3">Per-chain EIP-7702 delegation status for the EOA derived from <code className="text-white/60 text-xs">Q402_PRIVATE_KEY</code>. Read-only — no signing, no on-chain action.</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_clear_delegation</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">private key</td>
+                    <td className="px-4 py-3">Clear the EIP-7702 delegation on a single chain. Local signing; Q402 sponsors the on-chain TX so the user pays $0 gas.</td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · Sandbox vs live mode</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Sandbox vs live mode</h3>
             <p className="text-white/55 text-sm mb-3">
-              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a random fake transaction hash, no funds move, no gas-tank credit is consumed. To enable real on-chain transactions, the resolved live API key (a Trial key, a Multichain key, or the legacy <code className="text-yellow text-xs">Q402_API_KEY</code> fallback), <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code>, and <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=1</code> must all be set:
+              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a random fake transaction hash, no funds move, no gas-tank credit is consumed. The doctor walks you through enabling live mode; the env file looks like this when fully configured:
             </p>
             <CodeBlock lang="bash" code={`# Trial / Multichain split — set whichever applies (or both).
 # Auto-routing rule (same for q402_pay AND q402_batch_pay):
@@ -481,10 +509,6 @@ claude mcp add q402 -- npx -y @quackai/q402-mcp
 # Override per call with keyScope: "auto" | "trial" | "multichain".
 Q402_TRIAL_API_KEY=q402_live_...              # BNB-only sponsored Trial key (from /event)
 Q402_MULTICHAIN_API_KEY=q402_live_...         # paid 9-chain key (per-chain Gas Tank)
-
-# Legacy single-env path — kept for back-compat. If only Q402_API_KEY is
-# set, both trial and multichain calls fall back to it.
-Q402_API_KEY=q402_live_...                    # fallback if the two above are unset
 
 Q402_PRIVATE_KEY=0xabc...                     # signer for the payer EOA
 Q402_ENABLE_REAL_PAYMENTS=1                   # explicit opt-in for live mode`} />

@@ -19,25 +19,47 @@
  *     inside `loadConfig()` which the existing config tests exercise)
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { loadQ402EnvFileFromPath } from "../mcp-server/src/config.js";
+import { join, resolve } from "node:path";
+
+// `@quackai/q402-mcp` is shipped from its own repo and gitignored here, so
+// fresh clones of q402-landing don't have `mcp-server/` checked out as a
+// sibling. The existing drift tests (mcp-tool-description-drift,
+// mcp-package-drift) all use the same existsSync + skipIf pattern — the
+// initial 0.5.6 version of this file skipped that guard and tripped CI on
+// the next PR. We mirror that pattern here so any environment without the
+// MCP sources cleanly skips the suite instead of failing module-load.
+const MCP_CONFIG_PATH = resolve(__dirname, "..", "mcp-server", "src", "config.ts");
+const mcpAvailable    = existsSync(MCP_CONFIG_PATH);
+
+let loadQ402EnvFileFromPath: (p: string) => Record<string, string>;
+
+beforeAll(async () => {
+  if (!mcpAvailable) return;
+  // Dynamic import so the static module-load doesn't throw when
+  // mcp-server/ is absent. The .skipIf guard below prevents the
+  // assertions from running, but vitest still parses the file.
+  const mod = await import("../mcp-server/src/config.js");
+  loadQ402EnvFileFromPath = mod.loadQ402EnvFileFromPath;
+});
 
 let scratchDir: string;
 let envFile:    string;
 
 beforeEach(() => {
+  if (!mcpAvailable) return;
   scratchDir = mkdtempSync(join(tmpdir(), "q402-mcp-env-"));
   envFile    = join(scratchDir, "mcp.env");
 });
 
 afterEach(() => {
+  if (!mcpAvailable) return;
   rmSync(scratchDir, { recursive: true, force: true });
 });
 
-describe("loadQ402EnvFileFromPath", () => {
+describe.skipIf(!mcpAvailable)("loadQ402EnvFileFromPath", () => {
   it("returns empty object when the file does not exist", () => {
     expect(loadQ402EnvFileFromPath(join(scratchDir, "nope.env"))).toEqual({});
   });

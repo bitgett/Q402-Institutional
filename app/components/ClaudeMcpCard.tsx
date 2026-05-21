@@ -15,13 +15,19 @@ import { useMemo, useState } from "react";
 const INSTALL_CMD = "claude mcp add q402 -- npx -y @quackai/q402-mcp";
 
 function buildConfigJson(sandboxKey: string): string {
+  // Sandbox keys (q402_test_*) work in any scope — slot choice is just a
+  // placeholder. We use Q402_MULTICHAIN_API_KEY since Multichain is the
+  // broader scope, and when the user upgrades to live they typically
+  // paste a paid Multichain key into the same slot. (Q402_API_KEY still
+  // resolves silently for old integrations but isn't surfaced anywhere
+  // new users see.)
   return `{
   "mcpServers": {
     "q402": {
       "command": "npx",
       "args": ["-y", "@quackai/q402-mcp"],
       "env": {
-        "Q402_API_KEY": "${sandboxKey}"
+        "Q402_MULTICHAIN_API_KEY": "${sandboxKey}"
       }
     }
   }
@@ -111,10 +117,12 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
           </span>
         </div>
         <p className="text-white/35 text-[11px] mb-2 leading-relaxed">
-          The snippet uses <code className="text-white/50">Q402_API_KEY</code> as a legacy
-          single-env fallback because the sandbox key works in both scopes. For live mode, set{" "}
-          <code className="text-white/50">Q402_TRIAL_API_KEY</code> and/or{" "}
-          <code className="text-white/50">Q402_MULTICHAIN_API_KEY</code> in your shell — see below.
+          Snippet ships with your <strong className="text-white/55">sandbox key</strong> in the
+          {" "}<code className="text-white/50">Q402_MULTICHAIN_API_KEY</code> slot — safe to paste
+          anywhere. For live payments, swap in a real key and add{" "}
+          <code className="text-white/50">Q402_PRIVATE_KEY</code> +{" "}
+          <code className="text-white/50">Q402_ENABLE_REAL_PAYMENTS=1</code> in your shell
+          (or run <code className="text-yellow/80">q402_doctor</code> after install).
         </p>
         <div className="relative">
           <pre className="bg-[#060C14] border border-white/7 rounded-xl p-4 overflow-x-auto">
