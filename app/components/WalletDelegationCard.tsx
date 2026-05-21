@@ -83,7 +83,7 @@ function classifyError(msg: string): {
   ) {
     return {
       kind:  "wallet-unsupported",
-      human: "Your wallet doesn't support EIP-7702 signing yet. MetaMask 12.x+ works; for OKX and other wallets, use the CLI in docs.",
+      human: "Your wallet doesn't support EIP-7702 authorization signing yet. Switch to MetaMask 12.x+ (or another Pectra-aware wallet) and reconnect to clear the delegation here. The delegation itself is harmless for normal Q402 use — clearing is only needed if you want to receive native gas tokens to this EOA directly.",
     };
   }
   if (
@@ -262,7 +262,6 @@ export default function WalletDelegationCard() {
           const isDelegated = !!row?.delegated;
 
           const errorState = perChain[c.key] as { phase: "error"; message: string; kind?: string } | undefined;
-          const cliCommand = `PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs --chain ${c.key}`;
 
           return (
             <div key={c.key} className="py-3 first:pt-0 last:pb-0">
@@ -333,34 +332,28 @@ export default function WalletDelegationCard() {
                 </div>
               </div>
 
-              {/* Expanded error row — surfaces the actual message + CLI
-                  fallback when the user's wallet can't sign EIP-7702
-                  authorizations. The kind="wallet-unsupported" branch
-                  is the OKX / pre-12.x MetaMask case. */}
+              {/* Expanded error row — actionable next step in human language.
+                  No CLI / private-key instructions in the dashboard — that's
+                  a dev-only path that doesn't belong in front of retail
+                  users. The wallet-unsupported message tells users what to
+                  do (switch wallet) + reassures them the delegation is
+                  cosmetic. */}
               {phase === "error" && errorState && (
                 <div className="ml-8 mt-2 pl-4 border-l-2 border-red-400/30">
-                  <p className="text-red-300/80 text-[11px] leading-relaxed mb-2">
+                  <p className="text-red-300/80 text-[11px] leading-relaxed">
                     {errorState.message}
+                    {errorState.kind === "wallet-unsupported" && (
+                      <>
+                        {" "}
+                        <a
+                          href="/docs#eip-7702-delegation"
+                          className="text-yellow/80 hover:text-yellow underline underline-offset-2"
+                        >
+                          Learn more
+                        </a>
+                      </>
+                    )}
                   </p>
-                  {errorState.kind === "wallet-unsupported" && (
-                    <div className="rounded-md bg-white/[0.02] border border-white/[0.05] p-2 flex items-center gap-2">
-                      <code className="text-white/55 text-[10px] font-mono flex-1 truncate" title={cliCommand}>
-                        {cliCommand}
-                      </code>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(cliCommand)}
-                        className="text-white/45 hover:text-white text-[10px] font-medium flex-shrink-0"
-                      >
-                        Copy
-                      </button>
-                      <a
-                        href="/docs#eip-7702-delegation"
-                        className="text-yellow/80 hover:text-yellow text-[10px] flex-shrink-0"
-                      >
-                        Docs ↗
-                      </a>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
