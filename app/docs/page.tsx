@@ -659,10 +659,23 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
               Clearing the delegation
             </h3>
             <p className="text-white/55 text-sm mb-4 leading-relaxed">
-              The easiest way is the{" "}
-              <Link className="text-yellow hover:underline" href="/dashboard">dashboard&apos;s Wallet tab</Link>
-              {" "}— it shows delegation status across all 9 chains and clears any chain in one
-              click (Q402 sponsors the gas). For headless / CI flows, use the CLI:
+              Two paths — both end with the same Q402-sponsored on-chain TX:
+            </p>
+            <p className="text-white/55 text-sm mb-3 leading-relaxed">
+              <strong className="text-white/85">From your AI client (MCP — recommended for agentic flows).</strong>{" "}
+              Once <code className="text-yellow text-xs">@quackai/q402-mcp</code> is installed in Claude
+              Desktop / Codex / Cursor / Cline, ask your AI in plain English:
+            </p>
+            <CodeBlock lang="text" code={`"Clear my Q402 delegation on BNB Chain."`} />
+            <p className="text-white/55 text-sm mb-3 mt-2 leading-relaxed">
+              The agent calls <code className="text-yellow text-xs">q402_clear_delegation</code>,
+              your local <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code> signs the
+              EIP-7702 authorization, and Q402 broadcasts the type-0x04 TX (sponsored — you pay zero
+              gas). Use <code className="text-yellow text-xs">q402_wallet_status</code> first to see
+              which chains have an active delegation.
+            </p>
+            <p className="text-white/55 text-sm mb-3 mt-5 leading-relaxed">
+              <strong className="text-white/85">From the terminal (CLI — for power users / CI).</strong>
             </p>
             <CodeBlock lang="bash" code={`# Self-paid mode (you pay ~$0.001 in native gas)
 PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs --chain bnb
@@ -671,13 +684,21 @@ PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs --chain bnb
 PRIVATE_KEY=0x<yourKey> SPONSOR_PRIVATE_KEY=0x<sponsor> \\
   node scripts/undelegate-7702.mjs --chain bnb --sponsor`} />
             <p className="text-white/45 text-xs mt-3 mb-6 leading-relaxed">
-              Sponsored mode requires the Q402 relayer&apos;s private key, which we only share
-              with active business partners. Self-paid mode is open to anyone and works on all 9
-              chains. After clearing, <span className="font-mono text-white/65">eth_getCode</span>{" "}
-              returns <span className="font-mono text-white/65">0x</span> and your wallet behaves
-              exactly like before — your next Q402 payment creates a fresh delegation
-              automatically (no permanent state change).
+              Sponsored CLI mode requires the Q402 relayer&apos;s private key (business partners
+              only). Self-paid is open to anyone on all 9 chains. After clearing,{" "}
+              <span className="font-mono text-white/65">eth_getCode</span> returns{" "}
+              <span className="font-mono text-white/65">0x</span> and your wallet behaves exactly
+              like before — your next Q402 payment creates a fresh delegation automatically (no
+              permanent state change).
             </p>
+            <Callout type="info">
+              <strong className="text-white/80">Browser dashboard:</strong> a one-click clear UI was
+              prototyped but pulled — modern browser wallets like OKX don&apos;t yet implement the{" "}
+              <code className="text-white/70 text-xs">wallet_signAuthorization</code> RPC needed to
+              sign EIP-7702 authorizations. MetaMask 12.x+ supports it but the MCP / CLI paths
+              cover the same ground without the wallet-compat gate. We&apos;ll bring the dashboard
+              option back when wallet coverage catches up.
+            </Callout>
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
               Why we use it
