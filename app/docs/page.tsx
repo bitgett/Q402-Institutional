@@ -498,28 +498,28 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Sandbox vs live mode</h3>
             <p className="text-white/55 text-sm mb-3">
-              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a fake transaction hash with <code className="text-yellow text-xs">success: false</code> and <code className="text-yellow text-xs">sandbox: true</code>, no funds move, no gas-tank credit is consumed. The doctor walks you through enabling live mode; the env file <code className="text-yellow text-xs">q402_doctor</code> writes starts with every secret line commented out and the live flag pre-set to <code className="text-yellow text-xs">1</code>. The live-mode gate only flips once both a real key and a valid 32-byte private key are present, so saving the template as-is stays in sandbox; uncommenting + pasting real values is what takes you live. Set the flag to <code className="text-yellow text-xs">0</code> to force sandbox even with real keys (e.g. for chained testing):
+              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a fake transaction hash with <code className="text-yellow text-xs">success: false</code> and <code className="text-yellow text-xs">sandbox: true</code>, no funds move, no gas-tank credit is consumed. The doctor walks you through enabling live mode; the env file <code className="text-yellow text-xs">q402_doctor</code> writes ships the three secret lines uncommented but <strong>empty</strong> — paste your values on the right of <code className="text-yellow text-xs">=</code>, no <code className="text-yellow text-xs">#</code> to remove. The live-mode gate only flips once both a real key and a valid 32-byte private key are present, so saving the template as-is stays in sandbox automatically. Set the flag to <code className="text-yellow text-xs">0</code> to force sandbox even with real keys (e.g. for chained testing):
             </p>
             <CodeBlock lang="bash" code={`# ~/.q402/mcp.env — what q402_doctor creates on first install.
-# Uncomment ONE api-key line + Q402_PRIVATE_KEY. Q402_ENABLE_REAL_PAYMENTS
-# already defaults to 1 — the gate refuses placeholders, so partial setups
-# stay in sandbox automatically.
+# Paste your values on the right of \`=\`. Q402_ENABLE_REAL_PAYMENTS
+# already defaults to 1 — the gate refuses empty values, so partial
+# setups stay in sandbox automatically.
 
 # Free Trial — BNB only, 2,000 sponsored TX (from /event)
-# Q402_TRIAL_API_KEY=q402_live_...
+Q402_TRIAL_API_KEY=
 
 # Paid Multichain — all 9 chains (from /payment)
-# Q402_MULTICHAIN_API_KEY=q402_live_...
+Q402_MULTICHAIN_API_KEY=
 
-# Hex EVM private key. Use a FRESH wallet, not your main one —
-# Q402 delegates this EOA via EIP-7702 on first payment.
-# Q402_PRIVATE_KEY=0x...
+# Hex EVM private key (0x + 64 hex chars). A separate MetaMask account
+# dedicated to Q402 keeps your existing balances and history tidy.
+Q402_PRIVATE_KEY=
 
 # Live mode switch:
 #   0 = sandbox (test mode, no funds move)
 #   1 = real on-chain payments
 # Default 1 — safe because mode only flips to live when BOTH a live
-# API key AND a valid 32-byte private key are uncommented above.
+# API key AND a valid 32-byte private key are populated above.
 Q402_ENABLE_REAL_PAYMENTS=1
 
 # Default Q402 deployment. Only change for self-hosted.

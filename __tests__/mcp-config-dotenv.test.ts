@@ -35,6 +35,7 @@ const MCP_CONFIG_PATH = resolve(__dirname, "..", "mcp-server", "src", "config.ts
 const mcpAvailable    = existsSync(MCP_CONFIG_PATH);
 
 let loadQ402EnvFileFromPath: (p: string) => Record<string, string>;
+let classifyApiKey:           (k: string | null) => "live" | "test" | "missing";
 
 beforeAll(async () => {
   if (!mcpAvailable) return;
@@ -43,6 +44,7 @@ beforeAll(async () => {
   // assertions from running, but vitest still parses the file.
   const mod = await import("../mcp-server/src/config.js");
   loadQ402EnvFileFromPath = mod.loadQ402EnvFileFromPath;
+  classifyApiKey          = mod.classifyApiKey;
 });
 
 let scratchDir: string;
@@ -151,6 +153,32 @@ describe.skipIf(!mcpAvailable)("loadQ402EnvFileFromPath", () => {
       Q402_TRIAL_API_KEY: "q402_live_abc",
       Q402_PRIVATE_KEY:   "0xdead",
     });
+  });
+
+  // ── classifyApiKey ────────────────────────────────────────────────────
+  // 0.5.16 exposes `classifyApiKey` so detectPhase() + loadConfig.mode can
+  // detect "any scoped key is live" per-slot, instead of relying on the
+  // aliased single `apiKey` slot. The alias picks one of (multichain ??
+  // trial ?? legacy) and would mis-report e.g. multichain=q402_test_typo
+  // + trial=q402_live_real as "test" — but the trial key is live for
+  // BNB-scope q402_pay. Tests below lock in the contract that one bad
+  // slot can't poison the live signal for the other slots.
+
+  it("classifyApiKey returns 'live' for q402_live_* prefix", () => {
+    expect(classifyApiKey("q402_live_abc")).toBe("live");
+    expect(classifyApiKey("q402_live_")).toBe("live");
+  });
+
+  it("classifyApiKey returns 'test' for q402_test_* prefix", () => {
+    expect(classifyApiKey("q402_test_abc")).toBe("test");
+    expect(classifyApiKey("q402_test_typo")).toBe("test");
+  });
+
+  it("classifyApiKey returns 'missing' for null / empty / unknown prefix", () => {
+    expect(classifyApiKey(null)).toBe("missing");
+    expect(classifyApiKey("")).toBe("missing");
+    expect(classifyApiKey("sk_live_other_provider")).toBe("missing");
+    expect(classifyApiKey("q402_other_prefix")).toBe("missing");
   });
 
   it("treats `KEY=` (empty value) as unset", () => {

@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
   if (alreadyUsed) {
     return NextResponse.json(
       {
-        error: "This wallet has already used the free trial. Upgrade at /pricing.",
+        error: "This wallet has already used the free trial. Upgrade at /payment.",
         code: "TRIAL_ALREADY_USED",
       },
       { status: 409 },
@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
         kv.del(trialClaimKey(addr)).catch(() => {});
         return NextResponse.json(
           {
-            error: "This email has already claimed a free trial. Upgrade at /pricing.",
+            error: "This email has already claimed a free trial. Upgrade at /payment.",
             code: "TRIAL_ALREADY_USED_EMAIL",
           },
           { status: 409 },
