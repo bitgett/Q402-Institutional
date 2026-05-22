@@ -61,10 +61,9 @@ export default function Navbar() {
           <NavDropdown label="Community"  items={COMMUNITY_ITEMS} />
           <Link
             href="/visualization"
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-semibold text-white/75 hover:text-yellow transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium text-white/55 hover:text-white transition-colors"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-[#4AE54A] animate-pulse" />
-            Q402 Scan
+            Visualization
           </Link>
         </div>
 
