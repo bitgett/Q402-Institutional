@@ -353,8 +353,12 @@ export default function ClaudePage() {
                     <code className="text-white/55">
                       {current.key === "claude" ? "~/.claude.json" : "~/.codex/config.toml"}
                     </code>
-                    {" "}for you — no need to find or edit the file by hand. Existing MCP servers
-                    in that file are preserved.
+                    {" "}for you — no need to find or edit the file by hand.
+                    {current.key === "codex" && (
+                      <> If you already have other MCP servers configured there, it&apos;s worth
+                      backing the file up before running — Codex CLI handles the merge but the
+                      behavior is its own to define, not ours.</>
+                    )}
                   </div>
                 </div>
               ) : (
