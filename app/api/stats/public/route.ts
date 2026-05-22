@@ -2,8 +2,8 @@
  * GET /api/stats/public
  *
  * Aggregate, anonymous usage stats sourced ONLY from confirmed live
- * relayed-transaction history. External viz / metrics consumers render
- * these into live dashboards.
+ * relayed-transaction history. Public metrics consumers can render
+ * these into dashboards.
  *
  * Hard constraints — every line of this file is written to one of these:
  *
@@ -32,9 +32,9 @@ import type { RelayedTx } from "@/app/lib/db";
 
 const CACHE_HEADER = "public, s-maxage=60, stale-while-revalidate=120";
 
-// CORS — external viz / dashboards may consume this from any origin.
-// The response carries only aggregate counts (no per-account fields),
-// so `*` is acceptable here.
+// CORS — public dashboards may consume this from any origin. The
+// response carries only aggregate counts (no per-account fields), so
+// `*` is acceptable here.
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
