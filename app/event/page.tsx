@@ -223,10 +223,11 @@ export default function EventPage() {
               )}
 
               <p className="text-white/30 text-[11px] mt-5 leading-relaxed">
-                Google, email, and wallet all activate the same 2,000-TX trial
-                immediately — live key (real on-chain settlements, gasless for
-                the payer) and sandbox key issued in one shot. One identity,
-                one trial (ever).
+                Google and email activate instantly — your live key (real
+                on-chain settlements, gasless for the payer) and sandbox key
+                are issued in one shot. Wallet sign-in connects first; the
+                trial activates with one signature on the dashboard. One
+                identity, one trial (ever).
               </p>
             </motion.div>
 

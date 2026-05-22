@@ -92,7 +92,7 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
 
       <div>
         <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2 font-semibold">
-          1 · Install in Claude Desktop
+          1 · Install <span className="text-white/25 font-normal normal-case tracking-normal">(Claude Code shown)</span>
         </div>
         <div className="flex gap-2 items-stretch">
           <code className="flex-1 bg-navy border border-white/8 rounded-xl px-3 py-2.5 font-mono text-xs text-white/70 truncate">
@@ -110,6 +110,12 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
             {copiedCmd ? "Copied!" : "Copy"}
           </button>
         </div>
+        <p className="text-[10px] text-white/35 mt-2 leading-relaxed">
+          Using Codex CLI, Cursor, or Cline?{" "}
+          <a href="/claude" className="text-yellow underline">
+            Pick your client →
+          </a>
+        </p>
       </div>
 
       <div>

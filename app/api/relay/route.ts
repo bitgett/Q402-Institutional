@@ -328,7 +328,7 @@ export async function POST(req: NextRequest) {
     // trialSandboxApiKey both go through this gate).
     if (!isSandbox && isTrialScopedKey) {
       if (!subscription.trialExpiresAt || new Date() >= new Date(subscription.trialExpiresAt)) {
-        return NextResponse.json({ error: "Trial expired. Upgrade at /pricing to continue." }, { status: 403 });
+        return NextResponse.json({ error: "Trial expired. Upgrade at /payment to continue." }, { status: 403 });
       }
     }
   }
@@ -343,7 +343,7 @@ export async function POST(req: NextRequest) {
   if (!isSandbox && isTrialScopedKey && chain !== "bnb") {
     return NextResponse.json(
       {
-        error: `Trial API Key supports BNB Chain only — got "${chain}". Use a Multichain API Key for ${chain} and other paid chains. Upgrade at /pricing.`,
+        error: `Trial API Key supports BNB Chain only — got "${chain}". Use a Multichain API Key for ${chain} and other paid chains. Upgrade at /payment.`,
         code: "TRIAL_BNB_ONLY",
       },
       { status: 403 },
@@ -376,7 +376,7 @@ export async function POST(req: NextRequest) {
     if (quickCredits <= 0) {
       return NextResponse.json({
         error: isTrialScopedKey
-          ? "No trial credits remaining. Upgrade at /pricing to continue."
+          ? "No trial credits remaining. Upgrade at /payment to continue."
           : "No TX credits remaining. Purchase additional credits to continue.",
       }, { status: 429 });
     }
@@ -476,7 +476,7 @@ export async function POST(req: NextRequest) {
     if (!dec.ok) {
       return NextResponse.json({
         error: isTrialScopedKey
-          ? "No trial credits remaining. Upgrade at /pricing to continue."
+          ? "No trial credits remaining. Upgrade at /payment to continue."
           : "No TX credits remaining. Purchase additional credits to continue.",
       }, { status: 429 });
     }
