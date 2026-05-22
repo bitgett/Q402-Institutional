@@ -96,7 +96,7 @@ const CLIENTS: ClientInstall[] = [
     logo:    "/logos/codex.svg",
     kind:    "cli",
     snippet: "codex mcp add q402 -- npx -y @quackai/q402-mcp",
-    hint:    "OpenAI Codex CLI. Restart Codex (`codex` → quit, then re-launch) after running.",
+    hint:    "OpenAI Codex CLI. Restart Codex (`codex` → quit, then re-launch) after running. On Windows, if `codex mcp add` returns \"Access is denied\", add the equivalent stanza to `~/.codex/config.toml` by hand: `[mcp_servers.q402]` / `command = \"npx\"` / `args = [\"-y\", \"@quackai/q402-mcp\"]`.",
   },
   {
     key:          "cursor",
