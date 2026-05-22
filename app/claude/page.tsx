@@ -383,6 +383,28 @@ export default function ClaudePage() {
                       </div>
                     </details>
                   )}
+                  {current.kind === "json" && current.configPath && (
+                    <details className="mt-2 group">
+                      <summary className="text-[11px] text-yellow/70 hover:text-yellow cursor-pointer select-none list-none flex items-center gap-1.5">
+                        <span className="inline-block transition-transform group-open:rotate-90 text-white/35">▸</span>
+                        Don&apos;t have <code className="text-white/55 text-[11px]">{current.configPath}</code> yet? Create it.
+                      </summary>
+                      <div className="mt-2 text-[11px] text-white/55 leading-relaxed pl-4 space-y-2">
+                        <div>The file lives in a hidden dot-directory. Quickest way to create + open it:</div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-1">macOS / Linux</div>
+                          <pre className="text-[11px] text-white/75 whitespace-pre overflow-x-auto bg-white/[0.02] rounded px-2 py-1.5">{`mkdir -p ~/.cursor && code ~/.cursor/mcp.json`}</pre>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-1">Windows (PowerShell)</div>
+                          <pre className="text-[11px] text-white/75 whitespace-pre overflow-x-auto bg-white/[0.02] rounded px-2 py-1.5">{`New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cursor" | Out-Null; code "$env:USERPROFILE\\.cursor\\mcp.json"`}</pre>
+                        </div>
+                        <div className="text-white/40">
+                          Paste the JSON snippet above, save, and reload the window. (Replace <code className="text-white/55 text-[11px]">.cursor</code> with the relevant client&apos;s path if you&apos;re on Cline — Cline edits its config from inside VS Code, no shell needed.)
+                        </div>
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
             </div>

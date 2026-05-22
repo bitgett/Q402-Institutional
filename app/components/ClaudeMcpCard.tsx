@@ -7,9 +7,10 @@ import { useMemo, useState } from "react";
  *
  * Renders an install command + Claude Desktop config snippet pre-filled with
  * the user's *sandbox* API key only. Real on-chain payments deliberately are
- * NOT one-click here — the live key + private key go into shell env, not
- * claude_desktop_config.json (that file syncs through iCloud/OneDrive on most
- * setups and is a frequent source of accidental key leaks).
+ * NOT one-click here — the recommended live path is `q402_doctor` (it writes
+ * the live key + private key into ~/.q402/mcp.env, which the server auto-
+ * loads on startup). Keeping live secrets out of this JSON also keeps them
+ * out of any config file that syncs through iCloud/OneDrive.
  */
 
 const INSTALL_CMD = "claude mcp add q402 -- npx -y @quackai/q402-mcp";
@@ -82,9 +83,11 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
       </div>
 
       <p className="text-white/45 text-xs leading-relaxed">
-        Use Q402 directly from Claude Desktop, Claude Code, Cline, or any MCP-compatible AI
-        client. The config below is pre-filled with your sandbox key — safe to paste anywhere.
-        Real on-chain payments are configured separately, in your shell, not in this file.
+        Use Q402 directly from Claude (Desktop / Code), OpenAI Codex CLI, Cursor, Cline, or any
+        MCP-compatible AI client. The config below is pre-filled with your sandbox key — safe to
+        paste anywhere. For live payments the recommended path is to ask your AI &ldquo;Set up
+        Q402&rdquo; after install — <code className="text-white/55">q402_doctor</code> creates{" "}
+        <code className="text-white/55">~/.q402/mcp.env</code> for you and walks you through it.
       </p>
 
       <div>

@@ -181,7 +181,7 @@ export default function Pricing() {
         {/* Cost context */}
         <div className="mt-6 text-center">
           <p className="text-white/25 text-sm">
-            BNB Chain pricing. Other chains may vary. &nbsp;·&nbsp;
+            Same tier prices on every supported chain. &nbsp;·&nbsp;
             <a href="/payment" className="text-white/40 hover:text-white transition-colors">Custom quote →</a>
             &nbsp;·&nbsp;
             <a href="/docs" className="text-white/40 hover:text-white transition-colors">Docs →</a>
