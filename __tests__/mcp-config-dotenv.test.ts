@@ -152,4 +152,25 @@ describe.skipIf(!mcpAvailable)("loadQ402EnvFileFromPath", () => {
       Q402_PRIVATE_KEY:   "0xdead",
     });
   });
+
+  it("treats `KEY=` (empty value) as unset", () => {
+    // The 0.5.15 template ships the three secret lines uncommented but
+    // empty (no `#` to remove, just paste the value on the right). The
+    // parser must NOT propagate empty strings into FILE_ENV — otherwise
+    // detectPhase() / envSlot() would see "configured" when the user
+    // hasn't pasted anything yet, and skip the first-install branch.
+    writeFileSync(envFile, [
+      "Q402_TRIAL_API_KEY=",
+      "Q402_MULTICHAIN_API_KEY=q402_live_real",
+      "Q402_PRIVATE_KEY=   ",
+      "Q402_ENABLE_REAL_PAYMENTS=1",
+    ].join("\n"));
+    const out = loadQ402EnvFileFromPath(envFile);
+    expect(out).toEqual({
+      Q402_MULTICHAIN_API_KEY:    "q402_live_real",
+      Q402_ENABLE_REAL_PAYMENTS:  "1",
+    });
+    expect(out).not.toHaveProperty("Q402_TRIAL_API_KEY");
+    expect(out).not.toHaveProperty("Q402_PRIVATE_KEY");
+  });
 });
