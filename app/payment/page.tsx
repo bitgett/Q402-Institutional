@@ -356,9 +356,9 @@ export default function PaymentPage() {
                       <img src={c.img} alt={c.name} className={`w-7 h-7 flex-shrink-0 ${c.rounded}`} />
                       <div className="min-w-0">
                         <p className="text-xs font-semibold truncate">{c.name}</p>
-                        {c.comingSoon ? <p className="text-[10px] text-white/25">Integrating…</p>
-                        : c.multiplier > 1.0 ? <p className="text-[10px] text-white/25">+{Math.round((c.multiplier - 1) * 100)}%</p>
-                        : <p className="text-[10px] text-white/25">Base rate</p>}
+                        {c.comingSoon
+                          ? <p className="text-[10px] text-white/25">Integrating…</p>
+                          : <p className="text-[10px] text-white/25">Same price as BNB</p>}
                       </div>
                       {active && !c.comingSoon && (
                         <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-yellow" style={{ boxShadow: "0 0 5px #F5C518" }} />
@@ -671,11 +671,6 @@ export default function PaymentPage() {
                 <p className="text-white/25 text-xs text-right mb-1">
                   ${perTx < 0.01 ? perTx.toFixed(4) : perTx.toFixed(3)} per tx
                 </p>
-                {chain.multiplier > 1.0 && (
-                  <p className="text-white/20 text-xs text-right">
-                    Includes {chain.name} +{Math.round((chain.multiplier - 1) * 100)}% rate
-                  </p>
-                )}
 
                 {/* Security note */}
                 <div className="mt-5 pt-4 border-t border-white/6 flex gap-2">
