@@ -2,8 +2,8 @@
 
 > Pay USDC, USDT, or RLUSD across **9 EVM chains** with $0 in gas.
 > Built on EIP-7702 + EIP-712. Callable from a browser, a Node.js
-> backend, or any MCP-compatible AI client (Claude Desktop, Claude
-> Code, Cline).
+> backend, or any MCP-compatible AI client — first-class support for
+> Claude (Desktop / Code), OpenAI Codex CLI, Cursor, and Cline.
 
 [![sdk](https://img.shields.io/badge/sdk-v1.8.0-yellow)](public/q402-sdk.js)
 [![mcp](https://img.shields.io/badge/npm-@quackai/q402--mcp-blue)](https://www.npmjs.com/package/@quackai/q402-mcp)
