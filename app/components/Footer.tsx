@@ -39,7 +39,7 @@ const NAV: { heading: string; links: { label: string; href?: string; external?: 
     links: [
       { label: "Documentation",    href: "/docs" },
       { label: "MCP Server",       href: "https://www.npmjs.com/package/@quackai/q402-mcp", external: true },
-      { label: "Trust Receipts",   href: "/docs#trust-receipts" },
+      { label: "Trust Receipts",   href: "/docs#trust-receipt" },
       { label: "GitHub",           href: "https://github.com/bitgett", external: true },
     ],
   },

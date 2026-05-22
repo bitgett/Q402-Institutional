@@ -46,13 +46,13 @@ const TABS: Tab[] = [
     category: "Agent Infrastructure · New",
     hook:     "Tell your agent. It pays.",
     description:
-      "Pre-fund one Gas Tank per chain and let Claude, Codex, Cursor, Cline — or your own agent — call Q402 through MCP. Eight tools (including q402_doctor for one-prompt setup), signed Trust Receipts on every settlement, sandbox by default, 2,000 sponsored TX to start.",
-    chips: ["8 MCP TOOLS", "BATCH × 20", "TRUST RECEIPTS", "SANDBOX DEFAULT"],
+      "Let Claude, Codex, Cursor, Cline — or your own agent — call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Eight tools (q402_doctor for one-prompt setup), signed Trust Receipts on every settlement, sandbox-safe defaults.",
+    chips: ["8 MCP TOOLS", "BATCH × 20", "TRUST RECEIPTS", "FREE TRIAL"],
     transcript: [
-      { role: "you",   body: "Send 5 USDC to vitalik.eth on BNB." },
+      { role: "you",   body: "Send 5 USDC to 0xd8dA...6045 on BNB." },
       {
         role: "agent", via: "Claude",
-        body: 'q402_pay({chain:"bnb", token:"USDC", to:"vitalik.eth", amount:"5"})',
+        body: 'q402_pay({chain:"bnb", token:"USDC", to:"0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", amount:"5"})',
         meta: "✓ sent · 412ms · gas $0 · rct_8f2a…",
       },
       { role: "you",   body: "Now pay 0.50 USDT to each of these 3 contractors." },

@@ -2093,13 +2093,15 @@ export default function DashboardPage() {
             <div className="space-y-1 mb-2">
               <h2 className="text-lg font-semibold">Use Q402 from your AI client</h2>
               <p className="text-white/40 text-sm">
-                Q402 ships as a Model Context Protocol server, so Claude Desktop, Claude Code, OpenAI Codex,
+                Q402 ships as a Model Context Protocol server, so Claude (Desktop / Code), OpenAI Codex CLI,
                 Cursor, Cline, and any other MCP-compatible AI client can quote and (optionally) settle gasless
                 USDC, USDT, and RLUSD payments directly from a chat. The config snippet below is pre-filled with your{" "}
-                <strong className="text-white/60">sandbox key</strong> — safe to paste into{" "}
-                <code className="text-white/60">claude_desktop_config.json</code>. Real on-chain payments
-                are configured separately, via shell environment variables — your live key never leaves
-                your terminal.
+                <strong className="text-white/60">sandbox key</strong> — safe to paste anywhere. For real
+                on-chain payments, the recommended path is to ask your AI{" "}
+                <strong className="text-white/65">&ldquo;Set up Q402&rdquo;</strong> after installing — the
+                bundled <code className="text-white/60">q402_doctor</code> tool creates{" "}
+                <code className="text-white/60">~/.q402/mcp.env</code> for you and walks you through pasting
+                your live key + wallet private key in your editor (never in chat).
               </p>
             </div>
             <ClaudeMcpCard sandboxApiKey={sandboxApiKey || "q402_test_••••"} />

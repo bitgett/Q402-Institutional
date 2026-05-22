@@ -514,8 +514,12 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
 # Q402 delegates this EOA via EIP-7702 on first payment.
 # Q402_PRIVATE_KEY=0x...
 
-# Start at 0 (sandbox). Flip to 1 only after real values are pasted above.
-Q402_ENABLE_REAL_PAYMENTS=0
+# Live mode switch:
+#   0 = sandbox (test mode, no funds move)
+#   1 = real on-chain payments
+# Default 1 — safe because mode only flips to live when BOTH a live
+# API key AND a valid 32-byte private key are uncommented above.
+Q402_ENABLE_REAL_PAYMENTS=1
 
 # Default Q402 deployment. Only change for self-hosted.
 Q402_RELAY_BASE_URL=https://q402.quackai.ai/api`} />
