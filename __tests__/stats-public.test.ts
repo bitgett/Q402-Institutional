@@ -183,7 +183,7 @@ describe("GET /api/stats/public — headers", () => {
     expect(sMax).toBeLessThanOrEqual(120);
   });
 
-  it("sets CORS headers for the visualization origin", async () => {
+  it("sets CORS headers for cross-origin consumers", async () => {
     const { GET } = await import(ROUTE);
     const res = await GET();
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");

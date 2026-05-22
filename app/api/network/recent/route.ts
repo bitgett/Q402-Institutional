@@ -5,18 +5,17 @@
  * (sender, recipient, chain, amount, timestamp) in reverse-chronological
  * order. Sandbox TXs excluded.
  *
- * Used by downstream consumers (the upstream wallet-network viz) to
- * render new settlement events in near-real-time without holding open
- * an SSE connection here — Vercel's serverless model can't carry a
- * long-lived stream, so consumers poll this endpoint instead.
+ * Polled by downstream consumers to surface new settlement events in
+ * near-real-time without holding open an SSE connection here — Vercel's
+ * serverless model can't carry a long-lived stream.
  *
  * Privacy posture: every field is already public on BscScan / Etherscan
  * (the relayer's outbound TXs reveal sender + recipient + amount by
  * construction). We exclude sandbox TXs (apiKey prefix q402_test_ /
  * q402_sandbox_) so the surface stays bound to on-chain settlements.
  *
- * Cached for 15 s at the edge — fast enough to feel realtime for the
- * viz, infrequent enough to keep KV scan cost manageable.
+ * Cached for 15 s at the edge — fast enough to feel realtime,
+ * infrequent enough to keep KV scan cost manageable.
  */
 import { NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
