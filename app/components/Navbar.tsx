@@ -59,6 +59,12 @@ export default function Navbar() {
           <NavDropdown label="Product"    items={PRODUCT_ITEMS} />
           <NavDropdown label="Developers" items={DEVELOPER_ITEMS} />
           <NavDropdown label="Community"  items={COMMUNITY_ITEMS} />
+          <Link
+            href="/visualization"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium text-white/55 hover:text-white transition-colors"
+          >
+            Visualization
+          </Link>
         </div>
 
         {/* Right corner — wallet / signin */}
