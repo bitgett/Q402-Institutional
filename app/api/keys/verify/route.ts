@@ -63,7 +63,15 @@ export async function POST(req: NextRequest) {
     // Trial-scope expiry — uses the authoritative trialExpiresAt.
     if (!isSandboxKey && isTrialScopedKey) {
       if (!subscription.trialExpiresAt || new Date() >= new Date(subscription.trialExpiresAt)) {
-        return NextResponse.json({ valid: false, error: "Trial expired" });
+        // Surface trialExpiresAt on the invalid branch too so MCP's
+        // q402_doctor can show the user the exact expiration date
+        // ("expired on 2026-05-19, 3 days ago") instead of a bare
+        // "Trial expired" with no temporal context.
+        return NextResponse.json({
+          valid: false,
+          error: "Trial expired",
+          trialExpiresAt: subscription.trialExpiresAt ?? null,
+        });
       }
     }
   }
