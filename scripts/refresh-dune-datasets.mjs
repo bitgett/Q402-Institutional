@@ -17,7 +17,7 @@
  *
  * CI:
  *   .github/workflows/refresh-dune-datasets.yml triggers this every
- *   Monday 00:00 UTC via cron, plus a workflow_dispatch button for
+ *   day at 00:00 UTC via cron, plus a workflow_dispatch button for
  *   manual runs.
  */
 

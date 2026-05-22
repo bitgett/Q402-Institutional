@@ -2,11 +2,12 @@ name: Refresh Dune datasets
 
 on:
   schedule:
-    # Every Monday 00:00 UTC — pushes fresh off-chain data
-    # (npm downloads etc.) into the public Q402 Settlement Activity
-    # dashboard. On-chain widgets read live from each chain's tx table
-    # and don't need this; only the offchain rails do.
-    - cron: "0 0 * * 1"
+    # Daily at 00:00 UTC — pushes fresh off-chain data (npm downloads
+    # etc.) into the public Q402 Settlement Activity dashboard. On-chain
+    # widgets read live from each chain's tx table and don't need this;
+    # only the offchain rails do. Daily cadence keeps the trailing-day
+    # npm aggregation lag (~24h) backfilled within one cycle.
+    - cron: "0 0 * * *"
   workflow_dispatch: {}
 
 jobs:
