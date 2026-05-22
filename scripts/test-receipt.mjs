@@ -14,8 +14,8 @@
  *     → Q402 creates a Trust Receipt + signs it with RELAYER_PRIVATE_KEY
  *     → response includes receiptId + receiptUrl
  *
- * Use this as the demo-asset producer: the receiptUrl it prints is a real,
- * publicly-shareable receipt page anchored to a real on-chain TX.
+ * The printed receiptUrl is a real, publicly-shareable receipt page
+ * anchored to a real on-chain TX.
  *
  * Required .env.local:
  *   TEST_PAYER_KEY              — payer (token owner) private key, with
