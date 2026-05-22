@@ -525,7 +525,7 @@ Q402_ENABLE_REAL_PAYMENTS=1
 # Default Q402 deployment. Only change for self-hosted.
 Q402_RELAY_BASE_URL=https://q402.quackai.ai/api`} />
             <p className="text-white/40 text-xs mb-6">
-              Anything missing → automatic sandbox fallback with a hint pointing at what to set. Two additional guards run regardless of mode: <code className="text-white/60">Q402_MAX_AMOUNT_PER_CALL</code> (default $5) caps any single call, and <code className="text-white/60">Q402_ALLOWED_RECIPIENTS</code> optionally restricts to an address allowlist.
+              Anything missing → automatic sandbox fallback with a hint pointing at what to set. Two additional guards run regardless of mode: <code className="text-white/60">Q402_MAX_AMOUNT_PER_CALL</code> (default $200) caps any single call, and <code className="text-white/60">Q402_ALLOWED_RECIPIENTS</code> optionally restricts to an address allowlist.
             </p>
 
             <Callout type="tip">
