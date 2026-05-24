@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
@@ -452,6 +453,95 @@ export default function AgentsPage() {
                 </AnimatePresence>
               </div>
             </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ── Agentic Wallet ─────────────────────────────────────────────────── */}
+      <section className="py-20 px-6">
+        <div className="max-w-5xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ duration: 0.6 }}
+            className="text-center mb-10"
+          >
+            <div className="text-[10px] uppercase tracking-[0.22em] text-yellow font-bold mb-3">
+              New · v1.5
+            </div>
+            <h2 className="text-3xl font-bold mb-3">
+              Give your agent its own wallet
+            </h2>
+            <p className="text-white/45 text-sm max-w-2xl mx-auto">
+              Deposit stablecoins once. Your AI sends from a dedicated, Q402-managed
+              address — gaslessly, within the rules you define. Your MetaMask never
+              gets delegated, and you can export the key anytime.
+            </p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-5">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }} transition={{ duration: 0.45 }}
+              className="rounded-2xl border border-white/8 p-6"
+              style={{ background: "rgba(255,255,255,0.02)" }}
+            >
+              <div className="text-yellow text-xs font-bold uppercase tracking-widest mb-3">1 · Create</div>
+              <div className="text-white text-base font-semibold mb-2">One click in your dashboard</div>
+              <div className="text-white/45 text-sm">
+                Q402 generates a dedicated EOA for you. Private key stays
+                AES-256-GCM encrypted server-side. Export anytime to a hardware
+                or software wallet of your choice.
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.08 }}
+              className="rounded-2xl border border-white/8 p-6"
+              style={{ background: "rgba(255,255,255,0.02)" }}
+            >
+              <div className="text-yellow text-xs font-bold uppercase tracking-widest mb-3">2 · Deposit</div>
+              <div className="text-white text-base font-semibold mb-2">Fund once, spend many</div>
+              <div className="text-white/45 text-sm">
+                Send USDC or USDT to the wallet&apos;s address. BNB Chain is free
+                during the trial; multichain payments + 20-recipient batches
+                unlock with a paid subscription.
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.16 }}
+              className="rounded-2xl border border-white/8 p-6"
+              style={{ background: "rgba(255,255,255,0.02)" }}
+            >
+              <div className="text-yellow text-xs font-bold uppercase tracking-widest mb-3">3 · Let your agent run</div>
+              <div className="text-white text-base font-semibold mb-2">Same MCP, new signer</div>
+              <div className="text-white/45 text-sm">
+                The MCP server already shipping in <span className="font-mono text-white/65">@quackai/q402-mcp</span>
+                {" "}detects your Agentic Wallet automatically. No re-install, no
+                key pasting — your agent simply signs through the server.
+              </div>
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.24 }}
+            className="mt-8 flex flex-wrap justify-center gap-3"
+          >
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold bg-yellow text-navy hover:bg-yellow/90"
+            >
+              Create your Agentic Wallet →
+            </Link>
+            <Link
+              href="/claude"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium text-white/70 hover:text-white border border-white/12 hover:bg-white/[0.04]"
+            >
+              Use from Claude · Codex · Cursor · Cline
+            </Link>
           </motion.div>
         </div>
       </section>

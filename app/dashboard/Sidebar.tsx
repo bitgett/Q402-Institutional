@@ -22,7 +22,8 @@ export type DashboardTab =
   | "transactions"
   | "claude"
   | "gas-tank"
-  | "webhooks";
+  | "webhooks"
+  | "agent";
 
 export interface SidebarSelection {
   view: "trial" | "multichain";
@@ -63,6 +64,7 @@ interface TabDef {
 // (trial doesn't fund a tank, and webhook dispatch needs a paid plan).
 const TRIAL_TABS: TabDef[] = [
   { id: "overview",     label: "Overview",     icon: "◇" },
+  { id: "agent",        label: "Agent",        icon: "✦" },
   { id: "developer",    label: "Developer",    icon: "{ }" },
   { id: "transactions", label: "Transactions", icon: "≡" },
   { id: "claude",       label: "Claude",       icon: "C" },
@@ -72,6 +74,7 @@ const TRIAL_TABS: TabDef[] = [
 // existed before the sprint.
 const MULTICHAIN_TABS: TabDef[] = [
   { id: "overview",     label: "Overview",     icon: "◇" },
+  { id: "agent",        label: "Agent",        icon: "✦" },
   { id: "gas-tank",     label: "Gas Tank",     icon: "⛽" },
   { id: "developer",    label: "Developer",    icon: "{ }" },
   { id: "transactions", label: "Transactions", icon: "≡" },

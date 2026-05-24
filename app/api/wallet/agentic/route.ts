@@ -1,0 +1,201 @@
+/**
+ * /api/wallet/agentic — CRUD for a user's Agentic Wallet (1-per-user MVP).
+ *
+ *   POST   — create the wallet. 409 if one already exists for the owner.
+ *   GET    — return the wallet record (address, limits, deletedAt, agentId).
+ *            Excludes the encrypted private key — that's only ever surfaced
+ *            via POST /api/wallet/agentic/export.
+ *   PATCH  — update per-wallet limits (dailyLimitUsd, perTxMaxUsd).
+ *   DELETE — soft-delete. Hard delete fires after the grace window via cron.
+ *
+ * Auth: every method requires owner EOA signature (address + nonce + sig)
+ * verified by `requireAuth`. The MCP server reads the wallet via the
+ * dedicated /send + /info endpoints with apiKey auth instead.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/app/lib/auth";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import {
+  createAgenticWallet,
+  getAgenticWallet,
+  softDeleteAgenticWallet,
+  updateAgenticWalletLimits,
+  isKeystoreReady,
+  type AgenticWalletRecord,
+} from "@/app/lib/agentic-wallet";
+
+export const runtime = "nodejs";
+
+/**
+ * Surface to the client only the fields that are safe to render. The
+ * encrypted PK + nonce + tag never leave the server outside the explicit
+ * `/export` flow.
+ */
+function projectPublic(record: AgenticWalletRecord) {
+  return {
+    ownerAddr: record.ownerAddr,
+    address: record.address,
+    createdAt: record.createdAt,
+    deletedAt: record.deletedAt ?? null,
+    dailyLimitUsd: record.dailyLimitUsd ?? null,
+    perTxMaxUsd: record.perTxMaxUsd ?? null,
+    erc8004AgentId: record.erc8004AgentId ?? null,
+  };
+}
+
+async function parseJson<T>(req: NextRequest): Promise<T | null> {
+  try {
+    return (await req.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+interface AuthBody {
+  address?: string;
+  nonce?: string;
+  signature?: string;
+}
+
+async function authFromBody(
+  req: NextRequest,
+  body: AuthBody | null,
+): Promise<string | NextResponse> {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "agentic-wallet-crud", 30, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  const result = await requireAuth(
+    body?.address ?? null,
+    body?.nonce ?? null,
+    body?.signature ?? null,
+  );
+  if (typeof result !== "string") {
+    return NextResponse.json(
+      { error: result.error, code: result.code },
+      { status: result.status },
+    );
+  }
+  return result;
+}
+
+async function authFromQuery(req: NextRequest): Promise<string | NextResponse> {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "agentic-wallet-crud", 30, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  const result = await requireAuth(
+    req.nextUrl.searchParams.get("address"),
+    req.nextUrl.searchParams.get("nonce"),
+    req.nextUrl.searchParams.get("sig"),
+  );
+  if (typeof result !== "string") {
+    return NextResponse.json(
+      { error: result.error, code: result.code },
+      { status: result.status },
+    );
+  }
+  return result;
+}
+
+// ── GET ────────────────────────────────────────────────────────────────────
+
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const auth = await authFromQuery(req);
+  if (auth instanceof NextResponse) return auth;
+
+  const record = await getAgenticWallet(auth);
+  if (!record) {
+    return NextResponse.json({ wallet: null }, { status: 200 });
+  }
+  return NextResponse.json({ wallet: projectPublic(record) });
+}
+
+// ── POST ───────────────────────────────────────────────────────────────────
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const body = await parseJson<AuthBody>(req);
+  const auth = await authFromBody(req, body);
+  if (auth instanceof NextResponse) return auth;
+
+  // Pre-flight: surface a 503 if the keystore env isn't configured rather
+  // than letting createAgenticWallet → encrypt throw.
+  const ready = isKeystoreReady();
+  if (!ready.ok) {
+    return NextResponse.json(
+      { error: "keystore_unavailable", detail: ready.reason },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const record = await createAgenticWallet(auth);
+    return NextResponse.json({ wallet: projectPublic(record) }, { status: 201 });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "AGENTIC_WALLET_EXISTS") {
+      return NextResponse.json(
+        { error: "AGENTIC_WALLET_EXISTS", message: "An Agentic Wallet already exists for this owner." },
+        { status: 409 },
+      );
+    }
+    console.error("[api/wallet/agentic POST] failed:", e);
+    return NextResponse.json({ error: "create_failed" }, { status: 500 });
+  }
+}
+
+// ── PATCH ──────────────────────────────────────────────────────────────────
+
+interface PatchBody extends AuthBody {
+  dailyLimitUsd?: number | null;
+  perTxMaxUsd?: number | null;
+}
+
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
+  const body = await parseJson<PatchBody>(req);
+  const auth = await authFromBody(req, body);
+  if (auth instanceof NextResponse) return auth;
+
+  if (!body) return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+
+  // Each limit is independently optional. null = clear, number = set, undefined = leave.
+  const patch: { dailyLimitUsd?: number | null; perTxMaxUsd?: number | null } = {};
+  if ("dailyLimitUsd" in body) {
+    if (body.dailyLimitUsd !== null && typeof body.dailyLimitUsd !== "number") {
+      return NextResponse.json({ error: "dailyLimitUsd must be number or null" }, { status: 400 });
+    }
+    patch.dailyLimitUsd = body.dailyLimitUsd;
+  }
+  if ("perTxMaxUsd" in body) {
+    if (body.perTxMaxUsd !== null && typeof body.perTxMaxUsd !== "number") {
+      return NextResponse.json({ error: "perTxMaxUsd must be number or null" }, { status: 400 });
+    }
+    patch.perTxMaxUsd = body.perTxMaxUsd;
+  }
+
+  try {
+    const next = await updateAgenticWalletLimits(auth, patch);
+    return NextResponse.json({ wallet: projectPublic(next) });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "AGENTIC_WALLET_NOT_FOUND") {
+      return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
+    }
+    console.error("[api/wallet/agentic PATCH] failed:", e);
+    return NextResponse.json({ error: "patch_failed" }, { status: 500 });
+  }
+}
+
+// ── DELETE ─────────────────────────────────────────────────────────────────
+
+export async function DELETE(req: NextRequest): Promise<NextResponse> {
+  const body = await parseJson<AuthBody>(req);
+  const auth = await authFromBody(req, body);
+  if (auth instanceof NextResponse) return auth;
+
+  await softDeleteAgenticWallet(auth);
+  return NextResponse.json({ ok: true });
+}

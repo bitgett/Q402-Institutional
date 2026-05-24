@@ -11,6 +11,7 @@ import WalletModal from "../components/WalletModal";
 import TrialActivationModal from "../components/TrialActivationModal";
 import DashboardSidebar, { type DashboardTab } from "./Sidebar";
 import ClaudeMcpCard from "../components/ClaudeMcpCard";
+import { AgenticWalletTab } from "./components/AgenticWalletTab";
 import ClaimWalletPrompt from "./ClaimWalletPrompt";
 import WrongWalletHardBlock from "./WrongWalletHardBlock";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
@@ -2128,6 +2129,13 @@ export default function DashboardPage() {
                 <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a>
               </div>
             </div>
+          </motion.div>
+        )}
+
+        {/* ── AGENTIC WALLET ── */}
+        {tab === "agent" && address && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+            <AgenticWalletTab address={address} signMessage={signMessage} />
           </motion.div>
         )}
       </div>
