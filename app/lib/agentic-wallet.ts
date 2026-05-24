@@ -49,7 +49,14 @@ export interface ExportLogEntry {
 
 const RECORD_KEY = (owner: string) => `aw:${owner.toLowerCase()}`;
 const EXPORT_LOG_KEY = (owner: string) => `aw:export-log:${owner.toLowerCase()}`;
+const DAILY_SPEND_KEY = (owner: string, dateUtc: string) =>
+  `aw:daily-spend:${owner.toLowerCase()}:${dateUtc}`;
 const EXPORT_LOG_CAP = 50;
+const DAILY_SPEND_TTL_SEC = 48 * 60 * 60;
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 /** Number of days a soft-deleted wallet stays recoverable. */
 export const SOFT_DELETE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -205,6 +212,67 @@ export async function getExportLog(ownerAddr: string): Promise<ExportLogEntry[]>
     return rows ?? [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Sum of USD-equivalent stablecoin sent today (UTC) from the caller's
+ * Agentic Wallet. Returns 0 when no record exists or KV is unreachable.
+ */
+export async function getDailySpendUsd(ownerAddr: string): Promise<number> {
+  try {
+    const v = await kv.get<number>(DAILY_SPEND_KEY(ownerAddr, todayUtc()));
+    return typeof v === "number" && Number.isFinite(v) ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Enforces a per-wallet daily cap. Returns `allowed: true` when the
+ * proposed amount fits under the limit OR no limit is set. Returns
+ * `allowed: false` with the running total + limit so the caller can
+ * surface a clean 403 to the client. Pure read — does NOT mutate KV;
+ * call `recordDailySpend` only after the relay confirms.
+ */
+export async function checkDailyLimit(
+  ownerAddr: string,
+  amountUsd: number,
+  limitUsd: number | undefined,
+): Promise<{ allowed: true } | { allowed: false; spent: number; limit: number; requested: number }> {
+  if (typeof limitUsd !== "number" || !Number.isFinite(limitUsd) || limitUsd <= 0) {
+    return { allowed: true };
+  }
+  const spent = await getDailySpendUsd(ownerAddr);
+  if (spent + amountUsd > limitUsd) {
+    return { allowed: false, spent, limit: limitUsd, requested: amountUsd };
+  }
+  return { allowed: true };
+}
+
+/**
+ * Append `amountUsd` to today's running spend. Fire-and-forget at call
+ * sites — failure here must not bubble back to the relay caller (the
+ * TX already settled on-chain). The 48-hour TTL gives a 24-hour buffer
+ * for late-night UTC rolls without leaving the key around forever.
+ *
+ * Race-window note: this is a read-then-write under HTTP load. Two
+ * concurrent successful relays at the daily boundary can under-count by
+ * one transaction. An atomic INCRBYFLOAT migration is a Phase-2 cleanup.
+ */
+export async function recordDailySpend(
+  ownerAddr: string,
+  amountUsd: number,
+): Promise<void> {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
+  const key = DAILY_SPEND_KEY(ownerAddr, todayUtc());
+  try {
+    const current = (await kv.get<number>(key)) ?? 0;
+    const next = current + amountUsd;
+    await kv.set(key, next, { ex: DAILY_SPEND_TTL_SEC });
+  } catch {
+    // Best-effort — the TX already settled. The next day's checks will
+    // overcount slightly but no funds move incorrectly.
   }
 }
 

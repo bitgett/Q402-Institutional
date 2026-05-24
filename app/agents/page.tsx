@@ -1,745 +1,426 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+/**
+ * /agents — Q402 Agent Wallet landing page.
+ *
+ * Distinct from the main landing aesthetic: warm cream surface, green
+ * accents, product-led layout. Frames the Agent Wallet as Q402's
+ * super-2.0 feature — the wallet your AI agent operates from.
+ *
+ * No pricing card; the page exists to land users into the dashboard's
+ * Agent tab and the MCP install snippet.
+ */
+
+import { useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 
-// ─── Agent Network Animation ─────────────────────────────────────────────────
+const INSTALL_CMD = "npx @quackai/q402-mcp";
 
-const NODES = [
-  { id: "hub",     x: 50,  y: 50,  label: "Gas Tank",   color: "#4AE54A", size: 22, isHub: true },
-  { id: "a1",      x: 18,  y: 20,  label: "Agent 001",  color: "#4AE54A", size: 11 },
-  { id: "a2",      x: 82,  y: 18,  label: "Agent 002",  color: "#4AE54A", size: 11 },
-  { id: "a3",      x: 15,  y: 78,  label: "Agent 003",  color: "#4AE54A", size: 11 },
-  { id: "a4",      x: 85,  y: 75,  label: "Agent 004",  color: "#4AE54A", size: 11 },
-  { id: "a5",      x: 50,  y: 10,  label: "Agent 005",  color: "#4AE54A", size: 11 },
-  { id: "a6",      x: 50,  y: 90,  label: "Agent 006",  color: "#4AE54A", size: 11 },
-  { id: "avax",    x: 25,  y: 48,  label: "AVAX",       color: "#E84142", size: 13 },
-  { id: "bnb",     x: 75,  y: 48,  label: "BNB",        color: "#F0B90B", size: 13 },
-  { id: "eth",     x: 50,  y: 68,  label: "ETH",        color: "#627EEA", size: 13 },
-];
-
-const EDGES = [
-  ["hub","avax"],["hub","bnb"],["hub","eth"],
-  ["a1","avax"],["a1","hub"],
-  ["a2","bnb"],["a2","hub"],
-  ["a3","avax"],["a3","eth"],
-  ["a4","bnb"],["a4","eth"],
-  ["a5","hub"],["a5","bnb"],
-  ["a6","hub"],["a6","eth"],
-];
-
-function AgentNetwork() {
-  const [pulses, setPulses] = useState<{ id: number; from: string; to: string; progress: number }[]>([]);
-  const counter = useRef(0);
-  const nodesMap = Object.fromEntries(NODES.map(n => [n.id, n]));
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const edge = EDGES[Math.floor(Math.random() * EDGES.length)];
-      const [from, to] = Math.random() > 0.5 ? edge : [edge[1], edge[0]];
-      const id = ++counter.current;
-      setPulses(p => [...p, { id, from, to, progress: 0 }]);
-      setTimeout(() => setPulses(p => p.filter(x => x.id !== id)), 1200);
-    }, 320);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
-      {/* Edges */}
-      {EDGES.map(([a, b]) => {
-        const na = nodesMap[a], nb = nodesMap[b];
-        return (
-          <line
-            key={`${a}-${b}`}
-            x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
-            stroke="rgba(74,229,74,0.12)" strokeWidth="0.3"
-          />
-        );
-      })}
-
-      {/* Pulse dots */}
-      {pulses.map(pulse => {
-        const from = nodesMap[pulse.from];
-        const to   = nodesMap[pulse.to];
-        if (!from || !to) return null;
-        return (
-          <motion.circle
-            key={pulse.id}
-            r="0.8"
-            fill="#4AE54A"
-            style={{ filter: "drop-shadow(0 0 2px #4AE54A)" }}
-            initial={{ cx: from.x, cy: from.y, opacity: 1 }}
-            animate={{ cx: to.x, cy: to.y, opacity: 0 }}
-            transition={{ duration: 1.1, ease: "easeInOut" }}
-          />
-        );
-      })}
-
-      {/* Nodes */}
-      {NODES.map(n => (
-        <g key={n.id}>
-          {n.isHub && (
-            <motion.circle
-              cx={n.x} cy={n.y} r={n.size * 0.7}
-              fill="none" stroke="#4AE54A" strokeWidth="0.4" strokeOpacity="0.3"
-              animate={{ r: [n.size * 0.7, n.size * 1.1, n.size * 0.7] }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            />
-          )}
-          <circle
-            cx={n.x} cy={n.y} r={n.size * 0.38}
-            fill={n.color}
-            fillOpacity={n.isHub ? 0.25 : 0.15}
-            stroke={n.color}
-            strokeWidth={n.isHub ? 0.5 : 0.3}
-            strokeOpacity={0.6}
-            style={{ filter: n.isHub ? `drop-shadow(0 0 3px ${n.color})` : undefined }}
-          />
-          {n.isHub && (
-            <text x={n.x} y={n.y + 0.5} textAnchor="middle" dominantBaseline="middle" fill="#4AE54A" fontSize="2.2" fontWeight="bold">
-              ⛽
-            </text>
-          )}
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-// ─── Live TX Feed ─────────────────────────────────────────────────────────────
-
-const CHAINS_FEED = ["AVAX","BNB","ETH","MANTLE","INJECTIVE","XLAYER","STABLE","MONAD","SCROLL"];
-const TOKENS_FEED = ["USDC","USDT"];
-
-function randomHex(len: number) {
-  return Array.from({length: len}, () => Math.floor(Math.random()*16).toString(16)).join("");
-}
-
-function useLiveFeed() {
-  const [items, setItems] = useState<{ id: number; chain: string; token: string; amount: string; from: string; to: string; ms: number }[]>([]);
-  const counter = useRef(0);
-
-  useEffect(() => {
-    const add = () => {
-      setItems(prev => [
-        {
-          id: ++counter.current,
-          chain: CHAINS_FEED[Math.floor(Math.random() * CHAINS_FEED.length)],
-          token: TOKENS_FEED[Math.floor(Math.random() * TOKENS_FEED.length)],
-          amount: (Math.random() * 200 + 1).toFixed(2),
-          from: `0x${randomHex(4)}…${randomHex(4)}`,
-          to:   `0x${randomHex(4)}…${randomHex(4)}`,
-          ms: Math.floor(Math.random() * 300 + 80),
-        },
-        ...prev.slice(0, 11),
-      ]);
-    };
-    add();
-    const t = setInterval(add, 900);
-    return () => clearInterval(t);
-  }, []);
-
-  return items;
-}
-
-// ─── Contact Modal ────────────────────────────────────────────────────────────
-
-function ContactModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ name: "", email: "", telegram: "", agents: "", description: "" });
-  const [status, setStatus] = useState<"idle"|"sending"|"done">("idle");
-
-  async function handleSubmit() {
-    if (!form.name || !form.email) return;
-    setStatus("sending");
-    try {
-      await fetch("/api/inquiry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          appName: form.name,
-          email: form.email,
-          telegram: form.telegram,
-          category: "AI / Agents",
-          targetChain: "Multi-chain",
-          expectedVolume: form.agents ? `${form.agents} agents` : "Unknown",
-          description: `[AGENT PLAN INQUIRY]\n${form.description}`,
-        }),
-      });
-    } catch { /* best-effort */ }
-    await new Promise(r => setTimeout(r, 800));
-    setStatus("done");
-  }
-
-  const overlay = { hidden: { opacity: 0 }, visible: { opacity: 1 } };
-  const panel   = { hidden: { opacity: 0, scale: 0.96, y: 16 }, visible: { opacity: 1, scale: 1, y: 0 } };
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        variants={overlay} initial="hidden" animate="visible" exit="hidden"
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(16px)" }}
-        onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      >
-        <motion.div
-          variants={panel} initial="hidden" animate="visible" exit="hidden"
-          transition={{ type: "spring", damping: 28, stiffness: 300 }}
-          className="w-full max-w-md rounded-2xl overflow-hidden border shadow-2xl"
-          style={{ background: "#090E1A", borderColor: "rgba(74,229,74,0.2)" }}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "rgba(74,229,74,0.1)" }}>
-            <div>
-              <div className="text-green-400 font-bold text-sm uppercase tracking-widest">Agent Plan</div>
-              <div className="text-white/30 text-xs mt-0.5">
-                {status === "done" ? "Request received" : "Contact Sales"}
-              </div>
-            </div>
-            <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
-          </div>
-
-          <div className="px-6 py-6">
-            {status === "done" ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: "spring" }}
-                className="text-center py-6"
-              >
-                <motion.div
-                  initial={{ scale: 0 }} animate={{ scale: 1 }}
-                  transition={{ type: "spring", delay: 0.1, damping: 12 }}
-                  className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-400/15 border border-green-400/30 flex items-center justify-center text-2xl"
-                >
-                  ✓
-                </motion.div>
-                <h2 className="text-lg font-bold mb-2">We&apos;ll be in touch</h2>
-                <p className="text-white/40 text-sm mb-6">
-                  Our team will reach out within 24 hours to set up your Agent plan and Gas Tank.
-                </p>
-                <div className="flex items-center gap-2 justify-center text-xs text-white/30">
-                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="#29B6F6">
-                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-                  </svg>
-                  or reach us at{" "}
-                  <a href="https://t.me/kwanyeonglee" target="_blank" rel="noopener noreferrer" className="text-[#29B6F6] hover:underline">@kwanyeonglee</a>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                <p className="text-white/40 text-sm">Tell us about your agent pipeline and we&apos;ll get you set up.</p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">Name / Project <span className="text-green-400">*</span></label>
-                    <input
-                      type="text" placeholder="e.g. TradingBot Pro"
-                      value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">Email <span className="text-green-400">*</span></label>
-                    <input
-                      type="email" placeholder="you@company.com"
-                      value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">Telegram</label>
-                    <input
-                      type="text" placeholder="@yourhandle"
-                      value={form.telegram} onChange={e => setForm(f => ({ ...f, telegram: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">Number of agents</label>
-                    <input
-                      type="text" placeholder="e.g. 50–200"
-                      value={form.agents} onChange={e => setForm(f => ({ ...f, agents: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">What are your agents doing?</label>
-                  <textarea
-                    rows={3} placeholder="DeFi arb bots, payment processors, yield agents..."
-                    value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors resize-none"
-                  />
-                </div>
-
-                <button
-                  onClick={handleSubmit}
-                  disabled={!form.name || !form.email || status === "sending"}
-                  className="w-full bg-green-400 text-navy font-extrabold py-4 rounded-xl hover:bg-green-300 transition-all hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100"
-                >
-                  {status === "sending" ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3"/>
-                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-                      </svg>
-                      Sending…
-                    </span>
-                  ) : "Send Inquiry →"}
-                </button>
-
-                <div className="flex items-center gap-2 text-xs text-white/25 justify-center">
-                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="#29B6F6">
-                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-                  </svg>
-                  or DM us on Telegram:{" "}
-                  <a href="https://t.me/kwanyeonglee" target="_blank" rel="noopener noreferrer" className="text-[#29B6F6] hover:underline">@kwanyeonglee</a>
-                </div>
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-const CHAIN_COLORS: Record<string, string> = {
-  AVAX: "#E84142", BNB: "#F0B90B", ETH: "#627EEA", MANTLE: "#FFFFFF", INJECTIVE: "#0082FA", XLAYER: "#CCCCCC", STABLE: "#4AE54A", MONAD: "#836EF9", SCROLL: "#EEB431",
+type UseCase = {
+  key: string;
+  label: string;
+  one: string;
+  prompt: string;
 };
 
+const USE_CASES: UseCase[] = [
+  {
+    key: "shop",
+    label: "Shopping",
+    one: "Pay merchants and SaaS APIs without surfacing the user's wallet.",
+    prompt: '"Buy the $25 monthly plan and split the bill across the team."',
+  },
+  {
+    key: "scrape",
+    label: "Scrape",
+    one: "Stream sub-cent payments to data providers as your agent crawls.",
+    prompt: '"Pull yesterday\'s SEC filings — pay each provider per row."',
+  },
+  {
+    key: "research",
+    label: "Research",
+    one: "Compensate human-in-the-loop reviewers with one-line transfers.",
+    prompt: '"Send $40 to the analyst who labelled this dataset."',
+  },
+  {
+    key: "ops",
+    label: "Ops",
+    one: "Refill workers, vendors, and on-chain services on a schedule.",
+    prompt: '"Top up our 12 deploy bots to $10 each, every Friday."',
+  },
+];
+
 export default function AgentsPage() {
-  const [showContact, setShowContact] = useState(false);
-  const feed = useLiveFeed();
+  const [activeTab, setActiveTab] = useState<string>(USE_CASES[0].key);
+  const [copied, setCopied] = useState(false);
+  const activeCase = USE_CASES.find((u) => u.key === activeTab) ?? USE_CASES[0];
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(INSTALL_CMD);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }
 
   return (
-    <div className="min-h-screen text-white overflow-x-hidden" style={{ background: "#060B14" }}>
+    <>
       <Navbar />
 
-      {showContact && <ContactModal onClose={() => setShowContact(false)} />}
-
-      {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-20 pb-12 overflow-hidden">
-
-        {/* Animated background grid */}
-        <div className="absolute inset-0 pointer-events-none"
-          style={{
-            backgroundImage: "linear-gradient(rgba(74,229,74,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(74,229,74,0.04) 1px, transparent 1px)",
-            backgroundSize: "60px 60px",
-          }}
-        />
-        {/* Green radial glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full pointer-events-none"
-          style={{ background: "radial-gradient(circle, rgba(74,229,74,0.07) 0%, transparent 70%)" }}
-        />
-
-        <div className="relative z-10 max-w-6xl mx-auto w-full grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left: Text */}
-          <motion.div initial={{ opacity: 0, x: -32 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7, ease: "easeOut" }}>
-            <motion.div
-              initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-              className="inline-flex items-center gap-2 text-green-400 text-xs font-bold uppercase tracking-widest border border-green-400/25 bg-green-400/5 px-3 py-1.5 rounded-full mb-6"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              AI / Agents — Live
-            </motion.div>
-
-            <h1 className="text-5xl md:text-6xl font-extrabold leading-[1.08] mb-5">
-              One Gas Tank.<br />
-              <span className="text-green-400" style={{ textShadow: "0 0 40px rgba(74,229,74,0.4)" }}>
-                Infinite Agents.
-              </span>
-            </h1>
-            <p className="text-white/50 text-lg leading-relaxed mb-8">
-              Stop managing gas wallets across 1,000+ agents on 9 chains.
-              Deposit once — every agent relays freely until the tank runs dry.
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <motion.button
-                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}
-                onClick={() => setShowContact(true)}
-                className="bg-green-400 text-navy font-extrabold px-8 py-4 rounded-xl hover:bg-green-300 transition-colors shadow-lg"
-                style={{ boxShadow: "0 0 32px rgba(74,229,74,0.25)" }}
-              >
-                Contact Sales →
-              </motion.button>
-              <motion.a
-                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}
-                href="/docs"
-                className="border border-white/15 text-white font-semibold px-8 py-4 rounded-xl hover:bg-white/5 transition-colors text-center"
-              >
-                Read the Docs
-              </motion.a>
-            </div>
-
-            {/* Stats */}
-            <div className="flex gap-8 mt-10">
-              {[
-                { val: "8",   label: "EVM Chains" },
-                { val: "∞",   label: "TX Quota" },
-                { val: "$0",  label: "Gas per agent" },
-              ].map((s, i) => (
-                <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.1 }}>
-                  <div className="text-2xl font-extrabold text-green-400">{s.val}</div>
-                  <div className="text-xs text-white/30 mt-0.5">{s.label}</div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Right: Agent Network + Live Feed */}
-          <motion.div initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7, delay: 0.15, ease: "easeOut" }}
-            className="flex flex-col gap-4"
-          >
-            {/* Network graph */}
-            <div className="relative rounded-2xl border border-green-400/15 overflow-hidden"
-              style={{ background: "rgba(74,229,74,0.02)", aspectRatio: "1/0.75" }}
-            >
-              <div className="absolute inset-0 p-4">
-                <AgentNetwork />
-              </div>
-              <div className="absolute top-3 left-4 text-[10px] text-green-400/50 font-mono uppercase tracking-widest">
-                agent network · live
-              </div>
-              <div className="absolute bottom-3 right-4 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-[10px] text-green-400/50 font-mono">relaying</span>
-              </div>
-            </div>
-
-            {/* Live TX feed */}
-            <div className="rounded-2xl border border-white/8 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/6">
-                <span className="text-[10px] text-white/30 font-mono uppercase tracking-widest">live relay feed</span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-[10px] text-green-400/60 font-mono">live</span>
-                </span>
-              </div>
-              <div className="h-40 overflow-hidden relative">
-                <AnimatePresence initial={false}>
-                  {feed.slice(0, 7).map(item => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, y: -24 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="flex items-center gap-3 px-4 py-1.5 border-b border-white/4 text-xs"
-                    >
-                      <span className="font-bold font-mono w-14 flex-shrink-0"
-                        style={{ color: CHAIN_COLORS[item.chain] ?? "#fff" }}>
-                        {item.chain}
-                      </span>
-                      <span className="text-white/60 font-mono">{item.from}</span>
-                      <span className="text-white/25">→</span>
-                      <span className="text-white/60 font-mono">{item.to}</span>
-                      <span className="ml-auto text-green-400 font-semibold whitespace-nowrap">
-                        {item.amount} {item.token}
-                      </span>
-                      <span className="text-white/20 w-12 text-right flex-shrink-0">{item.ms}ms</span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── Agentic Wallet ─────────────────────────────────────────────────── */}
-      <section className="py-20 px-6">
+      {/* The /agents canvas is its own surface — warm cream instead of the
+          navy used everywhere else. Anchored above the global Footer. */}
+      <main
+        className="pt-24 pb-24 px-6"
+        style={{
+          background:
+            "radial-gradient(1100px 600px at 80% -10%, rgba(74,222,128,0.18), transparent 65%), linear-gradient(180deg, #F8F2E7 0%, #F1E8D6 100%)",
+          color: "#1F2A24",
+        }}
+      >
         <div className="max-w-5xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="text-center mb-10"
-          >
-            <div className="text-[10px] uppercase tracking-[0.22em] text-yellow font-bold mb-3">
-              New · v1.5
-            </div>
-            <h2 className="text-3xl font-bold mb-3">
-              Give your agent its own wallet
-            </h2>
-            <p className="text-white/45 text-sm max-w-2xl mx-auto">
-              Deposit stablecoins once. Your AI sends from a dedicated, Q402-managed
-              address — gaslessly, within the rules you define. Your MetaMask never
-              gets delegated, and you can export the key anytime.
-            </p>
-          </motion.div>
+          <Hero />
 
-          <div className="grid md:grid-cols-3 gap-5">
-            <motion.div
-              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.45 }}
-              className="rounded-2xl border border-white/8 p-6"
-              style={{ background: "rgba(255,255,255,0.02)" }}
-            >
-              <div className="text-yellow text-xs font-bold uppercase tracking-widest mb-3">1 · Create</div>
-              <div className="text-white text-base font-semibold mb-2">One click in your dashboard</div>
-              <div className="text-white/45 text-sm">
-                Q402 generates a dedicated EOA for you. Private key stays
-                AES-256-GCM encrypted server-side. Export anytime to a hardware
-                or software wallet of your choice.
-              </div>
-            </motion.div>
+          <BalanceMockup />
 
-            <motion.div
-              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.08 }}
-              className="rounded-2xl border border-white/8 p-6"
-              style={{ background: "rgba(255,255,255,0.02)" }}
-            >
-              <div className="text-yellow text-xs font-bold uppercase tracking-widest mb-3">2 · Deposit</div>
-              <div className="text-white text-base font-semibold mb-2">Fund once, spend many</div>
-              <div className="text-white/45 text-sm">
-                Send USDC or USDT to the wallet&apos;s address. BNB Chain is free
-                during the trial; multichain payments + 20-recipient batches
-                unlock with a paid subscription.
-              </div>
-            </motion.div>
+          <InstallCard
+            activeCase={activeCase}
+            tabs={USE_CASES}
+            onSelectTab={setActiveTab}
+            copied={copied}
+            onCopy={copy}
+          />
 
-            <motion.div
-              initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.16 }}
-              className="rounded-2xl border border-white/8 p-6"
-              style={{ background: "rgba(255,255,255,0.02)" }}
-            >
-              <div className="text-yellow text-xs font-bold uppercase tracking-widest mb-3">3 · Let your agent run</div>
-              <div className="text-white text-base font-semibold mb-2">Same MCP, new signer</div>
-              <div className="text-white/45 text-sm">
-                The MCP server already shipping in <span className="font-mono text-white/65">@quackai/q402-mcp</span>
-                {" "}detects your Agentic Wallet automatically. No re-install, no
-                key pasting — your agent simply signs through the server.
-              </div>
-            </motion.div>
-          </div>
+          <UseCaseGrid />
 
-          <motion.div
-            initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.4, delay: 0.24 }}
-            className="mt-8 flex flex-wrap justify-center gap-3"
-          >
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold bg-yellow text-navy hover:bg-yellow/90"
-            >
-              Create your Agentic Wallet →
-            </Link>
-            <Link
-              href="/claude"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium text-white/70 hover:text-white border border-white/12 hover:bg-white/[0.04]"
-            >
-              Use from Claude · Codex · Cursor · Cline
-            </Link>
-          </motion.div>
+          <Closing />
         </div>
-      </section>
-
-      {/* ── Problem vs Solution ──────────────────────────────────────────────── */}
-      <section className="py-20 px-6">
-        <div className="max-w-5xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-3xl font-bold mb-3">Gas management at scale is broken</h2>
-            <p className="text-white/40 text-sm">Running 100 agents across 9 chains = 800 funded wallets to maintain</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Old way */}
-            <motion.div
-              initial={{ opacity: 0, x: -24 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.5 }}
-              className="rounded-2xl border border-red-400/15 p-6"
-              style={{ background: "rgba(248,113,113,0.03)" }}
-            >
-              <div className="text-red-400 text-xs font-bold uppercase tracking-widest mb-4">Traditional approach</div>
-              <div className="space-y-3">
-                {[
-                  "Each agent holds AVAX + BNB + ETH + OKB + USDT0 + MNT + INJ + MON + Scroll ETH",
-                  "Gas spikes drain wallets → agents go silent",
-                  "700 wallets to monitor, refill, rotate keys",
-                  "Failed TX when gas runs out mid-execution",
-                  "Separate gas logic per chain, per agent",
-                ].map((t, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm text-white/50">
-                    <span className="text-red-400/60 mt-0.5 flex-shrink-0">✕</span>
-                    {t}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Q402 way */}
-            <motion.div
-              initial={{ opacity: 0, x: 24 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }}
-              className="rounded-2xl border border-green-400/20 p-6"
-              style={{ background: "rgba(74,229,74,0.03)" }}
-            >
-              <div className="text-green-400 text-xs font-bold uppercase tracking-widest mb-4">With Q402</div>
-              <div className="space-y-3">
-                {[
-                  "Agents hold zero gas — sign EIP-712 off-chain only",
-                  "One Gas Tank per chain funds unlimited agents",
-                  "1 API key, one deposit per chain — done",
-                  "Q402 relayer handles gas estimation & retry",
-                  "Same SDK call for all 9 chains",
-                ].map((t, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm text-white/70">
-                    <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                    {t}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Code Walkthrough ─────────────────────────────────────────────────── */}
-      <section className="py-20 px-6">
-        <div className="max-w-3xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="text-center mb-10"
-          >
-            <h2 className="text-3xl font-bold mb-2">Node.js. No browser wallet.</h2>
-            <p className="text-white/35 text-sm">Pure viem. Sign EIP-7702 authorizations server-side.</p>
-          </motion.div>
-
-          <div className="space-y-3">
-            {[
-              {
-                n: "1", label: "Initialize agent wallet",
-                code: `import { createWalletClient, http } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { avalanche } from "viem/chains";
-
-const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY);
-const client  = createWalletClient({
-  account, chain: avalanche,
-  transport: http(process.env.AVAX_RPC),
-});`,
-              },
-              {
-                n: "2", label: "Sign EIP-7702 authorization (server-side)",
-                code: `// No MetaMask needed — viem signs directly
-const auth = await client.experimental_signAuthorization({
-  contractAddress: "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
-  nonce: await client.getTransactionCount({ address: account.address }),
-});
-// → { chainId, address, nonce, yParity, r, s }`,
-              },
-              {
-                n: "3", label: "Relay — agents pay $0, gas billed to your Gas Tank",
-                code: `const res = await fetch("https://q402.quackai.ai/api/relay", {
-  method: "POST",
-  body: JSON.stringify({
-    apiKey: process.env.Q402_MULTICHAIN_API_KEY,  // shared across all agents
-    chain: "avax", token: "USDC",
-    from: account.address, to: recipient,
-    amount: "5000000",  // 5 USDC
-    deadline: Math.floor(Date.now() / 1000) + 3600,
-    nonce: String(randomNonce),
-    witnessSig: sig,
-    authorization: auth,
-  }),
-});
-const { txHash, gasCostNative } = await res.json();
-// gasCostNative charged from your Gas Tank — agents pay $0`,
-              },
-            ].map((step, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="rounded-2xl border border-white/8 overflow-hidden"
-              >
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-white/6"
-                  style={{ background: "rgba(74,229,74,0.03)" }}>
-                  <span className="w-6 h-6 rounded-full bg-green-400/15 text-green-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                    {step.n}
-                  </span>
-                  <span className="text-xs text-white/50 font-medium">{step.label}</span>
-                  <span className="ml-auto text-[10px] text-white/20 font-mono">javascript</span>
-                </div>
-                <pre className="p-4 text-xs text-white/65 overflow-x-auto leading-relaxed font-mono"
-                  style={{ background: "rgba(0,0,0,0.3)" }}>
-                  <code>{step.code}</code>
-                </pre>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Pricing CTA ──────────────────────────────────────────────────────── */}
-      <section className="py-20 px-6">
-        <div className="max-w-xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="rounded-2xl border border-green-400/20 p-10 text-center relative overflow-hidden"
-            style={{ background: "linear-gradient(135deg, rgba(74,229,74,0.07) 0%, rgba(6,11,20,0.95) 100%)" }}
-          >
-            <div className="absolute inset-0 pointer-events-none"
-              style={{ background: "radial-gradient(circle at 50% 0%, rgba(74,229,74,0.12) 0%, transparent 60%)" }}
-            />
-            <div className="relative">
-              <div className="text-green-400 text-xs font-bold uppercase tracking-widest mb-4">Agent Plan</div>
-              <div className="flex items-baseline justify-center gap-1 mb-1">
-                <span className="text-white/40 text-lg">from</span>
-                <span className="text-6xl font-extrabold">$500</span>
-                <span className="text-white/40 text-lg">/30-day access</span>
-              </div>
-              <p className="text-white/35 text-sm mb-8">
-                + Gas Tank deposits (consumed at actual on-chain cost, no markup)
-              </p>
-              <ul className="text-left space-y-2.5 mb-8 max-w-xs mx-auto">
-                {[
-                  "Unlimited TX quota",
-                  "All 9 EVM chains",
-                  "Gas Tank pre-pay model",
-                  "Webhooks + real-time events",
-                  "Sandbox mode for testing",
-                  "Node.js SDK support",
-                  "Priority support",
-                ].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2.5 text-sm text-white/70">
-                    <span className="text-green-400 flex-shrink-0">✓</span>{f}
-                  </li>
-                ))}
-              </ul>
-              <motion.button
-                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}
-                onClick={() => setShowContact(true)}
-                className="w-full bg-green-400 text-navy font-extrabold py-4 rounded-xl hover:bg-green-300 transition-colors"
-                style={{ boxShadow: "0 0 32px rgba(74,229,74,0.2)" }}
-              >
-                Contact Sales →
-              </motion.button>
-              <p className="text-white/20 text-xs mt-4">Custom pricing for pipelines with 1,000+ agents</p>
-            </div>
-          </motion.div>
-        </div>
-      </section>
+      </main>
 
       <Footer />
+    </>
+  );
+}
+
+// ── Hero ───────────────────────────────────────────────────────────────────
+
+function Hero() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="text-center mb-12"
+    >
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.22em] font-bold mb-5"
+        style={{ background: "rgba(34,131,75,0.10)", color: "#226B43" }}
+      >
+        <span>✦</span>
+        Q402 Agent Wallet · Super 2.0
+      </div>
+      <h1
+        className="text-5xl md:text-6xl font-semibold tracking-tight mb-4"
+        style={{ color: "#15201A" }}
+      >
+        Your AI&apos;s wallet.
+        <br />
+        <span style={{ color: "#226B43" }}>One install. No popups.</span>
+      </h1>
+      <p
+        className="text-base md:text-lg max-w-2xl mx-auto leading-relaxed"
+        style={{ color: "rgba(31,42,36,0.65)" }}
+      >
+        A Q402-managed wallet your agent signs through. Your MetaMask
+        never gets touched. Deposit stablecoins once; your agent operates
+        within the per-tx and per-day limits you set.
+      </p>
+
+      <div className="flex flex-wrap justify-center gap-3 mt-8">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold transition-colors"
+          style={{ background: "#22C55E", color: "#0B1A12" }}
+        >
+          Open dashboard →
+        </Link>
+        <Link
+          href="/claude"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium transition-colors border"
+          style={{
+            borderColor: "rgba(34,107,67,0.25)",
+            color: "#226B43",
+            background: "rgba(255,255,255,0.4)",
+          }}
+        >
+          Use from Claude · Codex · Cursor · Cline
+        </Link>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Mockup of the dashboard Agent card (purely decorative) ────────────────
+
+function BalanceMockup() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.55 }}
+      className="rounded-2xl border p-7 mb-10 relative overflow-hidden"
+      style={{
+        background:
+          "linear-gradient(135deg, #FFFFFF 0%, #FBF6EB 100%)",
+        borderColor: "rgba(34,107,67,0.18)",
+        boxShadow: "0 20px 60px rgba(31,42,36,0.06)",
+      }}
+    >
+      <div
+        aria-hidden
+        className="absolute top-0 right-0 h-full w-1/2 pointer-events-none opacity-60"
+        style={{
+          background:
+            "radial-gradient(circle, rgba(34,131,75,0.20) 1px, transparent 1.4px) 0 0 / 14px 14px",
+          maskImage: "linear-gradient(to left, black 0%, black 30%, transparent 80%)",
+          WebkitMaskImage: "linear-gradient(to left, black 0%, black 30%, transparent 80%)",
+        }}
+      />
+      <div className="relative flex items-start justify-between gap-4 mb-6">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] font-medium mb-1" style={{ color: "rgba(31,42,36,0.50)" }}>
+            Available balance
+          </div>
+          <div className="flex items-baseline gap-2">
+            <div className="text-4xl font-semibold tracking-tight" style={{ color: "#15201A" }}>$42.50</div>
+            <div className="text-xs" style={{ color: "rgba(31,42,36,0.45)" }}>USDC + USDT · BNB</div>
+          </div>
+        </div>
+        <div
+          className="rounded-full border px-3 py-1.5 text-[11px] font-mono"
+          style={{
+            background: "rgba(255,255,255,0.6)",
+            borderColor: "rgba(31,42,36,0.10)",
+            color: "rgba(31,42,36,0.65)",
+          }}
+        >
+          0xD222…ff64
+        </div>
+      </div>
+      <div className="relative flex flex-wrap gap-2">
+        {[
+          { l: "Send", a: "↗" },
+          { l: "Receive", a: "↙" },
+          { l: "Add Funds", a: "+" },
+        ].map((b) => (
+          <span
+            key={b.l}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium"
+            style={{
+              background: "rgba(34,197,94,0.12)",
+              color: "#226B43",
+              border: "1px solid rgba(34,197,94,0.28)",
+            }}
+          >
+            <span className="text-sm leading-none">{b.a}</span>
+            {b.l}
+          </span>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Install card (Kite-style tabs) ─────────────────────────────────────────
+
+function InstallCard({
+  activeCase,
+  tabs,
+  onSelectTab,
+  copied,
+  onCopy,
+}: {
+  activeCase: UseCase;
+  tabs: UseCase[];
+  onSelectTab: (k: string) => void;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5 }}
+      className="rounded-2xl border p-7 mb-10"
+      style={{
+        background: "rgba(255,255,255,0.65)",
+        borderColor: "rgba(31,42,36,0.10)",
+        boxShadow: "0 14px 36px rgba(31,42,36,0.04)",
+      }}
+    >
+      <div className="text-xl font-semibold mb-4" style={{ color: "#15201A" }}>
+        Start using your Agent Wallet
+      </div>
+
+      <div
+        className="flex flex-wrap gap-1 mb-5 pb-3 border-b"
+        style={{ borderColor: "rgba(31,42,36,0.08)" }}
+      >
+        <Tab label="Install" active={activeCase.key === "install"} onClick={() => onSelectTab("install")} sticky />
+        {tabs.map((t) => (
+          <Tab
+            key={t.key}
+            label={t.label}
+            active={activeCase.key === t.key}
+            onClick={() => onSelectTab(t.key)}
+          />
+        ))}
+      </div>
+
+      <div
+        className="rounded-md border px-4 py-3 flex items-center justify-between font-mono text-sm"
+        style={{
+          background: "rgba(34,131,75,0.06)",
+          borderColor: "rgba(34,131,75,0.18)",
+          color: "#15201A",
+        }}
+      >
+        <span>
+          <span className="mr-2" style={{ color: "rgba(34,107,67,0.7)" }}>{">"}</span>
+          {INSTALL_CMD}
+        </span>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="text-[11px] transition-colors"
+          style={{ color: copied ? "#22C55E" : "rgba(31,42,36,0.5)" }}
+        >
+          {copied ? "copied ✓" : "copy"}
+        </button>
+      </div>
+
+      <div
+        className="mt-4 text-sm rounded-md px-4 py-3"
+        style={{
+          background: "rgba(255,255,255,0.7)",
+          color: "rgba(31,42,36,0.72)",
+          border: "1px solid rgba(31,42,36,0.06)",
+        }}
+      >
+        <span className="font-medium" style={{ color: "#226B43" }}>{activeCase.label}:</span>{" "}
+        {activeCase.one}{" "}
+        <span className="italic" style={{ color: "rgba(31,42,36,0.55)" }}>{activeCase.prompt}</span>
+      </div>
+
+      <a
+        href="/docs#claude-mcp"
+        className="inline-block mt-4 text-sm font-medium hover:underline"
+        style={{ color: "#226B43" }}
+      >
+        View quickstart guide →
+      </a>
+    </motion.div>
+  );
+}
+
+function Tab({ label, active, onClick, sticky }: { label: string; active: boolean; onClick: () => void; sticky?: boolean }) {
+  const isActive = sticky || active;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="px-3 py-1.5 text-sm font-medium transition-colors"
+      style={{
+        color: isActive ? "#15201A" : "rgba(31,42,36,0.45)",
+        borderBottom: isActive ? "2px solid #22C55E" : "2px solid transparent",
+        marginBottom: "-13px",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ── Use case grid ──────────────────────────────────────────────────────────
+
+function UseCaseGrid() {
+  return (
+    <div className="grid md:grid-cols-3 gap-4 mb-12">
+      {USE_CASES.slice(0, 3).map((u, i) => (
+        <motion.div
+          key={u.key}
+          initial={{ opacity: 0, y: 12 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4, delay: i * 0.08 }}
+          className="rounded-2xl border p-5"
+          style={{
+            background: "rgba(255,255,255,0.55)",
+            borderColor: "rgba(31,42,36,0.08)",
+          }}
+        >
+          <div
+            className="text-[10px] uppercase tracking-[0.20em] font-bold mb-3"
+            style={{ color: "#226B43" }}
+          >
+            {u.label}
+          </div>
+          <div className="text-base font-semibold mb-2" style={{ color: "#15201A" }}>
+            {u.prompt}
+          </div>
+          <div className="text-sm leading-relaxed" style={{ color: "rgba(31,42,36,0.60)" }}>
+            {u.one}
+          </div>
+        </motion.div>
+      ))}
     </div>
+  );
+}
+
+// ── Closing CTA ────────────────────────────────────────────────────────────
+
+function Closing() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.45 }}
+      className="text-center"
+    >
+      <div className="text-xl font-semibold mb-3" style={{ color: "#15201A" }}>
+        Build with it today.
+      </div>
+      <div className="text-sm mb-6 max-w-xl mx-auto leading-relaxed" style={{ color: "rgba(31,42,36,0.62)" }}>
+        Free during the trial — 2,000 sponsored TX on BNB Chain. A Multichain
+        key extends the same wallet to the full 9 EVM chains Q402 supports.
+        Wallet creation, soft-delete, and per-wallet limits are always free.
+      </div>
+      <div className="flex flex-wrap justify-center gap-3">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold"
+          style={{ background: "#22C55E", color: "#0B1A12" }}
+        >
+          Create your Agent Wallet →
+        </Link>
+        <Link
+          href="/docs#claude-mcp"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium border"
+          style={{
+            borderColor: "rgba(34,107,67,0.25)",
+            color: "#226B43",
+            background: "rgba(255,255,255,0.4)",
+          }}
+        >
+          Read the docs
+        </Link>
+      </div>
+    </motion.div>
   );
 }

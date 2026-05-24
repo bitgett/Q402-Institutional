@@ -161,19 +161,37 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
 
   if (!body) return NextResponse.json({ error: "invalid_body" }, { status: 400 });
 
+  // Hard ceiling: enough headroom for any realistic wallet use case while
+  // still ruling out paste-error / overflow values (e.g. 1e18 from a copy
+  // of a raw token amount). One-shot upgrade by editing this constant if
+  // institutional users ever push past it.
+  const LIMIT_MAX_USD = 1_000_000;
+
+  const validLimit = (v: unknown, field: string): { ok: true; value: number | null } | { ok: false; res: NextResponse } => {
+    if (v === null) return { ok: true, value: null };
+    if (typeof v !== "number" || !Number.isFinite(v)) {
+      return { ok: false, res: NextResponse.json({ error: `${field} must be a finite number or null` }, { status: 400 }) };
+    }
+    if (v < 0) {
+      return { ok: false, res: NextResponse.json({ error: `${field} cannot be negative` }, { status: 400 }) };
+    }
+    if (v > LIMIT_MAX_USD) {
+      return { ok: false, res: NextResponse.json({ error: `${field} cannot exceed ${LIMIT_MAX_USD}` }, { status: 400 }) };
+    }
+    return { ok: true, value: v };
+  };
+
   // Each limit is independently optional. null = clear, number = set, undefined = leave.
   const patch: { dailyLimitUsd?: number | null; perTxMaxUsd?: number | null } = {};
   if ("dailyLimitUsd" in body) {
-    if (body.dailyLimitUsd !== null && typeof body.dailyLimitUsd !== "number") {
-      return NextResponse.json({ error: "dailyLimitUsd must be number or null" }, { status: 400 });
-    }
-    patch.dailyLimitUsd = body.dailyLimitUsd;
+    const v = validLimit(body.dailyLimitUsd, "dailyLimitUsd");
+    if (!v.ok) return v.res;
+    patch.dailyLimitUsd = v.value;
   }
   if ("perTxMaxUsd" in body) {
-    if (body.perTxMaxUsd !== null && typeof body.perTxMaxUsd !== "number") {
-      return NextResponse.json({ error: "perTxMaxUsd must be number or null" }, { status: 400 });
-    }
-    patch.perTxMaxUsd = body.perTxMaxUsd;
+    const v = validLimit(body.perTxMaxUsd, "perTxMaxUsd");
+    if (!v.ok) return v.res;
+    patch.perTxMaxUsd = v.value;
   }
 
   try {

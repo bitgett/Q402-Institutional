@@ -1,24 +1,22 @@
 /**
  * POST /api/wallet/agentic/send
  *
- * Submit a single-recipient gasless payment from the caller's Agentic
- * Wallet. The server holds the wallet's private key (AES-GCM encrypted
- * in KV), so signing happens here — the client just names the chain,
- * token, recipient, and amount.
+ * Server-mediated send from the caller's Agentic Wallet. Because Q402
+ * holds the wallet's AES-GCM-encrypted private key in this flow, signing
+ * happens on the server — the trust model differs from the canonical
+ * /api/relay path (where the user signs locally). Callers should treat
+ * this route as custody-lite: convenient, server-trusted, and bounded by
+ * the wallet's per-wallet limits.
  *
  * Phase 1 MVP scope:
  *   - Single recipient only (batch lives at /api/wallet/agentic/batch).
- *   - BNB chain only. Multichain unlock follows the same `hasMultichainScope`
- *     gate as the existing /api/relay route in a later phase.
- *
- * Auth (either, not both):
- *   - Owner EIP-191 signature  → { ownerAddress, nonce, signature }
- *   - API key (MCP, mode C)    → { apiKey }
- *
- * Whichever path is taken, the wallet record's `ownerAddr` and the
- * resolved caller address must agree, and the wallet must not be
- * soft-deleted. Quota is billed against the resolved owner address using
- * their existing apiKey via the canonical /api/relay route.
+ *   - BNB chain only. Multichain unlock follows `hasMultichainScope` in
+ *     a later phase.
+ *   - Auth: **owner EIP-191 signature only**. The API-key (MCP, mode C)
+ *     path is intentionally NOT enabled in Phase 1 — a leaked apiKey
+ *     would otherwise grant spend authority over the agentic wallet
+ *     without any wallet-side confirmation. Phase 3 reintroduces that
+ *     path behind agentic-scoped keys + enforced limits + allowlists.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -38,8 +36,10 @@ import {
   getActiveAgenticWallet,
   decryptPrivateKey,
   isKeystoreReady,
+  checkDailyLimit,
+  recordDailySpend,
 } from "@/app/lib/agentic-wallet";
-import { getApiKeyRecord, getSubscription, hasMultichainScope } from "@/app/lib/db";
+import { getSubscription, hasMultichainScope } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
 
 export const runtime = "nodejs";
@@ -90,13 +90,10 @@ interface SendBody {
   /** Required: human-readable amount as a decimal string (e.g. "1.50"). */
   amount?: string;
 
-  // Auth — provide either the EIP-191 trio (dashboard) …
+  // Auth — owner EIP-191 trio only in Phase 1.
   ownerAddress?: string;
   nonce?: string;
   signature?: string;
-
-  // … or an apiKey (MCP server-mediated, mode C).
-  apiKey?: string;
 }
 
 function isHexAddress(s: unknown): s is string {
@@ -114,24 +111,15 @@ function randomUint256Nonce(): bigint {
 }
 
 /**
- * Resolve the caller's owner address from either auth mode.
+ * Resolve the caller's owner address via the owner EIP-191 signature.
  * Returns the lowercased owner address or a NextResponse to short-circuit.
+ *
+ * Phase 1: signature-only. apiKey-mode is gated on Phase 3 work.
  */
 async function resolveOwner(
   req: NextRequest,
   body: SendBody,
 ): Promise<string | NextResponse> {
-  if (body.apiKey) {
-    const record = await getApiKeyRecord(body.apiKey);
-    if (!record || !record.active) {
-      return NextResponse.json(
-        { error: "INVALID_API_KEY" },
-        { status: 401 },
-      );
-    }
-    return record.address.toLowerCase();
-  }
-
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "agentic-wallet-send", 30, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -207,18 +195,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Per-tx max guard (if configured) ─────────────────────────────────────
-  if (typeof wallet.perTxMaxUsd === "number") {
-    const numAmount = Number(body.amount);
-    if (Number.isFinite(numAmount) && numAmount > wallet.perTxMaxUsd) {
-      return NextResponse.json(
-        {
-          error: "PER_TX_LIMIT_EXCEEDED",
-          limit: wallet.perTxMaxUsd,
-          requested: numAmount,
-        },
-        { status: 403 },
-      );
-    }
+  const numAmount = Number(body.amount);
+  if (!Number.isFinite(numAmount) || numAmount <= 0) {
+    return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+  }
+  if (typeof wallet.perTxMaxUsd === "number" && numAmount > wallet.perTxMaxUsd) {
+    return NextResponse.json(
+      {
+        error: "PER_TX_LIMIT_EXCEEDED",
+        limit: wallet.perTxMaxUsd,
+        requested: numAmount,
+      },
+      { status: 403 },
+    );
+  }
+
+  // ── Daily cap (enforced) ────────────────────────────────────────────────
+  // Reads today's UTC running spend from KV and rejects if this TX would
+  // overflow the configured cap. Recorded post-relay so a failed/skipped
+  // send doesn't consume the budget.
+  const limitCheck = await checkDailyLimit(owner, numAmount, wallet.dailyLimitUsd);
+  if (!limitCheck.allowed) {
+    return NextResponse.json(
+      {
+        error: "DAILY_LIMIT_EXCEEDED",
+        limit: limitCheck.limit,
+        spent: limitCheck.spent,
+        requested: limitCheck.requested,
+      },
+      { status: 403 },
+    );
   }
 
   // ── Subscription gate ────────────────────────────────────────────────────
@@ -232,10 +238,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Pick the user's most-capable apiKey. Paid live key first; falls back to
-  // the trial key on BNB. Sandbox keys are intentionally excluded — sandbox
-  // signing through the Agentic Wallet is a Phase 3 feature.
-  const apiKey = sub?.apiKey || sub?.trialApiKey;
+  // Pick the user's most-restrictive apiKey for the requested chain. Trial
+  // keys are BNB-only, so on BNB we prefer them — the paid pool only drains
+  // after the trial allotment is exhausted (or the trial window expired).
+  // On non-BNB chains (Phase 2+), the paid key is mandatory.
+  const apiKey =
+    body.chain === "bnb"
+      ? sub?.trialApiKey || sub?.apiKey
+      : sub?.apiKey;
   if (!apiKey) {
     return NextResponse.json(
       { error: "NO_API_KEY", message: "Activate a Q402 trial or subscription before using your Agentic Wallet." },
@@ -252,7 +262,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Server-side signing ──────────────────────────────────────────────────
   const tokenCfg = BNB.tokens[body.token as SupportedToken];
-  const amountRaw = ethers.parseUnits(body.amount as string, tokenCfg.decimals);
+  let amountRaw: bigint;
+  try {
+    amountRaw = ethers.parseUnits(body.amount as string, tokenCfg.decimals);
+  } catch {
+    return NextResponse.json(
+      {
+        error: "AMOUNT_PRECISION_TOO_HIGH",
+        message: `Amount has more decimal places than ${body.token} supports (${tokenCfg.decimals}).`,
+      },
+      { status: 400 },
+    );
+  }
+  if (amountRaw <= 0n) {
+    return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+  }
   const nonceUint = randomUint256Nonce();
   const deadline = BigInt(Math.floor(Date.now() / 1000) + DEADLINE_SECONDS_AHEAD);
 
@@ -333,6 +357,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const relayBody = await relayResponse.json().catch(() => null);
+
+  // Persist today's running spend only on a successful settlement. A
+  // 4xx/5xx relay response means no funds moved — the next attempt
+  // gets the same budget back. Failures here are best-effort.
+  if (relayResponse.ok && relayBody && typeof relayBody === "object" && "txHash" in relayBody) {
+    await recordDailySpend(owner, numAmount).catch(() => {});
+  }
+
   return NextResponse.json(
     relayBody ?? { error: "relay_response_unreadable" },
     { status: relayResponse.status },

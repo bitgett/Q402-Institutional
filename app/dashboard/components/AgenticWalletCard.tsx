@@ -1,11 +1,13 @@
 "use client";
 
 /**
- * AgenticWalletCard — single-wallet display with quick actions.
+ * AgenticWalletCard — hero "Available Balance" card for the Agent tab.
  *
- * Phase 1 MVP scope: show the wallet's address with a copy + BscScan link,
- * a Send button that opens the send modal, and a placeholder for the
- * deposit flow (Phase 2 will add deposit detection + multichain balance).
+ * Layout mirrors the Kite / Agent Passport pattern: a single balance
+ * surface up top with three pill-shaped actions (Send / Receive / Add
+ * Funds) and the wallet's address tucked into the corner. Balance polling
+ * + multi-chain reads land in Phase 2 — this MVP surface tells the
+ * caller where to verify on-chain in the meantime.
  */
 
 import { useState } from "react";
@@ -26,7 +28,7 @@ function shortAddr(addr: string) {
 
 export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: Props) {
   const [sendOpen, setSendOpen] = useState(false);
-  const [depositOpen, setDepositOpen] = useState(false);
+  const [receiveOpen, setReceiveOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -37,18 +39,18 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* ignore — older browsers without permission */
+      /* ignore */
     }
   }
 
   async function archive() {
-    if (!confirm("Archive this Agentic Wallet? You have 7 days to restore it before hard-delete.")) return;
+    if (!confirm("Archive this Agent Wallet? You have 7 days to restore before hard-delete.")) return;
     setArchiving(true);
     setArchiveError(null);
     try {
       const auth = await getAuthCreds(address, signMessage);
       if (!auth) {
-        setArchiveError("Please sign the auth challenge.");
+        setArchiveError("Sign the auth challenge to archive.");
         return;
       }
       const res = await fetch("/api/wallet/agentic", {
@@ -72,114 +74,85 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
   const archived = wallet.deletedAt !== null;
 
   return (
-    <div
-      className="rounded-2xl border p-5 space-y-5"
-      style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}
-    >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-white font-semibold">Agentic Wallet</span>
-            {wallet.erc8004AgentId && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow/15 text-yellow font-mono">
-                Agent #{wallet.erc8004AgentId.slice(-4)}
-              </span>
+    <>
+      <div
+        className="rounded-2xl border p-7 relative overflow-hidden"
+        style={{
+          background: "linear-gradient(135deg, #0F1929 0%, #0A1521 100%)",
+          borderColor: "rgba(74,222,128,0.18)",
+        }}
+      >
+        <DotPattern />
+
+        <div className="relative flex items-start justify-between gap-4 mb-6">
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-white/45 font-medium mb-1">
+              Available balance
+            </div>
+            <div className="flex items-baseline gap-2">
+              <div className="text-4xl font-semibold text-white tracking-tight">
+                $—
+              </div>
+              <div className="text-xs text-white/40">USDC + USDT · BNB</div>
+            </div>
+            {(wallet.dailyLimitUsd !== null || wallet.perTxMaxUsd !== null) && (
+              <div className="text-[11px] text-white/35 mt-2">
+                {wallet.perTxMaxUsd !== null && <>per-tx max ${wallet.perTxMaxUsd} · </>}
+                {wallet.dailyLimitUsd !== null && <>daily cap ${wallet.dailyLimitUsd}</>}
+              </div>
             )}
             {archived && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300">
-                Archived
-              </span>
+              <div className="text-[11px] mt-2 inline-block px-2 py-0.5 rounded bg-red-500/12 text-red-300 font-medium">
+                Archived · 7-day grace
+              </div>
             )}
           </div>
-          <div className="flex items-center gap-2 text-sm font-mono text-white/65">
+
+          <button
+            type="button"
+            onClick={copyAddress}
+            className="rounded-full border px-3 py-1.5 flex items-center gap-2 text-[11px] font-mono text-white/65 hover:text-emerald-300 transition-colors"
+            style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+            title="Copy address"
+          >
             <span>{shortAddr(wallet.address)}</span>
-            <button
-              type="button"
-              onClick={copyAddress}
-              className="text-[11px] text-white/40 hover:text-yellow transition-colors"
-              title="Copy address"
-            >
-              {copied ? "copied ✓" : "copy"}
-            </button>
-            <a
-              href={`https://bscscan.com/address/${wallet.address}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] text-white/40 hover:text-yellow transition-colors"
-            >
-              BscScan ↗
-            </a>
-          </div>
+            <span className="text-white/30">{copied ? "✓" : "⎘"}</span>
+          </button>
         </div>
+
+        <div className="relative flex flex-wrap gap-2">
+          <ActionPill
+            label="Send"
+            disabled={archived}
+            onClick={() => setSendOpen(true)}
+            iconArrow="up-right"
+          />
+          <ActionPill
+            label="Receive"
+            disabled={archived}
+            onClick={() => setReceiveOpen(true)}
+            iconArrow="down-left"
+          />
+          <ActionPill
+            label="Add Funds"
+            disabled={archived}
+            onClick={() => setReceiveOpen(true)}
+            iconArrow="plus"
+          />
+          <button
+            type="button"
+            onClick={archive}
+            disabled={archiving || archived}
+            className="ml-auto px-3 py-1.5 rounded-full text-[11px] text-white/40 hover:text-red-300 transition-colors disabled:opacity-40"
+          >
+            {archiving ? "archiving…" : archived ? "archived" : "archive"}
+          </button>
+        </div>
+
+        {archiveError && (
+          <div className="relative text-[12px] text-red-300/85 mt-3">{archiveError}</div>
+        )}
       </div>
-
-      {/* Balance section — Phase 2 will populate from a deposit-detection
-          cron + Multicall3 read. For MVP we surface a placeholder so the
-          UI doesn't lie about live numbers. */}
-      <div className="grid grid-cols-2 gap-3">
-        <div
-          className="rounded-md border px-3 py-2 text-sm"
-          style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.05)" }}
-        >
-          <div className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">BNB · USDC</div>
-          <div className="text-white/85 font-mono">— check BscScan</div>
-        </div>
-        <div
-          className="rounded-md border px-3 py-2 text-sm"
-          style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.05)" }}
-        >
-          <div className="text-[10px] text-white/40 uppercase tracking-widest mb-0.5">BNB · USDT</div>
-          <div className="text-white/85 font-mono">— check BscScan</div>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={archived}
-          onClick={() => setSendOpen(true)}
-          className="px-3 py-1.5 rounded-md text-sm font-semibold bg-yellow text-navy hover:bg-yellow/90 disabled:opacity-40"
-        >
-          Send
-        </button>
-        <button
-          type="button"
-          onClick={() => setDepositOpen(o => !o)}
-          className="px-3 py-1.5 rounded-md text-sm font-medium text-white/65 hover:text-white border border-white/10 hover:bg-white/[0.04]"
-        >
-          {depositOpen ? "Hide deposit" : "Deposit"}
-        </button>
-        <button
-          type="button"
-          disabled={archiving || archived}
-          onClick={archive}
-          className="ml-auto px-3 py-1.5 rounded-md text-sm font-medium text-white/45 hover:text-red-300 border border-white/10 hover:bg-white/[0.04] disabled:opacity-40"
-        >
-          {archiving ? "Archiving…" : archived ? "Archived" : "Archive"}
-        </button>
-      </div>
-
-      {archiveError && (
-        <div className="text-[12px] text-red-300/80">{archiveError}</div>
-      )}
-
-      {depositOpen && (
-        <div
-          className="rounded-md border px-4 py-3 space-y-2 text-sm"
-          style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.05)" }}
-        >
-          <div className="text-white/75 font-semibold">Deposit to your Agentic Wallet</div>
-          <div className="text-white/45 text-xs">
-            Send USDC or USDT on BNB Chain to the address below. Phase 2 adds automatic
-            balance polling — for now, verify the deposit on BscScan.
-          </div>
-          <div className="rounded bg-black/40 px-3 py-2 font-mono text-[11px] text-white/85 break-all">
-            {wallet.address}
-          </div>
-        </div>
-      )}
 
       {sendOpen && (
         <AgenticWalletSendModal
@@ -193,6 +166,140 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           }}
         />
       )}
+
+      {receiveOpen && (
+        <ReceiveModal walletAddress={wallet.address} onClose={() => setReceiveOpen(false)} />
+      )}
+    </>
+  );
+}
+
+// ── ActionPill ─────────────────────────────────────────────────────────────
+
+function ActionPill({
+  label,
+  onClick,
+  disabled,
+  iconArrow,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  iconArrow: "up-right" | "down-left" | "plus";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      style={{
+        background: "rgba(74,222,128,0.10)",
+        color: "#86efac",
+        border: "1px solid rgba(74,222,128,0.25)",
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.background = "rgba(74,222,128,0.16)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "rgba(74,222,128,0.10)";
+      }}
+    >
+      <ArrowIcon kind={iconArrow} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "plus" }) {
+  if (kind === "plus") {
+    return <span className="text-base leading-none">+</span>;
+  }
+  if (kind === "down-left") {
+    return <span className="text-sm leading-none rotate-180 inline-block">↗</span>;
+  }
+  return <span className="text-sm leading-none inline-block">↗</span>;
+}
+
+// ── Receive / Add Funds modal ──────────────────────────────────────────────
+
+function ReceiveModal({ walletAddress, onClose }: { walletAddress: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(walletAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: "rgba(2,6,15,0.72)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border p-6 space-y-4"
+        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-white font-semibold text-lg">Receive USDC / USDT</div>
+            <div className="text-[11px] text-white/45 mt-0.5">BNB Chain · auto-credited (verify on BscScan)</div>
+          </div>
+          <button onClick={onClose} className="text-white/40 hover:text-white text-lg leading-none">
+            ×
+          </button>
+        </div>
+        <div
+          className="rounded-md border px-3 py-3 font-mono text-[12px] text-white/85 break-all leading-relaxed"
+          style={{ background: "rgba(74,222,128,0.06)", borderColor: "rgba(74,222,128,0.18)" }}
+        >
+          {walletAddress}
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={copy}
+            className="flex-1 px-3 py-2 rounded-full text-sm font-medium"
+            style={{
+              background: "rgba(74,222,128,0.10)",
+              color: "#86efac",
+              border: "1px solid rgba(74,222,128,0.25)",
+            }}
+          >
+            {copied ? "copied ✓" : "Copy address"}
+          </button>
+          <a
+            href={`https://bscscan.com/address/${walletAddress}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 px-3 py-2 rounded-full text-sm font-medium text-center text-white/65 hover:text-white border border-white/10 hover:bg-white/[0.04]"
+          >
+            BscScan ↗
+          </a>
+        </div>
+      </div>
     </div>
+  );
+}
+
+// ── Decorative dot pattern ────────────────────────────────────────────────
+
+function DotPattern() {
+  return (
+    <div
+      aria-hidden
+      className="absolute top-0 right-0 h-full w-1/2 pointer-events-none opacity-40"
+      style={{
+        background:
+          "radial-gradient(circle, rgba(74,222,128,0.25) 1px, transparent 1.5px) 0 0 / 14px 14px",
+        maskImage: "linear-gradient(to left, black 0%, black 30%, transparent 80%)",
+        WebkitMaskImage: "linear-gradient(to left, black 0%, black 30%, transparent 80%)",
+      }}
+    />
   );
 }

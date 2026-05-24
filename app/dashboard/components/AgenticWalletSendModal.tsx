@@ -103,7 +103,7 @@ export function AgenticWalletSendModal({
     >
       <div
         className="w-full max-w-md rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.08)" }}
+        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
@@ -133,7 +133,7 @@ export function AgenticWalletSendModal({
                 href={`https://bscscan.com/tx/${success.txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-yellow hover:underline font-mono break-all"
+                className="text-xs text-emerald-400 hover:underline font-mono break-all"
               >
                 {success.txHash} ↗
               </a>
@@ -141,7 +141,7 @@ export function AgenticWalletSendModal({
             <button
               type="button"
               onClick={onSent}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-yellow text-navy hover:bg-yellow/90"
+              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300"
             >
               Done
             </button>
@@ -170,7 +170,7 @@ export function AgenticWalletSendModal({
                       onClick={() => setToken(t)}
                       className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                         token === t
-                          ? "border-yellow text-yellow bg-yellow/5"
+                          ? "border-emerald-400 text-emerald-300 bg-emerald-400/8"
                           : "border-white/10 text-white/55 hover:text-white"
                       }`}
                     >
@@ -221,7 +221,7 @@ export function AgenticWalletSendModal({
               type="button"
               disabled={!canSubmit}
               onClick={submit}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-yellow text-navy hover:bg-yellow/90 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? "Sending…" : `Send ${amount || "—"} ${token}`}
             </button>
