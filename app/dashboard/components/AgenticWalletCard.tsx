@@ -13,6 +13,8 @@
 import { useState } from "react";
 import { getAuthCreds } from "@/app/lib/auth-client";
 import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
+import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
+import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
 
 interface Props {
@@ -28,7 +30,10 @@ function shortAddr(addr: string) {
 
 export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: Props) {
   const [sendOpen, setSendOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [limitsOpen, setLimitsOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -149,6 +154,36 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           </button>
         </div>
 
+        {/* Secondary actions — subtler row underneath the primary pills. */}
+        <div className="relative mt-4 pt-4 border-t flex flex-wrap items-center gap-4 text-[12px]"
+          style={{ borderColor: "rgba(255,255,255,0.06)" }}
+        >
+          <button
+            type="button"
+            disabled={archived}
+            onClick={() => setWithdrawOpen(true)}
+            className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+          >
+            ↩ Withdraw to your wallet
+          </button>
+          <button
+            type="button"
+            disabled={archived}
+            onClick={() => setLimitsOpen(true)}
+            className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+          >
+            ⚙ Spending limits
+          </button>
+          <button
+            type="button"
+            disabled={archived}
+            onClick={() => setExportOpen(true)}
+            className="ml-auto text-white/45 hover:text-red-300 transition-colors disabled:opacity-40"
+          >
+            ⚠ Export private key
+          </button>
+        </div>
+
         {archiveError && (
           <div className="relative text-[12px] text-red-300/85 mt-3">{archiveError}</div>
         )}
@@ -169,6 +204,46 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
 
       {receiveOpen && (
         <ReceiveModal walletAddress={wallet.address} onClose={() => setReceiveOpen(false)} />
+      )}
+
+      {withdrawOpen && (
+        <AgenticWalletSendModal
+          walletAddress={wallet.address}
+          ownerAddress={address}
+          signMessage={signMessage}
+          onClose={() => setWithdrawOpen(false)}
+          onSent={() => {
+            setWithdrawOpen(false);
+            onChanged();
+          }}
+          prefillTo={address}
+          titleOverride="Withdraw to your wallet"
+        />
+      )}
+
+      {exportOpen && (
+        <AgenticWalletExportModal
+          walletAddress={wallet.address}
+          ownerAddress={address}
+          signMessage={signMessage}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
+
+      {limitsOpen && (
+        <AgenticWalletLimitsModal
+          ownerAddress={address}
+          signMessage={signMessage}
+          initial={{
+            dailyLimitUsd: wallet.dailyLimitUsd,
+            perTxMaxUsd: wallet.perTxMaxUsd,
+          }}
+          onClose={() => setLimitsOpen(false)}
+          onSaved={() => {
+            setLimitsOpen(false);
+            onChanged();
+          }}
+        />
       )}
     </>
   );

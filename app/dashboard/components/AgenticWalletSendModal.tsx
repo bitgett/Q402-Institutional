@@ -17,6 +17,10 @@ interface Props {
   signMessage: (message: string) => Promise<string | null>;
   onClose: () => void;
   onSent: () => void;
+  /** Pre-fill the recipient field (e.g. owner EOA for the Withdraw flow). */
+  prefillTo?: string;
+  /** Override the modal title — Withdraw uses "Withdraw to your wallet". */
+  titleOverride?: string;
 }
 
 type Token = "USDC" | "USDT";
@@ -35,9 +39,11 @@ export function AgenticWalletSendModal({
   signMessage,
   onClose,
   onSent,
+  prefillTo,
+  titleOverride,
 }: Props) {
   const [token, setToken] = useState<Token>("USDT");
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState(prefillTo ?? "");
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +114,7 @@ export function AgenticWalletSendModal({
       >
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-white font-semibold text-lg">Send from Agentic Wallet</div>
+            <div className="text-white font-semibold text-lg">{titleOverride ?? "Send from Agent Wallet"}</div>
             <div className="text-[11px] text-white/40 font-mono mt-0.5">
               {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}
             </div>

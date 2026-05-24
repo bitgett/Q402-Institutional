@@ -28,6 +28,9 @@ import {
   getExportLog,
   isKeystoreReady,
   SOFT_DELETE_GRACE_MS,
+  checkDailyLimit,
+  recordDailySpend,
+  getDailySpendUsd,
 } from "@/app/lib/agentic-wallet";
 import { _resetMasterKeyCacheForTesting } from "@/app/lib/keystore";
 import { ethers } from "ethers";
@@ -225,6 +228,46 @@ describe("export log", () => {
     await createAgenticWallet(TEST_OWNER);
     mockKv.lpush.mockRejectedValueOnce(new Error("KV outage"));
     await expect(recordExportEvent(TEST_OWNER, { ip: "9.9.9.9" })).resolves.toBeUndefined();
+  });
+});
+
+describe("daily-spend helpers", () => {
+  it("checkDailyLimit allows any amount when no limit is set", async () => {
+    const r = await checkDailyLimit(TEST_OWNER, 9_999, undefined);
+    expect(r.allowed).toBe(true);
+  });
+
+  it("checkDailyLimit allows when running total + amount stays under the cap", async () => {
+    await recordDailySpend(TEST_OWNER, 30);
+    const r = await checkDailyLimit(TEST_OWNER, 20, 100);
+    expect(r.allowed).toBe(true);
+  });
+
+  it("checkDailyLimit denies once running total + amount would overflow the cap", async () => {
+    await recordDailySpend(TEST_OWNER, 90);
+    const r = await checkDailyLimit(TEST_OWNER, 20, 100);
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) {
+      expect(r.limit).toBe(100);
+      expect(r.spent).toBe(90);
+      expect(r.requested).toBe(20);
+    }
+  });
+
+  it("recordDailySpend ignores non-finite / non-positive amounts", async () => {
+    await recordDailySpend(TEST_OWNER, Number.NaN);
+    await recordDailySpend(TEST_OWNER, -10);
+    expect(await getDailySpendUsd(TEST_OWNER)).toBe(0);
+  });
+
+  it("recordDailySpend accumulates and keys per UTC day", async () => {
+    await recordDailySpend(TEST_OWNER, 25);
+    await recordDailySpend(TEST_OWNER, 17.5);
+    expect(await getDailySpendUsd(TEST_OWNER)).toBe(42.5);
+  });
+
+  it("getDailySpendUsd returns 0 when no record exists", async () => {
+    expect(await getDailySpendUsd("0x2222222222222222222222222222222222222222")).toBe(0);
   });
 });
 
