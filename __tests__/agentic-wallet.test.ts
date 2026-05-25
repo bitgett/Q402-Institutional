@@ -11,6 +11,8 @@ const mockKv = vi.hoisted(() => ({
   lpush: vi.fn(),
   ltrim: vi.fn(),
   lrange: vi.fn(),
+  incrbyfloat: vi.fn(),
+  expire: vi.fn(),
 }));
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
@@ -31,6 +33,8 @@ import {
   checkDailyLimit,
   recordDailySpend,
   getDailySpendUsd,
+  chargeAgainstDailyLimit,
+  refundDailySpend,
 } from "@/app/lib/agentic-wallet";
 import { _resetMasterKeyCacheForTesting } from "@/app/lib/keystore";
 import { ethers } from "ethers";
@@ -47,10 +51,18 @@ beforeEach(() => {
   mockKv.get.mockImplementation((key: string) =>
     Promise.resolve(store.get(key) ?? null),
   );
-  mockKv.set.mockImplementation((key: string, value: unknown) => {
+  mockKv.set.mockImplementation((key: string, value: unknown, opts?: { nx?: boolean }) => {
+    if (opts?.nx && store.has(key)) return Promise.resolve(null);
     store.set(key, value);
     return Promise.resolve("OK");
   });
+  mockKv.incrbyfloat.mockImplementation((key: string, delta: number) => {
+    const current = typeof store.get(key) === "number" ? (store.get(key) as number) : 0;
+    const next = current + delta;
+    store.set(key, next);
+    return Promise.resolve(next);
+  });
+  mockKv.expire.mockImplementation(() => Promise.resolve(1));
   mockKv.del.mockImplementation((key: string) => {
     const had = store.delete(key);
     listStore.delete(key);
@@ -228,6 +240,56 @@ describe("export log", () => {
     await createAgenticWallet(TEST_OWNER);
     mockKv.lpush.mockRejectedValueOnce(new Error("KV outage"));
     await expect(recordExportEvent(TEST_OWNER, { ip: "9.9.9.9" })).resolves.toBeUndefined();
+  });
+});
+
+describe("chargeAgainstDailyLimit (atomic)", () => {
+  it("allows any amount when no limit is set", async () => {
+    const r = await chargeAgainstDailyLimit(TEST_OWNER, 9_999, undefined);
+    expect(r.allowed).toBe(true);
+  });
+
+  it("allows when running total + amount stays under the cap", async () => {
+    await chargeAgainstDailyLimit(TEST_OWNER, 30, 100);
+    const r = await chargeAgainstDailyLimit(TEST_OWNER, 20, 100);
+    expect(r.allowed).toBe(true);
+    expect(await getDailySpendUsd(TEST_OWNER)).toBe(50);
+  });
+
+  it("rolls back the increment when the cap would overflow", async () => {
+    await chargeAgainstDailyLimit(TEST_OWNER, 90, 100);
+    const r = await chargeAgainstDailyLimit(TEST_OWNER, 20, 100);
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) {
+      expect(r.limit).toBe(100);
+      expect(r.spent).toBe(90);
+      expect(r.requested).toBe(20);
+    }
+    // Running total stays at 90 — the failed charge refunded itself.
+    expect(await getDailySpendUsd(TEST_OWNER)).toBe(90);
+  });
+
+  it("ignores non-finite / non-positive amounts", async () => {
+    const a = await chargeAgainstDailyLimit(TEST_OWNER, Number.NaN, 100);
+    const b = await chargeAgainstDailyLimit(TEST_OWNER, -10, 100);
+    expect(a.allowed).toBe(true);
+    expect(b.allowed).toBe(true);
+    expect(await getDailySpendUsd(TEST_OWNER)).toBe(0);
+  });
+});
+
+describe("refundDailySpend (atomic)", () => {
+  it("decrements the running total", async () => {
+    await chargeAgainstDailyLimit(TEST_OWNER, 75, 100);
+    await refundDailySpend(TEST_OWNER, 25);
+    expect(await getDailySpendUsd(TEST_OWNER)).toBe(50);
+  });
+
+  it("ignores non-finite / non-positive refunds", async () => {
+    await chargeAgainstDailyLimit(TEST_OWNER, 50, 100);
+    await refundDailySpend(TEST_OWNER, Number.NaN);
+    await refundDailySpend(TEST_OWNER, -10);
+    expect(await getDailySpendUsd(TEST_OWNER)).toBe(50);
   });
 });
 

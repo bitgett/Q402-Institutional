@@ -5,20 +5,27 @@
  * Same trust model as /send (server holds the AES-GCM-wrapped private
  * key), one row per recipient, up to 20 rows.
  *
- * Idempotency — central to this route after the May 2026 Codex retry
- * incident. Each batch is fingerprinted by
- *   keccak(owner + chain + token + sorted(recipients × amounts))
- * and the result is cached in KV for `IDEMPOTENCY_TTL_SEC`. A retry
- * within that window returns the existing batch record (cached
- * results, no re-firing) so an agent that misreads a timeout cannot
- * double-spend.
+ * Idempotency — central to this route. Each batch is fingerprinted by
+ *   keccak(owner | chain | token | sorted(recipients × amounts))
+ * and claimed via SET NX in KV for `IDEMPOTENCY_TTL_SEC`. A retry
+ * within that window returns the existing batch record without re-
+ * firing, so a client that misreads a timeout cannot double-spend.
+ * Early failures (auth-nonce fetch, sign, etc.) delete the in-flight
+ * claim so the next retry starts fresh instead of being shadow-locked
+ * to an empty "processing" record.
  *
  * Phase 2 scope:
  *   - Multichain only (gated by `hasMultichainScope`). BNB-only trial
  *     keys cannot batch — single-recipient /send is sufficient there.
  *   - Owner EIP-191 signature auth. API-key (MCP) is Phase 3.
  *   - Limits enforced: every row honors perTxMaxUsd; the running
- *     dailyLimitUsd budget covers the whole batch sum.
+ *     dailyLimitUsd budget covers the whole batch sum atomically via
+ *     chargeAgainstDailyLimit + refundDailySpend on failure.
+ *   - EIP-7702 authorization nonce: signed once for the batch. After
+ *     the first type-4 TX applies the delegation on-chain, subsequent
+ *     rows piggy-back on the persistent delegation; their per-TX
+ *     authorizations carry the same nonce and are silently ignored by
+ *     the EVM (per EIP-7702 stale-auth semantics) without revert.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -32,8 +39,8 @@ import {
   getActiveAgenticWallet,
   decryptPrivateKey,
   isKeystoreReady,
-  checkDailyLimit,
-  recordDailySpend,
+  chargeAgainstDailyLimit,
+  refundDailySpend,
 } from "@/app/lib/agentic-wallet";
 import { getSubscription, hasMultichainScope } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
@@ -164,7 +171,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const owner = authResult;
 
-  // ── Pre-flight: keystore + wallet + sub + relayer ───────────────────────
+  // ── Idempotency check FIRST. A retry of a previously-completed batch
+  // returns the cached record before we touch limits / subscription /
+  // the keystore — the original call already paid those costs. This
+  // also closes the "Safe to retry" double-send hole on timeout: even
+  // if the agent retries with the exact same body, no second batch
+  // fires while the cache window is alive.
+  const fp = fingerprint(owner, body.chain, body.token, rows);
+  const key = batchKey(fp);
+  const cached = await kv.get<BatchRecord>(key);
+  if (cached) {
+    return NextResponse.json(
+      {
+        batchId: cached.batchId,
+        status: cached.status,
+        results: cached.results,
+        idempotent: true,
+        startedAt: cached.startedAt,
+        finishedAt: cached.finishedAt,
+      },
+      { status: 200 },
+    );
+  }
+
+  // ── Pre-flight: keystore + wallet + sub + limits ────────────────────────
   const ready = isKeystoreReady();
   if (!ready.ok) {
     return NextResponse.json({ error: "keystore_unavailable", detail: ready.reason }, { status: 503 });
@@ -176,7 +206,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Per-tx max enforced per row; the running daily total is enforced
-  // against the SUM of the batch.
+  // against the SUM of the batch atomically below.
   const perTxMax = wallet.perTxMaxUsd;
   let totalAmount = 0;
   for (const r of rows) {
@@ -188,18 +218,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
     totalAmount += v;
-  }
-  const dailyCheck = await checkDailyLimit(owner, totalAmount, wallet.dailyLimitUsd);
-  if (!dailyCheck.allowed) {
-    return NextResponse.json(
-      {
-        error: "DAILY_LIMIT_EXCEEDED",
-        limit: dailyCheck.limit,
-        spent: dailyCheck.spent,
-        requested: dailyCheck.requested,
-      },
-      { status: 403 },
-    );
   }
 
   const sub = await getSubscription(owner);
@@ -221,26 +239,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "relay_unavailable" }, { status: 503 });
   }
 
-  // ── Idempotency check ──────────────────────────────────────────────────
-  const fp = fingerprint(owner, body.chain, body.token, rows);
-  const key = batchKey(fp);
-  const cached = await kv.get<BatchRecord>(key);
-  if (cached) {
-    return NextResponse.json(
-      {
-        batchId: cached.batchId,
-        status: cached.status,
-        results: cached.results,
-        idempotent: true,
-        startedAt: cached.startedAt,
-        finishedAt: cached.finishedAt,
-      },
-      { status: 200 },
-    );
-  }
-
-  // Reserve the slot before signing so a concurrent retry sees
-  // "processing" and waits rather than firing in parallel.
+  // ── Claim the batch slot atomically (SET NX). Concurrent retries
+  // with the same body race here; the loser sees the winner's record
+  // on its next GET (handled by the idempotency check above).
   const batchId = randomBytes(16).toString("hex");
   const initialRecord: BatchRecord = {
     batchId,
@@ -251,26 +252,73 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     startedAt: Date.now(),
     status: "processing",
   };
-  await kv.set(key, initialRecord, { ex: IDEMPOTENCY_TTL_SEC });
+  const claimed = await kv.set(key, initialRecord, { nx: true, ex: IDEMPOTENCY_TTL_SEC });
+  if (!claimed) {
+    // Lost the SET NX race — a concurrent request beat us to it. Read
+    // the record they wrote and return its current state.
+    const live = await kv.get<BatchRecord>(key);
+    if (live) {
+      return NextResponse.json(
+        {
+          batchId: live.batchId,
+          status: live.status,
+          results: live.results,
+          idempotent: true,
+          startedAt: live.startedAt,
+          finishedAt: live.finishedAt,
+        },
+        { status: 200 },
+      );
+    }
+    return NextResponse.json({ error: "batch_claim_failed" }, { status: 500 });
+  }
+
+  // Released on every early-fail path AND if the batch settles 0 rows.
+  // Without it, an `auth_nonce_failed` leaves the claim cached for the
+  // full TTL even though no work happened — retries would see an empty
+  // "processing" record forever.
+  const releaseClaim = async () => {
+    await kv.del(key).catch(() => {});
+  };
+
+  // ── Daily-cap reservation (atomic). Refund on any downstream fail. ──────
+  const reservation = await chargeAgainstDailyLimit(owner, totalAmount, wallet.dailyLimitUsd);
+  if (!reservation.allowed) {
+    await releaseClaim();
+    return NextResponse.json(
+      {
+        error: "DAILY_LIMIT_EXCEEDED",
+        limit: reservation.limit,
+        spent: reservation.spent,
+        requested: reservation.requested,
+      },
+      { status: 403 },
+    );
+  }
 
   // ── Sign + submit ──────────────────────────────────────────────────────
   const pk = decryptPrivateKey(wallet);
   const baseUrl = internalBaseUrl();
   const facilitator = relayerKey.address as Address;
 
-  // Pre-fetch the EIP-7702 authorization nonce once; all 20 rows reuse
-  // it. (Each TX is independent on the witness side, but they share
-  // the EIP-7702 delegation, so a single auth nonce is correct.)
+  // Pre-fetch the EIP-7702 authorization nonce once. The first type-4
+  // TX consumes it; subsequent rows still attach the same value to
+  // their authorizationList — the EVM silently skips the stale entries
+  // and the inner transferWithAuthorization runs against the EOA's
+  // newly-applied delegation. Sequential nonces would break parallel
+  // submission ordering, which is the wrong trade-off here.
   let authNonce: number;
   try {
     authNonce = await fetchAuthNonce(body.chain, wallet.address as Address);
   } catch (e) {
+    await refundDailySpend(owner, totalAmount).catch(() => {});
+    await releaseClaim();
     console.error("[agentic-wallet/batch] fetchAuthNonce failed:", e);
     return NextResponse.json({ error: "auth_nonce_failed" }, { status: 502 });
   }
 
   // Process rows in parallel. The shared apiKey is billed per
-  // successful settlement, but the relay route already handles its own
+  // successful settlement; the canonical relay route handles its own
   // sequencing/locking on the apiKey side.
   const results: BatchResultRow[] = await Promise.all(
     rows.map(async (row): Promise<BatchResultRow> => {
@@ -314,10 +362,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   };
   await kv.set(key, finalRecord, { ex: IDEMPOTENCY_TTL_SEC });
 
-  // Daily spend records only the successful settlements.
+  // Reconcile the daily-cap reservation against the actual settled
+  // total. We reserved `totalAmount` up front; refund the failed rows
+  // so retries (different recipient set) keep their budget.
   const successfulSum = successful.reduce((s, r) => s + Number(r.amount), 0);
-  if (successfulSum > 0) {
-    await recordDailySpend(owner, successfulSum).catch(() => {});
+  const refundAmount = totalAmount - successfulSum;
+  if (refundAmount > 0) {
+    await refundDailySpend(owner, refundAmount).catch(() => {});
   }
 
   return NextResponse.json(

@@ -65,13 +65,15 @@ export const SOFT_DELETE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
  * Create a fresh Agentic Wallet for `ownerAddr`. Throws if one already
  * exists (active or soft-deleted) — restore the soft-deleted one or wait
  * out the grace window instead of stacking records.
+ *
+ * Uses SET NX so concurrent POST /api/wallet/agentic calls from the same
+ * owner can't race past a get-then-set check and end up with two
+ * different wallets fighting for the same KV slot (last-write-wins).
+ * The first concurrent caller wins; the rest see `null` and rejet with
+ * AGENTIC_WALLET_EXISTS.
  */
 export async function createAgenticWallet(ownerAddr: string): Promise<AgenticWalletRecord> {
   const owner = ownerAddr.toLowerCase();
-  const existing = await kv.get<AgenticWalletRecord>(RECORD_KEY(owner));
-  if (existing) {
-    throw new Error("AGENTIC_WALLET_EXISTS");
-  }
 
   const wallet = ethers.Wallet.createRandom();
   const encryptedPK = encrypt(wallet.privateKey);
@@ -83,7 +85,10 @@ export async function createAgenticWallet(ownerAddr: string): Promise<AgenticWal
     createdAt: Date.now(),
   };
 
-  await kv.set(RECORD_KEY(owner), record);
+  const claimed = await kv.set(RECORD_KEY(owner), record, { nx: true });
+  if (!claimed) {
+    throw new Error("AGENTIC_WALLET_EXISTS");
+  }
   return record;
 }
 
@@ -251,14 +256,84 @@ export async function checkDailyLimit(
 }
 
 /**
- * Append `amountUsd` to today's running spend. Fire-and-forget at call
- * sites — failure here must not bubble back to the relay caller (the
- * TX already settled on-chain). The 48-hour TTL gives a 24-hour buffer
- * for late-night UTC rolls without leaving the key around forever.
+ * Atomically reserve `amountUsd` of today's daily-spend budget. Combines
+ * the read + write into a single INCRBYFLOAT call so concurrent sends
+ * cannot all slip past a stale read and burst past the cap.
  *
- * Race-window note: this is a read-then-write under HTTP load. Two
- * concurrent successful relays at the daily boundary can under-count by
- * one transaction. An atomic INCRBYFLOAT migration is a Phase-2 cleanup.
+ * Returns `{ allowed: true, total }` on success. If the running total
+ * would exceed `limitUsd`, the reservation is rolled back via a
+ * matching INCRBYFLOAT(-amount) and `{ allowed: false, ... }` is
+ * returned. Callers MUST call `refundDailySpend` on any downstream
+ * failure (relay error, network drop) so the budget releases.
+ */
+export async function chargeAgainstDailyLimit(
+  ownerAddr: string,
+  amountUsd: number,
+  limitUsd: number | undefined,
+): Promise<
+  | { allowed: true; total: number }
+  | { allowed: false; spent: number; limit: number; requested: number }
+> {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+    return { allowed: true, total: 0 };
+  }
+  const key = DAILY_SPEND_KEY(ownerAddr, todayUtc());
+
+  let nextTotal: number;
+  try {
+    const v = await kv.incrbyfloat(key, amountUsd);
+    nextTotal = typeof v === "number" ? v : Number(v);
+  } catch {
+    // If the atomic increment is unavailable we cannot guarantee the
+    // limit, so fail closed when a limit is configured. With no limit
+    // the call doesn't matter — return success.
+    if (typeof limitUsd !== "number" || limitUsd <= 0) {
+      return { allowed: true, total: 0 };
+    }
+    return { allowed: false, spent: 0, limit: limitUsd, requested: amountUsd };
+  }
+
+  // Refresh the TTL after every successful increment. First write of
+  // the day sets the 48h window; later increments push the TTL forward
+  // so it can't shrink to zero mid-day.
+  try { await kv.expire(key, DAILY_SPEND_TTL_SEC); } catch { /* best-effort */ }
+
+  if (typeof limitUsd === "number" && limitUsd > 0 && nextTotal > limitUsd) {
+    // Refund — restore the slot we just claimed so a subsequent request
+    // sees the prior total instead of being shadow-blocked.
+    try { await kv.incrbyfloat(key, -amountUsd); } catch { /* best-effort */ }
+    return {
+      allowed: false,
+      spent: Math.max(0, nextTotal - amountUsd),
+      limit: limitUsd,
+      requested: amountUsd,
+    };
+  }
+
+  return { allowed: true, total: nextTotal };
+}
+
+/**
+ * Release a previously-charged daily-spend reservation. Called on any
+ * downstream failure so the budget doesn't stay locked.
+ */
+export async function refundDailySpend(
+  ownerAddr: string,
+  amountUsd: number,
+): Promise<void> {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
+  const key = DAILY_SPEND_KEY(ownerAddr, todayUtc());
+  try {
+    await kv.incrbyfloat(key, -amountUsd);
+  } catch {
+    // Best-effort. The next day's TTL expires the key anyway.
+  }
+}
+
+/**
+ * Append `amountUsd` to today's running spend without claiming budget.
+ * Used in legacy code paths that don't yet route through
+ * `chargeAgainstDailyLimit`. Prefer the atomic charger for new code.
  */
 export async function recordDailySpend(
   ownerAddr: string,
@@ -267,12 +342,10 @@ export async function recordDailySpend(
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
   const key = DAILY_SPEND_KEY(ownerAddr, todayUtc());
   try {
-    const current = (await kv.get<number>(key)) ?? 0;
-    const next = current + amountUsd;
-    await kv.set(key, next, { ex: DAILY_SPEND_TTL_SEC });
+    await kv.incrbyfloat(key, amountUsd);
+    await kv.expire(key, DAILY_SPEND_TTL_SEC);
   } catch {
-    // Best-effort — the TX already settled. The next day's checks will
-    // overcount slightly but no funds move incorrectly.
+    // Best-effort — the TX already settled.
   }
 }
 

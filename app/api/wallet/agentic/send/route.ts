@@ -25,8 +25,8 @@ import {
   getActiveAgenticWallet,
   decryptPrivateKey,
   isKeystoreReady,
-  checkDailyLimit,
-  recordDailySpend,
+  chargeAgainstDailyLimit,
+  refundDailySpend,
 } from "@/app/lib/agentic-wallet";
 import { getSubscription, hasMultichainScope } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
@@ -132,23 +132,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const limitCheck = await checkDailyLimit(owner, numAmount, wallet.dailyLimitUsd);
-  if (!limitCheck.allowed) {
+  // Atomic budget reservation. If the relay fails downstream we refund
+  // explicitly so the budget releases.
+  const reservation = await chargeAgainstDailyLimit(owner, numAmount, wallet.dailyLimitUsd);
+  if (!reservation.allowed) {
     return NextResponse.json(
       {
         error: "DAILY_LIMIT_EXCEEDED",
-        limit: limitCheck.limit,
-        spent: limitCheck.spent,
-        requested: limitCheck.requested,
+        limit: reservation.limit,
+        spent: reservation.spent,
+        requested: reservation.requested,
       },
       { status: 403 },
     );
   }
+  const refundIfHeld = async () => {
+    await refundDailySpend(owner, numAmount).catch(() => {});
+  };
 
   // Subscription gate — BNB is open during the trial. Anything else
   // requires the multichain scope (paid plan or admin grant).
   const sub = await getSubscription(owner);
   if (body.chain !== "bnb" && !hasMultichainScope(sub)) {
+    await refundIfHeld();
     return NextResponse.json(
       { error: "SUBSCRIPTION_REQUIRED", message: "Multichain access requires a paid subscription." },
       { status: 402 },
@@ -163,6 +169,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ? sub?.trialApiKey || sub?.apiKey
       : sub?.apiKey;
   if (!apiKey) {
+    await refundIfHeld();
     return NextResponse.json(
       { error: "NO_API_KEY", message: "Activate a Q402 trial or subscription before using your Agent Wallet." },
       { status: 402 },
@@ -171,6 +178,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const relayerKey = loadRelayerKey();
   if (!relayerKey.ok) {
+    await refundIfHeld();
     return NextResponse.json({ error: "relay_unavailable" }, { status: 503 });
   }
 
@@ -187,6 +195,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       facilitator: relayerKey.address as Address,
     });
   } catch (e) {
+    await refundIfHeld();
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "AMOUNT_PRECISION_TOO_HIGH") {
       return NextResponse.json(
@@ -205,14 +214,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     relayResponse = await submitToRelay(internalBaseUrl(), apiKey, signed);
   } catch (e) {
+    await refundIfHeld();
     console.error("[agentic-wallet/send] relay forward failed:", e);
     return NextResponse.json({ error: "relay_forward_failed" }, { status: 502 });
   }
 
   const relayBody = await relayResponse.json().catch(() => null);
-
-  if (relayResponse.ok && relayBody && typeof relayBody === "object" && "txHash" in relayBody) {
-    await recordDailySpend(owner, numAmount).catch(() => {});
+  const success =
+    relayResponse.ok && relayBody && typeof relayBody === "object" && "txHash" in relayBody;
+  // Refund the reservation when the relay didn't actually settle.
+  if (!success) {
+    await refundIfHeld();
   }
 
   return NextResponse.json(

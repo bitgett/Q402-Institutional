@@ -25,6 +25,29 @@ interface Props {
 
 type Token = "USDC" | "USDT";
 
+type ChainKey =
+  | "bnb"
+  | "eth"
+  | "avax"
+  | "xlayer"
+  | "stable"
+  | "mantle"
+  | "injective"
+  | "monad"
+  | "scroll";
+
+const CHAIN_LABELS: { key: ChainKey; label: string; multichainOnly?: boolean }[] = [
+  { key: "bnb",       label: "BNB Chain" },
+  { key: "eth",       label: "Ethereum",   multichainOnly: true },
+  { key: "avax",      label: "Avalanche",  multichainOnly: true },
+  { key: "xlayer",    label: "X Layer",    multichainOnly: true },
+  { key: "stable",    label: "Stable",     multichainOnly: true },
+  { key: "mantle",    label: "Mantle",     multichainOnly: true },
+  { key: "injective", label: "Injective",  multichainOnly: true },
+  { key: "monad",     label: "Monad",      multichainOnly: true },
+  { key: "scroll",    label: "Scroll",     multichainOnly: true },
+];
+
 function isAddress(s: string) {
   return /^0x[0-9a-fA-F]{40}$/.test(s.trim());
 }
@@ -42,6 +65,7 @@ export function AgenticWalletSendModal({
   prefillTo,
   titleOverride,
 }: Props) {
+  const [chain, setChain] = useState<ChainKey>("bnb");
   const [token, setToken] = useState<Token>("USDT");
   const [recipient, setRecipient] = useState(prefillTo ?? "");
   const [amount, setAmount] = useState("");
@@ -75,7 +99,7 @@ export function AgenticWalletSendModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chain: "bnb",
+          chain,
           token,
           to: recipient.trim(),
           amount: amount.trim(),
@@ -157,13 +181,23 @@ export function AgenticWalletSendModal({
             <div className="space-y-3">
               <div>
                 <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Chain</div>
-                <div
-                  className="rounded-md border px-3 py-2 text-sm text-white/85"
+                <select
+                  value={chain}
+                  onChange={(e) => setChain(e.target.value as ChainKey)}
+                  className="w-full rounded-md border px-3 py-2 text-sm text-white"
                   style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.05)" }}
                 >
-                  BNB Chain
-                  <span className="text-[10px] text-white/35 ml-2">multichain unlocks with paid plan</span>
-                </div>
+                  {CHAIN_LABELS.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.label}{c.multichainOnly ? " — multichain" : ""}
+                    </option>
+                  ))}
+                </select>
+                {chain !== "bnb" && (
+                  <div className="text-[10px] text-white/35 mt-1">
+                    Non-BNB chains require an active multichain subscription.
+                  </div>
+                )}
               </div>
 
               <div>

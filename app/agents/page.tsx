@@ -101,10 +101,10 @@ function Hero() {
         <span style={{ color: "#86efac" }}> it can actually use.</span>
       </h1>
       <p className="text-base md:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(226,232,240,0.65)" }}>
-        Q402 mints a server-managed wallet for your agent. AES-256-GCM
-        encrypted at rest, signed on demand, bounded by per-tx and
-        per-day caps you control. No browser wallet popups, no key paste
-        into chat, no separate gas to manage.
+        A dedicated wallet your AI signs through — without ever touching
+        your MetaMask. Set per-tx and per-day spend caps, send across
+        nine EVM chains, and keep the option to walk away with the keys
+        whenever you want.
       </p>
       <div className="flex flex-wrap justify-center gap-3 mt-7">
         <Link
@@ -221,10 +221,10 @@ function ConsoleMockup() {
 
 function ProofRow() {
   const rows: { label: string; value: string; foot: string }[] = [
-    { label: "Chains live",        value: "9 EVM chains",    foot: "BNB · ETH · AVAX · X Layer · Stable · Mantle · Injective · Monad · Scroll" },
-    { label: "Sponsored trial",    value: "2,000 TX",        foot: "BNB · no card · no gas" },
-    { label: "Per-wallet caps",    value: "daily · per-tx",  foot: "Enforced at the relay" },
-    { label: "Settle time",        value: "~1–3 s",          foot: "Median, EIP-7702 single-recipient" },
+    { label: "Chains live",       value: "9 EVM chains",     foot: "BNB · ETH · AVAX · X Layer · Stable · Mantle · Injective · Monad · Scroll" },
+    { label: "Wallet popups",     value: "Zero",             foot: "Your agent signs through Q402 — your MetaMask never touched" },
+    { label: "Spend controls",    value: "Per-tx · daily",   foot: "Caps enforced at the relay on every send + batch row" },
+    { label: "Settle time",       value: "~1–3 s",           foot: "Median, single-recipient, sender pays $0 gas" },
   ];
   return (
     <motion.div
@@ -268,13 +268,13 @@ function FlowSection() {
     {
       n: "02",
       title: "Mint the wallet",
-      body: "Sign once from your dashboard. Q402 generates an EOA, encrypts the private key with KEY_ENCRYPTION_KEY, and ties the address to your owner record.",
+      body: "One signature from your dashboard. Q402 generates a dedicated wallet for your agent, ties it to your account, and lets you export the key anytime.",
       code: 'POST /api/wallet/agentic\n  → { address: "0xD2…ff64", createdAt: 1717... }',
     },
     {
       n: "03",
       title: "Let the agent run",
-      body: "Every payment carries the EIP-712 TransferAuthorization + EIP-7702 authorization. Server signs, relayer pays gas, receipts are verifiable.",
+      body: "Your agent calls one tool and Q402 handles the rest. Server signs, relayer pays gas, every transfer comes back with a verifiable Trust Receipt.",
       code: 'agent.pay({\n  chain: "bnb",\n  token: "USDC",\n  to:   "0x9c…2f4a",\n  amount: "3.24"\n})',
     },
   ];
@@ -339,8 +339,8 @@ function PatternsSection() {
     },
     {
       eyebrow: "Batch payouts",
-      headline: "20 recipients, one signature.",
-      body: "Reward distribution, ambassador stipends, vendor invoices — one batch call settles up to 20 transfers atomically.",
+      headline: "20 recipients, one call.",
+      body: "Reward distribution, ambassador stipends, vendor invoices — submit up to 20 transfers in a single batch and get per-row results back.",
     },
     {
       eyebrow: "Recurring API spend",
@@ -404,7 +404,7 @@ function Closing() {
       <div>
         <div className="text-xl md:text-2xl font-semibold mb-1">Spin one up.</div>
         <div className="text-sm" style={{ color: "rgba(226,232,240,0.6)" }}>
-          Free during the trial. A multichain key extends the same wallet to every supported chain.
+          Free to create. Send on BNB Chain today; a multichain key opens the rest of the 9 EVM chains when you&apos;re ready.
         </div>
       </div>
       <div className="flex flex-wrap gap-3">

@@ -26,6 +26,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { requireFreshAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
   getAgenticWallet,
   decryptPrivateKey,
@@ -98,11 +99,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "decrypt_failed" }, { status: 500 });
   }
 
-  // Audit log — best-effort but should normally land. The export
-  // already succeeded by the time this runs; a KV outage here logs to
-  // server stderr instead of failing the call.
+  // Audit log — best-effort because the export already succeeded by the
+  // time this runs. We still fire an ops alert on failure so the team
+  // hears about it (export is the most sensitive action, a missing
+  // audit row should not stay quiet).
   await recordExportEvent(owner, { ip }).catch((e) => {
     console.error("[agentic-wallet/export] audit log failed:", e);
+    void sendOpsAlert(
+      `Agentic Wallet EXPORT audit log failed for owner ${owner} (ip ${ip}). ` +
+      `Key was still revealed to the client; KV write did not persist. ` +
+      `Investigate KV health.`,
+      "critical",
+    );
   });
 
   return NextResponse.json(
