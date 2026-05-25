@@ -3,9 +3,12 @@
 /**
  * AgenticWalletSendModal — single-recipient send form for the dashboard.
  *
- * Phase 1 MVP: BNB chain + USDC/USDT. The actual signing happens
- * server-side in /api/wallet/agentic/send — this UI only forwards the
- * user's intent + their EIP-191 session signature for owner-auth.
+ * Picks chain (BNB free, the remaining 8 require multichain scope on the
+ * caller's subscription) + USDC/USDT, plus recipient + amount. The
+ * actual signing happens server-side in /api/wallet/agentic/send — this
+ * UI only forwards the user's intent + their EIP-191 session signature
+ * for owner-auth. Backend gates non-BNB chains via hasMultichainScope
+ * and surfaces SUBSCRIPTION_REQUIRED on miss.
  */
 
 import { useState } from "react";

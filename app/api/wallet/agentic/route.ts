@@ -125,10 +125,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // than letting createAgenticWallet → encrypt throw.
   const ready = isKeystoreReady();
   if (!ready.ok) {
-    return NextResponse.json(
-      { error: "keystore_unavailable", detail: ready.reason },
-      { status: 503 },
-    );
+    console.error("[agentic-wallet POST] keystore unavailable:", ready.reason);
+    return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
   }
 
   try {

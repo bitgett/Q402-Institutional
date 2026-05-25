@@ -3,11 +3,12 @@
 /**
  * AgenticWalletCard — hero "Available Balance" card for the Agent tab.
  *
- * Layout mirrors the Kite / Agent Passport pattern: a single balance
- * surface up top with three pill-shaped actions (Send / Receive / Add
- * Funds) and the wallet's address tucked into the corner. Balance polling
- * + multi-chain reads land in Phase 2 — this MVP surface tells the
- * caller where to verify on-chain in the meantime.
+ * Single balance surface up top with three pill-shaped primary actions
+ * (Send / Receive / Add Funds) plus a secondary row for Withdraw,
+ * Spending Limits, and Export. The wallet's address sits in the corner
+ * with a copy chip and BscScan link. Automated balance polling lands in
+ * a later phase — this surface tells the caller where to verify on-chain
+ * in the meantime.
  */
 
 import { useState } from "react";

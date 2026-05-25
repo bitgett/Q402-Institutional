@@ -3,16 +3,18 @@
 /**
  * AgenticWalletTab — Dashboard "Agent" tab.
  *
- * Server-managed signing wallet for AI agents. Trust model differs from
- * the canonical Q402 flow (server holds the AES-GCM-wrapped private key),
+ * Server-managed signing wallet for AI agents. The trust model differs
+ * from the canonical Q402 flow (server holds the encrypted private key),
  * so the surface is deliberately framed as a custody-lite product: an
  * always-available signer scoped by the wallet's per-tx and per-day
  * limits.
  *
- * Phase 1 scope: create, view address, send single-recipient BNB-chain
- * USDC/USDT, soft-delete. Receive + Add Funds reveal the address with a
- * deposit notice. Multichain + export + MCP triple-mode ship in later
- * phases.
+ * Surface today: create, view address, send single-recipient or batch
+ * across 9 EVM chains (BNB free, the remaining 8 gated by multichain
+ * scope), withdraw to the owner's EOA, edit spending limits, export
+ * the private key behind step-up auth, and soft-delete with a 7-day
+ * grace window. Automated balance polling + MCP triple-mode wiring
+ * land in subsequent phases.
  */
 
 import { useCallback, useEffect, useState } from "react";

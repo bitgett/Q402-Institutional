@@ -104,10 +104,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const ready = isKeystoreReady();
   if (!ready.ok) {
-    return NextResponse.json(
-      { error: "keystore_unavailable", detail: ready.reason },
-      { status: 503 },
-    );
+    // Detail intentionally absent from the client body — the operator
+    // sees the underlying reason in server logs via isKeystoreReady,
+    // the caller only learns the surface is unavailable.
+    console.error("[agentic-wallet/send] keystore unavailable:", ready.reason);
+    return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
   }
 
   const wallet = await getActiveAgenticWallet(owner);
