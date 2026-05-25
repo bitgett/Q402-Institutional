@@ -50,6 +50,7 @@ export default function AgentsPage() {
         <div className="relative max-w-6xl mx-auto">
           <Hero />
           <ProofRow />
+          <ConsoleMockupSection />
           <FlowSection />
           <PatternsSection />
           <Closing />
@@ -83,50 +84,71 @@ function GridBacker() {
 
 function Hero() {
   return (
-    <div className="grid lg:grid-cols-[1.05fr_1fr] gap-10 items-start mb-20">
-      <motion.div
-        initial={{ opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="max-w-3xl mx-auto text-center mb-16"
+    >
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.22em] font-bold mb-6"
+        style={{ background: "rgba(74,222,128,0.10)", color: "#86efac", border: "1px solid rgba(74,222,128,0.22)" }}
       >
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.22em] font-bold mb-6"
-          style={{ background: "rgba(74,222,128,0.10)", color: "#86efac", border: "1px solid rgba(74,222,128,0.22)" }}
+        <span>✦</span>
+        Agent Wallet
+      </div>
+      <h1 className="text-5xl md:text-6xl font-semibold tracking-tight mb-5 leading-[1.05]">
+        Give your AI a wallet
+        <span style={{ color: "#86efac" }}> it can actually use.</span>
+      </h1>
+      <p className="text-base md:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(226,232,240,0.65)" }}>
+        Q402 mints a server-managed wallet for your agent. AES-256-GCM
+        encrypted at rest, signed on demand, bounded by per-tx and
+        per-day caps you control. No browser wallet popups, no key paste
+        into chat, no separate gas to manage.
+      </p>
+      <div className="flex flex-wrap justify-center gap-3 mt-7">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-semibold transition-colors"
+          style={{ background: "#22C55E", color: "#0B1A12" }}
         >
-          <span>✦</span>
-          Agent Wallet
+          Open dashboard →
+        </Link>
+        <Link
+          href="/claude"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-medium transition-colors border"
+          style={{
+            borderColor: "rgba(226,232,240,0.18)",
+            color: "rgba(226,232,240,0.85)",
+            background: "rgba(226,232,240,0.02)",
+          }}
+        >
+          Use from Claude · Codex · Cursor · Cline
+        </Link>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Console mockup — its own section between proof + flow ─────────────────
+
+function ConsoleMockupSection() {
+  return (
+    <div className="mb-20 max-w-2xl mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.45 }}
+        className="text-center mb-6"
+      >
+        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#86efac" }}>
+          What an agent run looks like
         </div>
-        <h1 className="text-5xl md:text-6xl font-semibold tracking-tight mb-5 leading-[1.05]">
-          Give your AI a wallet
-          <span style={{ color: "#86efac" }}> it can actually use.</span>
-        </h1>
-        <p className="text-base md:text-lg leading-relaxed max-w-xl" style={{ color: "rgba(226,232,240,0.65)" }}>
-          Q402 mints a server-managed wallet for your agent. AES-256-GCM
-          encrypted at rest, signed on demand, bounded by per-tx and
-          per-day caps you control. No browser wallet popups, no key
-          paste into chat, no separate gas to manage.
-        </p>
-        <div className="flex flex-wrap gap-3 mt-7">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-semibold transition-colors"
-            style={{ background: "#22C55E", color: "#0B1A12" }}
-          >
-            Open dashboard →
-          </Link>
-          <Link
-            href="/claude"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-medium transition-colors border"
-            style={{
-              borderColor: "rgba(226,232,240,0.18)",
-              color: "rgba(226,232,240,0.85)",
-              background: "rgba(226,232,240,0.02)",
-            }}
-          >
-            Use from Claude · Codex · Cursor · Cline
-          </Link>
+        <div className="text-2xl font-semibold tracking-tight">
+          Two payments, no popups.
         </div>
       </motion.div>
-
       <ConsoleMockup />
     </div>
   );

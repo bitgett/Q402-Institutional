@@ -66,7 +66,7 @@ const TRIAL_TABS: TabDef[] = [
   { id: "overview",     label: "Overview",     icon: "◇" },
   { id: "developer",    label: "Developer",    icon: "{ }" },
   { id: "transactions", label: "Transactions", icon: "≡" },
-  { id: "claude",       label: "Claude",       icon: "C" },
+  { id: "claude",       label: "MCP",          icon: "⌬" },
   { id: "agent",        label: "Agent",        icon: "✦" },
 ];
 
@@ -77,7 +77,7 @@ const MULTICHAIN_TABS: TabDef[] = [
   { id: "gas-tank",     label: "Gas Tank",     icon: "⛽" },
   { id: "developer",    label: "Developer",    icon: "{ }" },
   { id: "transactions", label: "Transactions", icon: "≡" },
-  { id: "claude",       label: "Claude",       icon: "C" },
+  { id: "claude",       label: "MCP",          icon: "⌬" },
   { id: "agent",        label: "Agent",        icon: "✦" },
 ];
 
