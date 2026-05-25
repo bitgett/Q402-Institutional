@@ -8,13 +8,19 @@
  * this route as custody-lite: convenient, server-trusted, and bounded
  * by the wallet's per-wallet limits.
  *
- * Phase 2 scope:
+ * Phase 3 scope:
  *   - All 9 EVM chains. BNB is free during the trial; the remaining 8
  *     require an active multichain subscription (same `hasMultichainScope`
  *     gate as the canonical relay route).
  *   - Single recipient only — batch lives at /api/wallet/agentic/batch.
- *   - Auth: owner EIP-191 signature only. The API-key (MCP, mode C)
- *     path is gated to Phase 3 behind agentic-scoped keys.
+ *   - Two auth modes:
+ *       (1) owner EIP-191 signature  — dashboard + Mode A/B from MCP
+ *       (2) apiKey                   — Mode C (server-mediated MCP), where
+ *                                       the caller has only the apiKey, no
+ *                                       private key. The apiKey's owner
+ *                                       address must match `ownerAddress`.
+ *     Sandbox keys (`q402_test_`) are rejected here — Agent Wallet sends
+ *     must always settle on-chain.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -28,7 +34,7 @@ import {
   chargeAgainstDailyLimit,
   refundDailySpend,
 } from "@/app/lib/agentic-wallet";
-import { getSubscription, hasMultichainScope } from "@/app/lib/db";
+import { getSubscription, hasMultichainScope, getApiKeyRecord } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
 import {
   isAgenticChainKey,
@@ -45,9 +51,12 @@ interface SendBody {
   token?: string;
   to?: string;
   amount?: string;
+  // Mode A/B — owner EIP-191 session signature
   ownerAddress?: string;
   nonce?: string;
   signature?: string;
+  // Mode C — server-mediated, MCP holds only the apiKey
+  apiKey?: string;
 }
 
 function isHexAddress(s: unknown): s is string {
@@ -58,24 +67,68 @@ function isPositiveDecimalString(s: unknown): s is string {
   return typeof s === "string" && /^\d+(\.\d+)?$/.test(s) && Number(s) > 0;
 }
 
+/**
+ * Resolve the owner address from either an EIP-191 signature (Mode A/B)
+ * or an apiKey (Mode C). Returns the lowercased owner string on success,
+ * or a 4xx NextResponse on auth failure.
+ */
 async function resolveOwner(req: NextRequest, body: SendBody): Promise<string | NextResponse> {
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "agentic-wallet-send", 30, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  const result = await requireAuth(
-    body.ownerAddress ?? null,
-    body.nonce ?? null,
-    body.signature ?? null,
-  );
-  if (typeof result !== "string") {
-    return NextResponse.json(
-      { error: result.error, code: result.code },
-      { status: result.status },
+  // ── Mode A/B — owner sig present ────────────────────────────────────────
+  if (typeof body.signature === "string" && body.signature.length > 0) {
+    const result = await requireAuth(
+      body.ownerAddress ?? null,
+      body.nonce ?? null,
+      body.signature ?? null,
     );
+    if (typeof result !== "string") {
+      return NextResponse.json(
+        { error: result.error, code: result.code },
+        { status: result.status },
+      );
+    }
+    return result;
   }
-  return result;
+
+  // ── Mode C — server-mediated via apiKey ────────────────────────────────
+  if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
+    // Sandbox keys fabricate txHashes on the relay — never what an Agent
+    // Wallet caller wants. Reject up front.
+    if (body.apiKey.startsWith("q402_test_")) {
+      return NextResponse.json(
+        { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet sends." },
+        { status: 401 },
+      );
+    }
+    const rec = await getApiKeyRecord(body.apiKey);
+    if (!rec || !rec.active) {
+      return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
+    }
+    // ownerAddress is optional in Mode C — when supplied it's just a
+    // double-check that the caller knows whose wallet it is. When
+    // omitted we derive it from the apiKey itself.
+    if (typeof body.ownerAddress === "string" && body.ownerAddress.length > 0) {
+      if (!isHexAddress(body.ownerAddress)) {
+        return NextResponse.json({ error: "INVALID_OWNER" }, { status: 400 });
+      }
+      if (rec.address.toLowerCase() !== body.ownerAddress.toLowerCase()) {
+        return NextResponse.json(
+          { error: "OWNER_MISMATCH", message: "apiKey is not bound to the supplied ownerAddress." },
+          { status: 403 },
+        );
+      }
+    }
+    return rec.address.toLowerCase();
+  }
+
+  return NextResponse.json(
+    { error: "AUTH_REQUIRED", message: "Provide either an EIP-191 signature or an apiKey." },
+    { status: 401 },
+  );
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {

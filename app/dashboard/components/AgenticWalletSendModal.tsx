@@ -16,6 +16,11 @@
 
 import { useState } from "react";
 import { getAuthCreds } from "@/app/lib/auth-client";
+import {
+  friendlyError,
+  type FriendlyError,
+  type BackendError,
+} from "@/app/lib/agentic-wallet-friendly-error";
 
 interface Props {
   walletAddress: string;
@@ -25,6 +30,8 @@ interface Props {
   onSent: () => void;
   /** Pre-fill the recipient field (e.g. owner EOA for the Withdraw flow). */
   prefillTo?: string;
+  /** Pre-fill the amount field (e.g. current balance for the Withdraw flow). */
+  prefillAmount?: string;
   /** Override the modal title — Withdraw uses "Withdraw to your wallet". */
   titleOverride?: string;
   /** Wallet-level per-tx cap, used to soft-block before hitting backend. */
@@ -81,71 +88,6 @@ function isDecimalAmount(s: string) {
   return /^\d+(\.\d+)?$/.test(s.trim()) && Number(s) > 0;
 }
 
-interface FriendlyError {
-  headline: string;
-  next?: { label: string; href: string };
-}
-
-interface BackendError {
-  error?: string;
-  message?: string;
-  limit?: number;
-  spent?: number;
-  requested?: number;
-}
-
-function friendlyError(status: number, body: BackendError): FriendlyError {
-  const code = body.error ?? "";
-
-  if (code === "SUBSCRIPTION_REQUIRED" || status === 402) {
-    return {
-      headline:
-        "Sending on this chain needs a Multichain subscription. BNB Chain is free with the trial.",
-      next: { label: "View plans →", href: "/payment" },
-    };
-  }
-  if (code === "DAILY_LIMIT_EXCEEDED") {
-    const lim = body.limit ?? "—";
-    return {
-      headline: `Daily cap of $${lim} reached. Resets at 00:00 UTC, or raise the cap below.`,
-      next: { label: "Raise limits", href: "#raise-limits" },
-    };
-  }
-  if (code === "PER_TX_LIMIT_EXCEEDED") {
-    const lim = body.limit ?? "—";
-    return {
-      headline: `This send exceeds the per-tx cap of $${lim}. Send a smaller amount, or raise the cap.`,
-      next: { label: "Raise limits", href: "#raise-limits" },
-    };
-  }
-  if (code === "AGENTIC_WALLET_NOT_FOUND") {
-    return { headline: "Agent Wallet not found — try reloading the page." };
-  }
-  if (code === "AGENTIC_WALLET_ARCHIVED" || code === "WALLET_ARCHIVED") {
-    return { headline: "This wallet is archived. Restore it before sending." };
-  }
-  if (code === "relay_unavailable" || code === "keystore_unavailable") {
-    return {
-      headline:
-        "Q402's signer is briefly offline. Wait a moment and try again — your balance is safe.",
-    };
-  }
-  if (code === "NONCE_EXPIRED") {
-    return {
-      headline: "Your session signature expired. Re-sign the auth challenge to continue.",
-    };
-  }
-  if (status >= 500) {
-    return {
-      headline: "Send failed on our side. Try again in a moment.",
-    };
-  }
-  if (body.message) {
-    return { headline: body.message };
-  }
-  return { headline: `Send failed (HTTP ${status}).` };
-}
-
 export function AgenticWalletSendModal({
   walletAddress,
   ownerAddress,
@@ -153,6 +95,7 @@ export function AgenticWalletSendModal({
   onClose,
   onSent,
   prefillTo,
+  prefillAmount,
   titleOverride,
   perTxMaxUsd,
   dailyLimitUsd,
@@ -162,7 +105,7 @@ export function AgenticWalletSendModal({
   const allowedTokens = chainMeta.tokens;
   const [token, setToken] = useState<Token>("USDT");
   const [recipient, setRecipient] = useState(prefillTo ?? "");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(prefillAmount ?? "");
 
   // Keep token consistent with the selected chain — if the user picks
   // Injective (USDT-only) while USDC is highlighted, snap to USDT.

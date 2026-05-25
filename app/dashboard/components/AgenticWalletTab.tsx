@@ -9,17 +9,24 @@
  * always-available signer scoped by the wallet's per-tx and per-day
  * limits.
  *
+ * Empty-state UX: rather than gate the entire UI behind a single
+ * "Create" CTA, we render the whole wallet console as a *preview*
+ * before activation. The viewer can read the stat tiles, the prompt
+ * examples, and the "how it works" recap, then click Create from
+ * inside that context — the act feels like activating something they
+ * can already see, not starting from a blank slate.
+ *
  * Surface today: create, view address, send single-recipient or batch
  * across 9 EVM chains (BNB free, the remaining 8 gated by multichain
  * scope), withdraw to the owner's EOA, edit spending limits, export
- * the private key behind step-up auth, and soft-delete with a 7-day
- * grace window. Automated balance polling + MCP triple-mode wiring
- * land in subsequent phases.
+ * the private key behind step-up auth, soft-delete with a 7-day grace
+ * window, and balance polling across all 9 chains via Multicall3.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { AgenticWalletCard } from "./AgenticWalletCard";
+import { AgenticWalletPreview } from "./AgenticWalletPreview";
 
 export interface AgenticWalletPublic {
   ownerAddr: string;
@@ -114,7 +121,7 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
         <div className="text-white/40 text-sm">Loading…</div>
       )}
 
-      {wallet === null && <EmptyHero onCreate={create} creating={creating} />}
+      {wallet === null && <AgenticWalletPreview onCreate={create} creating={creating} />}
 
       {wallet && (
         <AgenticWalletCard
@@ -126,41 +133,6 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
       )}
 
       {wallet && <InstallSnippet />}
-    </div>
-  );
-}
-
-// ── Empty hero (no wallet yet) ─────────────────────────────────────────────
-
-function EmptyHero({ onCreate, creating }: { onCreate: () => void; creating: boolean }) {
-  return (
-    <div
-      className="rounded-2xl border p-7 relative overflow-hidden"
-      style={{
-        background: "linear-gradient(135deg, #0F1929 0%, #0A1521 100%)",
-        borderColor: "rgba(74,222,128,0.18)",
-      }}
-    >
-      <DotPattern />
-      <div className="relative space-y-5 max-w-2xl">
-        <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-400 font-bold">
-          New
-        </div>
-        <h2 className="text-2xl font-semibold text-white">Create your Agent Wallet</h2>
-        <p className="text-white/55 text-sm leading-relaxed">
-          A Q402-managed wallet your AI signs through. Server holds the key (AES-256-GCM
-          encrypted) so your agent runs without wallet popups. Per-tx and per-day limits
-          bound the spend.
-        </p>
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={creating}
-          className="px-5 py-2 rounded-full text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-50 transition-colors"
-        >
-          {creating ? "Creating…" : "Create Agent Wallet"}
-        </button>
-      </div>
     </div>
   );
 }
@@ -205,19 +177,3 @@ function InstallSnippet() {
   );
 }
 
-// ── Decorative dot pattern (top-right of hero) ─────────────────────────────
-
-function DotPattern() {
-  return (
-    <div
-      aria-hidden
-      className="absolute top-0 right-0 h-full w-1/2 pointer-events-none opacity-40"
-      style={{
-        background:
-          "radial-gradient(circle, rgba(74,222,128,0.25) 1px, transparent 1.5px) 0 0 / 14px 14px",
-        maskImage: "linear-gradient(to left, black 0%, black 30%, transparent 80%)",
-        WebkitMaskImage: "linear-gradient(to left, black 0%, black 30%, transparent 80%)",
-      }}
-    />
-  );
-}

@@ -21,7 +21,7 @@
  * Restore + the remaining grace window.
  */
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { getAuthCreds } from "@/app/lib/auth-client";
 import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
 import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
@@ -29,6 +29,20 @@ import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
 import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
+
+interface BalancePayload {
+  asOf: number;
+  totalUsd: number;
+}
+
+function formatBalance(n: number): string {
+  if (!Number.isFinite(n)) return "$—";
+  if (n === 0) return "$0.00";
+  if (n < 0.01) return "<$0.01";
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
 interface Props {
   wallet: AgenticWalletPublic;
@@ -53,6 +67,43 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [balance, setBalance] = useState<BalancePayload | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const lastFetchRef = useRef<number>(0);
+
+  const fetchBalance = useCallback(async (force = false) => {
+    if (wallet.deletedAt !== null) return;
+    setBalanceLoading(true);
+    try {
+      const auth = await getAuthCreds(address, signMessage);
+      if (!auth) return;
+      const qs = new URLSearchParams({
+        address,
+        nonce: auth.nonce,
+        sig: auth.signature,
+        ...(force ? { force: "1" } : {}),
+      }).toString();
+      const res = await fetch(`/api/wallet/agentic/balance?${qs}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { balances?: BalancePayload };
+      if (data.balances) {
+        setBalance({ asOf: data.balances.asOf, totalUsd: data.balances.totalUsd });
+        lastFetchRef.current = Date.now();
+      }
+    } catch {
+      /* swallow — keep showing the last known balance */
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, [address, signMessage, wallet.deletedAt]);
+
+  useEffect(() => {
+    void fetchBalance();
+    const interval = setInterval(() => {
+      void fetchBalance();
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [fetchBalance]);
 
   async function copyAddress() {
     try {
@@ -170,9 +221,20 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
         <div className="relative grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
           <StatTile
             label="Balance"
-            value="$—"
-            sub="USDC + USDT across chains"
+            value={balance ? formatBalance(balance.totalUsd) : balanceLoading ? "…" : "$—"}
+            sub="USDC + USDT across 9 chains"
             tone="hero"
+            action={
+              <button
+                type="button"
+                onClick={() => { void fetchBalance(true); }}
+                disabled={balanceLoading}
+                title="Refresh balance"
+                className="text-[10px] text-white/35 hover:text-emerald-300 transition-colors disabled:opacity-40"
+              >
+                {balanceLoading ? "…" : "↻"}
+              </button>
+            }
           />
           <StatTile
             label="Daily cap"
@@ -330,6 +392,11 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
             onChanged();
           }}
           prefillTo={address}
+          prefillAmount={
+            balance && balance.totalUsd > 0
+              ? balance.totalUsd.toFixed(2)
+              : undefined
+          }
           titleOverride="Withdraw to your wallet"
           perTxMaxUsd={wallet.perTxMaxUsd}
           dailyLimitUsd={wallet.dailyLimitUsd}
@@ -374,11 +441,13 @@ function StatTile({
   value,
   sub,
   tone,
+  action,
 }: {
   label: string;
   value: string;
   sub: string;
   tone?: "hero";
+  action?: ReactNode;
 }) {
   const hero = tone === "hero";
   return (
@@ -389,8 +458,11 @@ function StatTile({
         borderColor: hero ? "rgba(74,222,128,0.22)" : "rgba(255,255,255,0.06)",
       }}
     >
-      <div className="text-[10px] text-white/45 uppercase tracking-widest font-medium mb-1">
-        {label}
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-[10px] text-white/45 uppercase tracking-widest font-medium">
+          {label}
+        </div>
+        {action}
       </div>
       <div className={`text-white tracking-tight ${hero ? "text-2xl font-semibold" : "text-base font-medium"}`}>
         {value}
