@@ -1,15 +1,24 @@
 "use client";
 
 /**
- * AgenticWalletCard — hero "Available Balance" card for the Agent tab.
+ * AgenticWalletCard — Agent Wallet console for the dashboard.
  *
- * Single balance surface up top with three pill-shaped primary actions
- * (Send / Receive / Add Funds) plus a secondary row for Withdraw,
- * Spending Limits, and Export. The address sits in the corner with a copy
- * chip and a per-chain explorer link picked from the Receive modal.
- * Archive opens a 7-day grace window during which the same surface
- * exposes a Restore action; after that the hard-delete cron sweeps the
- * record. Automated balance polling lands in a later phase.
+ * Layout philosophy: this is a *safe box for AI spending*, not a developer
+ * panel. Information density is the enemy. The card unfolds in three
+ * progressive bands so a non-technical owner can scan top-to-bottom and
+ * understand what they're looking at:
+ *
+ *   1. Identity strip       — one-line explanation + address chip
+ *   2. Four stat tiles      — Balance · Daily cap · Per-tx cap · Signer
+ *   3. Action surfaces      — primary (Send/Receive/Batch), secondary
+ *                             (Withdraw/Limits), then a *separated*
+ *                             danger zone for Archive and Export
+ *
+ * The danger zone is intentionally walled off with a red border so an
+ * accidental click on "Export private key" can't feel like the user just
+ * hit another settings button. Same for Archive while the wallet is
+ * active. When the wallet is archived, the danger zone flips to surface
+ * Restore + the remaining grace window.
  */
 
 import { useState } from "react";
@@ -18,9 +27,8 @@ import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
 import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
 import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
+import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
-import type { ChainKey } from "@/app/lib/relayer";
-import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
 
 interface Props {
   wallet: AgenticWalletPublic;
@@ -119,6 +127,7 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
 
   return (
     <>
+      {/* ── Identity + stats card ─────────────────────────────────────────── */}
       <div
         className="rounded-2xl border p-7 relative overflow-hidden"
         style={{
@@ -128,23 +137,16 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
       >
         <DotPattern />
 
-        <div className="relative flex items-start justify-between gap-4 mb-6">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-white/45 font-medium mb-1">
-              Available balance
+        {/* Header — what this is, plus the address chip */}
+        <div className="relative flex items-start justify-between gap-4 mb-5">
+          <div className="space-y-1">
+            <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-400/85 font-semibold">
+              Agent Wallet
             </div>
-            <div className="flex items-baseline gap-2">
-              <div className="text-4xl font-semibold text-white tracking-tight">
-                $—
-              </div>
-              <div className="text-xs text-white/40">USDC + USDT · BNB</div>
+            <div className="text-white/65 text-sm leading-relaxed max-w-md">
+              A separate wallet your AI signs through. Your MetaMask stays
+              untouched — funds here are bounded by the caps below.
             </div>
-            {(wallet.dailyLimitUsd !== null || wallet.perTxMaxUsd !== null) && (
-              <div className="text-[11px] text-white/35 mt-2">
-                {wallet.perTxMaxUsd !== null && <>per-tx max ${wallet.perTxMaxUsd} · </>}
-                {wallet.dailyLimitUsd !== null && <>daily cap ${wallet.dailyLimitUsd}</>}
-              </div>
-            )}
             {archived && (
               <div className="text-[11px] mt-2 inline-block px-2 py-0.5 rounded bg-red-500/12 text-red-300 font-medium">
                 Archived · {graceLeftDays ?? 0} day{graceLeftDays === 1 ? "" : "s"} left to restore
@@ -155,7 +157,7 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           <button
             type="button"
             onClick={copyAddress}
-            className="rounded-full border px-3 py-1.5 flex items-center gap-2 text-[11px] font-mono text-white/65 hover:text-emerald-300 transition-colors"
+            className="rounded-full border px-3 py-1.5 flex items-center gap-2 text-[11px] font-mono text-white/65 hover:text-emerald-300 transition-colors shrink-0"
             style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
             title="Copy address"
           >
@@ -164,6 +166,32 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           </button>
         </div>
 
+        {/* Four stat tiles. Balance is the hero (wider). */}
+        <div className="relative grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
+          <StatTile
+            label="Balance"
+            value="$—"
+            sub="USDC + USDT across chains"
+            tone="hero"
+          />
+          <StatTile
+            label="Daily cap"
+            value={wallet.dailyLimitUsd !== null ? `$${wallet.dailyLimitUsd}` : "no cap"}
+            sub={wallet.dailyLimitUsd !== null ? "resets at 00:00 UTC" : "set one in limits"}
+          />
+          <StatTile
+            label="Per-tx cap"
+            value={wallet.perTxMaxUsd !== null ? `$${wallet.perTxMaxUsd}` : "no cap"}
+            sub={wallet.perTxMaxUsd !== null ? "per single send" : "set one in limits"}
+          />
+          <StatTile
+            label="Signer"
+            value="Q402 server"
+            sub="encrypted key in keystore"
+          />
+        </div>
+
+        {/* Primary actions — Send / Receive / Batch sit here as equals. */}
         <div className="relative flex flex-wrap gap-2">
           <ActionPill
             label="Send"
@@ -178,34 +206,15 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
             iconArrow="down-left"
           />
           <ActionPill
-            label="Add Funds"
+            label="Batch send"
             disabled={archived}
-            onClick={() => setReceiveOpen(true)}
-            iconArrow="plus"
+            onClick={() => setBatchOpen(true)}
+            iconArrow="grid"
           />
-          {archived ? (
-            <button
-              type="button"
-              onClick={restore}
-              disabled={restoring}
-              className="ml-auto px-3 py-1.5 rounded-full text-[11px] font-medium text-emerald-300 hover:text-emerald-200 border border-emerald-400/30 hover:border-emerald-400/55 transition-colors disabled:opacity-40"
-            >
-              {restoring ? "restoring…" : "↺ Restore"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={archive}
-              disabled={archiving}
-              className="ml-auto px-3 py-1.5 rounded-full text-[11px] text-white/40 hover:text-red-300 transition-colors disabled:opacity-40"
-            >
-              {archiving ? "archiving…" : "archive"}
-            </button>
-          )}
         </div>
 
-        {/* Secondary actions — subtler row underneath the primary pills. */}
-        <div className="relative mt-4 pt-4 border-t flex flex-wrap items-center gap-4 text-[12px]"
+        {/* Secondary utility row — wallet maintenance, low risk. */}
+        <div className="relative mt-4 pt-4 border-t flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]"
           style={{ borderColor: "rgba(255,255,255,0.06)" }}
         >
           <button
@@ -219,34 +228,62 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           <button
             type="button"
             disabled={archived}
-            onClick={() => setBatchOpen(true)}
-            className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
-          >
-            ⇉ Batch send
-          </button>
-          <button
-            type="button"
-            disabled={archived}
             onClick={() => setLimitsOpen(true)}
             className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
           >
             ⚙ Spending limits
           </button>
-          <button
-            type="button"
-            disabled={archived}
-            onClick={() => setExportOpen(true)}
-            className="ml-auto text-white/45 hover:text-red-300 transition-colors disabled:opacity-40"
-          >
-            ⚠ Export private key
-          </button>
+        </div>
+      </div>
+
+      {/* ── Danger zone — visually walled off from the safe panel above. ─── */}
+      <div
+        className="mt-4 rounded-2xl border p-5 space-y-3"
+        style={{
+          background: "rgba(248,113,113,0.03)",
+          borderColor: "rgba(248,113,113,0.25)",
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-red-300 text-[11px] uppercase tracking-[0.22em] font-semibold">
+            Danger zone
+          </span>
+          <span className="text-white/35 text-[11px]">— irreversible once the 7-day grace expires</span>
         </div>
 
-        {archiveError && (
-          <div className="relative text-[12px] text-red-300/85 mt-3">{archiveError}</div>
+        {archived ? (
+          <DangerRow
+            title="Restore wallet"
+            body={`Cancels the pending hard-delete. You have ${graceLeftDays ?? 0} day${graceLeftDays === 1 ? "" : "s"} of grace remaining.`}
+            cta={restoring ? "Restoring…" : "Restore"}
+            tone="safe"
+            onClick={restore}
+            disabled={restoring}
+          />
+        ) : (
+          <DangerRow
+            title="Archive wallet"
+            body="Soft-deletes the wallet. You have 7 days to restore before Q402 hard-deletes the keystore record."
+            cta={archiving ? "Archiving…" : "Archive"}
+            tone="danger"
+            onClick={archive}
+            disabled={archiving}
+          />
         )}
-        {restoreError && (
-          <div className="relative text-[12px] text-red-300/85 mt-3">{restoreError}</div>
+
+        <DangerRow
+          title="Export private key"
+          body="Reveals the raw signing key. Anyone who has it can spend the wallet's USDC / USDT immediately, on any chain. Step-up signature required."
+          cta="Export"
+          tone="danger"
+          onClick={() => setExportOpen(true)}
+          disabled={archived}
+        />
+
+        {(archiveError || restoreError) && (
+          <div className="text-[12px] text-red-300/85">
+            {archiveError ?? restoreError}
+          </div>
         )}
       </div>
 
@@ -260,6 +297,8 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
             setSendOpen(false);
             onChanged();
           }}
+          perTxMaxUsd={wallet.perTxMaxUsd}
+          dailyLimitUsd={wallet.dailyLimitUsd}
         />
       )}
 
@@ -277,7 +316,7 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
       )}
 
       {receiveOpen && (
-        <ReceiveModal walletAddress={wallet.address} onClose={() => setReceiveOpen(false)} />
+        <AgenticWalletReceiveModal walletAddress={wallet.address} onClose={() => setReceiveOpen(false)} />
       )}
 
       {withdrawOpen && (
@@ -292,6 +331,8 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           }}
           prefillTo={address}
           titleOverride="Withdraw to your wallet"
+          perTxMaxUsd={wallet.perTxMaxUsd}
+          dailyLimitUsd={wallet.dailyLimitUsd}
         />
       )}
 
@@ -326,6 +367,39 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
   );
 }
 
+// ── StatTile ───────────────────────────────────────────────────────────────
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone?: "hero";
+}) {
+  const hero = tone === "hero";
+  return (
+    <div
+      className={`rounded-xl border p-3 ${hero ? "md:col-span-1" : ""}`}
+      style={{
+        background: hero ? "rgba(74,222,128,0.06)" : "rgba(255,255,255,0.02)",
+        borderColor: hero ? "rgba(74,222,128,0.22)" : "rgba(255,255,255,0.06)",
+      }}
+    >
+      <div className="text-[10px] text-white/45 uppercase tracking-widest font-medium mb-1">
+        {label}
+      </div>
+      <div className={`text-white tracking-tight ${hero ? "text-2xl font-semibold" : "text-base font-medium"}`}>
+        {value}
+      </div>
+      <div className="text-[11px] text-white/35 mt-0.5">{sub}</div>
+    </div>
+  );
+}
+
 // ── ActionPill ─────────────────────────────────────────────────────────────
 
 function ActionPill({
@@ -337,7 +411,7 @@ function ActionPill({
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  iconArrow: "up-right" | "down-left" | "plus";
+  iconArrow: "up-right" | "down-left" | "grid";
 }) {
   return (
     <button
@@ -363,9 +437,9 @@ function ActionPill({
   );
 }
 
-function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "plus" }) {
-  if (kind === "plus") {
-    return <span className="text-base leading-none">+</span>;
+function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "grid" }) {
+  if (kind === "grid") {
+    return <span className="text-sm leading-none">⇉</span>;
   }
   if (kind === "down-left") {
     return <span className="text-sm leading-none rotate-180 inline-block">↗</span>;
@@ -373,103 +447,48 @@ function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "plus" }) {
   return <span className="text-sm leading-none inline-block">↗</span>;
 }
 
-// ── Receive / Add Funds modal ──────────────────────────────────────────────
+// ── DangerRow ──────────────────────────────────────────────────────────────
 
-const RECEIVE_CHAINS: ReadonlyArray<{ key: ChainKey; label: string }> = [
-  { key: "bnb",       label: "BNB Chain" },
-  { key: "eth",       label: "Ethereum" },
-  { key: "avax",      label: "Avalanche" },
-  { key: "xlayer",    label: "X Layer" },
-  { key: "stable",    label: "Stable" },
-  { key: "mantle",    label: "Mantle" },
-  { key: "injective", label: "Injective" },
-  { key: "monad",     label: "Monad" },
-  { key: "scroll",    label: "Scroll" },
-];
-
-function ReceiveModal({ walletAddress, onClose }: { walletAddress: string; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-  const [chain, setChain] = useState<ChainKey>("bnb");
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(walletAddress);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* ignore */
-    }
-  }
+function DangerRow({
+  title,
+  body,
+  cta,
+  tone,
+  onClick,
+  disabled,
+}: {
+  title: string;
+  body: string;
+  cta: string;
+  tone: "danger" | "safe";
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  const danger = tone === "danger";
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={onClose}
+      className="rounded-md border px-3 py-3 flex items-center justify-between gap-4"
+      style={{
+        background: "rgba(8,17,30,0.45)",
+        borderColor: "rgba(255,255,255,0.06)",
+      }}
     >
-      <div
-        className="w-full max-w-md rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-white font-semibold text-lg">Receive USDC / USDT</div>
-            <div className="text-[11px] text-white/45 mt-0.5">
-              Same address across all supported EVM chains — pick the one you&apos;re depositing on.
-            </div>
-          </div>
-          <button onClick={onClose} className="text-white/40 hover:text-white text-lg leading-none">
-            ×
-          </button>
-        </div>
-
-        <div>
-          <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Network</div>
-          <select
-            value={chain}
-            onChange={(e) => setChain(e.target.value as ChainKey)}
-            className="w-full rounded-md border px-3 py-2 text-sm text-white"
-            style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.05)" }}
-          >
-            {RECEIVE_CHAINS.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div
-          className="rounded-md border px-3 py-3 font-mono text-[12px] text-white/85 break-all leading-relaxed"
-          style={{ background: "rgba(74,222,128,0.06)", borderColor: "rgba(74,222,128,0.18)" }}
-        >
-          {walletAddress}
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={copy}
-            className="flex-1 px-3 py-2 rounded-full text-sm font-medium"
-            style={{
-              background: "rgba(74,222,128,0.10)",
-              color: "#86efac",
-              border: "1px solid rgba(74,222,128,0.25)",
-            }}
-          >
-            {copied ? "copied ✓" : "Copy address"}
-          </button>
-          <a
-            href={explorerAddressUrl(chain, walletAddress)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 px-3 py-2 rounded-full text-sm font-medium text-center text-white/65 hover:text-white border border-white/10 hover:bg-white/[0.04]"
-          >
-            {explorerLabel(chain)} ↗
-          </a>
-        </div>
-        <div className="text-[10px] text-white/35 text-center">
-          Only send USDC or USDT on the selected network. Wrong-network deposits cannot be recovered.
-        </div>
+      <div className="min-w-0">
+        <div className="text-[13px] text-white/90 font-medium">{title}</div>
+        <div className="text-[11.5px] text-white/50 leading-relaxed mt-0.5">{body}</div>
       </div>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+          danger
+            ? "bg-red-500/80 text-white hover:bg-red-500"
+            : "bg-emerald-400 text-slate-900 hover:bg-emerald-300"
+        }`}
+      >
+        {cta}
+      </button>
     </div>
   );
 }

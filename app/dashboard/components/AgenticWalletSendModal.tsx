@@ -7,8 +7,11 @@
  * caller's subscription) + USDC/USDT, plus recipient + amount. The
  * actual signing happens server-side in /api/wallet/agentic/send — this
  * UI only forwards the user's intent + their EIP-191 session signature
- * for owner-auth. Backend gates non-BNB chains via hasMultichainScope
- * and surfaces SUBSCRIPTION_REQUIRED on miss.
+ * for owner-auth.
+ *
+ * Friendly-error principle: every backend rejection is mapped to a
+ * single-sentence headline + one next action ("Raise cap", "Upgrade
+ * subscription", "Try again"). Raw API error codes never reach the user.
  */
 
 import { useState } from "react";
@@ -24,6 +27,10 @@ interface Props {
   prefillTo?: string;
   /** Override the modal title — Withdraw uses "Withdraw to your wallet". */
   titleOverride?: string;
+  /** Wallet-level per-tx cap, used to soft-block before hitting backend. */
+  perTxMaxUsd?: number | null;
+  /** Wallet-level daily cap, used in the friendly error mapping. */
+  dailyLimitUsd?: number | null;
 }
 
 type Token = "USDC" | "USDT";
@@ -74,6 +81,71 @@ function isDecimalAmount(s: string) {
   return /^\d+(\.\d+)?$/.test(s.trim()) && Number(s) > 0;
 }
 
+interface FriendlyError {
+  headline: string;
+  next?: { label: string; href: string };
+}
+
+interface BackendError {
+  error?: string;
+  message?: string;
+  limit?: number;
+  spent?: number;
+  requested?: number;
+}
+
+function friendlyError(status: number, body: BackendError): FriendlyError {
+  const code = body.error ?? "";
+
+  if (code === "SUBSCRIPTION_REQUIRED" || status === 402) {
+    return {
+      headline:
+        "Sending on this chain needs a Multichain subscription. BNB Chain is free with the trial.",
+      next: { label: "View plans →", href: "/payment" },
+    };
+  }
+  if (code === "DAILY_LIMIT_EXCEEDED") {
+    const lim = body.limit ?? "—";
+    return {
+      headline: `Daily cap of $${lim} reached. Resets at 00:00 UTC, or raise the cap below.`,
+      next: { label: "Raise limits", href: "#raise-limits" },
+    };
+  }
+  if (code === "PER_TX_LIMIT_EXCEEDED") {
+    const lim = body.limit ?? "—";
+    return {
+      headline: `This send exceeds the per-tx cap of $${lim}. Send a smaller amount, or raise the cap.`,
+      next: { label: "Raise limits", href: "#raise-limits" },
+    };
+  }
+  if (code === "AGENTIC_WALLET_NOT_FOUND") {
+    return { headline: "Agent Wallet not found — try reloading the page." };
+  }
+  if (code === "AGENTIC_WALLET_ARCHIVED" || code === "WALLET_ARCHIVED") {
+    return { headline: "This wallet is archived. Restore it before sending." };
+  }
+  if (code === "relay_unavailable" || code === "keystore_unavailable") {
+    return {
+      headline:
+        "Q402's signer is briefly offline. Wait a moment and try again — your balance is safe.",
+    };
+  }
+  if (code === "NONCE_EXPIRED") {
+    return {
+      headline: "Your session signature expired. Re-sign the auth challenge to continue.",
+    };
+  }
+  if (status >= 500) {
+    return {
+      headline: "Send failed on our side. Try again in a moment.",
+    };
+  }
+  if (body.message) {
+    return { headline: body.message };
+  }
+  return { headline: `Send failed (HTTP ${status}).` };
+}
+
 export function AgenticWalletSendModal({
   walletAddress,
   ownerAddress,
@@ -82,6 +154,8 @@ export function AgenticWalletSendModal({
   onSent,
   prefillTo,
   titleOverride,
+  perTxMaxUsd,
+  dailyLimitUsd,
 }: Props) {
   const [chain, setChain] = useState<ChainKey>("bnb");
   const chainMeta = chainMetaFor(chain);
@@ -96,29 +170,35 @@ export function AgenticWalletSendModal({
     queueMicrotask(() => setToken(allowedTokens[0]));
   }
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
   const [success, setSuccess] = useState<{ txHash: string } | null>(null);
 
   const recipientValid = recipient === "" || isAddress(recipient);
   const amountValid = amount === "" || isDecimalAmount(amount);
+
+  // Soft per-tx cap check — surface the issue before the user signs.
+  const amountNum = isDecimalAmount(amount) ? Number(amount) : 0;
+  const overPerTxCap =
+    typeof perTxMaxUsd === "number" && amountNum > perTxMaxUsd;
+
   const canSubmit =
-    !submitting && isAddress(recipient) && isDecimalAmount(amount);
+    !submitting && isAddress(recipient) && isDecimalAmount(amount) && !overPerTxCap;
 
   async function submit() {
     setError(null);
     if (!isAddress(recipient)) {
-      setError("Recipient must be a 0x-prefixed 20-byte address.");
+      setError({ headline: "Recipient must be a 0x-prefixed 20-byte address." });
       return;
     }
     if (!isDecimalAmount(amount)) {
-      setError("Amount must be a positive decimal (e.g. 1.50).");
+      setError({ headline: "Amount must be a positive decimal (e.g. 1.50)." });
       return;
     }
     setSubmitting(true);
     try {
       const auth = await getAuthCreds(ownerAddress, signMessage);
       if (!auth) {
-        setError("Please sign the auth challenge to authorize this send.");
+        setError({ headline: "Sign the auth challenge to authorize this send." });
         return;
       }
       const res = await fetch("/api/wallet/agentic/send", {
@@ -134,18 +214,15 @@ export function AgenticWalletSendModal({
           signature: auth.signature,
         }),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as BackendError;
       if (!res.ok) {
-        setError(data.message ?? data.error ?? `Send failed (HTTP ${res.status}).`);
+        setError(friendlyError(res.status, data));
         return;
       }
-      if (data?.txHash) {
-        setSuccess({ txHash: data.txHash as string });
-      } else {
-        setSuccess({ txHash: "(pending)" });
-      }
+      const txHash = (data as { txHash?: string }).txHash;
+      setSuccess({ txHash: txHash ?? "(pending)" });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError({ headline: e instanceof Error ? e.message : String(e) });
     } finally {
       setSubmitting(false);
     }
@@ -204,6 +281,21 @@ export function AgenticWalletSendModal({
           </div>
         ) : (
           <>
+            {/* Source-of-funds primer — clears the #1 confusion: "wait, is
+                this signing with my MetaMask?" */}
+            <div
+              className="rounded-md border px-3 py-2.5 text-[11.5px] leading-relaxed"
+              style={{
+                background: "rgba(74,222,128,0.05)",
+                borderColor: "rgba(74,222,128,0.18)",
+                color: "rgba(226,232,240,0.78)",
+              }}
+            >
+              Sending from your <span className="text-emerald-300">Agent Wallet</span>,
+              not your MetaMask. Q402 sponsors the gas; only the stablecoin moves
+              from your Agent Wallet balance.
+            </div>
+
             <div className="space-y-3">
               <div>
                 <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Chain</div>
@@ -272,7 +364,16 @@ export function AgenticWalletSendModal({
               </div>
 
               <div>
-                <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Amount</div>
+                <div className="flex items-baseline justify-between mb-1">
+                  <div className="text-[11px] text-white/45 uppercase tracking-widest">Amount</div>
+                  {(typeof perTxMaxUsd === "number" || typeof dailyLimitUsd === "number") && (
+                    <div className="text-[10px] text-white/35">
+                      {typeof perTxMaxUsd === "number" && <>per-tx ${perTxMaxUsd}</>}
+                      {typeof perTxMaxUsd === "number" && typeof dailyLimitUsd === "number" && <> · </>}
+                      {typeof dailyLimitUsd === "number" && <>daily ${dailyLimitUsd}</>}
+                    </div>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={amount}
@@ -282,14 +383,36 @@ export function AgenticWalletSendModal({
                   className="w-full rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25"
                   style={{
                     background: "rgba(255,255,255,0.02)",
-                    borderColor: amountValid ? "rgba(255,255,255,0.05)" : "rgba(248,113,113,0.45)",
+                    borderColor: amountValid && !overPerTxCap ? "rgba(255,255,255,0.05)" : "rgba(248,113,113,0.45)",
                   }}
                 />
+                {overPerTxCap && (
+                  <div className="text-[11px] text-red-300/85 mt-1">
+                    Over per-tx cap (${perTxMaxUsd}). Raise it in Spending limits or send less.
+                  </div>
+                )}
               </div>
             </div>
 
             {error && (
-              <div className="text-[12px] text-red-300/80">{error}</div>
+              <div
+                className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed flex items-start justify-between gap-3"
+                style={{
+                  background: "rgba(248,113,113,0.06)",
+                  borderColor: "rgba(248,113,113,0.22)",
+                  color: "#fecaca",
+                }}
+              >
+                <span>{error.headline}</span>
+                {error.next && (
+                  <a
+                    href={error.next.href}
+                    className="shrink-0 text-emerald-300 hover:text-emerald-200 underline underline-offset-2"
+                  >
+                    {error.next.label}
+                  </a>
+                )}
+              </div>
             )}
 
             <button
@@ -300,9 +423,6 @@ export function AgenticWalletSendModal({
             >
               {submitting ? "Sending…" : `Send ${amount || "—"} ${token}`}
             </button>
-            <div className="text-[10px] text-white/30 text-center">
-              Gas is sponsored by Q402&apos;s relayer. Your Agentic Wallet only pays the stablecoin.
-            </div>
           </>
         )}
       </div>

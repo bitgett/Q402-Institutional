@@ -49,6 +49,7 @@ export default function AgentsPage() {
 
         <div className="relative max-w-6xl mx-auto">
           <Hero />
+          <PromptExamplesSection />
           <ProofRow />
           <ConsoleMockupSection />
           <FlowSection />
@@ -127,6 +128,95 @@ function Hero() {
         </Link>
       </div>
     </motion.div>
+  );
+}
+
+// ── Prompt examples — "Try saying this" block ────────────────────────────
+//
+// Lifted out of the abstract feature list so the user immediately sees what
+// kind of *thing they could ask their AI to do* once the wallet exists.
+// Three deliberately concrete prompts: a recurring payout, a routing
+// preference, and a spending policy.
+
+function PromptExamplesSection() {
+  const prompts: { quote: string; lane: "recurring" | "routing" | "policy" }[] = [
+    {
+      quote: "Every Friday, send 25 USDT to these 8 contributors.",
+      lane: "recurring",
+    },
+    {
+      quote: "If Scroll gas is cheaper than Ethereum, use Scroll.",
+      lane: "routing",
+    },
+    {
+      quote: "Never spend more than $200 per transaction or $500 per day.",
+      lane: "policy",
+    },
+  ];
+  const laneLabel: Record<"recurring" | "routing" | "policy", string> = {
+    recurring: "recurring payout",
+    routing: "chain routing",
+    policy: "spending policy",
+  };
+  return (
+    <div className="mb-20 max-w-3xl mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.45 }}
+        className="text-center mb-7"
+      >
+        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#86efac" }}>
+          Try saying this
+        </div>
+        <div className="text-2xl md:text-3xl font-semibold tracking-tight mb-2">
+          Plain English. Real settlement.
+        </div>
+        <div className="text-sm" style={{ color: "rgba(226,232,240,0.55)" }}>
+          Works inside Claude, Codex CLI, Cursor, and Cline — same MCP tool,
+          same Agent Wallet underneath.
+        </div>
+      </motion.div>
+
+      <div className="space-y-3">
+        {prompts.map((p, i) => (
+          <motion.div
+            key={p.quote}
+            initial={{ opacity: 0, y: 8 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.4, delay: i * 0.08 }}
+            className="rounded-2xl border p-5 flex items-start gap-4"
+            style={{
+              background: "rgba(226,232,240,0.025)",
+              borderColor: "rgba(74,222,128,0.18)",
+            }}
+          >
+            <div
+              className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[14px] font-semibold"
+              style={{ background: "rgba(74,222,128,0.10)", color: "#86efac", border: "1px solid rgba(74,222,128,0.25)" }}
+              aria-hidden
+            >
+              ❝
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[18px] md:text-[19px] font-medium leading-snug" style={{ color: "#E2E8F0" }}>
+                {p.quote}
+              </div>
+              <div className="text-[10.5px] uppercase tracking-[0.18em] mt-1.5" style={{ color: "rgba(134,239,172,0.7)" }}>
+                {laneLabel[p.lane]}
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="mt-5 text-center text-[11px]" style={{ color: "rgba(226,232,240,0.4)" }}>
+        Your agent only ever spends what you let it — caps are enforced server-side
+        on every send.
+      </div>
+    </div>
   );
 }
 
