@@ -44,6 +44,7 @@ import {
 } from "@/app/lib/agentic-wallet";
 import { getSubscription, hasMultichainScope } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
   isAgenticChainKey,
   signAgenticPayment,
@@ -361,7 +362,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     finishedAt: Date.now(),
     status: "complete",
   };
-  await kv.set(key, finalRecord, { ex: IDEMPOTENCY_TTL_SEC });
+  // If we cannot write the final record, future retries will re-fire
+  // (the cached "processing" record gets overwritten on retry by SET NX
+  // expiration, and worse — settled txHashes are lost from the cache).
+  // Wake an operator: settlement actually happened, we just can't prove
+  // it to a retrying client.
+  try {
+    await kv.set(key, finalRecord, { ex: IDEMPOTENCY_TTL_SEC });
+  } catch (e) {
+    const settledHashes = successful
+      .map((r) => r.txHash)
+      .filter((h): h is string => !!h)
+      .join(", ");
+    void sendOpsAlert(
+      `agentic-wallet/batch final write failed for ${owner} (batchId=${batchId}, ` +
+        `chain=${body.chain}, settled=${successful.length}/${results.length}). ` +
+        `Hashes: ${settledHashes || "(none)"}. Retries may re-fire. ` +
+        `Error: ${e instanceof Error ? e.message : String(e)}`,
+      "critical",
+    );
+  }
 
   // Reconcile the daily-cap reservation against the actual settled
   // total. We reserved `totalAmount` up front; refund the failed rows

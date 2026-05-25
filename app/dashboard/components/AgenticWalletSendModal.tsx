@@ -39,17 +39,32 @@ type ChainKey =
   | "monad"
   | "scroll";
 
-const CHAIN_LABELS: { key: ChainKey; label: string; multichainOnly?: boolean }[] = [
-  { key: "bnb",       label: "BNB Chain" },
-  { key: "eth",       label: "Ethereum",   multichainOnly: true },
-  { key: "avax",      label: "Avalanche",  multichainOnly: true },
-  { key: "xlayer",    label: "X Layer",    multichainOnly: true },
-  { key: "stable",    label: "Stable",     multichainOnly: true },
-  { key: "mantle",    label: "Mantle",     multichainOnly: true },
-  { key: "injective", label: "Injective",  multichainOnly: true },
-  { key: "monad",     label: "Monad",      multichainOnly: true },
-  { key: "scroll",    label: "Scroll",     multichainOnly: true },
+interface ChainMeta {
+  key: ChainKey;
+  label: string;
+  multichainOnly?: boolean;
+  /** Tokens this chain accepts. Used to disable the picker for tokens
+   *  the chain doesn't actually support (e.g. Injective USDT-only). */
+  tokens: readonly Token[];
+  explorerTxBase: string;
+  explorerLabel: string;
+}
+
+const CHAIN_META: ChainMeta[] = [
+  { key: "bnb",       label: "BNB Chain",  tokens: ["USDT", "USDC"], explorerTxBase: "https://bscscan.com/tx/",                    explorerLabel: "BscScan" },
+  { key: "eth",       label: "Ethereum",   multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://etherscan.io/tx/",                   explorerLabel: "Etherscan" },
+  { key: "avax",      label: "Avalanche",  multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://snowtrace.io/tx/",                   explorerLabel: "Snowtrace" },
+  { key: "xlayer",    label: "X Layer",    multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://www.oklink.com/xlayer/tx/",          explorerLabel: "OKLink" },
+  { key: "stable",    label: "Stable",     multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://stablescan.org/tx/",                 explorerLabel: "StableScan" },
+  { key: "mantle",    label: "Mantle",     multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://explorer.mantle.xyz/tx/",            explorerLabel: "Mantle Explorer" },
+  { key: "injective", label: "Injective",  multichainOnly: true, tokens: ["USDT"],         explorerTxBase: "https://blockscout.injective.network/tx/",   explorerLabel: "Blockscout" },
+  { key: "monad",     label: "Monad",      multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://monadscan.com/tx/",                  explorerLabel: "MonadScan" },
+  { key: "scroll",    label: "Scroll",     multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://scrollscan.com/tx/",                 explorerLabel: "ScrollScan" },
 ];
+
+function chainMetaFor(key: ChainKey): ChainMeta {
+  return CHAIN_META.find((c) => c.key === key) ?? CHAIN_META[0];
+}
 
 function isAddress(s: string) {
   return /^0x[0-9a-fA-F]{40}$/.test(s.trim());
@@ -69,9 +84,17 @@ export function AgenticWalletSendModal({
   titleOverride,
 }: Props) {
   const [chain, setChain] = useState<ChainKey>("bnb");
+  const chainMeta = chainMetaFor(chain);
+  const allowedTokens = chainMeta.tokens;
   const [token, setToken] = useState<Token>("USDT");
   const [recipient, setRecipient] = useState(prefillTo ?? "");
   const [amount, setAmount] = useState("");
+
+  // Keep token consistent with the selected chain — if the user picks
+  // Injective (USDT-only) while USDC is highlighted, snap to USDT.
+  if (!allowedTokens.includes(token)) {
+    queueMicrotask(() => setToken(allowedTokens[0]));
+  }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ txHash: string } | null>(null);
@@ -163,12 +186,12 @@ export function AgenticWalletSendModal({
             </div>
             {success.txHash !== "(pending)" && (
               <a
-                href={`https://bscscan.com/tx/${success.txHash}`}
+                href={`${chainMeta.explorerTxBase}${success.txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs text-emerald-400 hover:underline font-mono break-all"
               >
-                {success.txHash} ↗
+                {success.txHash} ↗ {chainMeta.explorerLabel}
               </a>
             )}
             <button
@@ -190,7 +213,7 @@ export function AgenticWalletSendModal({
                   className="w-full rounded-md border px-3 py-2 text-sm text-white"
                   style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.05)" }}
                 >
-                  {CHAIN_LABELS.map((c) => (
+                  {CHAIN_META.map((c) => (
                     <option key={c.key} value={c.key}>
                       {c.label}{c.multichainOnly ? " — multichain" : ""}
                     </option>
@@ -206,20 +229,29 @@ export function AgenticWalletSendModal({
               <div>
                 <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Token</div>
                 <div className="grid grid-cols-2 gap-2">
-                  {(["USDT", "USDC"] as Token[]).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setToken(t)}
-                      className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                        token === t
-                          ? "border-emerald-400 text-emerald-300 bg-emerald-400/8"
-                          : "border-white/10 text-white/55 hover:text-white"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
+                  {(["USDT", "USDC"] as Token[]).map(t => {
+                    const enabled = allowedTokens.includes(t);
+                    const active = token === t;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        disabled={!enabled}
+                        onClick={() => enabled && setToken(t)}
+                        title={enabled ? undefined : `${chainMeta.label} does not support ${t}`}
+                        className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                          !enabled
+                            ? "border-white/5 text-white/25 cursor-not-allowed"
+                            : active
+                              ? "border-emerald-400 text-emerald-300 bg-emerald-400/8"
+                              : "border-white/10 text-white/55 hover:text-white"
+                        }`}
+                      >
+                        {t}
+                        {!enabled && <span className="ml-1 text-[9px]">N/A</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

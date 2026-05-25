@@ -5,18 +5,22 @@
  *
  * Single balance surface up top with three pill-shaped primary actions
  * (Send / Receive / Add Funds) plus a secondary row for Withdraw,
- * Spending Limits, and Export. The wallet's address sits in the corner
- * with a copy chip and BscScan link. Automated balance polling lands in
- * a later phase — this surface tells the caller where to verify on-chain
- * in the meantime.
+ * Spending Limits, and Export. The address sits in the corner with a copy
+ * chip and a per-chain explorer link picked from the Receive modal.
+ * Archive opens a 7-day grace window during which the same surface
+ * exposes a Restore action; after that the hard-delete cron sweeps the
+ * record. Automated balance polling lands in a later phase.
  */
 
 import { useState } from "react";
 import { getAuthCreds } from "@/app/lib/auth-client";
 import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
+import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
 import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
+import type { ChainKey } from "@/app/lib/relayer";
+import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
 
 interface Props {
   wallet: AgenticWalletPublic;
@@ -31,12 +35,15 @@ function shortAddr(addr: string) {
 
 export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: Props) {
   const [sendOpen, setSendOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   async function copyAddress() {
@@ -77,7 +84,38 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
     }
   }
 
+  async function restore() {
+    setRestoring(true);
+    setRestoreError(null);
+    try {
+      const auth = await getAuthCreds(address, signMessage);
+      if (!auth) {
+        setRestoreError("Sign the auth challenge to restore.");
+        return;
+      }
+      const res = await fetch("/api/wallet/agentic/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, nonce: auth.nonce, signature: auth.signature }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRestoreError(data.message ?? data.error ?? "Restore failed.");
+        return;
+      }
+      onChanged();
+    } catch (e) {
+      setRestoreError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRestoring(false);
+    }
+  }
+
   const archived = wallet.deletedAt !== null;
+  const graceMs = 7 * 24 * 60 * 60 * 1000;
+  const graceLeftDays = archived && wallet.deletedAt !== null
+    ? Math.max(0, Math.ceil((wallet.deletedAt + graceMs - Date.now()) / (24 * 60 * 60 * 1000)))
+    : null;
 
   return (
     <>
@@ -109,7 +147,7 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
             )}
             {archived && (
               <div className="text-[11px] mt-2 inline-block px-2 py-0.5 rounded bg-red-500/12 text-red-300 font-medium">
-                Archived · 7-day grace
+                Archived · {graceLeftDays ?? 0} day{graceLeftDays === 1 ? "" : "s"} left to restore
               </div>
             )}
           </div>
@@ -145,14 +183,25 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
             onClick={() => setReceiveOpen(true)}
             iconArrow="plus"
           />
-          <button
-            type="button"
-            onClick={archive}
-            disabled={archiving || archived}
-            className="ml-auto px-3 py-1.5 rounded-full text-[11px] text-white/40 hover:text-red-300 transition-colors disabled:opacity-40"
-          >
-            {archiving ? "archiving…" : archived ? "archived" : "archive"}
-          </button>
+          {archived ? (
+            <button
+              type="button"
+              onClick={restore}
+              disabled={restoring}
+              className="ml-auto px-3 py-1.5 rounded-full text-[11px] font-medium text-emerald-300 hover:text-emerald-200 border border-emerald-400/30 hover:border-emerald-400/55 transition-colors disabled:opacity-40"
+            >
+              {restoring ? "restoring…" : "↺ Restore"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={archive}
+              disabled={archiving}
+              className="ml-auto px-3 py-1.5 rounded-full text-[11px] text-white/40 hover:text-red-300 transition-colors disabled:opacity-40"
+            >
+              {archiving ? "archiving…" : "archive"}
+            </button>
+          )}
         </div>
 
         {/* Secondary actions — subtler row underneath the primary pills. */}
@@ -166,6 +215,14 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
             className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
           >
             ↩ Withdraw to your wallet
+          </button>
+          <button
+            type="button"
+            disabled={archived}
+            onClick={() => setBatchOpen(true)}
+            className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+          >
+            ⇉ Batch send
           </button>
           <button
             type="button"
@@ -188,6 +245,9 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
         {archiveError && (
           <div className="relative text-[12px] text-red-300/85 mt-3">{archiveError}</div>
         )}
+        {restoreError && (
+          <div className="relative text-[12px] text-red-300/85 mt-3">{restoreError}</div>
+        )}
       </div>
 
       {sendOpen && (
@@ -198,6 +258,19 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           onClose={() => setSendOpen(false)}
           onSent={() => {
             setSendOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+
+      {batchOpen && (
+        <AgenticWalletBatchModal
+          walletAddress={wallet.address}
+          ownerAddress={address}
+          signMessage={signMessage}
+          onClose={() => setBatchOpen(false)}
+          onSent={() => {
+            setBatchOpen(false);
             onChanged();
           }}
         />
@@ -228,6 +301,9 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           ownerAddress={address}
           signMessage={signMessage}
           onClose={() => setExportOpen(false)}
+          onArchiveRequest={() => {
+            void archive();
+          }}
         />
       )}
 
@@ -299,8 +375,21 @@ function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "plus" }) {
 
 // ── Receive / Add Funds modal ──────────────────────────────────────────────
 
+const RECEIVE_CHAINS: ReadonlyArray<{ key: ChainKey; label: string }> = [
+  { key: "bnb",       label: "BNB Chain" },
+  { key: "eth",       label: "Ethereum" },
+  { key: "avax",      label: "Avalanche" },
+  { key: "xlayer",    label: "X Layer" },
+  { key: "stable",    label: "Stable" },
+  { key: "mantle",    label: "Mantle" },
+  { key: "injective", label: "Injective" },
+  { key: "monad",     label: "Monad" },
+  { key: "scroll",    label: "Scroll" },
+];
+
 function ReceiveModal({ walletAddress, onClose }: { walletAddress: string; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
+  const [chain, setChain] = useState<ChainKey>("bnb");
   async function copy() {
     try {
       await navigator.clipboard.writeText(walletAddress);
@@ -324,12 +413,31 @@ function ReceiveModal({ walletAddress, onClose }: { walletAddress: string; onClo
         <div className="flex items-start justify-between">
           <div>
             <div className="text-white font-semibold text-lg">Receive USDC / USDT</div>
-            <div className="text-[11px] text-white/45 mt-0.5">BNB Chain · auto-credited (verify on BscScan)</div>
+            <div className="text-[11px] text-white/45 mt-0.5">
+              Same address across all supported EVM chains — pick the one you&apos;re depositing on.
+            </div>
           </div>
           <button onClick={onClose} className="text-white/40 hover:text-white text-lg leading-none">
             ×
           </button>
         </div>
+
+        <div>
+          <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Network</div>
+          <select
+            value={chain}
+            onChange={(e) => setChain(e.target.value as ChainKey)}
+            className="w-full rounded-md border px-3 py-2 text-sm text-white"
+            style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.05)" }}
+          >
+            {RECEIVE_CHAINS.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div
           className="rounded-md border px-3 py-3 font-mono text-[12px] text-white/85 break-all leading-relaxed"
           style={{ background: "rgba(74,222,128,0.06)", borderColor: "rgba(74,222,128,0.18)" }}
@@ -350,13 +458,16 @@ function ReceiveModal({ walletAddress, onClose }: { walletAddress: string; onClo
             {copied ? "copied ✓" : "Copy address"}
           </button>
           <a
-            href={`https://bscscan.com/address/${walletAddress}`}
+            href={explorerAddressUrl(chain, walletAddress)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex-1 px-3 py-2 rounded-full text-sm font-medium text-center text-white/65 hover:text-white border border-white/10 hover:bg-white/[0.04]"
           >
-            BscScan ↗
+            {explorerLabel(chain)} ↗
           </a>
+        </div>
+        <div className="text-[10px] text-white/35 text-center">
+          Only send USDC or USDT on the selected network. Wrong-network deposits cannot be recovered.
         </div>
       </div>
     </div>

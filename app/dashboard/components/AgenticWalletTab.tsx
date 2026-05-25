@@ -126,8 +126,6 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
       )}
 
       {wallet && <InstallSnippet />}
-
-      {wallet && <SubCards />}
     </div>
   );
 }
@@ -185,76 +183,24 @@ function InstallSnippet() {
 
   return (
     <div
-      className="rounded-2xl border p-5"
-      style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}
+      className="rounded-xl border px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"
+      style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
     >
-      <div className="text-white font-semibold mb-1">Start using your Agent Wallet</div>
-      <div className="text-white/45 text-xs mb-4">
-        Install Q402 MCP in any AI client. Today the wallet signs via the dashboard;
-        full agent triple-mode auth ships in the next phase.
-      </div>
-      <div
-        className="rounded-md border px-3 py-2.5 flex items-center justify-between font-mono text-sm text-white/85"
-        style={{ background: "rgba(74,222,128,0.06)", borderColor: "rgba(74,222,128,0.18)" }}
+      <span className="text-white/55">Connect this wallet to an AI client:</span>
+      <code className="font-mono text-white/80 text-[13px]">{cmd}</code>
+      <button
+        type="button"
+        onClick={copy}
+        className="text-[12px] text-white/50 hover:text-emerald-300 transition-colors"
       >
-        <span>
-          <span className="text-emerald-400/70 mr-2">{">"}</span>
-          {cmd}
-        </span>
-        <button
-          type="button"
-          onClick={copy}
-          className="text-[11px] text-white/50 hover:text-emerald-300 transition-colors"
-        >
-          {copied ? "copied ✓" : "copy"}
-        </button>
-      </div>
+        {copied ? "copied ✓" : "copy"}
+      </button>
       <a
         href="/docs#claude-mcp"
-        className="inline-block mt-3 text-[12px] text-emerald-400 hover:text-emerald-300"
+        className="ml-auto text-[12px] text-emerald-400/85 hover:text-emerald-300"
       >
-        View quickstart guide →
+        Quickstart →
       </a>
-    </div>
-  );
-}
-
-// ── Sub cards: Active Sessions + Recent Activity ───────────────────────────
-
-function SubCards() {
-  return (
-    <div className="grid md:grid-cols-2 gap-4">
-      <div
-        className="rounded-2xl border p-6 flex flex-col items-center text-center"
-        style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}
-      >
-        <div className="text-white font-semibold mb-3">Active Agents</div>
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center mb-2"
-          style={{ background: "rgba(74,222,128,0.08)", color: "#86efac" }}
-        >
-          ⌬
-        </div>
-        <div className="text-[12px] text-white/40 leading-relaxed">
-          No agents yet. Agent sessions appear here once the MCP triple-mode auth ships.
-        </div>
-      </div>
-
-      <div
-        className="rounded-2xl border p-6 flex flex-col items-center text-center"
-        style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}
-      >
-        <div className="text-white font-semibold mb-3">Recent Activity</div>
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center mb-2"
-          style={{ background: "rgba(74,222,128,0.08)", color: "#86efac" }}
-        >
-          ◷
-        </div>
-        <div className="text-[12px] text-white/40 leading-relaxed">
-          Transactions from this wallet will appear here. Check <span className="text-white/55">Transactions</span> tab for the full list.
-        </div>
-      </div>
     </div>
   );
 }

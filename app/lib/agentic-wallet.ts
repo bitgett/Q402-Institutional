@@ -62,6 +62,15 @@ function todayUtc(): string {
 export const SOFT_DELETE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
+ * Safety defaults the wallet ships with. Server holds the key, so we
+ * lean conservative; callers can raise them via PATCH on
+ * /api/wallet/agentic. Phase-2 product intent: a wallet that "just
+ * works" for small payments without immediate ops attention.
+ */
+export const DEFAULT_PER_TX_MAX_USD = 200;
+export const DEFAULT_DAILY_LIMIT_USD = 500;
+
+/**
  * Create a fresh Agentic Wallet for `ownerAddr`. Throws if one already
  * exists (active or soft-deleted) — restore the soft-deleted one or wait
  * out the grace window instead of stacking records.
@@ -83,6 +92,8 @@ export async function createAgenticWallet(ownerAddr: string): Promise<AgenticWal
     address: ethers.getAddress(wallet.address),
     encryptedPK,
     createdAt: Date.now(),
+    dailyLimitUsd: DEFAULT_DAILY_LIMIT_USD,
+    perTxMaxUsd: DEFAULT_PER_TX_MAX_USD,
   };
 
   const claimed = await kv.set(RECORD_KEY(owner), record, { nx: true });

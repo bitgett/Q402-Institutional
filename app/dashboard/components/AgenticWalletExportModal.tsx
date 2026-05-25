@@ -26,6 +26,10 @@ interface Props {
   ownerAddress: string;
   signMessage: (message: string) => Promise<string | null>;
   onClose: () => void;
+  /** Called when the user opts to archive immediately after exporting.
+   *  Q402 still holds the AES-encrypted key after a successful export,
+   *  so this CTA closes the loop for users who want full custody. */
+  onArchiveRequest?: () => void;
 }
 
 type Stage = "warn" | "loading" | "reveal" | "error";
@@ -36,6 +40,7 @@ export function AgenticWalletExportModal({
   ownerAddress,
   signMessage,
   onClose,
+  onArchiveRequest,
 }: Props) {
   const [stage, setStage] = useState<Stage>("warn");
   const [pk, setPk] = useState<string | null>(null);
@@ -162,7 +167,10 @@ export function AgenticWalletExportModal({
             </div>
             <ul className="text-[12px] text-white/55 space-y-1.5 leading-relaxed list-disc list-inside">
               <li>Save it to a hardware wallet or a password manager — not chat, email, or screenshots.</li>
-              <li>Once exported you may want to archive this Agent Wallet and rotate to a new one.</li>
+              <li>
+                After export, Q402 still holds an encrypted copy of this key on the server.
+                Archive the wallet here (or right after reveal) to drop it from our keystore.
+              </li>
               <li>You&apos;ll sign a one-time challenge to confirm — that signature cannot be reused.</li>
             </ul>
             <button
@@ -208,17 +216,41 @@ export function AgenticWalletExportModal({
             <div className="text-[11px] text-white/45 text-center">
               Auto-clears in {remaining}s
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setPk(null);
-                setShow(false);
-                onClose();
-              }}
-              className="w-full px-3 py-2 rounded-md text-sm font-medium text-white/55 hover:text-white border border-white/10"
+            <div
+              className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed"
+              style={{ background: "rgba(248,113,113,0.05)", borderColor: "rgba(248,113,113,0.22)", color: "#fecaca" }}
             >
-              I&apos;ve saved it, close
-            </button>
+              Q402 still holds an encrypted copy of this key. If you want full custody, archive
+              the Agent Wallet now — the hard-delete cron drops the keystore record after the
+              7-day grace window.
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPk(null);
+                  setShow(false);
+                  onClose();
+                }}
+                className="flex-1 px-3 py-2 rounded-md text-sm font-medium text-white/55 hover:text-white border border-white/10"
+              >
+                I&apos;ve saved it, close
+              </button>
+              {onArchiveRequest && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPk(null);
+                    setShow(false);
+                    onClose();
+                    onArchiveRequest();
+                  }}
+                  className="flex-1 px-3 py-2 rounded-md text-sm font-semibold bg-red-500/80 text-white hover:bg-red-500"
+                >
+                  Archive wallet now
+                </button>
+              )}
+            </div>
           </>
         )}
 
