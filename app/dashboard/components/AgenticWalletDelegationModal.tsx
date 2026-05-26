@@ -27,7 +27,6 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { BrowserProvider } from "ethers";
 import { getActiveProvider, ensureWalletChain } from "@/app/lib/wallet";
 import type { WalletChainKey } from "@/app/lib/wallet";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -80,6 +79,68 @@ const CHAIN_IDS: Partial<Record<ChainKey, number>> = {
 // wrong EIP-1193 instance, with the wrong active account, on the
 // wrong chain. The naive `window.ethereum ?? window.okxwallet`
 // fallback misses the user's persisted wallet-type preference.
+
+/** Shape any of the known wallet_signAuthorization response variants. */
+type RawAuthResult =
+  | { r: string; s: string; yParity: number | string }
+  | { r: string; s: string; v: number | string }
+  | { signature: { r: string; s: string; yParity: number | string } }
+  | string;
+
+interface ProviderRequest {
+  request: (a: { method: string; params?: unknown[] }) => Promise<unknown>;
+}
+
+async function getOwnerTxNonce(provider: ProviderRequest, owner: string): Promise<number> {
+  const result = await provider.request({
+    method: "eth_getTransactionCount",
+    params: [owner, "pending"],
+  });
+  if (typeof result === "string" && result.startsWith("0x")) return parseInt(result, 16);
+  if (typeof result === "number") return result;
+  throw new Error(`unexpected getTransactionCount response: ${String(result)}`);
+}
+
+/**
+ * Normalise the wallet_signAuthorization response. The EIP-7702 wallet
+ * RPC is draft-stage, so different builds return slightly different
+ * shapes:
+ *
+ *   - MetaMask returns `{ r, s, yParity }` directly
+ *   - OKX returns `{ r, s, v }` (where v = yParity + 27)
+ *   - Some return nested under `signature: {...}`
+ *   - A few return a packed 65-byte hex string
+ *
+ * Server-side only needs `{ yParity, r, s }`, so this collapses all
+ * variants to that shape.
+ */
+function normaliseAuthSig(raw: RawAuthResult): { yParity: number; r: string; s: string } {
+  if (typeof raw === "string") {
+    if (!/^0x[0-9a-fA-F]{130}$/.test(raw)) {
+      throw new Error("packed authorization signature must be 65 bytes hex");
+    }
+    const r = "0x" + raw.slice(2, 66);
+    const s = "0x" + raw.slice(66, 130);
+    const vNum = parseInt(raw.slice(130, 132), 16);
+    return { yParity: vNum === 27 || vNum === 0 ? 0 : 1, r, s };
+  }
+  const inner = "signature" in raw ? raw.signature : raw;
+  const r = (inner as { r: string }).r;
+  const s = (inner as { s: string }).s;
+  let yParity: number;
+  if ("yParity" in inner) {
+    const yp = (inner as { yParity: number | string }).yParity;
+    yParity = typeof yp === "string" ? (yp === "0x0" || yp === "0x00" ? 0 : 1) : yp;
+  } else if ("v" in inner) {
+    const v = (inner as { v: number | string }).v;
+    const vNum = typeof v === "string" ? parseInt(v, 16) : v;
+    // v = 27 → yParity 0, v = 28 → yParity 1, raw v = 0/1 stays as-is.
+    yParity = vNum === 1 || vNum === 28 ? 1 : 0;
+  } else {
+    throw new Error("authorization signature missing yParity / v");
+  }
+  return { yParity, r, s };
+}
 
 export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared }: Props) {
   const [status, setStatus] = useState<DelegationStatusBody | null>(null);
@@ -154,34 +215,34 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
         return;
       }
 
-      // ethers v6 BrowserProvider → signer → signer.authorize() emits a
-      // protocol-correct EIP-7702 authorization. MetaMask 12.x+ + OKX
-      // Wallet (recent) forward to their native `wallet_signAuthorization`
-      // RPC; older wallets throw, which surfaces here as a clean
-      // "wallet needs EIP-7702 support" error.
-      const browserProvider = new BrowserProvider(provider as never);
-      const signer = await browserProvider.getSigner(ownerAddress);
-      // Use getTransactionCount directly — populateTransaction({}) is
-      // brittle (some wallets reject it without a `to`), and we don't
-      // need the rest of the populated fields anyway.
-      const nonce = await browserProvider.getTransactionCount(ownerAddress, "pending");
+      // Direct wallet_signAuthorization RPC. ethers v6.16's
+      // JsonRpcSigner doesn't implement `.authorize()` (the base class
+      // throws "authorization not implemented for this signer"), so we
+      // skip the ethers wrapper and call the EIP-7702 wallet RPC by
+      // hand. MetaMask 12.x+ and OKX Wallet (latest) both expose it.
+      const nonce = await getOwnerTxNonce(provider, ownerAddress);
 
-      const auth = await signer.authorize({
-        chainId,
+      const rpcParams = {
+        chainId: "0x" + chainId.toString(16),
         address: "0x0000000000000000000000000000000000000000",
-        nonce,
-      });
+        nonce: "0x" + nonce.toString(16),
+      };
+      const signed = await provider.request({
+        method: "wallet_signAuthorization",
+        params: [rpcParams],
+      }) as RawAuthResult;
 
+      const sig = normaliseAuthSig(signed);
       const body = {
         chain,
         address: ownerAddress,
         authorization: {
-          chainId: Number(auth.chainId),
-          address: auth.address,
-          nonce: Number(auth.nonce),
-          yParity: auth.signature.yParity,
-          r: auth.signature.r,
-          s: auth.signature.s,
+          chainId,
+          address: "0x0000000000000000000000000000000000000000",
+          nonce,
+          yParity: sig.yParity,
+          r: sig.r,
+          s: sig.s,
         },
       };
       const res = await fetch("/api/wallet/clear-delegation", {
