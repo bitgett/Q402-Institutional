@@ -11,16 +11,17 @@
  *   • Owner EOA   — sky tint, "you sign with this"
  *   • Agent Wallet — emerald tint, "your AI spends with this"
  *
- * Below the address pair, a small Utilities row exposes EIP-7702
- * delegation status + a one-click clear path when any chain is
- * delegated to a Q402 impl. Clear is fully sponsored (gas $0) — the
- * server's relayer pays, the user just signs the spec-correct
- * authorization in their wallet.
+ * Below the address pair, a small Utilities row surfaces EIP-7702
+ * delegation status as read-only info. Clearing it is intentionally
+ * NOT exposed as a UI button — the in-browser `wallet_signAuthorization`
+ * RPC isn't supported uniformly (OKX, older MetaMask), so we route the
+ * action through `scripts/clear-delegation.mjs` (CLI) or the
+ * `q402_clear_delegation` MCP tool. Both sign locally and POST to
+ * `/api/wallet/clear-delegation` where the relayer sponsors the gas.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ChainKey } from "@/app/lib/relayer";
-import { AgenticWalletDelegationModal } from "./AgenticWalletDelegationModal";
 
 interface Props {
   ownerAddress: string;
@@ -55,25 +56,8 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
   const [ownerCopied, setOwnerCopied] = useState(false);
   const [agentCopied, setAgentCopied] = useState(false);
   const [delegationStatus, setDelegationStatus] = useState<DelegationStatusBody | null>(null);
-  const [delegationModalOpen, setDelegationModalOpen] = useState(false);
-
-  const loadDelegation = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/wallet/delegation-status?address=${ownerAddress}`);
-      if (!res.ok) return;
-      const data = (await res.json()) as DelegationStatusBody;
-      setDelegationStatus(data);
-    } catch {
-      /* non-fatal — status row stays hidden if read fails */
-    }
-  }, [ownerAddress]);
 
   useEffect(() => {
-    // Linter flags the indirection through `loadDelegation`. The fetch
-    // here is mount-only side-effect plumbing — exactly the case the
-    // rule is meant to allow. Inline a tiny throwaway wrapper so the
-    // dependency list stays empty and react-hooks/set-state-in-effect
-    // doesn't get confused by the useCallback indirection.
     let alive = true;
     (async () => {
       try {
@@ -82,7 +66,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
         const data = (await res.json()) as DelegationStatusBody;
         if (alive) setDelegationStatus(data);
       } catch {
-        /* non-fatal */
+        /* non-fatal — status row stays hidden if read fails */
       }
     })();
     return () => { alive = false; };
@@ -105,11 +89,10 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
   }
 
   return (
-    <>
-      <div
-        className="rounded-2xl border p-5 space-y-4"
-        style={{ background: "rgba(255,255,255,0.012)", borderColor: "rgba(255,255,255,0.06)" }}
-      >
+    <div
+      className="rounded-2xl border p-5 space-y-4"
+      style={{ background: "rgba(255,255,255,0.012)", borderColor: "rgba(255,255,255,0.06)" }}
+    >
         <div className="text-[10px] uppercase tracking-[0.22em] text-white/45 font-semibold">
           Wallet Identities
         </div>
@@ -193,10 +176,9 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
           </div>
         </div>
 
-        {/* Utilities — only renders when there's something actionable */}
         {delegatedChains.length > 0 && (
           <div
-            className="rounded-md border px-3 py-2.5 flex items-center justify-between gap-3"
+            className="rounded-md border px-3 py-2.5 space-y-1.5"
             style={{
               background: "rgba(252,211,77,0.05)",
               borderColor: "rgba(252,211,77,0.22)",
@@ -206,33 +188,20 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
             <div className="text-[12px] leading-relaxed">
               <span className="font-semibold">EIP-7702 delegation active</span> on{" "}
               {delegatedChains.map(([c]) => CHAIN_LABEL[c] ?? c).join(", ")}.
-              Clear it to drop the &quot;Smart account&quot; badge + let native gas tokens
-              land in your EOA again.
             </div>
-            <button
-              type="button"
-              onClick={() => setDelegationModalOpen(true)}
-              className="shrink-0 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-amber-400 text-slate-900 hover:bg-amber-300"
-            >
-              Clear delegation
-            </button>
+            <div className="text-[11px] text-amber-200/80 leading-relaxed">
+              Clear via CLI: <code className="font-mono">node scripts/clear-delegation.mjs</code>
+              {" "}— or use the <code className="font-mono">q402_clear_delegation</code> MCP tool
+              from Claude / Codex. Gas is sponsored.
+            </div>
           </div>
         )}
 
-        {delegationStatus && delegatedChains.length === 0 && (
-          <div className="text-[11px] text-white/35">
-            ✓ Owner EOA is not EIP-7702-delegated on any supported chain.
-          </div>
-        )}
-      </div>
-
-      {delegationModalOpen && (
-        <AgenticWalletDelegationModal
-          ownerAddress={ownerAddress}
-          onClose={() => setDelegationModalOpen(false)}
-          onCleared={() => void loadDelegation()}
-        />
+      {delegationStatus && delegatedChains.length === 0 && (
+        <div className="text-[11px] text-white/35">
+          ✓ Owner EOA is not EIP-7702-delegated on any supported chain.
+        </div>
       )}
-    </>
+    </div>
   );
 }
