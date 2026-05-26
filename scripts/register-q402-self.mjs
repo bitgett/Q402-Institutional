@@ -38,7 +38,7 @@ import {
   encodeFunctionData,
   decodeEventLog,
   keccak256,
-  toUtf8Bytes,
+  stringToBytes,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -117,7 +117,7 @@ const METADATA = {
 };
 
 function hashAgentMetadata(payload) {
-  return keccak256(toUtf8Bytes(JSON.stringify(payload)));
+  return keccak256(stringToBytes(JSON.stringify(payload)));
 }
 
 function agentMetadataKey(hash) {
