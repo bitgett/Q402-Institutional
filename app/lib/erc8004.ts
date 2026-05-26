@@ -46,55 +46,62 @@ interface NetworkConfig {
 
 const REGISTRY_BSC = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432" as const;
 
+// 8004scan uses chain-slug paths, NOT EIP-155 CAIP-2 IDs. Verified
+// against https://8004scan.io/agents — live entries link as
+// `/agents/bsc/{id}` and `/agents/xlayer/{id}`. The earlier
+// `/eip155:56/agent/{id}` was a guess and 404s. Slug list inferred
+// from the public Browse Agents listing; chains 8004scan doesn't
+// surface yet (eth/base/polygon/arbitrum/celo) follow the same shape
+// using the conventional lower-case chain slug.
 export const ERC8004_NETWORKS: Record<Erc8004Network, NetworkConfig> = {
   "bsc": {
     chainId: 56,
     name: "BNB Smart Chain",
     rpc: process.env.BSC_RPC_URL ?? "https://bsc-dataseed.binance.org",
     registry: REGISTRY_BSC,
-    scanAgentPrefix: "https://8004scan.io/eip155:56/agent/",
+    scanAgentPrefix: "https://8004scan.io/agents/bsc/",
   },
   "bsc-testnet": {
     chainId: 97,
     name: "BNB Smart Chain Testnet",
     rpc: process.env.BSC_TESTNET_RPC_URL ?? "https://data-seed-prebsc-1-s1.binance.org:8545",
     registry: REGISTRY_BSC,
-    scanAgentPrefix: "https://8004scan.io/eip155:97/agent/",
+    scanAgentPrefix: "https://8004scan.io/agents/bsc-testnet/",
   },
   "eth": {
     chainId: 1,
     name: "Ethereum",
     rpc: process.env.ETH_RPC_URL ?? "https://ethereum.publicnode.com",
     registry: REGISTRY_BSC,
-    scanAgentPrefix: "https://8004scan.io/eip155:1/agent/",
+    scanAgentPrefix: "https://8004scan.io/agents/ethereum/",
   },
   "base": {
     chainId: 8453,
     name: "Base",
     rpc: process.env.BASE_RPC_URL ?? "https://mainnet.base.org",
     registry: REGISTRY_BSC,
-    scanAgentPrefix: "https://8004scan.io/eip155:8453/agent/",
+    scanAgentPrefix: "https://8004scan.io/agents/base/",
   },
   "polygon": {
     chainId: 137,
     name: "Polygon",
     rpc: process.env.POLYGON_RPC_URL ?? "https://polygon-rpc.com",
     registry: REGISTRY_BSC,
-    scanAgentPrefix: "https://8004scan.io/eip155:137/agent/",
+    scanAgentPrefix: "https://8004scan.io/agents/polygon/",
   },
   "arbitrum": {
     chainId: 42161,
     name: "Arbitrum One",
     rpc: process.env.ARBITRUM_RPC_URL ?? "https://arb1.arbitrum.io/rpc",
     registry: REGISTRY_BSC,
-    scanAgentPrefix: "https://8004scan.io/eip155:42161/agent/",
+    scanAgentPrefix: "https://8004scan.io/agents/arbitrum/",
   },
   "celo": {
     chainId: 42220,
     name: "Celo",
     rpc: process.env.CELO_RPC_URL ?? "https://forno.celo.org",
     registry: REGISTRY_BSC,
-    scanAgentPrefix: "https://8004scan.io/eip155:42220/agent/",
+    scanAgentPrefix: "https://8004scan.io/agents/celo/",
   },
 };
 
