@@ -47,10 +47,13 @@ describe("/api/wallet/agentic/send — Mode C freshness gate", () => {
 
   it("refunds the daily-cap reservation before returning 401", () => {
     // Whole window from `chargeAgainstDailyLimit` to STALE_API_KEY must
-    // include a refundIfHeld() call so a stale-key attempt doesn't
-    // burn the user's daily budget for free.
+    // include a refundAndRelease() call so a stale-key attempt doesn't
+    // burn the user's daily budget for free AND so the SET NX
+    // idempotency claim is released for legitimate retry. Renamed
+    // from refundIfHeld() in the same patch that closed the
+    // reviewer's single-send race window.
     const slice = SEND_ROUTE.slice(SEND_ROUTE.indexOf("STALE_API_KEY") - 600, SEND_ROUTE.indexOf("STALE_API_KEY"));
-    expect(slice).toMatch(/refundIfHeld\(\)/);
+    expect(slice).toMatch(/refundAndRelease\(\)/);
   });
 
   it("still allows the canonical owner-sig path (no apiKey present) to bypass the gate", () => {

@@ -27,11 +27,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 import { ethers } from "ethers";
+import { randomBytes } from "node:crypto";
 
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import {
-  getActiveAgenticWallet,
   decryptPrivateKey,
   isKeystoreReady,
   chargeAgainstDailyLimit,
@@ -72,12 +72,20 @@ interface SendBody {
 }
 
 interface SendRecord {
+  /**
+   * `processing` is the initial SET NX claim so concurrent identical
+   * requests deduplicate before we touch the relay. The first request
+   * flips it to `complete` or `failed` once the relay returns; later
+   * arrivals see whichever final state is cached.
+   */
+  status: "processing" | "complete" | "failed";
   txHash?: string;
-  status: "complete" | "failed";
   startedAt: number;
-  finishedAt: number;
-  relayBody: unknown;
-  relayStatus: number;
+  finishedAt?: number;
+  relayBody?: unknown;
+  relayStatus?: number;
+  /** Short id so the dashboard can correlate retries to the original. */
+  sendId: string;
 }
 
 function isHexAddress(s: unknown): s is string {
@@ -249,32 +257,55 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const walletId = wallet.address.toLowerCase();
 
-  // ── Idempotency check: same intent within window → return cached ───────
-  // The owner-sig path already burned its single-use challenge in
-  // resolveOwner. A retry MUST mint a fresh challenge — but the new
-  // signature still hashes to the same `fp` because the intent fields
-  // are unchanged. The cache returns the original txHash, no double-fire.
+  // ── Idempotency: SET NX claim BEFORE any relay work ────────────────────
+  // Two concurrent identical requests must NOT both fire on-chain. The
+  // earlier read-then-write pattern had a TOCTOU window between the
+  // get() and the final set(): both racers saw cached=null and both
+  // settled. Mirror batch's atomic claim — the loser falls through to
+  // the cached record returned by the winner.
   const fp = agenticSendFingerprint(owner, walletId, body.chain, body.token, body.to, body.amount);
   const idempotencyKey = sendKey(fp);
-  const cached = await kv.get<SendRecord>(idempotencyKey);
-  if (cached) {
-    return NextResponse.json(
-      {
-        ...((cached.relayBody as Record<string, unknown>) ?? {}),
-        idempotent: true,
-        status: cached.status,
-        startedAt: cached.startedAt,
-        finishedAt: cached.finishedAt,
-      },
-      { status: cached.relayStatus },
-    );
+  const startedAt = Date.now();
+  const sendId = randomBytes(8).toString("hex");
+  const claim: SendRecord = { status: "processing", startedAt, sendId };
+  const claimed = await kv.set(idempotencyKey, claim, { nx: true, ex: IDEMPOTENCY_TTL_SEC });
+  if (!claimed) {
+    // Lost the race — surface whichever record landed. Mirrors batch
+    // route's pattern: when concurrent retries beat us we return the
+    // winner's state instead of inventing a parallel settlement.
+    const live = await kv.get<SendRecord>(idempotencyKey);
+    if (live) {
+      return NextResponse.json(
+        {
+          ...((live.relayBody as Record<string, unknown>) ?? {}),
+          idempotent: true,
+          status: live.status,
+          startedAt: live.startedAt,
+          finishedAt: live.finishedAt,
+          sendId: live.sendId,
+        },
+        { status: live.relayStatus ?? 202 },
+      );
+    }
+    // Race window where the claim disappeared between SET NX and GET
+    // (TTL expiry, manual delete). Fail closed.
+    return NextResponse.json({ error: "send_claim_failed" }, { status: 500 });
   }
+  // Best-effort release of the claim on early-fail paths so the user
+  // isn't shadow-locked to an empty "processing" record for the full
+  // TTL when the actual relay never happened. Successful settlement
+  // overwrites the record below with `complete` / `failed`.
+  const releaseClaim = async () => {
+    await kv.del(idempotencyKey).catch(() => {});
+  };
 
   const numAmount = Number(body.amount);
   if (!Number.isFinite(numAmount) || numAmount <= 0) {
+    await releaseClaim();
     return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
   }
   if (typeof wallet.perTxMaxUsd === "number" && numAmount > wallet.perTxMaxUsd) {
+    await releaseClaim();
     return NextResponse.json(
       { error: "PER_TX_LIMIT_EXCEEDED", limit: wallet.perTxMaxUsd, requested: numAmount },
       { status: 403 },
@@ -284,6 +315,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Reserve budget atomically.
   const reservation = await chargeAgainstDailyLimit(owner, walletId, numAmount, wallet.dailyLimitUsd);
   if (!reservation.allowed) {
+    await releaseClaim();
     return NextResponse.json(
       {
         error: "DAILY_LIMIT_EXCEEDED",
@@ -294,14 +326,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 403 },
     );
   }
-  const refundIfHeld = async () => {
+  // Compose refund + release so every relay-failure path releases BOTH
+  // the daily-spend reservation AND the SET NX idempotency claim. A
+  // surviving claim with no relay would shadow-lock the user from
+  // retrying the same (recipient, amount) for the full TTL.
+  const refundAndRelease = async () => {
     await refundDailySpend(owner, walletId, numAmount).catch(() => {});
+    await releaseClaim();
   };
 
   // Subscription gate — BNB free, others require multichain.
   const sub = await getSubscription(owner);
   if (body.chain !== "bnb" && !hasMultichainScope(sub)) {
-    await refundIfHeld();
+    await refundAndRelease();
     return NextResponse.json(
       { error: "SUBSCRIPTION_REQUIRED", message: "Multichain access requires a paid subscription." },
       { status: 402 },
@@ -315,7 +352,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const isTrial = presented === sub?.trialApiKey;
     const isPaid = presented === sub?.apiKey;
     if (!isTrial && !isPaid) {
-      await refundIfHeld();
+      await refundAndRelease();
       return NextResponse.json(
         {
           error: "STALE_API_KEY",
@@ -327,7 +364,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
     if (isTrial && body.chain !== "bnb") {
-      await refundIfHeld();
+      await refundAndRelease();
       return NextResponse.json(
         {
           error: "TRIAL_BNB_ONLY",
@@ -345,7 +382,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   if (!apiKey) {
-    await refundIfHeld();
+    await refundAndRelease();
     return NextResponse.json(
       { error: "NO_API_KEY", message: "Activate a Q402 trial or subscription before using your Agent Wallet." },
       { status: 402 },
@@ -354,13 +391,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const relayerKey = loadRelayerKey();
   if (!relayerKey.ok) {
-    await refundIfHeld();
+    await refundAndRelease();
     return NextResponse.json({ error: "relay_unavailable" }, { status: 503 });
   }
 
-  // Sign + submit
+  // Sign + submit. `startedAt` was set when we minted the SET NX claim
+  // so the cached final record stitches back to the wallet popup time
+  // rather than the post-budget-check time.
   const pk = decryptPrivateKey(wallet);
-  const startedAt = Date.now();
   let signed;
   try {
     signed = await signAgenticPayment({
@@ -372,7 +410,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       facilitator: relayerKey.address as Address,
     });
   } catch (e) {
-    await refundIfHeld();
+    await refundAndRelease();
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "AMOUNT_PRECISION_TOO_HIGH") {
       return NextResponse.json(
@@ -391,7 +429,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     relayResponse = await submitToRelay(internalBaseUrl(), apiKey, signed);
   } catch (e) {
-    await refundIfHeld();
+    await refundAndRelease();
     console.error("[agentic-wallet/send] relay forward failed:", e);
     return NextResponse.json({ error: "relay_forward_failed" }, { status: 502 });
   }
@@ -400,7 +438,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const success =
     relayResponse.ok && relayBody && typeof relayBody === "object" && "txHash" in relayBody;
   if (!success) {
-    await refundIfHeld();
+    await refundAndRelease();
   }
 
   // Persist the result in the idempotency cache so subsequent retries
@@ -410,6 +448,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // some field (recipient, amount). This prevents both double-spend
   // and double-failure-side-effect within the window.
   const finalRecord: SendRecord = {
+    sendId,
     txHash:
       success && relayBody && typeof relayBody === "object"
         ? (relayBody as { txHash?: string }).txHash
@@ -420,8 +459,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     relayBody: relayBody ?? null,
     relayStatus: relayResponse.status,
   };
-  // Best-effort cache write — settlement already happened or didn't,
-  // failing the cache shouldn't fail the request.
+  // Overwrite the `processing` claim with the final result. NOT NX
+  // here — the success-path claim is still alive (refundAndRelease
+  // only ran on failure paths above) and must be replaced with the
+  // settled record. The failure-path claim was released, so writing
+  // creates a fresh record so subsequent retries within the TTL still
+  // see "this exact intent was tried" instead of mis-firing again.
   try {
     await kv.set(idempotencyKey, finalRecord, { ex: IDEMPOTENCY_TTL_SEC });
   } catch (e) {

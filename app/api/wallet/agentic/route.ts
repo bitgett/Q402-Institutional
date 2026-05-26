@@ -190,6 +190,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ wallet: projectPublic(record) }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "AGENTIC_WALLET_CREATE_LOCKED") {
+      // Another concurrent create for this owner is mid-flight (10s TTL).
+      // Surface a 409 + Retry-After so the dashboard can re-attempt
+      // after the in-flight one settles rather than racing into a
+      // double-create.
+      return NextResponse.json(
+        {
+          error: "AGENTIC_WALLET_CREATE_LOCKED",
+          message: "Another wallet is being created for this owner. Try again in a few seconds.",
+        },
+        { status: 409, headers: { "Retry-After": "3" } },
+      );
+    }
     if (msg === "AGENTIC_WALLET_CAP_REACHED") {
       const have = (e as Error & { have?: number }).have ?? cap;
       return NextResponse.json(

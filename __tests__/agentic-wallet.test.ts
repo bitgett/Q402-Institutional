@@ -148,6 +148,35 @@ describe("createAgenticWallet (multi-wallet v2)", () => {
     const record = await createAgenticWallet(TEST_OWNER, { label: "Trading bot" });
     expect(record.label).toBe("Trading bot");
   });
+
+  it("uses a SET NX create-lock so concurrent creates serialise (no orphans, no cap-bypass)", async () => {
+    // Simulate a slow critical section — the second create lands while
+    // the first holds the lock. The lock model must reject the racer
+    // with AGENTIC_WALLET_CREATE_LOCKED rather than letting both
+    // create-paths run interleaved (the old behaviour).
+    //
+    // The in-memory KV mock honours `nx: true`; the lock is just a
+    // SET NX on `aw:create-lock:{owner}`, so calling createAgenticWallet
+    // while the lock key is already set must throw.
+    const owner = TEST_OWNER.toLowerCase();
+    // Seed the lock as if another in-flight call holds it.
+    store.set(`aw:create-lock:${owner}`, "1");
+    await expect(createAgenticWallet(TEST_OWNER)).rejects.toThrow("AGENTIC_WALLET_CREATE_LOCKED");
+    // Cleanup — release the simulated lock and confirm a subsequent
+    // create now succeeds, verifying the lock isn't sticky.
+    store.delete(`aw:create-lock:${owner}`);
+    const ok = await createAgenticWallet(TEST_OWNER);
+    expect(ok.address).toBeTruthy();
+  });
+
+  it("releases the create-lock after a normal create completes", async () => {
+    const owner = TEST_OWNER.toLowerCase();
+    await createAgenticWallet(TEST_OWNER);
+    // Lock key must not survive past the finally{} branch — a sticky
+    // lock would prevent the owner from ever creating a second wallet
+    // until the 10s TTL expired.
+    expect(store.has(`aw:create-lock:${owner}`)).toBe(false);
+  });
 });
 
 describe("listAgenticWallets / countAgenticWallets / getDefaultAgenticWallet", () => {
