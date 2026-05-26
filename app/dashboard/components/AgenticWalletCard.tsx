@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { getAuthCreds } from "@/app/lib/auth-client";
+import { getAuthCreds, getActionAuth } from "@/app/lib/auth-client";
 import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
 import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
 import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
@@ -135,15 +135,26 @@ export function AgenticWalletCard({
     setArchiving(true);
     setArchiveError(null);
     try {
-      const auth = await getAuthCreds(address, signMessage);
+      // Action-scoped challenge so a leaked session signature can't fire
+      // the 7-day destructive deletion path.
+      const auth = await getActionAuth(
+        address,
+        "agentic.archive",
+        { target: address.toLowerCase() },
+        signMessage,
+      );
       if (!auth) {
-        setArchiveError("Sign the auth challenge to archive.");
+        setArchiveError("Sign the archive challenge in your wallet to confirm.");
         return;
       }
       const res = await fetch("/api/wallet/agentic", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, nonce: auth.nonce, signature: auth.signature }),
+        body: JSON.stringify({
+          address,
+          nonce: auth.challenge,
+          signature: auth.signature,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -467,7 +478,13 @@ export function AgenticWalletCard({
           signMessage={signMessage}
           onClose={() => setExportOpen(false)}
           onArchiveRequest={() => {
-            void archive();
+            // Route through the typed-confirm modal — the export
+            // modal must not bypass the destructive-confirm UX. The
+            // export modal will close itself first; we open the
+            // archive modal after a tick so the focus transitions
+            // cleanly.
+            setExportOpen(false);
+            setArchiveModalOpen(true);
           }}
         />
       )}

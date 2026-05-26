@@ -19,7 +19,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { getFreshChallenge } from "@/app/lib/auth-client";
+import { getActionAuth } from "@/app/lib/auth-client";
 
 interface Props {
   walletAddress: string;
@@ -75,9 +75,18 @@ export function AgenticWalletExportModal({
     setStage("loading");
     setError(null);
     try {
-      const fresh = await getFreshChallenge(ownerAddress, signMessage);
-      if (!fresh) {
-        setError("Could not obtain a fresh challenge — try again.");
+      // Action-scoped challenge — the signed bytes literally include
+      // `Action: agentic.export` so a fresh-but-generic signature
+      // (e.g. for archive or batch) cannot be redirected to reveal a
+      // private key.
+      const auth = await getActionAuth(
+        ownerAddress,
+        "agentic.export",
+        { target: ownerAddress.toLowerCase() },
+        signMessage,
+      );
+      if (!auth) {
+        setError("Could not obtain a fresh export challenge — try again.");
         setStage("error");
         return;
       }
@@ -86,8 +95,8 @@ export function AgenticWalletExportModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ownerAddress,
-          challenge: fresh.challenge,
-          signature: fresh.signature,
+          challenge: auth.challenge,
+          signature: auth.signature,
         }),
       });
       const data = await res.json().catch(() => ({}));

@@ -40,8 +40,13 @@ describe("POST /api/wallet/agentic/restore — auth + grace handling", () => {
 });
 
 describe("POST /api/wallet/agentic/send — Mode A/B sig + Mode C apiKey paths", () => {
-  it("accepts the owner-signature path via requireAuth", () => {
-    expect(SEND_ROUTE).toMatch(/requireAuth\s*\(/);
+  it("accepts the owner-signature path via intent-bound challenge auth", () => {
+    // Migrated from session-bound `requireAuth` to action-bound
+    // `requireIntentAuth` so the signed bytes pin chain + token +
+    // recipient + amount and the single-use challenge also acts as
+    // the single-send idempotency guard.
+    expect(SEND_ROUTE).toMatch(/requireIntentAuth/);
+    expect(SEND_ROUTE).toMatch(/action:\s*"agentic\.send"/);
   });
   it("imports getApiKeyRecord for the Mode C path", () => {
     expect(SEND_ROUTE).toMatch(/getApiKeyRecord/);

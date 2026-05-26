@@ -24,7 +24,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { requireFreshAuth } from "@/app/lib/auth";
+import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
@@ -57,13 +57,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // requireFreshAuth verifies + atomically consumes the one-time
-  // challenge so the same signature can't be replayed.
-  const authResult = await requireFreshAuth(
-    body.ownerAddress ?? null,
-    body.challenge ?? null,
-    body.signature ?? null,
-  );
+  // requireIntentAuth verifies + atomically consumes the one-time
+  // challenge AND rebuilds the canonical message bound to this exact
+  // action. A fresh-but-generic challenge minted for, say, archive
+  // confirmation cannot be redirected here — the rebuilt
+  // `Action: agentic.export` line on the export verifier won't match
+  // the bytes the user signed for any other action.
+  const authResult = await requireIntentAuth({
+    address: body.ownerAddress ?? null,
+    challenge: body.challenge ?? null,
+    signature: body.signature ?? null,
+    action: "agentic.export",
+    intent: {
+      // The wallet address the export targets, lowercased so client +
+      // server canonical bytes agree regardless of case.
+      target: (body.ownerAddress ?? "").toLowerCase(),
+    },
+  });
   if (typeof authResult !== "string") {
     return NextResponse.json(
       { error: authResult.error, code: authResult.code },

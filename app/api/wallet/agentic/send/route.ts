@@ -25,7 +25,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { requireAuth } from "@/app/lib/auth";
+import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import {
   getActiveAgenticWallet,
@@ -51,7 +51,13 @@ interface SendBody {
   token?: string;
   to?: string;
   amount?: string;
-  // Mode A/B — owner EIP-191 session signature
+  // Owner-sig path (Mode A/B in dashboard) — intent-bound challenge.
+  // `nonce` is the action-challenge token issued by
+  // /api/auth/action-challenge (NOT the session nonce). `signature`
+  // signs the canonical intent message rebuilt server-side from the
+  // intent fields below. A successful verify atomically consumes the
+  // challenge, so re-submitting the same body fails NONCE_EXPIRED —
+  // that is *also* the single-send idempotency guard.
   ownerAddress?: string;
   nonce?: string;
   signature?: string;
@@ -78,13 +84,39 @@ async function resolveOwner(req: NextRequest, body: SendBody): Promise<string | 
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  // ── Mode A/B — owner sig present ────────────────────────────────────────
+  // ── Mode A/B — owner sig present, intent-bound challenge required ─────
+  // We refuse the legacy "session signature" path here. Fund-moving
+  // routes MUST receive a one-time challenge signed over the exact
+  // canonical intent (chain | token | recipient | amount | wallet).
+  // That single change closes two findings at once: (a) a session
+  // signature stolen from localStorage cannot fire a payment, and
+  // (b) the single-use challenge IS the idempotency guard — replaying
+  // the same signed body returns NONCE_EXPIRED instead of a second
+  // settlement.
   if (typeof body.signature === "string" && body.signature.length > 0) {
-    const result = await requireAuth(
-      body.ownerAddress ?? null,
-      body.nonce ?? null,
-      body.signature ?? null,
-    );
+    if (
+      !isAgenticChainKey(body.chain) ||
+      (body.token !== "USDC" && body.token !== "USDT") ||
+      !isHexAddress(body.to) ||
+      !isPositiveDecimalString(body.amount)
+    ) {
+      // The intent fields are also checked at the top of POST, but we
+      // rebuild the canonical message HERE so the auth path doesn't
+      // depend on later validation order. Fail closed.
+      return NextResponse.json({ error: "INVALID_INTENT_FOR_AUTH" }, { status: 400 });
+    }
+    const result = await requireIntentAuth({
+      address: body.ownerAddress ?? null,
+      challenge: body.nonce ?? null,
+      signature: body.signature ?? null,
+      action: "agentic.send",
+      intent: {
+        chain: body.chain,
+        token: body.token,
+        recipient: body.to.toLowerCase(),
+        amount: body.amount,
+      },
+    });
     if (typeof result !== "string") {
       return NextResponse.json(
         { error: result.error, code: result.code },
@@ -215,20 +247,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Mode C freshness gate. Without this an *old* apiKey that's still in
-  // the keystore as `active: true` (e.g. a rotation that never marked
-  // the prior key inactive) would (a) pass `getApiKeyRecord`, (b) resolve
-  // to the owner via Mode C auth, and then (c) drain that owner's
-  // CURRENT trial/multichain quota — because below we forward the
-  // *current* sub key to /api/relay, not the presented one. So an
-  // attacker who exfiltrated a rotated key could spend off the user's
-  // active subscription. We close that by demanding the presented key
-  // be exactly the live trial OR live multichain key.
+  // ── apiKey resolution: Mode C uses the presented key, dashboard
+  //     (owner-sig) uses sub's auto-pick ───────────────────────────────
+  // The original auto-pick (`trialApiKey || apiKey` for BNB,
+  // `apiKey` for non-BNB) silently substituted the relay-time key for
+  // whatever the caller presented. That had two consequences:
+  //
+  //  1. Rotation hole — a stale apiKey that was still active in KV
+  //     could pass Mode C owner-auth, after which the route would
+  //     drain the user's *current* paid quota. Closed by the
+  //     freshness check.
+  //
+  //  2. Scope escalation — a trial apiKey (BNB-only at /api/relay)
+  //     presented via Mode C for a non-BNB chain would pass freshness
+  //     and then ride the user's *paid* key through relay. Closes the
+  //     paid-quota drain even when the freshness check passes.
+  //
+  // We now demand: the presented Mode C key IS the key sent to relay.
+  // No substitution. Scope is enforced by what the presented key can
+  // actually settle — trial-on-non-BNB is rejected here so the user
+  // gets a clean 402 instead of a relay-side 400.
+  let apiKey: string | undefined;
   if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
     const presented = body.apiKey;
-    const isCurrent =
-      presented === sub?.trialApiKey || presented === sub?.apiKey;
-    if (!isCurrent) {
+    const isTrial = presented === sub?.trialApiKey;
+    const isPaid = presented === sub?.apiKey;
+    if (!isTrial && !isPaid) {
       await refundIfHeld();
       return NextResponse.json(
         {
@@ -240,15 +284,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 401 },
       );
     }
+    // Trial keys can settle BNB only. Reject any other chain even if
+    // freshness passes, so the presented key's scope determines what
+    // actually moves.
+    if (isTrial && body.chain !== "bnb") {
+      await refundIfHeld();
+      return NextResponse.json(
+        {
+          error: "TRIAL_BNB_ONLY",
+          message:
+            "Trial apiKeys can only settle on BNB Chain. Present the " +
+            "Multichain key (or omit apiKey + sign the owner challenge) " +
+            "for non-BNB sends.",
+        },
+        { status: 402 },
+      );
+    }
+    apiKey = presented;
+  } else {
+    // Owner-sig path (Mode A/B from dashboard / MCP). Keep the
+    // auto-pick semantics that existing dashboard flows expect.
+    apiKey =
+      body.chain === "bnb"
+        ? sub?.trialApiKey || sub?.apiKey
+        : sub?.apiKey;
   }
 
-  // Pick the most-restrictive apiKey for the chosen chain. Trial keys
-  // are BNB-only, so on BNB they drain first; non-BNB chains require
-  // the paid key.
-  const apiKey =
-    body.chain === "bnb"
-      ? sub?.trialApiKey || sub?.apiKey
-      : sub?.apiKey;
   if (!apiKey) {
     await refundIfHeld();
     return NextResponse.json(

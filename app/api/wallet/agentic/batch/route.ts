@@ -30,11 +30,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
-import { ethers } from "ethers";
 import { randomBytes } from "node:crypto";
 
-import { requireAuth } from "@/app/lib/auth";
+import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import {
   getActiveAgenticWallet,
   decryptPrivateKey,
@@ -102,20 +102,6 @@ function isPositiveDecimalString(s: unknown): s is string {
   return typeof s === "string" && /^\d+(\.\d+)?$/.test(s) && Number(s) > 0;
 }
 
-function fingerprint(
-  owner: string,
-  chain: string,
-  token: string,
-  rows: { to: string; amount: string }[],
-): string {
-  const sorted = rows
-    .map((r) => `${r.to.toLowerCase()}:${r.amount}`)
-    .sort()
-    .join(",");
-  const seed = `${owner.toLowerCase()}|${chain}|${token}|${sorted}`;
-  return ethers.keccak256(ethers.toUtf8Bytes(seed)).slice(2, 18);
-}
-
 function batchKey(fp: string): string {
   return `aw:batch:${fp}`;
 }
@@ -154,16 +140,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const rows = body.recipients.map((r) => ({ to: r.to as string, amount: r.amount as string }));
 
-  // ── Auth ────────────────────────────────────────────────────────────────
+  // ── Auth — intent-bound challenge over the full recipient set ─────────
+  // A session signature would let the same signed bytes fire any batch;
+  // here we bind the signature to the exact `(chain, token, fingerprint
+  // of the 20-row recipient set)`. Replay of the same body returns
+  // NONCE_EXPIRED at the challenge step — but we still keep the
+  // `aw:batch:{fp}` cache below so legitimate retries (with a fresh
+  // signature) see the prior settlement instead of a confusing 401.
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "agentic-wallet-batch", 10, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
-  const authResult = await requireAuth(
-    body.ownerAddress ?? null,
-    body.nonce ?? null,
-    body.signature ?? null,
-  );
+  const rowsHash = agenticBatchFingerprint(body.ownerAddress ?? "", body.chain, body.token, rows);
+  const authResult = await requireIntentAuth({
+    address: body.ownerAddress ?? null,
+    challenge: body.nonce ?? null,
+    signature: body.signature ?? null,
+    action: "agentic.batch",
+    intent: {
+      chain: body.chain,
+      token: body.token,
+      rows: String(rows.length),
+      fp: rowsHash,
+    },
+  });
   if (typeof authResult !== "string") {
     return NextResponse.json(
       { error: authResult.error, code: authResult.code },
@@ -176,9 +176,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // returns the cached record before we touch limits / subscription /
   // the keystore — the original call already paid those costs. This
   // also closes the "Safe to retry" double-send hole on timeout: even
-  // if the agent retries with the exact same body, no second batch
-  // fires while the cache window is alive.
-  const fp = fingerprint(owner, body.chain, body.token, rows);
+  // if the agent retries with the exact same body (after re-minting
+  // a fresh action-challenge), no second batch fires while the cache
+  // window is alive.
+  //
+  // Reuses `rowsHash` computed above so the auth's bound `fp` matches
+  // the cache lookup — single source of truth, no drift.
+  const fp = rowsHash;
   const key = batchKey(fp);
   const cached = await kv.get<BatchRecord>(key);
   if (cached) {

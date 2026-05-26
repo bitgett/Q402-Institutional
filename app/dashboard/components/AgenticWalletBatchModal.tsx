@@ -13,7 +13,8 @@
  */
 
 import { useState } from "react";
-import { getAuthCreds } from "@/app/lib/auth-client";
+import { getActionAuth } from "@/app/lib/auth-client";
+import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
 
@@ -121,9 +122,23 @@ export function AgenticWalletBatchModal({
     }
     setSubmitting(true);
     try {
-      const auth = await getAuthCreds(ownerAddress, signMessage);
+      // Compute the same fingerprint the server uses for both
+      // idempotency and the canonical intent message. The user signs
+      // a payload that pins the exact recipient set — replaying the
+      // same signed bytes against a different recipient list fails
+      // verification.
+      const fp = agenticBatchFingerprint(ownerAddress, chain, token, trimmedRows);
+      const auth = await getActionAuth(
+        ownerAddress,
+        "agentic.batch",
+        { chain, token, rows: String(trimmedRows.length), fp },
+        signMessage,
+      );
       if (!auth) {
-        setError("Please sign the auth challenge to authorize this batch.");
+        setError(
+          "Sign the batch challenge in your wallet to authorize. The signature " +
+            "is bound to this exact recipient set.",
+        );
         return;
       }
       const res = await fetch("/api/wallet/agentic/batch", {
@@ -134,7 +149,7 @@ export function AgenticWalletBatchModal({
           token,
           recipients: trimmedRows,
           ownerAddress,
-          nonce: auth.nonce,
+          nonce: auth.challenge,
           signature: auth.signature,
         }),
       });

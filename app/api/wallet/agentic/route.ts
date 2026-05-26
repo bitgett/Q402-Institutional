@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/app/lib/auth";
+import { requireAuth, requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { getSubscription, hasMultichainScope } from "@/app/lib/db";
 import {
@@ -215,10 +215,40 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
 
 // ── DELETE ─────────────────────────────────────────────────────────────────
 
+interface DeleteBody {
+  address?: string;
+  nonce?: string;
+  signature?: string;
+}
+
+/**
+ * Archive (soft-delete) is destructive — once the 7-day grace expires
+ * the encrypted private key is hard-deleted from KV. A reusable
+ * session signature has no business firing this; we require an
+ * `agentic.archive` action challenge so the same signed bytes can't
+ * be relayed to delete anyone else's wallet, and so a leaked session
+ * sig has no path to a destructive action.
+ */
 export async function DELETE(req: NextRequest): Promise<NextResponse> {
-  const body = await parseJson<AuthBody>(req);
-  const auth = await authFromBody(req, body);
-  if (auth instanceof NextResponse) return auth;
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "agentic-wallet-crud", 30, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  const body = await parseJson<DeleteBody>(req);
+  const auth = await requireIntentAuth({
+    address: body?.address ?? null,
+    challenge: body?.nonce ?? null,
+    signature: body?.signature ?? null,
+    action: "agentic.archive",
+    intent: { target: (body?.address ?? "").toLowerCase() },
+  });
+  if (typeof auth !== "string") {
+    return NextResponse.json(
+      { error: auth.error, code: auth.code },
+      { status: auth.status },
+    );
+  }
 
   await softDeleteAgenticWallet(auth);
   return NextResponse.json({ ok: true });

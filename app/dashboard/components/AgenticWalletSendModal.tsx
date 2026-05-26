@@ -15,7 +15,7 @@
  */
 
 import { useState } from "react";
-import { getAuthCreds } from "@/app/lib/auth-client";
+import { getActionAuth } from "@/app/lib/auth-client";
 import {
   friendlyError,
   type FriendlyError,
@@ -145,9 +145,26 @@ export function AgenticWalletSendModal({
     }
     setSubmitting(true);
     try {
-      const auth = await getAuthCreds(ownerAddress, signMessage);
+      // Intent-bound auth. The server rebuilds the canonical message
+      // from `(chain, token, recipient, amount)` and rejects any
+      // signature that wasn't over exactly those bytes. The single-use
+      // challenge also makes the resulting POST idempotent — a network
+      // retry with the same body fails NONCE_EXPIRED instead of
+      // firing a second on-chain payment.
+      const to = recipient.trim();
+      const intent: Record<string, string> = {
+        chain,
+        token,
+        recipient: to.toLowerCase(),
+        amount: amount.trim(),
+      };
+      const auth = await getActionAuth(ownerAddress, "agentic.send", intent, signMessage);
       if (!auth) {
-        setError({ headline: "Sign the auth challenge to authorize this send." });
+        setError({
+          headline:
+            "Sign the payment challenge in your wallet to authorize this send. " +
+            "The signature is bound to this exact recipient + amount.",
+        });
         return;
       }
       const res = await fetch("/api/wallet/agentic/send", {
@@ -156,10 +173,10 @@ export function AgenticWalletSendModal({
         body: JSON.stringify({
           chain,
           token,
-          to: recipient.trim(),
+          to,
           amount: amount.trim(),
           ownerAddress,
-          nonce: auth.nonce,
+          nonce: auth.challenge,
           signature: auth.signature,
         }),
       });
