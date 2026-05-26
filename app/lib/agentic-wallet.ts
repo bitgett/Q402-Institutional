@@ -1,0 +1,671 @@
+/**
+ * agentic-wallet.ts — server-side CRUD + key-handling for Agentic Wallets.
+ *
+ * Multi-wallet schema (v2). Each owner EOA can hold up to N Agentic
+ * Wallets (currently 10). The `walletId` is the lowercased Agentic Wallet
+ * address — already unique, recognisable in the UI, and stable.
+ *
+ * KV schema:
+ *   aw:{owner}:{walletId}                  → AgenticWalletRecord
+ *   aw:list:{owner}                         → string[] of walletIds, creation order
+ *   aw:default:{owner}                      → walletId of the owner's default wallet
+ *   aw:export-log:{owner}:{walletId}        → list of { ts, ip } (cap 50)
+ *   aw:daily-spend:{owner}:{walletId}:{D}   → number (USD-equivalent reservation)
+ *
+ * Legacy schema (v1, lazy-migrated on read):
+ *   aw:{owner}                              → single AgenticWalletRecord
+ *   aw:export-log:{owner}                   → audit list
+ *   aw:daily-spend:{owner}:{D}              → number
+ *
+ * The first call into the new module for a legacy-schema owner promotes
+ * the single record to {owner}:{walletId}, builds the list/default
+ * indices, and migrates the audit log. Daily-spend is left to expire on
+ * its 48h TTL since copying it adds no real safety.
+ *
+ * Owner + wallet addresses are always lowercased at the key boundary so
+ * checksum-case drift can't fork a record.
+ *
+ * Read paths never cross owner boundaries. Caller passes owner; the
+ * library refuses to load a wallet not in that owner's list.
+ */
+
+import { ethers } from "ethers";
+import type { Hex } from "viem";
+import { kv } from "@vercel/kv";
+import { encrypt, decrypt, loadMasterKey, type EncryptedBlob } from "./keystore";
+
+export interface AgenticWalletRecord {
+  /** Lowercased owner EOA (the user's MetaMask / OKX address). */
+  ownerAddr: string;
+  /** Checksummed Agentic Wallet address (the EOA we generated). */
+  address: string;
+  /** AES-GCM ciphertext fields wrapping the private key. */
+  encryptedPK: EncryptedBlob;
+  /** ms-epoch creation timestamp. */
+  createdAt: number;
+  /** ms-epoch soft-delete timestamp. Hard-delete cron sweeps after grace. */
+  deletedAt?: number;
+  /** Per-wallet daily spending cap in USD-equivalent stablecoin. */
+  dailyLimitUsd?: number;
+  /** Per-transaction max in USD-equivalent stablecoin. */
+  perTxMaxUsd?: number;
+  /** ERC8004 agent id once registered. Stored as `${network}:${id}`. */
+  erc8004AgentId?: string;
+  /** Optional user-facing label (e.g. "Trading bot", "Subscriptions"). */
+  label?: string;
+}
+
+export interface ExportLogEntry {
+  ts: number;
+  ip: string;
+}
+
+/**
+ * Maximum number of wallets a single owner can hold. Includes
+ * soft-deleted records inside the grace window — they still consume a
+ * slot until the cron hard-deletes them. Trial plans cap lower (see
+ * `effectiveWalletCap` below).
+ */
+export const MAX_WALLETS_PER_OWNER = 10;
+
+/** Trial-plan cap. Multichain-paid subscribers get the full MAX. */
+export const TRIAL_WALLET_CAP = 1;
+
+/** Number of days a soft-deleted wallet stays recoverable. */
+export const SOFT_DELETE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Safety defaults a new wallet ships with. */
+export const DEFAULT_PER_TX_MAX_USD = 200;
+export const DEFAULT_DAILY_LIMIT_USD = 500;
+
+const EXPORT_LOG_CAP = 50;
+const DAILY_SPEND_TTL_SEC = 48 * 60 * 60;
+
+// ── Key helpers ──────────────────────────────────────────────────────────
+
+function lower(addr: string): string {
+  return addr.toLowerCase();
+}
+
+const recordKey = (owner: string, walletId: string) =>
+  `aw:${lower(owner)}:${lower(walletId)}`;
+const listKey = (owner: string) => `aw:list:${lower(owner)}`;
+const defaultKey = (owner: string) => `aw:default:${lower(owner)}`;
+const createLockKey = (owner: string) => `aw:create-lock:${lower(owner)}`;
+const exportLogKey = (owner: string, walletId: string) =>
+  `aw:export-log:${lower(owner)}:${lower(walletId)}`;
+const dailySpendKey = (owner: string, walletId: string, dateUtc: string) =>
+  `aw:daily-spend:${lower(owner)}:${lower(walletId)}:${dateUtc}`;
+
+const CREATE_LOCK_TTL_SEC = 10;
+
+// Legacy keys — only used in the lazy-migration read path.
+const legacyRecordKey = (owner: string) => `aw:${lower(owner)}`;
+const legacyExportLogKey = (owner: string) => `aw:export-log:${lower(owner)}`;
+
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ── Lazy migration ───────────────────────────────────────────────────────
+
+/**
+ * If the owner still has a legacy single-wallet record but no list index,
+ * promote it into the new schema. Idempotent — a second call after a
+ * successful migration is a no-op.
+ *
+ * Migration is best-effort: if the legacy record exists but the writes
+ * to new keys fail mid-flight, the caller still sees the legacy record
+ * via `_legacyFallback` in the read helpers below. The NEXT successful
+ * call retries the migration.
+ */
+async function migrateLegacyIfNeeded(ownerAddr: string): Promise<void> {
+  const owner = lower(ownerAddr);
+  const list = await kv.get<string[]>(listKey(owner));
+  if (Array.isArray(list) && list.length > 0) return; // already migrated
+
+  const legacy = await kv.get<AgenticWalletRecord>(legacyRecordKey(owner));
+  if (!legacy) return; // nothing to migrate
+
+  const walletId = lower(legacy.address);
+  // Promote the wallet record under the new key shape.
+  await kv.set(recordKey(owner, walletId), legacy);
+  // Initialise the list + default. SET NX so concurrent migrations don't
+  // clobber each other.
+  await kv.set(listKey(owner), [walletId]);
+  await kv.set(defaultKey(owner), walletId);
+
+  // Audit log: copy if present, then drop the legacy key.
+  try {
+    const oldLog = await kv.lrange<ExportLogEntry>(legacyExportLogKey(owner), 0, -1);
+    if (Array.isArray(oldLog) && oldLog.length > 0) {
+      // lpush takes newest first; the legacy log already stored newest-
+      // first (recordExportEvent pushed to the head), so re-push in the
+      // SAME order — reverse so the first iteration pushes the oldest
+      // and the last pushes the newest.
+      for (const entry of [...oldLog].reverse()) {
+        await kv.lpush(exportLogKey(owner, walletId), entry);
+      }
+      await kv.ltrim(exportLogKey(owner, walletId), 0, EXPORT_LOG_CAP - 1);
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  // Legacy keys stay readable for one more tick to absorb any in-flight
+  // requests against the old shape, then the next administrative
+  // touch can clean them up. We don't `kv.del` here intentionally — a
+  // race during migration could otherwise drop a wallet on the floor.
+}
+
+// ── Listing + default ────────────────────────────────────────────────────
+
+/**
+ * Return every wallet for `ownerAddr`, in creation order. Includes
+ * soft-deleted records (caller filters via `record.deletedAt` if it
+ * cares). Triggers lazy migration when called against a legacy owner.
+ */
+export async function listAgenticWallets(
+  ownerAddr: string,
+): Promise<AgenticWalletRecord[]> {
+  await migrateLegacyIfNeeded(ownerAddr);
+  const owner = lower(ownerAddr);
+  const ids = (await kv.get<string[]>(listKey(owner))) ?? [];
+  if (ids.length === 0) return [];
+  const records = await Promise.all(
+    ids.map((id) => kv.get<AgenticWalletRecord>(recordKey(owner, id))),
+  );
+  return records.filter((r): r is AgenticWalletRecord => r !== null && r !== undefined);
+}
+
+/**
+ * Count an owner's wallets, including soft-deleted (they still occupy a
+ * slot until the hard-delete cron sweeps them). Used by createAgenticWallet
+ * to enforce the per-owner cap.
+ */
+export async function countAgenticWallets(ownerAddr: string): Promise<number> {
+  const list = await listAgenticWallets(ownerAddr);
+  return list.length;
+}
+
+/**
+ * Compute the effective wallet cap for this owner based on subscription
+ * scope. Trial = 1. Multichain-paid = MAX (10). Callers pass a boolean
+ * indicating multichain scope (or null for the trial-only path).
+ */
+export function effectiveWalletCap(hasMultichainScope: boolean): number {
+  return hasMultichainScope ? MAX_WALLETS_PER_OWNER : TRIAL_WALLET_CAP;
+}
+
+/**
+ * Return the owner's default wallet (the oldest still-active one, or
+ * the explicit pointer in `aw:default:{owner}`). Returns null when the
+ * owner has zero wallets or the default points at a deleted record.
+ */
+export async function getDefaultAgenticWallet(
+  ownerAddr: string,
+): Promise<AgenticWalletRecord | null> {
+  await migrateLegacyIfNeeded(ownerAddr);
+  const owner = lower(ownerAddr);
+
+  const explicit = await kv.get<string>(defaultKey(owner));
+  if (explicit) {
+    const record = await kv.get<AgenticWalletRecord>(recordKey(owner, explicit));
+    if (record && !isSoftDeletedEffective(record)) return record;
+    // Default points at a missing or deleted record — fall through to
+    // pick the first available wallet.
+  }
+
+  const all = await listAgenticWallets(ownerAddr);
+  const active = all.filter((r) => !isSoftDeletedEffective(r));
+  return active[0] ?? null;
+}
+
+function isSoftDeletedEffective(record: AgenticWalletRecord): boolean {
+  return !!record.deletedAt && Date.now() >= record.deletedAt;
+}
+
+/**
+ * Pick a wallet from the owner's bag by either an explicit walletId or
+ * by falling back to the default. Returns null if the requested walletId
+ * isn't in this owner's list (no cross-owner reads) or if none exists.
+ */
+export async function resolveWallet(
+  ownerAddr: string,
+  walletId: string | null | undefined,
+): Promise<AgenticWalletRecord | null> {
+  if (!walletId) return await getDefaultAgenticWallet(ownerAddr);
+  return await getAgenticWallet(ownerAddr, walletId);
+}
+
+// ── CRUD ─────────────────────────────────────────────────────────────────
+
+/**
+ * Create a fresh Agentic Wallet for `ownerAddr`, race-safe.
+ *
+ * Concurrency model: the cap check, record write, list append, and
+ * default-pointer write must all run as a single critical section,
+ * otherwise two concurrent creates can:
+ *   (a) both pass the cap check and overshoot it,
+ *   (b) one's list append clobber the other → an orphan record
+ *       (encrypted key sitting in KV but invisible to listing because
+ *       it's not in the index), OR
+ *   (c) both set the default pointer to different walletIds.
+ *
+ * Vercel KV's wrapper doesn't expose MULTI/EXEC, so we serialise the
+ * critical section per owner with a SET NX lock (`aw:create-lock:{owner}`,
+ * 10s TTL — well above the worst-case path). Lock contention surfaces
+ * as `AGENTIC_WALLET_CREATE_LOCKED` so the dashboard can show a
+ * "creating, try again in a moment" hint instead of silently
+ * corrupting state.
+ */
+export async function createAgenticWallet(
+  ownerAddr: string,
+  opts: { cap?: number; label?: string } = {},
+): Promise<AgenticWalletRecord> {
+  const owner = lower(ownerAddr);
+  const cap = typeof opts.cap === "number" ? opts.cap : MAX_WALLETS_PER_OWNER;
+
+  await migrateLegacyIfNeeded(owner);
+
+  // ── Critical section under SET NX lock ────────────────────────────────
+  const lockKey = createLockKey(owner);
+  const lockClaimed = await kv.set(lockKey, "1", { nx: true, ex: CREATE_LOCK_TTL_SEC });
+  if (!lockClaimed) {
+    const err = new Error("AGENTIC_WALLET_CREATE_LOCKED");
+    throw err;
+  }
+  try {
+    const existing = await listAgenticWallets(owner);
+    if (existing.length >= cap) {
+      const err = new Error("AGENTIC_WALLET_CAP_REACHED");
+      (err as Error & { cap?: number; have?: number }).cap = cap;
+      (err as Error & { cap?: number; have?: number }).have = existing.length;
+      throw err;
+    }
+
+    const wallet = ethers.Wallet.createRandom();
+    const encryptedPK = encrypt(wallet.privateKey);
+    const walletId = lower(wallet.address);
+
+    const record: AgenticWalletRecord = {
+      ownerAddr: owner,
+      address: ethers.getAddress(wallet.address),
+      encryptedPK,
+      createdAt: Date.now(),
+      dailyLimitUsd: DEFAULT_DAILY_LIMIT_USD,
+      perTxMaxUsd: DEFAULT_PER_TX_MAX_USD,
+      ...(typeof opts.label === "string" && opts.label.length > 0
+        ? { label: opts.label }
+        : {}),
+    };
+
+    const claimed = await kv.set(recordKey(owner, walletId), record, { nx: true });
+    if (!claimed) {
+      // Cosmically unlikely ECDSA collision. Surface as an existence
+      // error rather than silently overwriting.
+      throw new Error("AGENTIC_WALLET_EXISTS");
+    }
+
+    // Append to the list. Under the create-lock this read-then-write is
+    // safe — only one creator for this owner runs at a time, so the
+    // list slice can't be clobbered by a concurrent append.
+    const prevList = (await kv.get<string[]>(listKey(owner))) ?? [];
+    if (!prevList.includes(walletId)) {
+      await kv.set(listKey(owner), [...prevList, walletId]);
+    }
+    // Set as default if owner had no default yet.
+    const prevDefault = await kv.get<string>(defaultKey(owner));
+    if (!prevDefault) {
+      await kv.set(defaultKey(owner), walletId);
+    }
+
+    return record;
+  } finally {
+    // Best-effort lock release. Even if this throws (KV outage), the
+    // 10s TTL eventually clears the lock so the owner isn't stuck.
+    await kv.del(lockKey).catch(() => {});
+  }
+}
+
+/**
+ * Return the wallet record for a specific (owner, walletId) pair. Returns
+ * null if the walletId isn't in the owner's list (no cross-owner reads).
+ * Soft-deleted records are still returned — call sites that need to
+ * exclude them should check `record.deletedAt`.
+ */
+export async function getAgenticWallet(
+  ownerAddr: string,
+  walletId: string,
+): Promise<AgenticWalletRecord | null> {
+  await migrateLegacyIfNeeded(ownerAddr);
+  const owner = lower(ownerAddr);
+  const id = lower(walletId);
+  // Enforce list membership — a stolen walletId from another owner must
+  // not load.
+  const list = (await kv.get<string[]>(listKey(owner))) ?? [];
+  if (!list.includes(id)) return null;
+  return await kv.get<AgenticWalletRecord>(recordKey(owner, id));
+}
+
+/**
+ * Like `getAgenticWallet` but returns null for soft-deleted records.
+ * Use in send / export / balance paths where a deleted wallet must not
+ * be usable.
+ */
+export async function getActiveAgenticWallet(
+  ownerAddr: string,
+  walletId: string,
+): Promise<AgenticWalletRecord | null> {
+  const record = await getAgenticWallet(ownerAddr, walletId);
+  if (!record) return null;
+  if (isSoftDeletedEffective(record)) return null;
+  return record;
+}
+
+/**
+ * Decrypt and return the wallet's private key as a `0x`-prefixed hex
+ * string. Hand off immediately to the signer; do not log or persist.
+ */
+export function decryptPrivateKey(record: AgenticWalletRecord): Hex {
+  const pk = decrypt(record.encryptedPK);
+  return (pk.startsWith("0x") ? pk : `0x${pk}`) as Hex;
+}
+
+/**
+ * Soft-delete a specific wallet. The hard delete is performed by the
+ * GC cron after `SOFT_DELETE_GRACE_MS`.
+ */
+export async function softDeleteAgenticWallet(
+  ownerAddr: string,
+  walletId: string,
+): Promise<void> {
+  const record = await getAgenticWallet(ownerAddr, walletId);
+  if (!record) return;
+  if (record.deletedAt) return;
+  await kv.set(
+    recordKey(ownerAddr, walletId),
+    { ...record, deletedAt: Date.now() },
+  );
+}
+
+/** Clear the soft-delete marker if still within the grace window. */
+export async function restoreAgenticWallet(
+  ownerAddr: string,
+  walletId: string,
+): Promise<void> {
+  const record = await getAgenticWallet(ownerAddr, walletId);
+  if (!record || !record.deletedAt) return;
+  const elapsed = Date.now() - record.deletedAt;
+  if (elapsed > SOFT_DELETE_GRACE_MS) {
+    throw new Error("AGENTIC_WALLET_GRACE_EXPIRED");
+  }
+  const next: AgenticWalletRecord = { ...record };
+  delete next.deletedAt;
+  await kv.set(recordKey(ownerAddr, walletId), next);
+}
+
+/**
+ * Permanent delete — only called by the hard-delete cron once the grace
+ * window has elapsed AND on-chain balance is empty (the cron is
+ * responsible for the balance check; this function trusts the caller).
+ *
+ * Removes the wallet record, audit log, list entry, and re-elects the
+ * default if this was the default wallet.
+ */
+export async function hardDeleteAgenticWallet(
+  ownerAddr: string,
+  walletId: string,
+): Promise<void> {
+  const owner = lower(ownerAddr);
+  const id = lower(walletId);
+  await kv.del(recordKey(owner, id));
+  await kv.del(exportLogKey(owner, id));
+
+  // Remove from list.
+  const list = (await kv.get<string[]>(listKey(owner))) ?? [];
+  const filtered = list.filter((x) => x !== id);
+  if (filtered.length === 0) {
+    await kv.del(listKey(owner));
+  } else {
+    await kv.set(listKey(owner), filtered);
+  }
+
+  // Re-elect default if this wallet was the default.
+  const prevDefault = await kv.get<string>(defaultKey(owner));
+  if (prevDefault === id) {
+    if (filtered.length > 0) {
+      await kv.set(defaultKey(owner), filtered[0]);
+    } else {
+      await kv.del(defaultKey(owner));
+    }
+  }
+}
+
+export interface LimitPatch {
+  dailyLimitUsd?: number | null;
+  perTxMaxUsd?: number | null;
+  label?: string | null;
+}
+
+/**
+ * Update per-wallet spending limits and optional label. Pass `null` to
+ * clear a field; omit it to leave it as-is.
+ */
+export async function updateAgenticWalletLimits(
+  ownerAddr: string,
+  walletId: string,
+  patch: LimitPatch,
+): Promise<AgenticWalletRecord> {
+  const record = await getAgenticWallet(ownerAddr, walletId);
+  if (!record) throw new Error("AGENTIC_WALLET_NOT_FOUND");
+
+  const next: AgenticWalletRecord = { ...record };
+  if (Object.prototype.hasOwnProperty.call(patch, "dailyLimitUsd")) {
+    if (patch.dailyLimitUsd === null) delete next.dailyLimitUsd;
+    else if (typeof patch.dailyLimitUsd === "number") next.dailyLimitUsd = patch.dailyLimitUsd;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "perTxMaxUsd")) {
+    if (patch.perTxMaxUsd === null) delete next.perTxMaxUsd;
+    else if (typeof patch.perTxMaxUsd === "number") next.perTxMaxUsd = patch.perTxMaxUsd;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "label")) {
+    if (patch.label === null) delete next.label;
+    else if (typeof patch.label === "string") next.label = patch.label;
+  }
+
+  await kv.set(recordKey(ownerAddr, walletId), next);
+  return next;
+}
+
+/**
+ * Persist the ERC-8004 agent id assigned to this wallet after the user
+ * completed a `register` tx. Stored as `${network}:${agentId}` so the
+ * dashboard can build the correct scan URL even when the wallet has
+ * been registered on multiple chains.
+ */
+export async function setErc8004AgentId(
+  ownerAddr: string,
+  walletId: string,
+  network: string,
+  agentId: bigint | string | number,
+): Promise<void> {
+  const record = await getAgenticWallet(ownerAddr, walletId);
+  if (!record) throw new Error("AGENTIC_WALLET_NOT_FOUND");
+  const tag = `${network}:${String(agentId)}`;
+  await kv.set(recordKey(ownerAddr, walletId), { ...record, erc8004AgentId: tag });
+}
+
+// ── Export audit log ────────────────────────────────────────────────────
+
+/**
+ * Append an export event to the per-wallet audit log. Rethrows the
+ * underlying KV error so the route's `.catch()` can fire an ops alert
+ * — silent failure here would let a PK reveal slip past the audit trail.
+ */
+export async function recordExportEvent(
+  ownerAddr: string,
+  walletId: string,
+  meta: { ip: string },
+): Promise<void> {
+  const key = exportLogKey(ownerAddr, walletId);
+  const entry: ExportLogEntry = { ts: Date.now(), ip: meta.ip };
+  // Intentionally NOT swallowing errors — route handler escalates a KV
+  // failure as a critical ops alert. See audit P1 #5.
+  await kv.lpush(key, entry);
+  await kv.ltrim(key, 0, EXPORT_LOG_CAP - 1);
+}
+
+/** Return recent export events for this wallet (newest first). */
+export async function getExportLog(
+  ownerAddr: string,
+  walletId: string,
+): Promise<ExportLogEntry[]> {
+  try {
+    const rows = await kv.lrange<ExportLogEntry>(
+      exportLogKey(ownerAddr, walletId),
+      0,
+      -1,
+    );
+    return rows ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// ── Daily spend (per-wallet) ────────────────────────────────────────────
+
+/**
+ * Sum of USD-equivalent stablecoin sent today (UTC) from the specific
+ * Agentic Wallet. Returns 0 when no spend recorded or KV is unreachable.
+ */
+export async function getDailySpendUsd(
+  ownerAddr: string,
+  walletId: string,
+): Promise<number> {
+  try {
+    const v = await kv.get<number>(
+      dailySpendKey(ownerAddr, walletId, todayUtc()),
+    );
+    return typeof v === "number" && Number.isFinite(v) ? v : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Read-only daily-cap check. Pure — does NOT mutate KV. Use the
+ * `chargeAgainstDailyLimit` variant when reserving budget for an
+ * imminent relay call.
+ */
+export async function checkDailyLimit(
+  ownerAddr: string,
+  walletId: string,
+  amountUsd: number,
+  limitUsd: number | undefined,
+): Promise<
+  | { allowed: true }
+  | { allowed: false; spent: number; limit: number; requested: number }
+> {
+  if (typeof limitUsd !== "number" || !Number.isFinite(limitUsd) || limitUsd <= 0) {
+    return { allowed: true };
+  }
+  const spent = await getDailySpendUsd(ownerAddr, walletId);
+  if (spent + amountUsd > limitUsd) {
+    return { allowed: false, spent, limit: limitUsd, requested: amountUsd };
+  }
+  return { allowed: true };
+}
+
+/**
+ * Atomically reserve `amountUsd` of today's daily-spend budget for the
+ * given wallet. Combines read + write into a single INCRBYFLOAT so
+ * concurrent sends from the same wallet can't burst past the cap.
+ *
+ * Caller MUST call `refundDailySpend` on any downstream failure (relay
+ * error, network drop) so the budget releases.
+ */
+export async function chargeAgainstDailyLimit(
+  ownerAddr: string,
+  walletId: string,
+  amountUsd: number,
+  limitUsd: number | undefined,
+): Promise<
+  | { allowed: true; total: number }
+  | { allowed: false; spent: number; limit: number; requested: number }
+> {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) {
+    return { allowed: true, total: 0 };
+  }
+  const key = dailySpendKey(ownerAddr, walletId, todayUtc());
+
+  let nextTotal: number;
+  try {
+    const v = await kv.incrbyfloat(key, amountUsd);
+    nextTotal = typeof v === "number" ? v : Number(v);
+  } catch {
+    if (typeof limitUsd !== "number" || limitUsd <= 0) {
+      return { allowed: true, total: 0 };
+    }
+    return { allowed: false, spent: 0, limit: limitUsd, requested: amountUsd };
+  }
+
+  try { await kv.expire(key, DAILY_SPEND_TTL_SEC); } catch { /* best-effort */ }
+
+  if (typeof limitUsd === "number" && limitUsd > 0 && nextTotal > limitUsd) {
+    try { await kv.incrbyfloat(key, -amountUsd); } catch { /* best-effort */ }
+    return {
+      allowed: false,
+      spent: Math.max(0, nextTotal - amountUsd),
+      limit: limitUsd,
+      requested: amountUsd,
+    };
+  }
+
+  return { allowed: true, total: nextTotal };
+}
+
+/** Release a previously-charged daily-spend reservation. */
+export async function refundDailySpend(
+  ownerAddr: string,
+  walletId: string,
+  amountUsd: number,
+): Promise<void> {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
+  const key = dailySpendKey(ownerAddr, walletId, todayUtc());
+  try {
+    await kv.incrbyfloat(key, -amountUsd);
+  } catch {
+    /* best-effort — next day's TTL flushes the key anyway. */
+  }
+}
+
+/**
+ * Legacy non-atomic spend recorder. Prefer `chargeAgainstDailyLimit`
+ * for new code so concurrent sends can't both slip past a stale read.
+ */
+export async function recordDailySpend(
+  ownerAddr: string,
+  walletId: string,
+  amountUsd: number,
+): Promise<void> {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
+  const key = dailySpendKey(ownerAddr, walletId, todayUtc());
+  try {
+    await kv.incrbyfloat(key, amountUsd);
+    await kv.expire(key, DAILY_SPEND_TTL_SEC);
+  } catch {
+    /* best-effort — the TX already settled. */
+  }
+}
+
+/**
+ * Cheap pre-flight that callers can use before touching the keystore —
+ * surfaces a 503 when the master key is misconfigured instead of
+ * letting encrypt/decrypt throw mid-route.
+ */
+export function isKeystoreReady(): { ok: true } | { ok: false; reason: string } {
+  const k = loadMasterKey();
+  if (k.ok) return { ok: true };
+  return { ok: false, reason: `${k.reason}: ${k.detail}` };
+}

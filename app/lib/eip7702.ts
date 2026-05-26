@@ -337,3 +337,35 @@ const EXPLORER_TX_BASE: Record<ChainKey, string> = {
 export function explorerTxUrl(chain: ChainKey, hash: string): string {
   return (EXPLORER_TX_BASE[chain] ?? "") + hash;
 }
+
+const EXPLORER_ADDRESS_BASE: Record<ChainKey, string> = {
+  bnb:       "https://bscscan.com/address/",
+  eth:       "https://etherscan.io/address/",
+  avax:      "https://snowtrace.io/address/",
+  xlayer:    "https://www.oklink.com/xlayer/address/",
+  stable:    "https://stablescan.org/address/",
+  mantle:    "https://explorer.mantle.xyz/address/",
+  injective: "https://blockscout.injective.network/address/",
+  monad:     "https://monadscan.com/address/",
+  scroll:    "https://scrollscan.com/address/",
+};
+
+export function explorerAddressUrl(chain: ChainKey, addr: string): string {
+  return (EXPLORER_ADDRESS_BASE[chain] ?? "") + addr;
+}
+
+const EXPLORER_LABEL: Record<ChainKey, string> = {
+  bnb:       "BscScan",
+  eth:       "Etherscan",
+  avax:      "Snowtrace",
+  xlayer:    "OKLink",
+  stable:    "StableScan",
+  mantle:    "Mantle Explorer",
+  injective: "Blockscout",
+  monad:     "MonadScan",
+  scroll:    "ScrollScan",
+};
+
+export function explorerLabel(chain: ChainKey): string {
+  return EXPLORER_LABEL[chain] ?? "Explorer";
+}

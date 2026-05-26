@@ -1,0 +1,497 @@
+/**
+ * POST /api/wallet/agentic/send
+ *
+ * Server-mediated single-recipient send from a specific Agent Wallet.
+ * Q402 holds the AES-GCM-encrypted private key; signing happens here.
+ *
+ * Idempotency (audit P1 fix):
+ *   Each send is fingerprinted by
+ *     keccak(owner | walletId | chain | token | recipient | amount) [16 hex]
+ *   and claimed via SET NX in KV under `aw:send:{fp}` for ~10 minutes.
+ *   A retry of the SAME body (even with a fresh action-challenge) within
+ *   the window returns the cached `{txHash}` instead of firing again.
+ *   This closes the network-timeout double-spend window — the
+ *   challenge's single-use guard prevents *signature replay*, the
+ *   fingerprint cache prevents *intent retry*.
+ *
+ * Multi-wallet (Phase 3): the request now requires `walletId` (the
+ * lowercased Agent Wallet address). The intent message that the owner
+ * signs embeds the walletId so a signature scoped to wallet A can't
+ * drain wallet B.
+ *
+ * Auth modes:
+ *   (A) Mode A/B — owner EIP-191 signature with action challenge
+ *   (C) Mode C    — apiKey only (server-mediated MCP); no auto-substitution
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { kv } from "@vercel/kv";
+import { ethers } from "ethers";
+import { randomBytes } from "node:crypto";
+
+import { requireIntentAuth } from "@/app/lib/auth";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import {
+  decryptPrivateKey,
+  isKeystoreReady,
+  chargeAgainstDailyLimit,
+  refundDailySpend,
+  resolveWallet,
+} from "@/app/lib/agentic-wallet";
+import { getSubscription, hasMultichainScope, getApiKeyRecord } from "@/app/lib/db";
+import { loadRelayerKey } from "@/app/lib/relayer-key";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
+import {
+  isAgenticChainKey,
+  signAgenticPayment,
+  submitToRelay,
+  internalBaseUrl,
+} from "@/app/lib/agentic-wallet-sign";
+import type { Address, Hex } from "viem";
+
+export const runtime = "nodejs";
+
+const IDEMPOTENCY_TTL_SEC = 10 * 60;
+
+interface SendBody {
+  chain?: string;
+  token?: string;
+  to?: string;
+  amount?: string;
+  /**
+   * Lowercased Agent Wallet address to send from. Optional in Mode C
+   * (omitting defaults to the owner's default wallet), required in
+   * owner-sig mode (so the intent message can pin a specific wallet).
+   */
+  walletId?: string;
+  // Mode A/B — intent-bound challenge over the exact send shape.
+  ownerAddress?: string;
+  nonce?: string;
+  signature?: string;
+  // Mode C — server-mediated, MCP holds only the apiKey
+  apiKey?: string;
+}
+
+interface SendRecord {
+  /**
+   * `processing` is the initial SET NX claim so concurrent identical
+   * requests deduplicate before we touch the relay. The first request
+   * flips it to `complete` or `failed` once the relay returns; later
+   * arrivals see whichever final state is cached.
+   */
+  status: "processing" | "complete" | "failed";
+  txHash?: string;
+  startedAt: number;
+  finishedAt?: number;
+  relayBody?: unknown;
+  relayStatus?: number;
+  /** Short id so the dashboard can correlate retries to the original. */
+  sendId: string;
+}
+
+function isHexAddress(s: unknown): s is string {
+  return typeof s === "string" && /^0x[0-9a-fA-F]{40}$/.test(s);
+}
+
+function isPositiveDecimalString(s: unknown): s is string {
+  return typeof s === "string" && /^\d+(\.\d+)?$/.test(s) && Number(s) > 0;
+}
+
+/**
+ * Send-level fingerprint. Mirrors `agenticBatchFingerprint` but binds
+ * walletId so a fresh wallet's first send doesn't collide with another
+ * wallet's prior send to the same recipient/amount.
+ */
+function agenticSendFingerprint(
+  owner: string,
+  walletId: string,
+  chain: string,
+  token: string,
+  to: string,
+  amount: string,
+): string {
+  const seed = [
+    owner.toLowerCase(),
+    walletId.toLowerCase(),
+    chain,
+    token,
+    to.toLowerCase(),
+    amount,
+  ].join("|");
+  return ethers.keccak256(ethers.toUtf8Bytes(seed)).slice(2, 18);
+}
+
+function sendKey(fp: string): string {
+  return `aw:send:${fp}`;
+}
+
+/**
+ * Resolve owner from auth, given the (already-validated) intent fields.
+ * The owner-sig path requires walletId in the body so it can bind to
+ * the intent message; Mode C defaults walletId to the owner's default
+ * wallet.
+ */
+async function resolveOwner(
+  req: NextRequest,
+  body: SendBody,
+): Promise<string | NextResponse> {
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "agentic-wallet-send", 30, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  // Mode A/B — owner EIP-191 signature with intent challenge
+  if (typeof body.signature === "string" && body.signature.length > 0) {
+    if (
+      !isAgenticChainKey(body.chain) ||
+      (body.token !== "USDC" && body.token !== "USDT") ||
+      !isHexAddress(body.to) ||
+      !isPositiveDecimalString(body.amount) ||
+      !body.walletId ||
+      typeof body.walletId !== "string"
+    ) {
+      return NextResponse.json({ error: "INVALID_INTENT_FOR_AUTH" }, { status: 400 });
+    }
+    const result = await requireIntentAuth({
+      address: body.ownerAddress ?? null,
+      challenge: body.nonce ?? null,
+      signature: body.signature ?? null,
+      action: "agentic.send",
+      intent: {
+        walletId: body.walletId.toLowerCase(),
+        chain: body.chain,
+        token: body.token,
+        recipient: body.to.toLowerCase(),
+        amount: body.amount,
+      },
+    });
+    if (typeof result !== "string") {
+      return NextResponse.json(
+        { error: result.error, code: result.code },
+        { status: result.status },
+      );
+    }
+    return result;
+  }
+
+  // Mode C — apiKey only
+  if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
+    if (body.apiKey.startsWith("q402_test_")) {
+      return NextResponse.json(
+        { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet sends." },
+        { status: 401 },
+      );
+    }
+    const rec = await getApiKeyRecord(body.apiKey);
+    if (!rec || !rec.active) {
+      return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
+    }
+    if (typeof body.ownerAddress === "string" && body.ownerAddress.length > 0) {
+      if (!isHexAddress(body.ownerAddress)) {
+        return NextResponse.json({ error: "INVALID_OWNER" }, { status: 400 });
+      }
+      if (rec.address.toLowerCase() !== body.ownerAddress.toLowerCase()) {
+        return NextResponse.json(
+          { error: "OWNER_MISMATCH", message: "apiKey is not bound to the supplied ownerAddress." },
+          { status: 403 },
+        );
+      }
+    }
+    return rec.address.toLowerCase();
+  }
+
+  return NextResponse.json(
+    { error: "AUTH_REQUIRED", message: "Provide either an EIP-191 signature or an apiKey." },
+    { status: 401 },
+  );
+}
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  let body: SendBody;
+  try {
+    body = (await req.json()) as SendBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!isAgenticChainKey(body.chain)) {
+    return NextResponse.json({ error: "INVALID_CHAIN" }, { status: 400 });
+  }
+  if (body.token !== "USDC" && body.token !== "USDT") {
+    return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
+  }
+  if (!isHexAddress(body.to)) {
+    return NextResponse.json({ error: "INVALID_RECIPIENT" }, { status: 400 });
+  }
+  if (!isPositiveDecimalString(body.amount)) {
+    return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+  }
+
+  const owner = await resolveOwner(req, body);
+  if (owner instanceof NextResponse) return owner;
+
+  const ready = isKeystoreReady();
+  if (!ready.ok) {
+    console.error("[agentic-wallet/send] keystore unavailable:", ready.reason);
+    return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
+  }
+
+  // Resolve the specific wallet. Owner-sig path bound walletId in the
+  // challenge; Mode C falls back to default if walletId not specified.
+  const wallet = await resolveWallet(owner, body.walletId ?? null);
+  if (!wallet) {
+    return NextResponse.json(
+      {
+        error: "AGENTIC_WALLET_NOT_FOUND",
+        message: body.walletId
+          ? `No active wallet with id ${body.walletId} for this owner.`
+          : "Create an Agent Wallet in your dashboard before calling /send.",
+      },
+      { status: 404 },
+    );
+  }
+  // Re-check soft-delete defensively (resolveWallet may have returned a
+  // stale-by-time record).
+  if (wallet.deletedAt && Date.now() >= wallet.deletedAt) {
+    return NextResponse.json({ error: "AGENTIC_WALLET_ARCHIVED" }, { status: 410 });
+  }
+
+  const walletId = wallet.address.toLowerCase();
+
+  // ── Idempotency: SET NX claim BEFORE any relay work ────────────────────
+  // Two concurrent identical requests must NOT both fire on-chain. The
+  // earlier read-then-write pattern had a TOCTOU window between the
+  // get() and the final set(): both racers saw cached=null and both
+  // settled. Mirror batch's atomic claim — the loser falls through to
+  // the cached record returned by the winner.
+  const fp = agenticSendFingerprint(owner, walletId, body.chain, body.token, body.to, body.amount);
+  const idempotencyKey = sendKey(fp);
+  const startedAt = Date.now();
+  const sendId = randomBytes(8).toString("hex");
+  const claim: SendRecord = { status: "processing", startedAt, sendId };
+  const claimed = await kv.set(idempotencyKey, claim, { nx: true, ex: IDEMPOTENCY_TTL_SEC });
+  if (!claimed) {
+    // Lost the race — surface whichever record landed. Mirrors batch
+    // route's pattern: when concurrent retries beat us we return the
+    // winner's state instead of inventing a parallel settlement.
+    const live = await kv.get<SendRecord>(idempotencyKey);
+    if (live) {
+      return NextResponse.json(
+        {
+          ...((live.relayBody as Record<string, unknown>) ?? {}),
+          idempotent: true,
+          status: live.status,
+          startedAt: live.startedAt,
+          finishedAt: live.finishedAt,
+          sendId: live.sendId,
+        },
+        { status: live.relayStatus ?? 202 },
+      );
+    }
+    // Race window where the claim disappeared between SET NX and GET
+    // (TTL expiry, manual delete). Fail closed.
+    return NextResponse.json({ error: "send_claim_failed" }, { status: 500 });
+  }
+  // Best-effort release of the claim on early-fail paths so the user
+  // isn't shadow-locked to an empty "processing" record for the full
+  // TTL when the actual relay never happened. Successful settlement
+  // overwrites the record below with `complete` / `failed`.
+  const releaseClaim = async () => {
+    await kv.del(idempotencyKey).catch(() => {});
+  };
+
+  const numAmount = Number(body.amount);
+  if (!Number.isFinite(numAmount) || numAmount <= 0) {
+    await releaseClaim();
+    return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+  }
+  if (typeof wallet.perTxMaxUsd === "number" && numAmount > wallet.perTxMaxUsd) {
+    await releaseClaim();
+    return NextResponse.json(
+      { error: "PER_TX_LIMIT_EXCEEDED", limit: wallet.perTxMaxUsd, requested: numAmount },
+      { status: 403 },
+    );
+  }
+
+  // Reserve budget atomically.
+  const reservation = await chargeAgainstDailyLimit(owner, walletId, numAmount, wallet.dailyLimitUsd);
+  if (!reservation.allowed) {
+    await releaseClaim();
+    return NextResponse.json(
+      {
+        error: "DAILY_LIMIT_EXCEEDED",
+        limit: reservation.limit,
+        spent: reservation.spent,
+        requested: reservation.requested,
+      },
+      { status: 403 },
+    );
+  }
+  // Compose refund + release so every relay-failure path releases BOTH
+  // the daily-spend reservation AND the SET NX idempotency claim. A
+  // surviving claim with no relay would shadow-lock the user from
+  // retrying the same (recipient, amount) for the full TTL.
+  const refundAndRelease = async () => {
+    await refundDailySpend(owner, walletId, numAmount).catch(() => {});
+    await releaseClaim();
+  };
+
+  // Subscription gate — BNB free, others require multichain.
+  const sub = await getSubscription(owner);
+  if (body.chain !== "bnb" && !hasMultichainScope(sub)) {
+    await refundAndRelease();
+    return NextResponse.json(
+      { error: "SUBSCRIPTION_REQUIRED", message: "Multichain access requires a paid subscription." },
+      { status: 402 },
+    );
+  }
+
+  // ── apiKey resolution: Mode C uses presented; owner-sig uses auto-pick ─
+  let apiKey: string | undefined;
+  if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
+    const presented = body.apiKey;
+    const isTrial = presented === sub?.trialApiKey;
+    const isPaid = presented === sub?.apiKey;
+    if (!isTrial && !isPaid) {
+      await refundAndRelease();
+      return NextResponse.json(
+        {
+          error: "STALE_API_KEY",
+          message:
+            "This apiKey is no longer the live trial or multichain key. " +
+            "Rotate to the current key in your dashboard and retry.",
+        },
+        { status: 401 },
+      );
+    }
+    if (isTrial && body.chain !== "bnb") {
+      await refundAndRelease();
+      return NextResponse.json(
+        {
+          error: "TRIAL_BNB_ONLY",
+          message:
+            "Trial apiKeys can only settle on BNB Chain. Present the " +
+            "Multichain key (or omit apiKey + sign the owner challenge) " +
+            "for non-BNB sends.",
+        },
+        { status: 402 },
+      );
+    }
+    apiKey = presented;
+  } else {
+    apiKey = body.chain === "bnb" ? sub?.trialApiKey || sub?.apiKey : sub?.apiKey;
+  }
+
+  if (!apiKey) {
+    await refundAndRelease();
+    return NextResponse.json(
+      { error: "NO_API_KEY", message: "Activate a Q402 trial or subscription before using your Agent Wallet." },
+      { status: 402 },
+    );
+  }
+
+  const relayerKey = loadRelayerKey();
+  if (!relayerKey.ok) {
+    await refundAndRelease();
+    return NextResponse.json({ error: "relay_unavailable" }, { status: 503 });
+  }
+
+  // Sign + submit. `startedAt` was set when we minted the SET NX claim
+  // so the cached final record stitches back to the wallet popup time
+  // rather than the post-budget-check time.
+  const pk = decryptPrivateKey(wallet);
+  let signed;
+  try {
+    signed = await signAgenticPayment({
+      privateKey: pk as Hex,
+      chain: body.chain,
+      token: body.token,
+      to: body.to as Address,
+      amount: body.amount,
+      facilitator: relayerKey.address as Address,
+    });
+  } catch (e) {
+    await refundAndRelease();
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "AMOUNT_PRECISION_TOO_HIGH") {
+      return NextResponse.json(
+        { error: "AMOUNT_PRECISION_TOO_HIGH", message: `Amount has more decimals than ${body.token} supports.` },
+        { status: 400 },
+      );
+    }
+    if (msg === "INVALID_AMOUNT") {
+      return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+    }
+    console.error("[agentic-wallet/send] signing failed:", e);
+    return NextResponse.json({ error: "sign_failed" }, { status: 500 });
+  }
+
+  let relayResponse: Response;
+  try {
+    relayResponse = await submitToRelay(internalBaseUrl(), apiKey, signed);
+  } catch (e) {
+    await refundAndRelease();
+    console.error("[agentic-wallet/send] relay forward failed:", e);
+    return NextResponse.json({ error: "relay_forward_failed" }, { status: 502 });
+  }
+
+  const relayBody = await relayResponse.json().catch(() => null);
+  const success =
+    relayResponse.ok && relayBody && typeof relayBody === "object" && "txHash" in relayBody;
+
+  // ── Post-relay finalisation ───────────────────────────────────────────
+  // Critical: keep the claim alive between refund + overwrite so a racing
+  // retry can't slip into the window where the key is deleted but the
+  // failed record isn't yet written. (Earlier code released the claim
+  // first and then re-wrote — that gave concurrent retries a short race
+  // to claim a fresh `processing` slot and re-fire.) Refund the budget,
+  // then overwrite the same key with the terminal `complete` / `failed`
+  // state — no NX, so we replace the claim atomically from the racer's
+  // perspective.
+  if (!success) {
+    await refundDailySpend(owner, walletId, numAmount).catch(() => {});
+  }
+  const finalRecord: SendRecord = {
+    sendId,
+    txHash:
+      success && relayBody && typeof relayBody === "object"
+        ? (relayBody as { txHash?: string }).txHash
+        : undefined,
+    status: success ? "complete" : "failed",
+    startedAt,
+    finishedAt: Date.now(),
+    relayBody: relayBody ?? null,
+    relayStatus: relayResponse.status,
+  };
+  try {
+    await kv.set(idempotencyKey, finalRecord, { ex: IDEMPOTENCY_TTL_SEC });
+  } catch (e) {
+    // Cache write failed AFTER the relay either settled or rejected.
+    // The claim is still alive as `processing` and will stay that way
+    // until the TTL expires — at which point a future identical
+    // request would re-fire against a chain that already settled,
+    // double-spending. Mirror the batch route: page ops with the
+    // settled txHash (if any) so a human can either patch the cache
+    // or warn the user.
+    const txHashStr =
+      success && relayBody && typeof relayBody === "object"
+        ? String((relayBody as { txHash?: string }).txHash ?? "(none)")
+        : "(none)";
+    console.error("[agentic-wallet/send] idempotency cache write failed:", e);
+    void sendOpsAlert(
+      `agentic-wallet/send final write failed for owner ${owner} ` +
+        `(walletId=${walletId}, sendId=${sendId}, chain=${body.chain}, ` +
+        `token=${body.token}, amount=${body.amount}, recipient=${body.to}). ` +
+        `${success ? `SETTLED on-chain — txHash=${txHashStr}.` : "Relay returned non-success."} ` +
+        `Claim is stuck as 'processing' until TTL; a retry within ` +
+        `${IDEMPOTENCY_TTL_SEC / 60}min could re-fire and double-spend. ` +
+        `Error: ${e instanceof Error ? e.message : String(e)}`,
+      "critical",
+    );
+  }
+
+  return NextResponse.json(
+    relayBody ?? { error: "relay_response_unreadable" },
+    { status: relayResponse.status },
+  );
+}

@@ -221,3 +221,50 @@ export async function getFreshChallenge(
     return null;
   }
 }
+
+/**
+ * Intent-bound, action-scoped authorisation for Agent Wallet
+ * fund-moving + destructive routes.
+ *
+ * Two-step handshake:
+ *   1. POST /api/auth/action-challenge with the (address, action, intent)
+ *      tuple. Server mints a single-use challenge, builds the canonical
+ *      message text, and hands it back.
+ *   2. Browser wallet signs that exact message.
+ *   3. Caller bundles `{ nonce: challenge, signature, ...intent }` with
+ *      the route request. The route rebuilds the same canonical bytes
+ *      from server-trusted intent and verifies the signature.
+ *
+ * Returns null if:
+ *   - The server refuses (rate-limit, malformed intent, unknown action)
+ *   - The user rejects the wallet popup
+ *
+ * Each call always triggers exactly one wallet popup — there is no
+ * caching by design. Replaying the same returned pair against the
+ * same route fails with NONCE_EXPIRED because the challenge is
+ * single-use, which doubles as the idempotency guard for single
+ * sends.
+ */
+export async function getActionAuth(
+  addr: string,
+  action: string,
+  intent: Record<string, string | number>,
+  signMessage: (msg: string) => Promise<string | null>,
+): Promise<{ challenge: string; signature: string } | null> {
+  try {
+    const resp = await fetch("/api/auth/action-challenge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: addr, action, intent }),
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as { challenge?: string; message?: string };
+    if (typeof data.challenge !== "string" || typeof data.message !== "string") return null;
+
+    const signature = await signMessage(data.message);
+    if (!signature) return null;
+    return { challenge: data.challenge, signature };
+  } catch {
+    return null;
+  }
+}
