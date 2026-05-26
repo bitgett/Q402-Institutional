@@ -325,7 +325,7 @@ export function AgenticWalletCard({
         )}
 
         {/* Primary actions — Send / Receive / Batch sit here as equals. */}
-        <div className="relative flex flex-wrap gap-2">
+        <div className="relative flex flex-wrap gap-2 mt-5">
           <ActionPill
             label="Send"
             disabled={archived}
