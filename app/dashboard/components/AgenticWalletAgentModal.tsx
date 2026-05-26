@@ -18,7 +18,7 @@
 
 import { useState } from "react";
 import { getAuthCreds } from "@/app/lib/auth-client";
-import { ensureWalletChain } from "@/app/lib/wallet";
+import { ensureWalletChain, getActiveProvider } from "@/app/lib/wallet";
 import type { WalletChainKey } from "@/app/lib/wallet";
 
 interface Props {
@@ -55,16 +55,6 @@ interface ConfirmResponse {
   network: string;
   agentId: string;
   scanUrl: string;
-}
-
-interface EthereumProvider {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-}
-
-function getProvider(): EthereumProvider | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as { ethereum?: EthereumProvider; okxwallet?: EthereumProvider };
-  return w.ethereum ?? w.okxwallet ?? null;
 }
 
 export function AgenticWalletAgentModal({
@@ -131,7 +121,12 @@ export function AgenticWalletAgentModal({
 
       // ── Step 2: user signs the mint tx through their wallet ───────────
       setStage("awaiting-sign");
-      const provider = getProvider();
+      // Use the canonical localStorage-aware picker so chain-switch and
+      // eth_sendTransaction land on the SAME injected provider.
+      // (Falling back to `window.ethereum ?? window.okxwallet` here
+      // caused chain switch to happen on OKX while the tx popup opened
+      // on MetaMask in dual-injection setups.)
+      const provider = getActiveProvider();
       if (!provider) {
         fail("No wallet provider found. Connect MetaMask or OKX and retry.", "generic");
         return;
@@ -201,16 +196,16 @@ export function AgenticWalletAgentModal({
       onRegistered(confirmed.agentId, confirmed.scanUrl);
     } catch (e) {
       // MetaMask + EIP-1193 providers throw *plain objects* (not Error
-      // instances) so `String(e)` returns the useless "[object Object]"
-      // and `e instanceof Error` is false. Normalise to a readable
-      // string + extract the numeric code so we can branch on known
-      // EIP-1193 cases (4001 = user rejected; -32000 family = insufficient
-      // funds / rpc / etc).
+      // instances). Real reject codes are often nested. We log the raw
+      // error so the browser console always has the ground truth — the
+      // fail() copy is best-effort classification, not the source of
+      // truth.
+      console.error("[agent-modal] registration error:", e);
       const norm = normaliseProviderError(e);
-      if (norm.code === 4001 || /user rejected|User denied/i.test(norm.message)) {
+      if (norm.rejected) {
         fail("You cancelled the signature in your wallet.", "rejected");
       } else if (
-        norm.code === -32000 ||
+        norm.numericCode === -32000 ||
         /insufficient funds|insufficient balance/i.test(norm.message)
       ) {
         fail(
@@ -219,33 +214,88 @@ export function AgenticWalletAgentModal({
           "insufficient",
         );
       } else {
-        fail(norm.message, "generic");
+        // Append the code so the user can paste it to support / open
+        // devtools and find the matching console.error above.
+        const tail =
+          norm.numericCode !== undefined
+            ? ` (code ${norm.numericCode})`
+            : norm.stringCode
+              ? ` (${norm.stringCode})`
+              : "";
+        fail(norm.message + tail, "generic");
       }
     }
   }
 
-  function normaliseProviderError(e: unknown): { message: string; code?: number } {
-    if (e instanceof Error) {
-      // ethers / viem also tuck the EIP-1193 code into Error.cause
-      const c = (e as Error & { code?: unknown }).code;
-      const code = typeof c === "number" ? c : undefined;
-      return { message: e.message, code };
+  /**
+   * Walk an EIP-1193 / ethers / viem error and pull out the things we
+   * actually need to classify it. Wallets and libraries layer codes
+   * differently — MetaMask 12+ wraps the user-visible rejection deep
+   * inside `data` or `cause` while the top-level `code` is some
+   * internal JSON-RPC code like -32603. ethers v6 sometimes uses the
+   * string code "ACTION_REJECTED" instead of the numeric 4001.
+   *
+   * Returns:
+   *   - numericCode: shallowest *numeric* `code` found (top → nested)
+   *   - stringCode:  shallowest *string*  `code` found (ethers signal)
+   *   - message:     best-effort human readable string
+   *   - rejected:    true iff we found unambiguous rejection evidence
+   *                  (numericCode === 4001 OR stringCode includes the
+   *                  word "REJECT", OR e.info?.error?.code === 4001).
+   *                  Crucially we do NOT key off message regex — many
+   *                  wrapped errors mention "user rejected" in copy
+   *                  even when the real cause is something else.
+   */
+  function normaliseProviderError(e: unknown): {
+    message: string;
+    numericCode?: number;
+    stringCode?: string;
+    rejected: boolean;
+  } {
+    let message = "Unexpected error.";
+    let numericCode: number | undefined;
+    let stringCode: string | undefined;
+    let rejected = false;
+
+    const seen = new WeakSet<object>();
+    function walk(node: unknown, depth: number): void {
+      if (depth > 6 || node == null) return;
+      if (typeof node === "string") {
+        // Promote a string to message only if we haven't seen one yet.
+        if (message === "Unexpected error.") message = node;
+        return;
+      }
+      if (typeof node !== "object") return;
+      if (seen.has(node as object)) return;
+      seen.add(node as object);
+
+      const o = node as Record<string, unknown>;
+      if (typeof o.message === "string" && message === "Unexpected error.") {
+        message = o.message;
+      } else if (typeof o.reason === "string" && message === "Unexpected error.") {
+        message = o.reason;
+      } else if (typeof o.shortMessage === "string" && message === "Unexpected error.") {
+        message = o.shortMessage;
+      }
+      if (typeof o.code === "number" && numericCode === undefined) {
+        numericCode = o.code;
+      } else if (typeof o.code === "string" && stringCode === undefined) {
+        stringCode = o.code;
+      }
+      // Recurse into the common nesting points
+      for (const k of ["data", "error", "cause", "info", "details", "originalError"]) {
+        if (k in o) walk(o[k], depth + 1);
+      }
     }
-    if (e && typeof e === "object") {
-      const o = e as { message?: unknown; code?: unknown; reason?: unknown };
-      const message =
-        typeof o.message === "string"
-          ? o.message
-          : typeof o.reason === "string"
-            ? o.reason
-            : (() => {
-                try { return JSON.stringify(o); } catch { return "Unexpected error."; }
-              })();
-      const code = typeof o.code === "number" ? o.code : undefined;
-      return { message, code };
+    walk(e, 0);
+
+    if (
+      numericCode === 4001 ||
+      (typeof stringCode === "string" && /REJECT/i.test(stringCode))
+    ) {
+      rejected = true;
     }
-    if (typeof e === "string") return { message: e };
-    return { message: "Unexpected error." };
+    return { message, numericCode, stringCode, rejected };
   }
 
   return (
