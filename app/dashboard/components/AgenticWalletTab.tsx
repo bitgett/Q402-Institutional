@@ -27,6 +27,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { AgenticWalletCard } from "./AgenticWalletCard";
 import { AgenticWalletPreview } from "./AgenticWalletPreview";
+import { AgenticWalletFooter } from "./AgenticWalletFooter";
 
 export interface AgenticWalletPublic {
   ownerAddr: string;
@@ -136,6 +137,10 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
       )}
 
       {wallet && <InstallSnippet />}
+
+      {wallet && (
+        <AgenticWalletFooter ownerAddress={address} walletAddress={wallet.address} />
+      )}
     </div>
   );
 }
