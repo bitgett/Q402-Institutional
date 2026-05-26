@@ -241,16 +241,6 @@ export async function resolveWallet(
 // ── CRUD ─────────────────────────────────────────────────────────────────
 
 /**
- * Create a fresh Agentic Wallet for `ownerAddr`. Enforces the wallet cap
- * (MAX_WALLETS_PER_OWNER or the trial cap, depending on subscription
- * scope passed by the caller).
- *
- * Uses SET NX on the per-wallet record key so concurrent creates can't
- * collide on the same generated address (the random ECDSA collision is
- * cryptographically negligible — the NX is a belt-and-suspenders
- * around accidental duplicate writes).
- */
-/**
  * Create a fresh Agentic Wallet for `ownerAddr`, race-safe.
  *
  * Concurrency model: the cap check, record write, list append, and

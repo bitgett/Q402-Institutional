@@ -40,6 +40,7 @@ import {
 } from "@/app/lib/agentic-wallet";
 import { getSubscription, hasMultichainScope, getApiKeyRecord } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
   isAgenticChainKey,
   signAgenticPayment,
@@ -437,16 +438,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const relayBody = await relayResponse.json().catch(() => null);
   const success =
     relayResponse.ok && relayBody && typeof relayBody === "object" && "txHash" in relayBody;
-  if (!success) {
-    await refundAndRelease();
-  }
 
-  // Persist the result in the idempotency cache so subsequent retries
-  // see the same outcome. We cache BOTH success and failure — a failed
-  // attempt is still "this exact intent has been tried", so a fresh
-  // attempt requires the user to actually wait out the TTL OR change
-  // some field (recipient, amount). This prevents both double-spend
-  // and double-failure-side-effect within the window.
+  // ── Post-relay finalisation ───────────────────────────────────────────
+  // Critical: keep the claim alive between refund + overwrite so a racing
+  // retry can't slip into the window where the key is deleted but the
+  // failed record isn't yet written. (Earlier code released the claim
+  // first and then re-wrote — that gave concurrent retries a short race
+  // to claim a fresh `processing` slot and re-fire.) Refund the budget,
+  // then overwrite the same key with the terminal `complete` / `failed`
+  // state — no NX, so we replace the claim atomically from the racer's
+  // perspective.
+  if (!success) {
+    await refundDailySpend(owner, walletId, numAmount).catch(() => {});
+  }
   const finalRecord: SendRecord = {
     sendId,
     txHash:
@@ -459,16 +463,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     relayBody: relayBody ?? null,
     relayStatus: relayResponse.status,
   };
-  // Overwrite the `processing` claim with the final result. NOT NX
-  // here — the success-path claim is still alive (refundAndRelease
-  // only ran on failure paths above) and must be replaced with the
-  // settled record. The failure-path claim was released, so writing
-  // creates a fresh record so subsequent retries within the TTL still
-  // see "this exact intent was tried" instead of mis-firing again.
   try {
     await kv.set(idempotencyKey, finalRecord, { ex: IDEMPOTENCY_TTL_SEC });
   } catch (e) {
+    // Cache write failed AFTER the relay either settled or rejected.
+    // The claim is still alive as `processing` and will stay that way
+    // until the TTL expires — at which point a future identical
+    // request would re-fire against a chain that already settled,
+    // double-spending. Mirror the batch route: page ops with the
+    // settled txHash (if any) so a human can either patch the cache
+    // or warn the user.
+    const txHashStr =
+      success && relayBody && typeof relayBody === "object"
+        ? String((relayBody as { txHash?: string }).txHash ?? "(none)")
+        : "(none)";
     console.error("[agentic-wallet/send] idempotency cache write failed:", e);
+    void sendOpsAlert(
+      `agentic-wallet/send final write failed for owner ${owner} ` +
+        `(walletId=${walletId}, sendId=${sendId}, chain=${body.chain}, ` +
+        `token=${body.token}, amount=${body.amount}, recipient=${body.to}). ` +
+        `${success ? `SETTLED on-chain — txHash=${txHashStr}.` : "Relay returned non-success."} ` +
+        `Claim is stuck as 'processing' until TTL; a retry within ` +
+        `${IDEMPOTENCY_TTL_SEC / 60}min could re-fire and double-spend. ` +
+        `Error: ${e instanceof Error ? e.message : String(e)}`,
+      "critical",
+    );
   }
 
   return NextResponse.json(
