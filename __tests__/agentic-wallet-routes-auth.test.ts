@@ -21,8 +21,13 @@ const INFO_BY_KEY     = loadRoute("app", "api", "wallet", "agentic", "info-by-ke
 const BALANCE_ROUTE   = loadRoute("app", "api", "wallet", "agentic", "balance",     "route.ts");
 
 describe("POST /api/wallet/agentic/restore — auth + grace handling", () => {
-  it("requires the owner-sig path via requireAuth", () => {
-    expect(RESTORE_ROUTE).toMatch(/requireAuth\s*\(/);
+  it("uses intent-bound auth (agentic.restore) — not bare session sig", () => {
+    // Phase 3 multi-wallet: restore now binds to the specific walletId.
+    // A leaked session signature cannot revive a wallet the user didn't
+    // intend to bring back.
+    expect(RESTORE_ROUTE).toMatch(/requireIntentAuth/);
+    expect(RESTORE_ROUTE).toMatch(/action:\s*"agentic\.restore"/);
+    expect(RESTORE_ROUTE).toMatch(/walletId:\s*body\.walletId\.toLowerCase\(\)/);
   });
   it("enforces a per-IP rate limit before doing work", () => {
     expect(RESTORE_ROUTE).toMatch(/rateLimit\(ip,\s*"agentic-wallet-restore"/);

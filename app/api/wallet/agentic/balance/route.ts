@@ -1,14 +1,15 @@
 /**
  * GET /api/wallet/agentic/balance
  *
- * Returns the caller's Agent Wallet USDC + USDT balances across every
- * supported EVM chain. Results are cached in KV for 5 minutes so the
- * dashboard's polling loop doesn't fan out to 18 ERC20 reads per
- * refresh.
+ * Returns a specific Agent Wallet's USDC + USDT balances across every
+ * supported EVM chain. Cached per-wallet in KV for 5 minutes.
  *
- * Auth: owner EIP-191 session signature, same shape as GET /api/wallet/
- * agentic. No apiKey path — balance is read-only but the address is
- * still per-owner private.
+ * Multi-wallet Phase 3: takes a `walletId` query param. Omitting it
+ * resolves to the owner's default wallet so existing single-wallet
+ * dashboards keep working without code changes.
+ *
+ * Auth: owner EIP-191 session signature. No apiKey path (info-by-key
+ * is the apiKey route).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -16,7 +17,7 @@ import { kv } from "@vercel/kv";
 
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
-import { getActiveAgenticWallet } from "@/app/lib/agentic-wallet";
+import { getActiveAgenticWallet, resolveWallet } from "@/app/lib/agentic-wallet";
 import {
   fetchAgenticBalances,
   type AgenticBalances,
@@ -26,7 +27,8 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const CACHE_TTL_SEC = 5 * 60;
-const CACHE_KEY = (owner: string) => `aw:balance:${owner.toLowerCase()}`;
+const CACHE_KEY = (owner: string, walletId: string) =>
+  `aw:balance:${owner.toLowerCase()}:${walletId.toLowerCase()}`;
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const ip = getClientIP(req);
@@ -38,6 +40,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const address = url.searchParams.get("address");
   const nonce = url.searchParams.get("nonce");
   const sig = url.searchParams.get("sig");
+  const walletIdParam = url.searchParams.get("walletId");
   const force = url.searchParams.get("force") === "1";
 
   const authResult = await requireAuth(address, nonce, sig);
@@ -49,23 +52,25 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
   const owner = authResult;
 
-  // Cache hit short-circuits the heavy 9-chain read. `force=1` skips the
-  // cache so the user can poke a refresh from the UI if a balance feels
-  // stale.
+  // Resolve to a specific wallet — walletId param if supplied, default
+  // wallet otherwise. Active-only (soft-deleted = treated as gone).
+  const wallet = walletIdParam
+    ? await getActiveAgenticWallet(owner, walletIdParam)
+    : await resolveWallet(owner, null);
+  if (!wallet) {
+    return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
+  }
+  const walletId = wallet.address.toLowerCase();
+
   if (!force) {
     try {
-      const cached = await kv.get<AgenticBalances>(CACHE_KEY(owner));
+      const cached = await kv.get<AgenticBalances>(CACHE_KEY(owner, walletId));
       if (cached && cached.asOf && Date.now() - cached.asOf < CACHE_TTL_SEC * 1000) {
-        return NextResponse.json({ balances: cached, cached: true });
+        return NextResponse.json({ balances: cached, cached: true, walletId });
       }
     } catch {
       /* fall through to live read */
     }
-  }
-
-  const wallet = await getActiveAgenticWallet(owner);
-  if (!wallet) {
-    return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
 
   let balances: AgenticBalances;
@@ -77,11 +82,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    await kv.set(CACHE_KEY(owner), balances, { ex: CACHE_TTL_SEC });
+    await kv.set(CACHE_KEY(owner, walletId), balances, { ex: CACHE_TTL_SEC });
   } catch {
-    // Cache miss is fine — the next caller will recompute. Still surface
-    // the live value.
+    /* cache miss is non-fatal */
   }
 
-  return NextResponse.json({ balances, cached: false });
+  return NextResponse.json({ balances, cached: false, walletId });
 }

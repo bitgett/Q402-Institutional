@@ -3,17 +3,22 @@
 /**
  * AgenticWalletLimitsModal — set / clear per-wallet spending caps.
  *
- * Maps the dailyLimitUsd + perTxMaxUsd fields on the wallet record.
- * Empty input clears the cap (sent as null). The server validates that
- * each value is finite, non-negative, and below the LIMIT_MAX_USD
- * ceiling — clients only do soft validation.
+ * Maps `dailyLimitUsd` + `perTxMaxUsd` on the wallet record. Empty
+ * input clears the cap (sent as null). The server validates that each
+ * value is finite, non-negative, and below the LIMIT_MAX_USD ceiling.
+ *
+ * Multi-wallet Phase 3: takes walletId so a leaked session signature
+ * can't raise caps on a different wallet. PATCH is now intent-bound
+ * (`agentic.limits`) and embeds the new values in the canonical
+ * message so the signature is provably tied to *this* exact change.
  */
 
-import { useState } from "react";
-import { getAuthCreds } from "@/app/lib/auth-client";
+import { useEffect, useRef, useState } from "react";
+import { getActionAuth } from "@/app/lib/auth-client";
 
 interface Props {
   ownerAddress: string;
+  walletId: string;
   signMessage: (message: string) => Promise<string | null>;
   initial: { dailyLimitUsd: number | null; perTxMaxUsd: number | null };
   onClose: () => void;
@@ -22,6 +27,7 @@ interface Props {
 
 export function AgenticWalletLimitsModal({
   ownerAddress,
+  walletId,
   signMessage,
   initial,
   onClose,
@@ -31,6 +37,21 @@ export function AgenticWalletLimitsModal({
   const [perTx, setPerTx] = useState<string>(initial.perTxMaxUsd?.toString() ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inFlightRef = useRef(false);
+  // Use a ref so the ESC-key handler reads the current `saving` value
+  // without re-binding the listener every render.
+  const savingRef = useRef(saving);
+  useEffect(() => { savingRef.current = saving; }, [saving]);
+
+  // Escape closes — gated on `saving` so users can't bail mid-PATCH and
+  // strand the modal trying to setState on an unmounted tree.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && !savingRef.current) onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   function parseField(raw: string): number | null | "invalid" {
     const t = raw.trim();
@@ -41,22 +62,37 @@ export function AgenticWalletLimitsModal({
   }
 
   async function submit() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setError(null);
     const d = parseField(daily);
     const p = parseField(perTx);
     if (d === "invalid") {
       setError("Daily cap must be a non-negative number or empty.");
+      inFlightRef.current = false;
       return;
     }
     if (p === "invalid") {
       setError("Per-tx max must be a non-negative number or empty.");
+      inFlightRef.current = false;
       return;
     }
     setSaving(true);
     try {
-      const auth = await getAuthCreds(ownerAddress, signMessage);
+      // Intent-bound. The canonical message includes both new values
+      // (or "null" / "unchanged" sentinels matching what we send) so
+      // the server's rebuild + verify catches any tampering. Action
+      // names tie the signature to this exact PATCH — replaying as a
+      // delete or send fails the action check.
+      const intent: Record<string, string> = {
+        walletId,
+        dailyLimitUsd: d === null ? "null" : String(d),
+        perTxMaxUsd: p === null ? "null" : String(p),
+        label: "unchanged",
+      };
+      const auth = await getActionAuth(ownerAddress, "agentic.limits", intent, signMessage);
       if (!auth) {
-        setError("Sign the auth challenge to save.");
+        setError("Sign the limits challenge in your wallet to save.");
         return;
       }
       const res = await fetch("/api/wallet/agentic", {
@@ -64,7 +100,8 @@ export function AgenticWalletLimitsModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address: ownerAddress,
-          nonce: auth.nonce,
+          walletId,
+          nonce: auth.challenge,
           signature: auth.signature,
           dailyLimitUsd: d,
           perTxMaxUsd: p,
@@ -72,7 +109,7 @@ export function AgenticWalletLimitsModal({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? `Save failed (HTTP ${res.status}).`);
+        setError(data.error ?? data.message ?? `Save failed (HTTP ${res.status}).`);
         return;
       }
       onSaved();
@@ -80,6 +117,7 @@ export function AgenticWalletLimitsModal({
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
+      inFlightRef.current = false;
     }
   }
 
@@ -87,7 +125,10 @@ export function AgenticWalletLimitsModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={onClose}
+      onClick={saving ? undefined : onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="limits-modal-title"
     >
       <div
         className="w-full max-w-md rounded-2xl border p-6 space-y-4"
@@ -96,13 +137,16 @@ export function AgenticWalletLimitsModal({
       >
         <div className="flex items-start justify-between">
           <div>
-            <div className="text-white font-semibold text-lg">Spending limits</div>
+            <div id="limits-modal-title" className="text-white font-semibold text-lg">
+              Spending limits
+            </div>
             <div className="text-[11px] text-white/45 mt-0.5">USD-equivalent. Leave blank to clear.</div>
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="text-white/40 hover:text-white text-lg leading-none"
+            onClick={saving ? undefined : onClose}
+            disabled={saving}
+            className="text-white/40 hover:text-white text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Close"
           >
             ×

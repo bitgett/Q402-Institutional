@@ -1,29 +1,32 @@
 /**
  * POST /api/wallet/agentic/send
  *
- * Server-mediated single-recipient send from the caller's Agentic Wallet.
- * Q402 holds the wallet's AES-GCM-encrypted private key, so signing
- * happens on the server — the trust model differs from the canonical
- * /api/relay path (where the user signs locally). Callers should treat
- * this route as custody-lite: convenient, server-trusted, and bounded
- * by the wallet's per-wallet limits.
+ * Server-mediated single-recipient send from a specific Agent Wallet.
+ * Q402 holds the AES-GCM-encrypted private key; signing happens here.
  *
- * Phase 3 scope:
- *   - All 9 EVM chains. BNB is free during the trial; the remaining 8
- *     require an active multichain subscription (same `hasMultichainScope`
- *     gate as the canonical relay route).
- *   - Single recipient only — batch lives at /api/wallet/agentic/batch.
- *   - Two auth modes:
- *       (1) owner EIP-191 signature  — dashboard + Mode A/B from MCP
- *       (2) apiKey                   — Mode C (server-mediated MCP), where
- *                                       the caller has only the apiKey, no
- *                                       private key. The apiKey's owner
- *                                       address must match `ownerAddress`.
- *     Sandbox keys (`q402_test_`) are rejected here — Agent Wallet sends
- *     must always settle on-chain.
+ * Idempotency (audit P1 fix):
+ *   Each send is fingerprinted by
+ *     keccak(owner | walletId | chain | token | recipient | amount) [16 hex]
+ *   and claimed via SET NX in KV under `aw:send:{fp}` for ~10 minutes.
+ *   A retry of the SAME body (even with a fresh action-challenge) within
+ *   the window returns the cached `{txHash}` instead of firing again.
+ *   This closes the network-timeout double-spend window — the
+ *   challenge's single-use guard prevents *signature replay*, the
+ *   fingerprint cache prevents *intent retry*.
+ *
+ * Multi-wallet (Phase 3): the request now requires `walletId` (the
+ * lowercased Agent Wallet address). The intent message that the owner
+ * signs embeds the walletId so a signature scoped to wallet A can't
+ * drain wallet B.
+ *
+ * Auth modes:
+ *   (A) Mode A/B — owner EIP-191 signature with action challenge
+ *   (C) Mode C    — apiKey only (server-mediated MCP); no auto-substitution
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { kv } from "@vercel/kv";
+import { ethers } from "ethers";
 
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -33,6 +36,7 @@ import {
   isKeystoreReady,
   chargeAgainstDailyLimit,
   refundDailySpend,
+  resolveWallet,
 } from "@/app/lib/agentic-wallet";
 import { getSubscription, hasMultichainScope, getApiKeyRecord } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
@@ -46,23 +50,34 @@ import type { Address, Hex } from "viem";
 
 export const runtime = "nodejs";
 
+const IDEMPOTENCY_TTL_SEC = 10 * 60;
+
 interface SendBody {
   chain?: string;
   token?: string;
   to?: string;
   amount?: string;
-  // Owner-sig path (Mode A/B in dashboard) — intent-bound challenge.
-  // `nonce` is the action-challenge token issued by
-  // /api/auth/action-challenge (NOT the session nonce). `signature`
-  // signs the canonical intent message rebuilt server-side from the
-  // intent fields below. A successful verify atomically consumes the
-  // challenge, so re-submitting the same body fails NONCE_EXPIRED —
-  // that is *also* the single-send idempotency guard.
+  /**
+   * Lowercased Agent Wallet address to send from. Optional in Mode C
+   * (omitting defaults to the owner's default wallet), required in
+   * owner-sig mode (so the intent message can pin a specific wallet).
+   */
+  walletId?: string;
+  // Mode A/B — intent-bound challenge over the exact send shape.
   ownerAddress?: string;
   nonce?: string;
   signature?: string;
   // Mode C — server-mediated, MCP holds only the apiKey
   apiKey?: string;
+}
+
+interface SendRecord {
+  txHash?: string;
+  status: "complete" | "failed";
+  startedAt: number;
+  finishedAt: number;
+  relayBody: unknown;
+  relayStatus: number;
 }
 
 function isHexAddress(s: unknown): s is string {
@@ -74,35 +89,58 @@ function isPositiveDecimalString(s: unknown): s is string {
 }
 
 /**
- * Resolve the owner address from either an EIP-191 signature (Mode A/B)
- * or an apiKey (Mode C). Returns the lowercased owner string on success,
- * or a 4xx NextResponse on auth failure.
+ * Send-level fingerprint. Mirrors `agenticBatchFingerprint` but binds
+ * walletId so a fresh wallet's first send doesn't collide with another
+ * wallet's prior send to the same recipient/amount.
  */
-async function resolveOwner(req: NextRequest, body: SendBody): Promise<string | NextResponse> {
+function agenticSendFingerprint(
+  owner: string,
+  walletId: string,
+  chain: string,
+  token: string,
+  to: string,
+  amount: string,
+): string {
+  const seed = [
+    owner.toLowerCase(),
+    walletId.toLowerCase(),
+    chain,
+    token,
+    to.toLowerCase(),
+    amount,
+  ].join("|");
+  return ethers.keccak256(ethers.toUtf8Bytes(seed)).slice(2, 18);
+}
+
+function sendKey(fp: string): string {
+  return `aw:send:${fp}`;
+}
+
+/**
+ * Resolve owner from auth, given the (already-validated) intent fields.
+ * The owner-sig path requires walletId in the body so it can bind to
+ * the intent message; Mode C defaults walletId to the owner's default
+ * wallet.
+ */
+async function resolveOwner(
+  req: NextRequest,
+  body: SendBody,
+): Promise<string | NextResponse> {
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "agentic-wallet-send", 30, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  // ── Mode A/B — owner sig present, intent-bound challenge required ─────
-  // We refuse the legacy "session signature" path here. Fund-moving
-  // routes MUST receive a one-time challenge signed over the exact
-  // canonical intent (chain | token | recipient | amount | wallet).
-  // That single change closes two findings at once: (a) a session
-  // signature stolen from localStorage cannot fire a payment, and
-  // (b) the single-use challenge IS the idempotency guard — replaying
-  // the same signed body returns NONCE_EXPIRED instead of a second
-  // settlement.
+  // Mode A/B — owner EIP-191 signature with intent challenge
   if (typeof body.signature === "string" && body.signature.length > 0) {
     if (
       !isAgenticChainKey(body.chain) ||
       (body.token !== "USDC" && body.token !== "USDT") ||
       !isHexAddress(body.to) ||
-      !isPositiveDecimalString(body.amount)
+      !isPositiveDecimalString(body.amount) ||
+      !body.walletId ||
+      typeof body.walletId !== "string"
     ) {
-      // The intent fields are also checked at the top of POST, but we
-      // rebuild the canonical message HERE so the auth path doesn't
-      // depend on later validation order. Fail closed.
       return NextResponse.json({ error: "INVALID_INTENT_FOR_AUTH" }, { status: 400 });
     }
     const result = await requireIntentAuth({
@@ -111,6 +149,7 @@ async function resolveOwner(req: NextRequest, body: SendBody): Promise<string | 
       signature: body.signature ?? null,
       action: "agentic.send",
       intent: {
+        walletId: body.walletId.toLowerCase(),
         chain: body.chain,
         token: body.token,
         recipient: body.to.toLowerCase(),
@@ -126,10 +165,8 @@ async function resolveOwner(req: NextRequest, body: SendBody): Promise<string | 
     return result;
   }
 
-  // ── Mode C — server-mediated via apiKey ────────────────────────────────
+  // Mode C — apiKey only
   if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
-    // Sandbox keys fabricate txHashes on the relay — never what an Agent
-    // Wallet caller wants. Reject up front.
     if (body.apiKey.startsWith("q402_test_")) {
       return NextResponse.json(
         { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet sends." },
@@ -140,9 +177,6 @@ async function resolveOwner(req: NextRequest, body: SendBody): Promise<string | 
     if (!rec || !rec.active) {
       return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
     }
-    // ownerAddress is optional in Mode C — when supplied it's just a
-    // double-check that the caller knows whose wallet it is. When
-    // omitted we derive it from the apiKey itself.
     if (typeof body.ownerAddress === "string" && body.ownerAddress.length > 0) {
       if (!isHexAddress(body.ownerAddress)) {
         return NextResponse.json({ error: "INVALID_OWNER" }, { status: 400 });
@@ -189,21 +223,50 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const ready = isKeystoreReady();
   if (!ready.ok) {
-    // Detail intentionally absent from the client body — the operator
-    // sees the underlying reason in server logs via isKeystoreReady,
-    // the caller only learns the surface is unavailable.
     console.error("[agentic-wallet/send] keystore unavailable:", ready.reason);
     return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
   }
 
-  const wallet = await getActiveAgenticWallet(owner);
+  // Resolve the specific wallet. Owner-sig path bound walletId in the
+  // challenge; Mode C falls back to default if walletId not specified.
+  const wallet = await resolveWallet(owner, body.walletId ?? null);
   if (!wallet) {
     return NextResponse.json(
       {
         error: "AGENTIC_WALLET_NOT_FOUND",
-        message: "Create an Agent Wallet in your dashboard before calling /send.",
+        message: body.walletId
+          ? `No active wallet with id ${body.walletId} for this owner.`
+          : "Create an Agent Wallet in your dashboard before calling /send.",
       },
       { status: 404 },
+    );
+  }
+  // Re-check soft-delete defensively (resolveWallet may have returned a
+  // stale-by-time record).
+  if (wallet.deletedAt && Date.now() >= wallet.deletedAt) {
+    return NextResponse.json({ error: "AGENTIC_WALLET_ARCHIVED" }, { status: 410 });
+  }
+
+  const walletId = wallet.address.toLowerCase();
+
+  // ── Idempotency check: same intent within window → return cached ───────
+  // The owner-sig path already burned its single-use challenge in
+  // resolveOwner. A retry MUST mint a fresh challenge — but the new
+  // signature still hashes to the same `fp` because the intent fields
+  // are unchanged. The cache returns the original txHash, no double-fire.
+  const fp = agenticSendFingerprint(owner, walletId, body.chain, body.token, body.to, body.amount);
+  const idempotencyKey = sendKey(fp);
+  const cached = await kv.get<SendRecord>(idempotencyKey);
+  if (cached) {
+    return NextResponse.json(
+      {
+        ...((cached.relayBody as Record<string, unknown>) ?? {}),
+        idempotent: true,
+        status: cached.status,
+        startedAt: cached.startedAt,
+        finishedAt: cached.finishedAt,
+      },
+      { status: cached.relayStatus },
     );
   }
 
@@ -218,9 +281,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Atomic budget reservation. If the relay fails downstream we refund
-  // explicitly so the budget releases.
-  const reservation = await chargeAgainstDailyLimit(owner, numAmount, wallet.dailyLimitUsd);
+  // Reserve budget atomically.
+  const reservation = await chargeAgainstDailyLimit(owner, walletId, numAmount, wallet.dailyLimitUsd);
   if (!reservation.allowed) {
     return NextResponse.json(
       {
@@ -233,11 +295,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
   const refundIfHeld = async () => {
-    await refundDailySpend(owner, numAmount).catch(() => {});
+    await refundDailySpend(owner, walletId, numAmount).catch(() => {});
   };
 
-  // Subscription gate — BNB is open during the trial. Anything else
-  // requires the multichain scope (paid plan or admin grant).
+  // Subscription gate — BNB free, others require multichain.
   const sub = await getSubscription(owner);
   if (body.chain !== "bnb" && !hasMultichainScope(sub)) {
     await refundIfHeld();
@@ -247,26 +308,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── apiKey resolution: Mode C uses the presented key, dashboard
-  //     (owner-sig) uses sub's auto-pick ───────────────────────────────
-  // The original auto-pick (`trialApiKey || apiKey` for BNB,
-  // `apiKey` for non-BNB) silently substituted the relay-time key for
-  // whatever the caller presented. That had two consequences:
-  //
-  //  1. Rotation hole — a stale apiKey that was still active in KV
-  //     could pass Mode C owner-auth, after which the route would
-  //     drain the user's *current* paid quota. Closed by the
-  //     freshness check.
-  //
-  //  2. Scope escalation — a trial apiKey (BNB-only at /api/relay)
-  //     presented via Mode C for a non-BNB chain would pass freshness
-  //     and then ride the user's *paid* key through relay. Closes the
-  //     paid-quota drain even when the freshness check passes.
-  //
-  // We now demand: the presented Mode C key IS the key sent to relay.
-  // No substitution. Scope is enforced by what the presented key can
-  // actually settle — trial-on-non-BNB is rejected here so the user
-  // gets a clean 402 instead of a relay-side 400.
+  // ── apiKey resolution: Mode C uses presented; owner-sig uses auto-pick ─
   let apiKey: string | undefined;
   if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
     const presented = body.apiKey;
@@ -284,9 +326,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 401 },
       );
     }
-    // Trial keys can settle BNB only. Reject any other chain even if
-    // freshness passes, so the presented key's scope determines what
-    // actually moves.
     if (isTrial && body.chain !== "bnb") {
       await refundIfHeld();
       return NextResponse.json(
@@ -302,12 +341,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
     apiKey = presented;
   } else {
-    // Owner-sig path (Mode A/B from dashboard / MCP). Keep the
-    // auto-pick semantics that existing dashboard flows expect.
-    apiKey =
-      body.chain === "bnb"
-        ? sub?.trialApiKey || sub?.apiKey
-        : sub?.apiKey;
+    apiKey = body.chain === "bnb" ? sub?.trialApiKey || sub?.apiKey : sub?.apiKey;
   }
 
   if (!apiKey) {
@@ -324,8 +358,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "relay_unavailable" }, { status: 503 });
   }
 
-  // Server-side sign for the chosen chain.
+  // Sign + submit
   const pk = decryptPrivateKey(wallet);
+  const startedAt = Date.now();
   let signed;
   try {
     signed = await signAgenticPayment({
@@ -364,9 +399,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const relayBody = await relayResponse.json().catch(() => null);
   const success =
     relayResponse.ok && relayBody && typeof relayBody === "object" && "txHash" in relayBody;
-  // Refund the reservation when the relay didn't actually settle.
   if (!success) {
     await refundIfHeld();
+  }
+
+  // Persist the result in the idempotency cache so subsequent retries
+  // see the same outcome. We cache BOTH success and failure — a failed
+  // attempt is still "this exact intent has been tried", so a fresh
+  // attempt requires the user to actually wait out the TTL OR change
+  // some field (recipient, amount). This prevents both double-spend
+  // and double-failure-side-effect within the window.
+  const finalRecord: SendRecord = {
+    txHash:
+      success && relayBody && typeof relayBody === "object"
+        ? (relayBody as { txHash?: string }).txHash
+        : undefined,
+    status: success ? "complete" : "failed",
+    startedAt,
+    finishedAt: Date.now(),
+    relayBody: relayBody ?? null,
+    relayStatus: relayResponse.status,
+  };
+  // Best-effort cache write — settlement already happened or didn't,
+  // failing the cache shouldn't fail the request.
+  try {
+    await kv.set(idempotencyKey, finalRecord, { ex: IDEMPOTENCY_TTL_SEC });
+  } catch (e) {
+    console.error("[agentic-wallet/send] idempotency cache write failed:", e);
   }
 
   return NextResponse.json(

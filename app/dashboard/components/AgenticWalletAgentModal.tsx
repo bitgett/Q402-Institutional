@@ -5,7 +5,11 @@
  *
  * Three-step flow:
  *   1. Name + description form → POST /register-agent (prepare)
- *      • Server pins metadata to IPFS, returns calldata
+ *      • Server publishes Q402-flavoured agent metadata at a stable
+ *        self-hosted HTTPS URL (content-addressed by keccak hash) and
+ *        returns the calldata to mint the agent NFT. Not IPFS — we
+ *        used to pin to Pinata but the dependency was rip'd in
+ *        commit 46e8ae7 to remove the silent 503 failure mode.
  *   2. User signs the register tx through their MetaMask
  *      (the NFT mints to msg.sender, gas ~$0.05 on BSC)
  *   3. After receipt → POST /register-agent/confirm
@@ -17,12 +21,13 @@
  */
 
 import { useState } from "react";
-import { getAuthCreds } from "@/app/lib/auth-client";
+import { getActionAuth } from "@/app/lib/auth-client";
 import { ensureWalletChain, getActiveProvider } from "@/app/lib/wallet";
 import type { WalletChainKey } from "@/app/lib/wallet";
 
 interface Props {
   walletAddress: string;
+  walletId: string;
   ownerAddress: string;
   signMessage: (message: string) => Promise<string | null>;
   onClose: () => void;
@@ -59,6 +64,7 @@ interface ConfirmResponse {
 
 export function AgenticWalletAgentModal({
   walletAddress,
+  walletId,
   ownerAddress,
   signMessage,
   onClose,
@@ -88,10 +94,17 @@ export function AgenticWalletAgentModal({
     setError(null);
     setStage("preparing");
     try {
-      // ── Step 1: prepare (pins metadata, returns calldata) ─────────────
-      const auth = await getAuthCreds(ownerAddress, signMessage);
-      if (!auth) {
-        fail("Sign the auth challenge to start registration.", "generic");
+      // ── Step 1: prepare — intent-bound (`agentic.register`). Signed
+      //     message embeds walletId + network + name so a leaked
+      //     session sig can't publish a different wallet's identity. ─
+      const prepAuth = await getActionAuth(
+        ownerAddress,
+        "agentic.register",
+        { walletId, network: "bsc", name: name.trim() },
+        signMessage,
+      );
+      if (!prepAuth) {
+        fail("Sign the registration challenge in your wallet.", "generic");
         return;
       }
       const prepRes = await fetch("/api/wallet/agentic/register-agent", {
@@ -99,8 +112,9 @@ export function AgenticWalletAgentModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address: ownerAddress,
-          nonce: auth.nonce,
-          signature: auth.signature,
+          walletId,
+          nonce: prepAuth.challenge,
+          signature: prepAuth.signature,
           name: name.trim(),
           description: description.trim() || undefined,
           network: "bsc",
@@ -153,17 +167,31 @@ export function AgenticWalletAgentModal({
       // Small initial delay so the receipt is more likely indexed.
       await new Promise((r) => setTimeout(r, 4000));
 
-      // Up to 6 polls × 5s = 30s window. BSC blocks are ~3s.
+      // Up to 6 polls × 5s = 30s window. BSC blocks are ~3s. Confirm
+      // is now intent-bound on (walletId, txHash, network) — mint a
+      // fresh challenge per attempt so the canonical bytes match the
+      // post-receipt-known txHash.
       let confirmed: ConfirmResponse | null = null;
       let lastErr = "";
       for (let i = 0; i < 6; i++) {
+        const confAuth = await getActionAuth(
+          ownerAddress,
+          "agentic.register.confirm",
+          { walletId, txHash: hash.toLowerCase(), network: "bsc" },
+          signMessage,
+        );
+        if (!confAuth) {
+          lastErr = "Sign the confirm challenge in your wallet.";
+          break;
+        }
         const confRes = await fetch("/api/wallet/agentic/register-agent/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             address: ownerAddress,
-            nonce: auth.nonce,
-            signature: auth.signature,
+            walletId,
+            nonce: confAuth.challenge,
+            signature: confAuth.signature,
             txHash: hash,
             network: "bsc",
           }),
@@ -399,7 +427,7 @@ export function AgenticWalletAgentModal({
         {(stage === "preparing" || stage === "awaiting-sign" || stage === "confirming") && (
           <div className="py-3 space-y-2 text-sm text-white/65">
             <StageLine
-              label="Pinning agent metadata to IPFS"
+              label="Publishing agent metadata"
               state={stage === "preparing" ? "active" : "done"}
             />
             <StageLine

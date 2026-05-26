@@ -1,16 +1,18 @@
 /**
  * POST /api/wallet/agentic/restore
  *
- * Clear the soft-delete marker on the caller's Agent Wallet, returning
- * it to the active set. Closes the loop on the 7-day grace promise —
- * archive can be undone here until the grace window expires (or the
- * hard-delete cron sweeps the record, whichever comes first).
+ * Clear the soft-delete marker on a specific Agent Wallet, returning it
+ * to the active set. Multi-wallet Phase 3: takes walletId, intent-bound.
  *
- * Auth: owner EIP-191 session signature (same as other CRUD methods).
+ * Auth: intent-bound `agentic.restore` action. Restore isn't destructive
+ * — it brings a record BACK — but binding it to the walletId still
+ * pays off: it pins which wallet is being restored so a leaked session
+ * signature can't surface a previously-archived wallet the user didn't
+ * intend to revive.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/app/lib/auth";
+import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { restoreAgenticWallet } from "@/app/lib/agentic-wallet";
 
@@ -18,6 +20,7 @@ export const runtime = "nodejs";
 
 interface RestoreBody {
   address?: string;
+  walletId?: string;
   nonce?: string;
   signature?: string;
 }
@@ -35,11 +38,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const result = await requireAuth(
-    body.address ?? null,
-    body.nonce ?? null,
-    body.signature ?? null,
-  );
+  if (!body.walletId || typeof body.walletId !== "string") {
+    return NextResponse.json({ error: "walletId_required" }, { status: 400 });
+  }
+
+  const result = await requireIntentAuth({
+    address: body.address ?? null,
+    challenge: body.nonce ?? null,
+    signature: body.signature ?? null,
+    action: "agentic.restore",
+    intent: { walletId: body.walletId.toLowerCase() },
+  });
   if (typeof result !== "string") {
     return NextResponse.json(
       { error: result.error, code: result.code },
@@ -49,7 +58,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const owner = result;
 
   try {
-    await restoreAgenticWallet(owner);
+    await restoreAgenticWallet(owner, body.walletId);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (msg === "AGENTIC_WALLET_GRACE_EXPIRED") {

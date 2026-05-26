@@ -1,25 +1,20 @@
 /**
  * POST /api/wallet/agentic/export
  *
- * Reveals the caller's Agent Wallet private key once. Designed to back
- * the "custodial + export" promise: at any point the user can pull the
- * key out of Q402's keystore and continue self-custody from MetaMask /
- * a hardware wallet.
+ * Reveals a specific Agent Wallet's private key once. Multi-wallet
+ * Phase 3: the caller must specify walletId; the intent message embeds
+ * it so a signature scoped to wallet A cannot reveal wallet B's key.
  *
  * Hard requirements (one bypassed = the key never leaves the server):
- *   1. A FRESH one-time challenge — not a session nonce. Issued via
- *      GET /api/auth/challenge; consumed atomically by requireFreshAuth.
- *      A leaked session nonce can't be turned into an export.
- *   2. The caller's lowercased address must match the agentic wallet's
- *      ownerAddr — verified after challenge consumption.
+ *   1. A FRESH intent-bound challenge (action=agentic.export). The
+ *      canonical message is rebuilt server-side from the walletId — a
+ *      session sig has no path here.
+ *   2. The caller's lowercased address must own the walletId.
  *   3. The wallet must not be soft-deleted. Archived wallets cannot
  *      export; restore first.
- *   4. Every successful export is appended to the per-owner audit log
- *      (timestamp + IP). The log is capped to the most recent 50 events.
- *
- * Response surface: the decrypted private key returns ONCE in the JSON
- * body. The client UI is expected to clear it from memory after the
- * user copies it. We never persist plaintext anywhere else.
+ *   4. Every successful export is appended to the per-wallet audit log.
+ *      A KV failure on audit fires an ops alert (recordExportEvent
+ *      rethrows — see audit P1 #5 in agentic-wallet.ts).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -38,13 +33,12 @@ export const runtime = "nodejs";
 
 interface ExportBody {
   ownerAddress?: string;
+  walletId?: string;
   challenge?: string;
   signature?: string;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  // Throttle hard — export is the most sensitive surface in the
-  // agentic-wallet feature.
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "agentic-wallet-export", 5, 300))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -57,21 +51,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // requireIntentAuth verifies + atomically consumes the one-time
-  // challenge AND rebuilds the canonical message bound to this exact
-  // action. A fresh-but-generic challenge minted for, say, archive
-  // confirmation cannot be redirected here — the rebuilt
-  // `Action: agentic.export` line on the export verifier won't match
-  // the bytes the user signed for any other action.
+  if (!body.walletId || typeof body.walletId !== "string") {
+    return NextResponse.json({ error: "walletId_required" }, { status: 400 });
+  }
+
   const authResult = await requireIntentAuth({
     address: body.ownerAddress ?? null,
     challenge: body.challenge ?? null,
     signature: body.signature ?? null,
     action: "agentic.export",
     intent: {
-      // The wallet address the export targets, lowercased so client +
-      // server canonical bytes agree regardless of case.
-      target: (body.ownerAddress ?? "").toLowerCase(),
+      walletId: body.walletId.toLowerCase(),
     },
   });
   if (typeof authResult !== "string") {
@@ -87,13 +77,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
   }
 
-  const wallet = await getAgenticWallet(owner);
+  const wallet = await getAgenticWallet(owner, body.walletId);
   if (!wallet) {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
-  // Archived wallets cannot export — restore the wallet first so the
-  // export action shows up against a non-deleted record in the audit
-  // log.
   if (wallet.deletedAt) {
     return NextResponse.json(
       { error: "WALLET_ARCHIVED", message: "Restore the wallet before exporting." },
@@ -109,16 +96,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "decrypt_failed" }, { status: 500 });
   }
 
-  // Audit log — best-effort because the export already succeeded by the
-  // time this runs. We still fire an ops alert on failure so the team
-  // hears about it (export is the most sensitive action, a missing
-  // audit row should not stay quiet).
-  await recordExportEvent(owner, { ip }).catch((e) => {
+  // Audit log — recordExportEvent now rethrows on KV failure (audit P1
+  // #5). Catching here so the export still succeeds, but firing a
+  // critical ops alert because the key was revealed without an audit
+  // row.
+  await recordExportEvent(owner, body.walletId, { ip }).catch((e) => {
     console.error("[agentic-wallet/export] audit log failed:", e);
     void sendOpsAlert(
-      `Agentic Wallet EXPORT audit log failed for owner ${owner} (ip ${ip}). ` +
-      `Key was still revealed to the client; KV write did not persist. ` +
-      `Investigate KV health.`,
+      `Agentic Wallet EXPORT audit log failed for owner ${owner} ` +
+        `(walletId ${body.walletId}, ip ${ip}). ` +
+        `Key was still revealed to the client; KV write did not persist. ` +
+        `Investigate KV health.`,
       "critical",
     );
   });
@@ -126,6 +114,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {
       address: wallet.address,
+      walletId: wallet.address.toLowerCase(),
       privateKey: pk,
       exportedAt: Date.now(),
       warning:

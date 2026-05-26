@@ -73,14 +73,18 @@ export function AgenticWalletDangerZone({
       )
     : null;
 
+  const walletId = wallet.address.toLowerCase();
+
   async function archive() {
     setArchiving(true);
     setArchiveError(null);
     try {
+      // walletId in the intent so the signed message is scoped to THIS
+      // wallet. A leaked sig from one wallet can't archive another.
       const auth = await getActionAuth(
         address,
         "agentic.archive",
-        { target: address.toLowerCase() },
+        { walletId },
         signMessage,
       );
       if (!auth) {
@@ -92,6 +96,7 @@ export function AgenticWalletDangerZone({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address,
+          walletId,
           nonce: auth.challenge,
           signature: auth.signature,
         }),
@@ -114,25 +119,27 @@ export function AgenticWalletDangerZone({
     setRestoring(true);
     setRestoreError(null);
     try {
+      // Restore is now intent-bound (`agentic.restore`) and walletId-
+      // scoped. Server's POST /restore expects the same shape as DELETE.
       const auth = await getActionAuth(
         address,
-        "agentic.archive",
-        { target: address.toLowerCase() },
+        "agentic.restore",
+        { walletId },
         signMessage,
       );
-      // Restore reuses the archive's action challenge intent shape —
-      // it's the same fund-scoped operation in reverse, and the server's
-      // /restore route is session-auth, not intent-auth (it's not
-      // destructive). Falling through to the existing restore endpoint
-      // with a session sig is the existing path.
       if (!auth) {
-        setRestoreError("Sign the auth challenge to restore.");
+        setRestoreError("Sign the restore challenge in your wallet.");
         return;
       }
       const res = await fetch("/api/wallet/agentic/restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, nonce: auth.challenge, signature: auth.signature }),
+        body: JSON.stringify({
+          address,
+          walletId,
+          nonce: auth.challenge,
+          signature: auth.signature,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -206,6 +213,7 @@ export function AgenticWalletDangerZone({
       {exportOpen && (
         <AgenticWalletExportModal
           walletAddress={wallet.address}
+          walletId={walletId}
           ownerAddress={address}
           signMessage={signMessage}
           onClose={() => setExportOpen(false)}

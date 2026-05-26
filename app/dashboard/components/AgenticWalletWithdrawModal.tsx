@@ -23,6 +23,7 @@ import type { ChainKey } from "@/app/lib/relayer";
 
 interface Props {
   walletAddress: string;
+  walletId: string;
   ownerAddress: string;
   signMessage: (message: string) => Promise<string | null>;
   perTxMaxUsd: number | null;
@@ -124,6 +125,7 @@ function deriveSweepAmount(
 
 export function AgenticWalletWithdrawModal({
   walletAddress,
+  walletId,
   ownerAddress,
   signMessage,
   perTxMaxUsd,
@@ -147,6 +149,7 @@ export function AgenticWalletWithdrawModal({
         address: ownerAddress,
         nonce: auth.nonce,
         sig: auth.signature,
+        walletId,
         force: "1",
       }).toString();
       const res = await fetch(`/api/wallet/agentic/balance?${qs}`);
@@ -162,7 +165,7 @@ export function AgenticWalletWithdrawModal({
     } finally {
       setLoading(false);
     }
-  }, [ownerAddress, signMessage]);
+  }, [ownerAddress, signMessage, walletId]);
 
   useEffect(() => {
     void load();

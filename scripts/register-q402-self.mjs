@@ -269,7 +269,10 @@ async function main() {
   }
   if (!agentId) die("Registered event not found in receipt");
 
-  const scanUrl = `https://8004scan.io/eip155:56/agent/${agentId}`;
+  // 8004scan uses chain-slug paths (`/agents/bsc/{id}`), NOT the
+  // EIP-155 CAIP-2 form the earlier draft of this script printed.
+  // Keep this in sync with `scanUrl()` in app/lib/erc8004.ts.
+  const scanUrl = `https://8004scan.io/agents/bsc/${agentId}`;
   process.stderr.write("\n=================================================================\n");
   process.stderr.write(`✓ Q402 registered as ERC-8004 agent #${agentId} on BSC mainnet\n`);
   process.stderr.write(`  tx:      https://bscscan.com/tx/${txHash}\n`);

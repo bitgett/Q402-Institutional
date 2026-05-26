@@ -1,20 +1,15 @@
 /**
  * POST /api/wallet/agentic/info-by-key
  *
- * Read-only Agent Wallet introspection authenticated by apiKey alone
- * (no EIP-191 owner sig). Trades a little visibility for a lot of MCP
- * ergonomics: an agent running headless can answer "what's in my agent
- * wallet?" without bouncing through the dashboard for a signature.
+ * Read-only Agent Wallet introspection authenticated by apiKey alone.
+ * MCP path. Multi-wallet aware: takes optional `walletId` (defaults to
+ * the apiKey owner's default wallet) and can also list all wallets
+ * (`list: true`).
  *
- * Returns: wallet record (address, caps, deletedAt) + a balance snapshot
- * across all 9 EVM chains. The balance snapshot honors the same 5-minute
- * KV cache as GET /api/wallet/agentic/balance so heavy MCP polling stays
- * cheap.
- *
- * Trust model: the apiKey is enough auth here because (a) the read is
- * scoped to the apiKey's owner, and (b) no funds move. Sandbox keys are
- * rejected just so an MCP test-run doesn't accidentally expose the real
- * wallet's record.
+ * Audit fix (P1 #3): excludes soft-deleted wallets. Previously this
+ * route returned the full record even after archive — a leaked apiKey
+ * could enumerate caps + addresses of a wallet in its 7-day grace
+ * window.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -22,7 +17,12 @@ import { kv } from "@vercel/kv";
 
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { getApiKeyRecord } from "@/app/lib/db";
-import { getAgenticWallet } from "@/app/lib/agentic-wallet";
+import {
+  getActiveAgenticWallet,
+  listAgenticWallets,
+  resolveWallet,
+  type AgenticWalletRecord,
+} from "@/app/lib/agentic-wallet";
 import {
   fetchAgenticBalances,
   type AgenticBalances,
@@ -32,34 +32,46 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const BALANCE_CACHE_TTL_SEC = 5 * 60;
-const BALANCE_CACHE_KEY = (owner: string) => `aw:balance:${owner.toLowerCase()}`;
+const BALANCE_CACHE_KEY = (owner: string, walletId: string) =>
+  `aw:balance:${owner.toLowerCase()}:${walletId.toLowerCase()}`;
 
 interface InfoBody {
   apiKey?: string;
+  /** Optional — omit to use default wallet, ignored when `list: true`. */
+  walletId?: string;
+  /** When true, returns all active wallets for the owner. */
+  list?: boolean;
 }
 
-/**
- * Public shape the apiKey-auth read surface returns. The owner EOA is
- * deliberately *masked* (first 6 + last 4) rather than fully exposed:
- * an exfiltrated apiKey already maps the wallet to its owner, but the
- * fully-resolved owner address is not needed by MCP introspection and
- * shouldn't be the join surface for "match this apiKey to an on-chain
- * EOA". The masked form is enough for the AI to render "your wallet
- * 0xABCD…1234 sits on top of MetaMask 0xDEF0…5678" — no more.
- */
 interface PublicWallet {
   /** Masked owner EOA — `0xAAAA…BBBB` (6 + 4). */
   ownerAddrShort: string;
   address: string;
+  walletId: string;
   createdAt: number;
   deletedAt: number | null;
   dailyLimitUsd: number | null;
   perTxMaxUsd: number | null;
   erc8004AgentId: string | null;
+  label: string | null;
 }
 
 function maskAddr(addr: string): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function project(wallet: AgenticWalletRecord): PublicWallet {
+  return {
+    ownerAddrShort: maskAddr(wallet.ownerAddr),
+    address: wallet.address,
+    walletId: wallet.address.toLowerCase(),
+    createdAt: wallet.createdAt,
+    deletedAt: wallet.deletedAt ?? null,
+    dailyLimitUsd: wallet.dailyLimitUsd ?? null,
+    perTxMaxUsd: wallet.perTxMaxUsd ?? null,
+    erc8004AgentId: wallet.erc8004AgentId ?? null,
+    label: wallet.label ?? null,
+  };
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -91,36 +103,51 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const owner = rec.address.toLowerCase();
 
-  const wallet = await getAgenticWallet(owner);
+  // ── List mode ─────────────────────────────────────────────────────────
+  if (body.list === true) {
+    const all = await listAgenticWallets(owner);
+    // Exclude soft-deleted from the list surface — same posture as
+    // single-wallet info: an archived wallet shouldn't be enumerable
+    // via apiKey auth.
+    const active = all.filter(
+      (w) => !w.deletedAt || Date.now() < w.deletedAt,
+    );
+    return NextResponse.json({
+      wallets: active.map(project),
+      count: active.length,
+    });
+  }
+
+  // ── Single-wallet mode ────────────────────────────────────────────────
+  const wallet = body.walletId
+    ? await getActiveAgenticWallet(owner, body.walletId)
+    : await resolveWallet(owner, null);
   if (!wallet) {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
+  // Defensive — resolveWallet returns the default which is supposed to
+  // be active, but double-check:
+  if (wallet.deletedAt && Date.now() >= wallet.deletedAt) {
+    return NextResponse.json({ error: "AGENTIC_WALLET_ARCHIVED" }, { status: 410 });
+  }
 
-  const publicWallet: PublicWallet = {
-    ownerAddrShort: maskAddr(wallet.ownerAddr),
-    address: wallet.address,
-    createdAt: wallet.createdAt,
-    deletedAt: wallet.deletedAt ?? null,
-    dailyLimitUsd: wallet.dailyLimitUsd ?? null,
-    perTxMaxUsd: wallet.perTxMaxUsd ?? null,
-    erc8004AgentId: wallet.erc8004AgentId ?? null,
-  };
+  const walletId = wallet.address.toLowerCase();
+  const publicWallet = project(wallet);
 
-  // Balance: try cache, then live fetch. Cache miss is acceptable — the
-  // route still returns the wallet info, just without a balance.
+  // Balance — try cache, then live read.
   let balance: AgenticBalances | null = null;
   try {
-    const cached = await kv.get<AgenticBalances>(BALANCE_CACHE_KEY(owner));
+    const cached = await kv.get<AgenticBalances>(BALANCE_CACHE_KEY(owner, walletId));
     if (cached && cached.asOf && Date.now() - cached.asOf < BALANCE_CACHE_TTL_SEC * 1000) {
       balance = cached;
     }
-  } catch { /* cache miss falls through to live read */ }
+  } catch { /* cache miss falls through */ }
 
-  if (!balance && !wallet.deletedAt) {
+  if (!balance) {
     try {
       balance = await fetchAgenticBalances(wallet.address);
       try {
-        await kv.set(BALANCE_CACHE_KEY(owner), balance, { ex: BALANCE_CACHE_TTL_SEC });
+        await kv.set(BALANCE_CACHE_KEY(owner, walletId), balance, { ex: BALANCE_CACHE_TTL_SEC });
       } catch { /* best-effort */ }
     } catch {
       balance = null;

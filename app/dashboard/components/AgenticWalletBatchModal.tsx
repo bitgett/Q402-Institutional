@@ -12,14 +12,16 @@
  * "Submit" button doubles as a safe retry if the network blips.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
+import { friendlyError, type FriendlyError, type BackendError } from "@/app/lib/agentic-wallet-friendly-error";
 import type { ChainKey } from "@/app/lib/relayer";
 
 interface Props {
   walletAddress: string;
+  walletId: string;
   ownerAddress: string;
   signMessage: (message: string) => Promise<string | null>;
   onClose: () => void;
@@ -80,6 +82,7 @@ function isDecimalAmount(s: string) {
 
 export function AgenticWalletBatchModal({
   walletAddress,
+  walletId,
   ownerAddress,
   signMessage,
   onClose,
@@ -89,13 +92,16 @@ export function AgenticWalletBatchModal({
   const chainCfg = CHAIN_OPTIONS.find((c) => c.key === chain) ?? CHAIN_OPTIONS[0];
   const allowedTokens = chainCfg.tokens;
   const [token, setToken] = useState<Token>("USDT");
-  if (!allowedTokens.includes(token)) {
-    queueMicrotask(() => setToken(allowedTokens[0]));
-  }
+  // Effect-based token snap (was queueMicrotask setState in render — a
+  // React 19 warning + an eventual error).
+  useEffect(() => {
+    if (!allowedTokens.includes(token)) setToken(allowedTokens[0]);
+  }, [allowedTokens, token]);
   const [rows, setRows] = useState<Row[]>([{ to: "", amount: "" }]);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FriendlyError | null>(null);
   const [resp, setResp] = useState<BatchResponse | null>(null);
+  const inFlightRef = useRef(false);
 
   function updateRow(i: number, patch: Partial<Row>) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -115,36 +121,46 @@ export function AgenticWalletBatchModal({
   const canSubmit = !submitting && validRows;
 
   async function submit() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setError(null);
     if (!validRows) {
-      setError("All rows need a valid 0x recipient and a positive decimal amount.");
+      setError({ headline: "All rows need a valid 0x recipient and a positive decimal amount." });
+      inFlightRef.current = false;
       return;
     }
     setSubmitting(true);
     try {
-      // Compute the same fingerprint the server uses for both
-      // idempotency and the canonical intent message. The user signs
-      // a payload that pins the exact recipient set — replaying the
-      // same signed bytes against a different recipient list fails
-      // verification.
-      const fp = agenticBatchFingerprint(ownerAddress, chain, token, trimmedRows);
+      // Fingerprint matches the server's batch idempotency key. Mixes
+      // owner+walletId so two wallets sending the same recipient set
+      // share no cache slot. The user signs an intent that pins this
+      // exact recipient set + walletId — a leaked signature can't
+      // drain a different wallet.
+      const fp = agenticBatchFingerprint(
+        `${ownerAddress.toLowerCase()}:${walletId}`,
+        chain,
+        token,
+        trimmedRows,
+      );
       const auth = await getActionAuth(
         ownerAddress,
         "agentic.batch",
-        { chain, token, rows: String(trimmedRows.length), fp },
+        { walletId, chain, token, rows: String(trimmedRows.length), fp },
         signMessage,
       );
       if (!auth) {
-        setError(
-          "Sign the batch challenge in your wallet to authorize. The signature " +
+        setError({
+          headline:
+            "Sign the batch challenge in your wallet to authorize. The signature " +
             "is bound to this exact recipient set.",
-        );
+        });
         return;
       }
       const res = await fetch("/api/wallet/agentic/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          walletId,
           chain,
           token,
           recipients: trimmedRows,
@@ -153,19 +169,17 @@ export function AgenticWalletBatchModal({
           signature: auth.signature,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as
-        | (BatchResponse & { error?: string; message?: string })
-        | Record<string, never>;
+      const data = (await res.json().catch(() => ({}))) as BatchResponse & BackendError;
       if (!res.ok) {
-        const msg = "message" in data ? data.message : "error" in data ? data.error : null;
-        setError(msg ?? `Batch failed (HTTP ${res.status}).`);
+        setError(friendlyError(res.status, data));
         return;
       }
       setResp(data as BatchResponse);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError({ headline: e instanceof Error ? e.message : String(e) });
     } finally {
       setSubmitting(false);
+      inFlightRef.current = false;
     }
   }
 
@@ -176,7 +190,7 @@ export function AgenticWalletBatchModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={onClose}
+      onClick={submitting ? undefined : onClose}
     >
       <div
         className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border p-6 space-y-4"
@@ -192,8 +206,9 @@ export function AgenticWalletBatchModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="text-white/40 hover:text-white text-lg leading-none"
+            onClick={submitting ? undefined : onClose}
+            disabled={submitting}
+            className="text-white/40 hover:text-white text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Close"
           >
             ×
@@ -364,7 +379,24 @@ export function AgenticWalletBatchModal({
             </div>
 
             {error && (
-              <div className="text-[12px] text-red-300/80">{error}</div>
+              <div
+                className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed flex items-start justify-between gap-3"
+                style={{
+                  background: "rgba(248,113,113,0.06)",
+                  borderColor: "rgba(248,113,113,0.22)",
+                  color: "#fecaca",
+                }}
+              >
+                <span>{error.headline}</span>
+                {error.next && (
+                  <a
+                    href={error.next.href}
+                    className="shrink-0 text-emerald-300 hover:text-emerald-200 underline underline-offset-2"
+                  >
+                    {error.next.label}
+                  </a>
+                )}
+              </div>
             )}
 
             <button

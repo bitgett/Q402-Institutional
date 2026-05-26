@@ -71,6 +71,8 @@ interface BatchBody {
   chain?: string;
   token?: string;
   recipients?: RecipientRow[];
+  /** Lowercased Agent Wallet address to source the batch from. Required. */
+  walletId?: string;
   ownerAddress?: string;
   nonce?: string;
   signature?: string;
@@ -87,6 +89,7 @@ interface BatchResultRow {
 interface BatchRecord {
   batchId: string;
   ownerAddr: string;
+  walletId: string;
   chain: AgenticChainKey;
   token: AgenticToken;
   results: BatchResultRow[];
@@ -140,24 +143,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const rows = body.recipients.map((r) => ({ to: r.to as string, amount: r.amount as string }));
 
-  // ── Auth — intent-bound challenge over the full recipient set ─────────
-  // A session signature would let the same signed bytes fire any batch;
-  // here we bind the signature to the exact `(chain, token, fingerprint
-  // of the 20-row recipient set)`. Replay of the same body returns
-  // NONCE_EXPIRED at the challenge step — but we still keep the
-  // `aw:batch:{fp}` cache below so legitimate retries (with a fresh
-  // signature) see the prior settlement instead of a confusing 401.
+  if (!body.walletId || typeof body.walletId !== "string") {
+    return NextResponse.json({ error: "walletId_required" }, { status: 400 });
+  }
+  const walletId = body.walletId.toLowerCase();
+
+  // ── Auth — intent-bound challenge over the full recipient set + wallet ─
+  // walletId is now part of the intent so a signature bound to wallet A
+  // cannot drain wallet B's balance.
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "agentic-wallet-batch", 10, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
-  const rowsHash = agenticBatchFingerprint(body.ownerAddress ?? "", body.chain, body.token, rows);
+  // Fingerprint mixes walletId so two wallets settling identical recipient
+  // sets share no cache slot.
+  const rowsHash = agenticBatchFingerprint(
+    `${(body.ownerAddress ?? "").toLowerCase()}:${walletId}`,
+    body.chain,
+    body.token,
+    rows,
+  );
   const authResult = await requireIntentAuth({
     address: body.ownerAddress ?? null,
     challenge: body.nonce ?? null,
     signature: body.signature ?? null,
     action: "agentic.batch",
     intent: {
+      walletId,
       chain: body.chain,
       token: body.token,
       rows: String(rows.length),
@@ -206,7 +218,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
   }
 
-  const wallet = await getActiveAgenticWallet(owner);
+  const wallet = await getActiveAgenticWallet(owner, walletId);
   if (!wallet) {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
@@ -252,6 +264,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const initialRecord: BatchRecord = {
     batchId,
     ownerAddr: owner,
+    walletId,
     chain: body.chain,
     token: body.token,
     results: [],
@@ -287,8 +300,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await kv.del(key).catch(() => {});
   };
 
-  // ── Daily-cap reservation (atomic). Refund on any downstream fail. ──────
-  const reservation = await chargeAgainstDailyLimit(owner, totalAmount, wallet.dailyLimitUsd);
+  // ── Daily-cap reservation (atomic, per-wallet). Refund on any downstream fail. ──
+  const reservation = await chargeAgainstDailyLimit(owner, walletId, totalAmount, wallet.dailyLimitUsd);
   if (!reservation.allowed) {
     await releaseClaim();
     return NextResponse.json(
@@ -317,7 +330,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     authNonce = await fetchAuthNonce(body.chain, wallet.address as Address);
   } catch (e) {
-    await refundDailySpend(owner, totalAmount).catch(() => {});
+    await refundDailySpend(owner, walletId, totalAmount).catch(() => {});
     await releaseClaim();
     console.error("[agentic-wallet/batch] fetchAuthNonce failed:", e);
     return NextResponse.json({ error: "auth_nonce_failed" }, { status: 502 });
@@ -393,7 +406,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const successfulSum = successful.reduce((s, r) => s + Number(r.amount), 0);
   const refundAmount = totalAmount - successfulSum;
   if (refundAmount > 0) {
-    await refundDailySpend(owner, refundAmount).catch(() => {});
+    await refundDailySpend(owner, walletId, refundAmount).catch(() => {});
   }
 
   return NextResponse.json(

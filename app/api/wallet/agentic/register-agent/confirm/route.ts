@@ -1,28 +1,26 @@
 /**
  * POST /api/wallet/agentic/register-agent/confirm
  *
- * Confirm phase of the ERC-8004 agent registration flow. After the user
- * signs and submits the `register(agentURI)` transaction through their
- * wallet, the frontend bounces the resulting `txHash` here so the
- * server can:
+ * Confirm phase of ERC-8004 agent registration. Reads the receipt,
+ * parses the Registered event, persists agentId on the wallet record.
  *
- *   1. Read the receipt
- *   2. Parse the `Registered(agentId, agentURI, owner)` event
- *   3. Verify the registry address matches the network we expected
- *   4. Persist `{network}:{agentId}` on the Agent Wallet record
+ * Multi-wallet Phase 3: takes walletId.
  *
- * Returns the assigned `agentId` + an `8004scan.io` URL the dashboard
- * card uses to render the "Agent #N" badge.
- *
- * Replay-safe: the txHash is the unique identity. We don't dedupe in
- * KV because re-running the parse for the same hash is idempotent — it
- * just rewrites the same agentId tag onto the wallet record.
+ * Audit fixes:
+ *   - P1 #1 (auth+crypto): intent-bound `agentic.register.confirm`
+ *     with txHash + walletId in the canonical message. Stops session-
+ *     sig replay across confirm operations.
+ *   - P1 #2 (auth+crypto): SET NX claim on `aw:register-tx:{net}:{tx}`
+ *     so the same txHash can't be re-parsed and overwrite the wallet's
+ *     agentId. A second confirm call with the same txHash returns the
+ *     cached result.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
+import { kv } from "@vercel/kv";
 
-import { requireAuth } from "@/app/lib/auth";
+import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import {
   getActiveAgenticWallet,
@@ -38,18 +36,34 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+const REGISTER_TX_TTL_SEC = 7 * 24 * 60 * 60; // 7 days
+
 interface ConfirmBody {
   address?: string;
   nonce?: string;
   signature?: string;
+  walletId?: string;
   txHash?: string;
   network?: Erc8004Network;
+}
+
+interface RegisterTxRecord {
+  agentId: string;
+  owner: string;
+  agentURI: string;
+  walletId: string;
+  network: Erc8004Network;
+  confirmedAt: number;
 }
 
 const ALLOWED_NETWORKS: Erc8004Network[] = ["bsc"];
 
 function isTxHash(s: unknown): s is `0x${string}` {
   return typeof s === "string" && /^0x[0-9a-fA-F]{64}$/.test(s);
+}
+
+function registerTxKey(network: string, txHash: string): string {
+  return `aw:register-tx:${network}:${txHash.toLowerCase()}`;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -65,11 +79,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const authResult = await requireAuth(
-    body.address ?? null,
-    body.nonce ?? null,
-    body.signature ?? null,
-  );
+  if (!isTxHash(body.txHash)) {
+    return NextResponse.json({ error: "INVALID_TX_HASH" }, { status: 400 });
+  }
+  if (!body.walletId || typeof body.walletId !== "string") {
+    return NextResponse.json({ error: "walletId_required" }, { status: 400 });
+  }
+  const network: Erc8004Network = body.network ?? "bsc";
+  if (!ALLOWED_NETWORKS.includes(network)) {
+    return NextResponse.json({ error: "NETWORK_NOT_SUPPORTED" }, { status: 400 });
+  }
+
+  // ── Intent-bound auth — binds owner + walletId + txHash + network ─────
+  const authResult = await requireIntentAuth({
+    address: body.address ?? null,
+    challenge: body.nonce ?? null,
+    signature: body.signature ?? null,
+    action: "agentic.register.confirm",
+    intent: {
+      walletId: body.walletId.toLowerCase(),
+      txHash: body.txHash.toLowerCase(),
+      network,
+    },
+  });
   if (typeof authResult !== "string") {
     return NextResponse.json(
       { error: authResult.error, code: authResult.code },
@@ -78,15 +110,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const owner = authResult;
 
-  if (!isTxHash(body.txHash)) {
-    return NextResponse.json({ error: "INVALID_TX_HASH" }, { status: 400 });
-  }
-  const network: Erc8004Network = body.network ?? "bsc";
-  if (!ALLOWED_NETWORKS.includes(network)) {
-    return NextResponse.json({ error: "NETWORK_NOT_SUPPORTED" }, { status: 400 });
+  // ── Idempotency: SET NX claim on the txHash ───────────────────────────
+  // If a previous confirm already parsed this txHash, return the cached
+  // result — no re-parse, no agentId overwrite (audit P1 #2).
+  const txKey = registerTxKey(network, body.txHash);
+  const cached = await kv.get<RegisterTxRecord>(txKey);
+  if (cached) {
+    return NextResponse.json({
+      network: cached.network,
+      agentId: cached.agentId,
+      owner: cached.owner,
+      agentURI: cached.agentURI,
+      walletId: cached.walletId,
+      scanUrl: scanUrl(cached.network, cached.agentId),
+      idempotent: true,
+    });
   }
 
-  const wallet = await getActiveAgenticWallet(owner);
+  const wallet = await getActiveAgenticWallet(owner, body.walletId);
   if (!wallet) {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
@@ -102,9 +143,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     transport: http(cfg.rpc),
   });
 
-  // The receipt may still be pending if the user just submitted. We try
-  // once and surface a clear "still pending" code so the frontend can
-  // poll instead of blowing up.
   let receipt;
   try {
     receipt = await client.getTransactionReceipt({ hash: body.txHash });
@@ -113,7 +151,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (/not found|could not be found/i.test(msg)) {
       return NextResponse.json(
         { error: "TX_PENDING", message: "Transaction not yet confirmed — retry in a few seconds." },
-        { status: 425 }, // 425 Too Early
+        { status: 425 },
       );
     }
     console.error("[register-agent/confirm] receipt fetch failed:", e);
@@ -140,29 +178,55 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // The NFT owner is whoever submitted the tx. We don't *require* it to
-  // match the Agent Wallet owner EOA — the user may have minted from
-  // a different address and we still want to record the linkage. But
-  // we DO require the owner to be the caller's owner-sig address, to
-  // prevent random callers attaching someone else's agent id.
   if (parsed.owner.toLowerCase() !== owner.toLowerCase()) {
     return NextResponse.json(
       {
         error: "OWNER_MISMATCH",
         message: "The agent was minted to a different address than your dashboard session.",
         mintOwner: parsed.owner,
+        agentId: parsed.agentId.toString(),
       },
       { status: 403 },
     );
   }
 
-  await setErc8004AgentId(owner, network, parsed.agentId);
+  // Atomically claim the txHash so a concurrent retry can't re-parse +
+  // overwrite. The race window is small (we already authed + fetched
+  // receipt) but a SET NX is cheap insurance.
+  const record: RegisterTxRecord = {
+    agentId: parsed.agentId.toString(),
+    owner: parsed.owner,
+    agentURI: parsed.agentURI,
+    walletId: body.walletId.toLowerCase(),
+    network,
+    confirmedAt: Date.now(),
+  };
+  const claimed = await kv.set(txKey, record, { nx: true, ex: REGISTER_TX_TTL_SEC });
+  if (!claimed) {
+    // Concurrent confirm raced us — return whichever record landed.
+    const live = await kv.get<RegisterTxRecord>(txKey);
+    if (live) {
+      return NextResponse.json({
+        network: live.network,
+        agentId: live.agentId,
+        owner: live.owner,
+        agentURI: live.agentURI,
+        walletId: live.walletId,
+        scanUrl: scanUrl(live.network, live.agentId),
+        idempotent: true,
+      });
+    }
+    return NextResponse.json({ error: "confirm_claim_failed" }, { status: 500 });
+  }
+
+  await setErc8004AgentId(owner, body.walletId, network, parsed.agentId);
 
   return NextResponse.json({
     network,
     agentId: parsed.agentId.toString(),
     owner: parsed.owner,
     agentURI: parsed.agentURI,
+    walletId: body.walletId.toLowerCase(),
     scanUrl: scanUrl(network, parsed.agentId),
   });
 }

@@ -14,7 +14,7 @@
  * subscription", "Try again"). Raw API error codes never reach the user.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
 import {
   friendlyError,
@@ -24,6 +24,10 @@ import {
 
 interface Props {
   walletAddress: string;
+  /** Lowercased agentic wallet address — used as the walletId in API
+   *  calls and bound into the intent challenge so a signature scoped
+   *  to wallet A can't drain wallet B. */
+  walletId: string;
   ownerAddress: string;
   signMessage: (message: string) => Promise<string | null>;
   onClose: () => void;
@@ -94,6 +98,7 @@ function isDecimalAmount(s: string) {
 
 export function AgenticWalletSendModal({
   walletAddress,
+  walletId,
   ownerAddress,
   signMessage,
   onClose,
@@ -115,12 +120,22 @@ export function AgenticWalletSendModal({
 
   // Keep token consistent with the selected chain — if the user picks
   // Injective (USDT-only) while USDC is highlighted, snap to USDT.
-  if (!allowedTokens.includes(token)) {
-    queueMicrotask(() => setToken(allowedTokens[0]));
-  }
+  // Migrated from `queueMicrotask(setState)`-in-render to a proper
+  // effect so React 19 doesn't warn about setState during render.
+  useEffect(() => {
+    if (!allowedTokens.includes(token)) setToken(allowedTokens[0]);
+  }, [allowedTokens, token]);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [success, setSuccess] = useState<{ txHash: string } | null>(null);
+  /**
+   * Double-click guard — checked + flipped synchronously at the top of
+   * submit() so a rapid second click can't slip through before
+   * setSubmitting(true) renders. Without this, two parallel wallet
+   * popups + two POSTs (second NONCE_EXPIRED) confuse users.
+   */
+  const inFlightRef = useRef(false);
 
   const recipientValid = recipient === "" || isAddress(recipient);
   const amountValid = amount === "" || isDecimalAmount(amount);
@@ -134,25 +149,31 @@ export function AgenticWalletSendModal({
     !submitting && isAddress(recipient) && isDecimalAmount(amount) && !overPerTxCap;
 
   async function submit() {
+    // Synchronous double-click guard. Setting state alone isn't enough
+    // — React batches and the second click can see canSubmit=true
+    // before the first paint with submitting=true.
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setError(null);
     if (!isAddress(recipient)) {
       setError({ headline: "Recipient must be a 0x-prefixed 20-byte address." });
+      inFlightRef.current = false;
       return;
     }
     if (!isDecimalAmount(amount)) {
       setError({ headline: "Amount must be a positive decimal (e.g. 1.50)." });
+      inFlightRef.current = false;
       return;
     }
     setSubmitting(true);
     try {
-      // Intent-bound auth. The server rebuilds the canonical message
-      // from `(chain, token, recipient, amount)` and rejects any
-      // signature that wasn't over exactly those bytes. The single-use
-      // challenge also makes the resulting POST idempotent — a network
-      // retry with the same body fails NONCE_EXPIRED instead of
-      // firing a second on-chain payment.
+      // Intent-bound auth — server rebuilds the canonical message from
+      // `(walletId, chain, token, recipient, amount)`. Server's
+      // separate fingerprint cache (audit P1 #4) makes the actual
+      // payment idempotent on a fresh-challenge retry.
       const to = recipient.trim();
       const intent: Record<string, string> = {
+        walletId,
         chain,
         token,
         recipient: to.toLowerCase(),
@@ -171,6 +192,7 @@ export function AgenticWalletSendModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          walletId,
           chain,
           token,
           to,
@@ -191,6 +213,7 @@ export function AgenticWalletSendModal({
       setError({ headline: e instanceof Error ? e.message : String(e) });
     } finally {
       setSubmitting(false);
+      inFlightRef.current = false;
     }
   }
 
@@ -198,7 +221,7 @@ export function AgenticWalletSendModal({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={onClose}
+      onClick={submitting ? undefined : onClose}
     >
       <div
         className="w-full max-w-md rounded-2xl border p-6 space-y-4"
@@ -214,8 +237,9 @@ export function AgenticWalletSendModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            className="text-white/40 hover:text-white text-lg leading-none"
+            onClick={submitting ? undefined : onClose}
+            disabled={submitting}
+            className="text-white/40 hover:text-white text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Close"
           >
             ×

@@ -167,6 +167,12 @@ describe("/api/auth/action-challenge route shape", () => {
     expect(src).toMatch(/agentic\.batch/);
     expect(src).toMatch(/agentic\.export/);
     expect(src).toMatch(/agentic\.archive/);
+    // New actions added in multi-wallet Phase 3 — intent-bind PATCH
+    // (limits), restore, and ERC-8004 register prepare + confirm.
+    expect(src).toMatch(/agentic\.limits/);
+    expect(src).toMatch(/agentic\.restore/);
+    expect(src).toMatch(/agentic\.register/);
+    expect(src).toMatch(/agentic\.register\.confirm/);
   });
 
   it("rate-limits per IP and returns the canonical message body", () => {
@@ -175,12 +181,22 @@ describe("/api/auth/action-challenge route shape", () => {
   });
 });
 
+// MCP is a sibling repo (`bitgett/q402-mcp`) and lives under
+// `mcp-server/` in dev checkouts. In a fresh CI worktree without the
+// MCP repo cloned alongside, the path doesn't exist. Skip the source-
+// grep there instead of crashing the whole suite. The MCP repo has its
+// own tests for this guard.
+function readMcpConfigOrNull(): string | null {
+  try {
+    return readFileSync(resolve(__dirname, "..", "mcp-server", "src", "config.ts"), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 describe("MCP — Mode C visibility fix", () => {
-  const src = readFileSync(
-    resolve(__dirname, "..", "mcp-server", "src", "config.ts"),
-    "utf8",
-  );
-  it("Mode C is independent of A/B — no `!modeA && !modeB` gate", () => {
+  const src = readMcpConfigOrNull();
+  it.skipIf(src === null)("Mode C is independent of A/B — no `!modeA && !modeB` gate", () => {
     // The guard wording specifically: previous bug was
     // `modeC = !modeA && !modeB && ...`. The fix removes the
     // negation chain so multi-key installs can pick Mode C.

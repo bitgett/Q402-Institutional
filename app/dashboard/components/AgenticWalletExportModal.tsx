@@ -23,12 +23,10 @@ import { getActionAuth } from "@/app/lib/auth-client";
 
 interface Props {
   walletAddress: string;
+  walletId: string;
   ownerAddress: string;
   signMessage: (message: string) => Promise<string | null>;
   onClose: () => void;
-  /** Called when the user opts to archive immediately after exporting.
-   *  Q402 still holds the AES-encrypted key after a successful export,
-   *  so this CTA closes the loop for users who want full custody. */
   onArchiveRequest?: () => void;
 }
 
@@ -37,6 +35,7 @@ const AUTO_CLEAR_MS = 30_000;
 
 export function AgenticWalletExportModal({
   walletAddress,
+  walletId,
   ownerAddress,
   signMessage,
   onClose,
@@ -82,7 +81,7 @@ export function AgenticWalletExportModal({
       const auth = await getActionAuth(
         ownerAddress,
         "agentic.export",
-        { target: ownerAddress.toLowerCase() },
+        { walletId },
         signMessage,
       );
       if (!auth) {
@@ -95,6 +94,7 @@ export function AgenticWalletExportModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ownerAddress,
+          walletId,
           challenge: auth.challenge,
           signature: auth.signature,
         }),

@@ -47,6 +47,9 @@ const ALLOWED_ACTIONS = new Set([
   "agentic.export",
   "agentic.archive",
   "agentic.register",
+  "agentic.register.confirm",
+  "agentic.limits",
+  "agentic.restore",
 ]);
 
 function isAddress(s: unknown): s is string {

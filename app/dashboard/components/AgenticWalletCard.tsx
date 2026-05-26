@@ -82,7 +82,36 @@ interface Props {
    *  button trigger so trial users see a paid-only hint instead of
    *  bouncing off a backend 402 mid-modal. */
   hasMultichainScope: boolean;
+  /**
+   * Increment this counter (from the Tab) to force a fresh on-chain
+   * balance fetch even when the wallet record is unchanged. Audit P1
+   * fix — previously the Tab's `onChanged` callback only reloaded the
+   * wallet record, leaving Holdings stale until the 5-minute poll
+   * tick.
+   */
+  balanceRefreshTick?: number;
   onChanged: () => void;
+}
+
+/**
+ * Build an 8004scan agent URL from the wallet record's stored
+ * `${network}:${agentId}` tag. 8004scan uses chain-slug paths
+ * (`/agents/bsc/{id}`); keep this in sync with `scanUrl()` in
+ * `app/lib/erc8004.ts`. Only the live registration network ("bsc")
+ * is reachable today via ALLOWED_NETWORKS — the fallback covers any
+ * future expansion without breaking the link.
+ */
+function agentScanUrl(tag: string): string {
+  const [network, id] = tag.split(":");
+  const slug =
+    network === "bsc-testnet" ? "bsc-testnet"
+    : network === "eth" ? "ethereum"
+    : network === "base" ? "base"
+    : network === "polygon" ? "polygon"
+    : network === "arbitrum" ? "arbitrum"
+    : network === "celo" ? "celo"
+    : "bsc";
+  return `https://8004scan.io/agents/${slug}/${id}`;
 }
 
 function shortAddr(addr: string) {
@@ -94,6 +123,7 @@ export function AgenticWalletCard({
   address,
   signMessage,
   hasMultichainScope,
+  balanceRefreshTick = 0,
   onChanged,
 }: Props) {
   const [sendOpen, setSendOpen] = useState(false);
@@ -118,6 +148,7 @@ export function AgenticWalletCard({
         address,
         nonce: auth.nonce,
         sig: auth.signature,
+        walletId: wallet.walletId,
         ...(force ? { force: "1" } : {}),
       }).toString();
       const res = await fetch(`/api/wallet/agentic/balance?${qs}`);
@@ -136,7 +167,7 @@ export function AgenticWalletCard({
     } finally {
       setBalanceLoading(false);
     }
-  }, [address, signMessage, wallet.deletedAt]);
+  }, [address, signMessage, wallet.deletedAt, wallet.walletId]);
 
   useEffect(() => {
     void fetchBalance();
@@ -145,6 +176,16 @@ export function AgenticWalletCard({
     }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchBalance]);
+
+  // External refresh trigger from the Tab — bumping balanceRefreshTick
+  // forces a fresh on-chain read past the 5-minute cache. Closes the
+  // "send done but Holdings still shows pre-send total" audit gap.
+  useEffect(() => {
+    if (balanceRefreshTick > 0) {
+      void fetchBalance(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balanceRefreshTick]);
 
   async function copyAddress() {
     try {
@@ -304,7 +345,7 @@ export function AgenticWalletCard({
           </button>
           {wallet.erc8004AgentId ? (
             <a
-              href={`https://8004scan.io/eip155:${wallet.erc8004AgentId.split(":")[0] === "bsc" ? "56" : "1"}/agent/${wallet.erc8004AgentId.split(":")[1]}`}
+              href={agentScanUrl(wallet.erc8004AgentId)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-emerald-300/85 hover:text-emerald-200 transition-colors"
@@ -328,6 +369,7 @@ export function AgenticWalletCard({
       {sendOpen && (
         <AgenticWalletSendModal
           walletAddress={wallet.address}
+          walletId={wallet.walletId}
           ownerAddress={address}
           signMessage={signMessage}
           onClose={() => setSendOpen(false)}
@@ -343,6 +385,7 @@ export function AgenticWalletCard({
       {batchOpen && (
         <AgenticWalletBatchModal
           walletAddress={wallet.address}
+          walletId={wallet.walletId}
           ownerAddress={address}
           signMessage={signMessage}
           onClose={() => setBatchOpen(false)}
@@ -360,6 +403,7 @@ export function AgenticWalletCard({
       {withdrawOpen && (
         <AgenticWalletWithdrawModal
           walletAddress={wallet.address}
+          walletId={wallet.walletId}
           ownerAddress={address}
           signMessage={signMessage}
           perTxMaxUsd={wallet.perTxMaxUsd}
@@ -374,6 +418,7 @@ export function AgenticWalletCard({
       {withdrawBucket && (
         <AgenticWalletSendModal
           walletAddress={wallet.address}
+          walletId={wallet.walletId}
           ownerAddress={address}
           signMessage={signMessage}
           onClose={() => setWithdrawBucket(null)}
@@ -394,6 +439,7 @@ export function AgenticWalletCard({
       {limitsOpen && (
         <AgenticWalletLimitsModal
           ownerAddress={address}
+          walletId={wallet.walletId}
           signMessage={signMessage}
           initial={{
             dailyLimitUsd: wallet.dailyLimitUsd,
@@ -410,6 +456,7 @@ export function AgenticWalletCard({
       {agentOpen && (
         <AgenticWalletAgentModal
           walletAddress={wallet.address}
+          walletId={wallet.walletId}
           ownerAddress={address}
           signMessage={signMessage}
           onClose={() => setAgentOpen(false)}
