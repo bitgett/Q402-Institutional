@@ -17,20 +17,36 @@
  * shape, so resolvers fetch from `q402.quackai.ai`, not from any
  * third-party gateway.
  *
- * Usage (PowerShell):
- *   $env:Q402_AGENT_REGISTRAR_KEY="0x<64-hex>"  # EOA that owns the NFT
- *   $env:KV_REST_API_URL="<from Vercel KV integration>"
- *   $env:KV_REST_API_TOKEN="<from Vercel KV integration>"
- *   $env:APP_ORIGIN="https://q402.quackai.ai"   # optional; defaults to prod
- *   $env:BSC_RPC_URL="<rpc>"                    # optional; defaults to dataseed
+ * Usage (PowerShell — simplest path):
+ *
+ *   # 1. Pull Vercel-managed env once. This produces .env.local with
+ *   #    KV_REST_API_URL + KV_REST_API_TOKEN already populated:
+ *   vercel env pull .env.local --environment=production
+ *
+ *   # 2. Only the registrar key has to come from outside Vercel (it's
+ *   #    the operator's own wallet, not something the project stores):
+ *   $env:Q402_AGENT_REGISTRAR_KEY="0x<64-hex>"
+ *
+ *   # 3. Dry-run preview → live submit.
  *   node scripts/register-q402-self.mjs --dry-run
  *   node scripts/register-q402-self.mjs
+ *
+ * The script auto-loads `.env.local` from the repo root. Override with
+ * `--env-file=/path/to/file` if you keep secrets elsewhere. Process env
+ * always beats the file on collisions.
+ *
+ * Optional overrides:
+ *   APP_ORIGIN     — defaults to https://q402.quackai.ai
+ *   BSC_RPC_URL    — defaults to public BNB dataseed
  *
  * Cost: ~$0.05 BSC gas. The registrar wallet must have ≥0.001 BNB to
  * cover it.
  */
 
 import { parseArgs } from "node:util";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   createWalletClient,
   createPublicClient,
@@ -46,8 +62,43 @@ const { values } = parseArgs({
   options: {
     "dry-run": { type: "boolean", default: false },
     network:   { type: "string", default: "bsc" },
+    "env-file": { type: "string" },
   },
 });
+
+/**
+ * Auto-load env from `.env.local` (or whatever `--env-file=…` points
+ * at) so the operator only needs to run `vercel env pull .env.local`
+ * once and then `node scripts/register-q402-self.mjs`. Without this
+ * they would have to either (a) export every env var manually, or
+ * (b) launch Node with the built-in `--env-file=` flag, which is
+ * easy to forget. Reads minimal KEY=VALUE syntax — no quoting,
+ * comments stripped, blank lines ignored. Process env wins on
+ * collision so an explicitly-exported variable always takes
+ * precedence over the file.
+ */
+function loadEnvFile(path) {
+  if (!existsSync(path)) return;
+  const raw = readFileSync(path, "utf-8");
+  for (const line of raw.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const eq = t.indexOf("=");
+    if (eq < 0) continue;
+    const k = t.slice(0, eq).trim();
+    let v = t.slice(eq + 1).trim();
+    // Strip simple surrounding quotes if present (vercel env pull
+    // produces double-quoted values for entries containing whitespace
+    // or special chars).
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      v = v.slice(1, -1);
+    }
+    if (process.env[k] === undefined) process.env[k] = v;
+  }
+}
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+loadEnvFile(values["env-file"] ?? resolve(__dirname, "..", ".env.local"));
 
 const DRY_RUN = !!values["dry-run"];
 const NETWORK = values["network"];
