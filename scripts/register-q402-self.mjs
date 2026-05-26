@@ -2,24 +2,32 @@
 /**
  * register-q402-self.mjs — register Q402 itself as an ERC-8004 agent.
  *
- * One-shot script. Submits an ERC-8004 `register(agentURI)` tx from a
- * configured operator wallet (`Q402_AGENT_REGISTRAR_KEY`) on BSC
- * mainnet, then prints the assigned `agentId` and the 8004scan URL so
- * the public landing can advertise "Q402 is ERC-8004 agent #N."
+ * One-shot operator script. Builds the Q402-as-agent metadata, computes
+ * the keccak256 content-hash, writes the JSON into Vercel KV at the
+ * same key the public agent-metadata route serves
+ * (`aw:agent-md:{hash}`), then submits the ERC-8004 `register(agentURI)`
+ * tx from `Q402_AGENT_REGISTRAR_KEY` on BSC mainnet. Prints the
+ * assigned `agentId` and the 8004scan URL so the public landing can
+ * advertise "Q402 is ERC-8004 agent #N."
  *
- * The metadata JSON is built locally (no Pinata round-trip needed) and
- * pinned via the same Pinata helper the dashboard route uses, so that
- * users and Q402 itself live under the same identity-file convention.
+ * Trade-off: this puts an external dependency on Vercel KV (which Q402
+ * already requires) instead of IPFS pinning. Aligned with how live
+ * users' dashboards register — both paths now share the
+ * `agent-metadata-store` helper + the self-hosted `agentURI` URL
+ * shape, so resolvers fetch from `q402.quackai.ai`, not from any
+ * third-party gateway.
  *
  * Usage (PowerShell):
- *   $env:Q402_AGENT_REGISTRAR_KEY="0x<64-hex>"   # the EOA that owns the NFT
- *   $env:PINATA_JWT="<jwt>"
- *   $env:BSC_RPC_URL="<rpc>"                     # optional; defaults to dataseed
- *   node scripts/register-q402-self.mjs --dry-run         # build + pin, no tx
- *   node scripts/register-q402-self.mjs                   # live
+ *   $env:Q402_AGENT_REGISTRAR_KEY="0x<64-hex>"  # EOA that owns the NFT
+ *   $env:KV_REST_API_URL="<from Vercel KV integration>"
+ *   $env:KV_REST_API_TOKEN="<from Vercel KV integration>"
+ *   $env:APP_ORIGIN="https://q402.quackai.ai"   # optional; defaults to prod
+ *   $env:BSC_RPC_URL="<rpc>"                    # optional; defaults to dataseed
+ *   node scripts/register-q402-self.mjs --dry-run
+ *   node scripts/register-q402-self.mjs
  *
- * Cost: ~$0.05 BSC gas. The registrar wallet must have a small BNB
- * balance to cover it.
+ * Cost: ~$0.05 BSC gas. The registrar wallet must have ≥0.001 BNB to
+ * cover it.
  */
 
 import { parseArgs } from "node:util";
@@ -29,6 +37,8 @@ import {
   http,
   encodeFunctionData,
   decodeEventLog,
+  keccak256,
+  toUtf8Bytes,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -53,12 +63,15 @@ const REGISTRAR = process.env.Q402_AGENT_REGISTRAR_KEY;
 if (!REGISTRAR) die("Q402_AGENT_REGISTRAR_KEY required (0x-prefixed 32-byte hex)");
 if (!/^0x[0-9a-fA-F]{64}$/.test(REGISTRAR)) die("Q402_AGENT_REGISTRAR_KEY must be 32-byte hex");
 
-const PINATA_JWT = process.env.PINATA_JWT;
-if (!DRY_RUN && !PINATA_JWT) die("PINATA_JWT required (or pass --dry-run)");
+const KV_URL   = process.env.KV_REST_API_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+if (!DRY_RUN && (!KV_URL || !KV_TOKEN)) {
+  die("KV_REST_API_URL and KV_REST_API_TOKEN required (Vercel KV integration → Settings → REST API). Pass --dry-run to skip the KV write.");
+}
 
 const BSC_RPC = process.env.BSC_RPC_URL ?? "https://bsc-dataseed.binance.org";
 const REGISTRY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432";
-const RELAY_BASE = process.env.APP_ORIGIN ?? "https://q402.quackai.ai";
+const APP_ORIGIN = (process.env.APP_ORIGIN ?? "https://q402.quackai.ai").replace(/\/$/, "");
 const FACILITATOR = "0xfc77FF29178B7286A8bA703D7a70895CA74fF466";
 
 const REGISTER_ABI = [
@@ -90,52 +103,64 @@ const METADATA = {
     "settled 11,700+ payments to date. Available as @quackai/q402-mcp on npm for Claude, " +
     "Codex CLI, Cursor, and Cline.",
   services: [
-    { name: "q402",  endpoint: `${RELAY_BASE}/api/relay/info`, version: "1.3.1", walletAddress: FACILITATOR },
+    { name: "q402",  endpoint: `${APP_ORIGIN}/api/relay/info`, version: "1.3.1", walletAddress: FACILITATOR },
     { name: "MCP",   endpoint: "npm://@quackai/q402-mcp" },
-    { name: "web",   endpoint: RELAY_BASE },
+    { name: "web",   endpoint: APP_ORIGIN },
   ],
   x402Support: false,
   supportedTrust: ["reputation"],
   metadata: {
     chainCount: "9",
     facilitator: FACILITATOR,
-    docsUrl: `${RELAY_BASE}/docs`,
+    docsUrl: `${APP_ORIGIN}/docs`,
   },
 };
 
-async function pinJsonToPinata(payload) {
-  const res = await fetch("https://api.pinata.cloud/pinning/pinJSONToIPFS", {
+function hashAgentMetadata(payload) {
+  return keccak256(toUtf8Bytes(JSON.stringify(payload)));
+}
+
+function agentMetadataKey(hash) {
+  return `aw:agent-md:${hash.toLowerCase()}`;
+}
+
+function agentMetadataUrl(hash) {
+  return `${APP_ORIGIN}/api/wallet/agentic/agent-metadata/${hash.toLowerCase()}`;
+}
+
+async function kvSet(key, value) {
+  // Upstash REST: POST [url]/set/<key> with body = value (JSON-stringified).
+  const res = await fetch(`${KV_URL}/set/${encodeURIComponent(key)}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${PINATA_JWT}`,
+      Authorization: `Bearer ${KV_TOKEN}`,
     },
-    body: JSON.stringify({
-      pinataContent: payload,
-      pinataMetadata: { name: "q402-self-agent-metadata" },
-      pinataOptions: { cidVersion: 1 },
-    }),
+    body: JSON.stringify(value),
   });
-  if (!res.ok) die(`pinata ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  if (!data?.IpfsHash) die("pinata returned no IpfsHash");
-  return `ipfs://${data.IpfsHash}`;
+  if (!res.ok) die(`KV set failed (${res.status}): ${await res.text()}`);
 }
 
 async function main() {
   process.stderr.write(`[register-q402] network=${NETWORK} ${DRY_RUN ? "DRY RUN" : "LIVE"}\n`);
   process.stderr.write(`[register-q402] metadata name: "${METADATA.name}"\n`);
+  process.stderr.write(`[register-q402] app origin:    ${APP_ORIGIN}\n`);
+
+  const hash = hashAgentMetadata(METADATA);
+  const agentURI = agentMetadataUrl(hash);
+  process.stderr.write(`[register-q402] content hash:  ${hash}\n`);
+  process.stderr.write(`[register-q402] agentURI:      ${agentURI}\n`);
 
   if (DRY_RUN) {
-    process.stderr.write("[register-q402] (skipping IPFS pin in dry run)\n");
+    process.stderr.write("[register-q402] (skipping KV write + chain submit in dry run)\n");
     process.stderr.write("[register-q402] METADATA preview:\n");
     process.stderr.write(JSON.stringify(METADATA, null, 2) + "\n");
     return;
   }
 
-  process.stderr.write("[register-q402] pinning metadata to IPFS…\n");
-  const agentURI = await pinJsonToPinata(METADATA);
-  process.stderr.write(`[register-q402] agentURI = ${agentURI}\n`);
+  process.stderr.write("[register-q402] writing metadata to KV…\n");
+  await kvSet(agentMetadataKey(hash), METADATA);
+  process.stderr.write(`[register-q402] KV write OK at ${agentMetadataKey(hash)}\n`);
 
   const account = privateKeyToAccount(REGISTRAR);
   const viemChain = {
@@ -157,10 +182,10 @@ async function main() {
   const data = encodeFunctionData({ abi: REGISTER_ABI, functionName: "register", args: [agentURI] });
   process.stderr.write("[register-q402] submitting register tx…\n");
 
-  const hash = await walletClient.sendTransaction({ to: REGISTRY, data });
-  process.stderr.write(`[register-q402] tx hash: ${hash}\n`);
+  const txHash = await walletClient.sendTransaction({ to: REGISTRY, data });
+  process.stderr.write(`[register-q402] tx hash: ${txHash}\n`);
   process.stderr.write("[register-q402] waiting for receipt…\n");
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
   if (receipt.status !== "success") die("transaction reverted");
 
   let agentId = null;
@@ -179,11 +204,11 @@ async function main() {
   const scanUrl = `https://8004scan.io/eip155:56/agent/${agentId}`;
   process.stderr.write("\n=================================================================\n");
   process.stderr.write(`✓ Q402 registered as ERC-8004 agent #${agentId} on BSC mainnet\n`);
-  process.stderr.write(`  tx:      https://bscscan.com/tx/${hash}\n`);
+  process.stderr.write(`  tx:      https://bscscan.com/tx/${txHash}\n`);
   process.stderr.write(`  agent:   ${scanUrl}\n`);
   process.stderr.write(`  uri:     ${agentURI}\n`);
   process.stderr.write("=================================================================\n");
-  process.stdout.write(JSON.stringify({ agentId, scanUrl, txHash: hash, agentURI }) + "\n");
+  process.stdout.write(JSON.stringify({ agentId, scanUrl, txHash, agentURI, metadataHash: hash }) + "\n");
 }
 
 main().catch((e) => die(e instanceof Error ? e.stack ?? e.message : String(e)));

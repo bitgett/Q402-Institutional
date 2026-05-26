@@ -8,7 +8,12 @@
  *   2. Build the Q402-flavoured agent metadata JSON (name, description,
  *      services[].q402 → our relay endpoint with the Agent Wallet
  *      address declared as the payment wallet)
- *   3. Pin it to IPFS via Pinata
+ *   3. Compute the keccak256 content-hash of the canonical JSON and
+ *      store the payload in KV under `aw:agent-md:{hash}`. The
+ *      `agentURI` we hand to the user is `https://<origin>/api/wallet/
+ *      agentic/agent-metadata/{hash}` — self-hosted, no external IPFS
+ *      dependency. ERC-8004 indexers (8004scan etc.) can resolve any
+ *      `https://` URI, so this is fully spec-compliant.
  *   4. Encode `register(agentURI)` calldata for the user to submit
  *      through their MetaMask (the NFT mints to msg.sender, paying tiny
  *      BSC gas)
@@ -22,11 +27,17 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { kv } from "@vercel/kv";
 
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { getActiveAgenticWallet } from "@/app/lib/agentic-wallet";
-import { pinJson, isPinnerReady } from "@/app/lib/ipfs-pin";
+import {
+  agentMetadataKey,
+  agentMetadataUrl,
+  canonicalJson,
+  hashAgentMetadata,
+} from "@/app/lib/agent-metadata-store";
 import {
   ERC8004_NETWORKS,
   buildQ402AgentMetadata,
@@ -103,11 +114,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
 
-  if (!isPinnerReady()) {
-    return NextResponse.json({ error: "ipfs_unavailable" }, { status: 503 });
-  }
-
-  // ── Build + pin metadata ───────────────────────────────────────────────
+  // ── Build + self-host metadata ─────────────────────────────────────────
   const metadata = buildQ402AgentMetadata({
     name: body.name.trim(),
     description: body.description?.trim(),
@@ -117,21 +124,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     imageUrl: body.imageUrl,
   });
 
-  const pinned = await pinJson(metadata);
-  if (!pinned.ok) {
-    console.error("[register-agent] pin failed:", pinned.reason);
-    return NextResponse.json({ error: "pin_failed" }, { status: 502 });
+  // Content-address: keccak the canonical JSON, store under that hash,
+  // serve from `/api/wallet/agentic/agent-metadata/{hash}`. The agentURI
+  // we hand to the user is immutable for a given content — re-running
+  // the prepare phase with the same name/description yields the same
+  // hash + the same KV slot (idempotent on retry).
+  const hash = hashAgentMetadata(metadata);
+  try {
+    await kv.set(agentMetadataKey(hash), metadata);
+  } catch (e) {
+    console.error("[register-agent] kv.set metadata failed:", e);
+    return NextResponse.json({ error: "metadata_store_failed" }, { status: 502 });
   }
+
+  const agentURI = agentMetadataUrl(appOrigin(), hash);
 
   // ── Encode calldata for the user's MetaMask ────────────────────────────
   const cfg = ERC8004_NETWORKS[network];
-  const calldata = encodeRegister(pinned.uri);
+  const calldata = encodeRegister(agentURI);
 
   return NextResponse.json({
     network,
     registry: cfg.registry,
     chainId: cfg.chainId,
-    agentURI: pinned.uri,
+    agentURI,
+    // Echo the content hash separately — useful for the dashboard to
+    // double-check that the agent's on-chain agentURI points at the
+    // exact content the user just confirmed.
+    metadataHash: hash,
+    canonicalBytes: canonicalJson(metadata).length,
     calldata,
     metadata,
     // The frontend opens MetaMask with `{ to: registry, data: calldata, value: 0 }`
