@@ -69,6 +69,11 @@ function tokenBalanceFromRaw(raw: bigint, decimals: number): TokenBalance {
   };
 }
 
+/** Canonical Multicall3 address — deployed at the same address on every
+ *  chain Q402 supports. Required for viem's `multicall()` helper to find
+ *  the aggregator without us paying two round-trips per chain. */
+const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11" as const;
+
 async function readChainBalances(
   chain: AgenticChainKey,
   walletAddr: Address,
@@ -79,6 +84,9 @@ async function readChainBalances(
     name: cfg.name,
     nativeCurrency: { name: cfg.name, symbol: cfg.name, decimals: 18 },
     rpcUrls: { default: { http: [cfg.rpc] } },
+    contracts: {
+      multicall3: { address: MULTICALL3_ADDRESS },
+    },
   } as const;
   const client = createPublicClient({ chain: viemChain, transport: http(cfg.rpc) });
 

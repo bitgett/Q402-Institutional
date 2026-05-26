@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { __test, formatUsd } from "@/app/lib/agentic-wallet-balance";
 
 describe("tokenBalanceFromRaw", () => {
@@ -41,5 +43,28 @@ describe("formatUsd", () => {
   it("renders an em-dash for non-finite", () => {
     expect(formatUsd(Number.NaN)).toBe("—");
     expect(formatUsd(Infinity)).toBe("—");
+  });
+});
+
+describe("agentic-wallet-balance — multicall3 wiring", () => {
+  // First canary on preview returned "Chain does not support contract
+  // multicall3" for every chain that ran the multi-token path,
+  // collapsing every BNB-USDT-only deposit to TOTAL $0. The minimal
+  // viem chain object we build per-chain was missing
+  // `contracts.multicall3.address`, which viem's `multicall()`
+  // requires. This guard pins both the constant address and the
+  // presence of the `contracts.multicall3` shape so the regression
+  // can't sneak back in via a refactor.
+  const src = readFileSync(
+    resolve(__dirname, "..", "app", "lib", "agentic-wallet-balance.ts"),
+    "utf8",
+  );
+
+  it("declares the canonical Multicall3 address", () => {
+    expect(src).toMatch(/0xcA11bde05977b3631167028862bE2a173976CA11/);
+  });
+
+  it("attaches `contracts.multicall3` to every viemChain it builds", () => {
+    expect(src).toMatch(/contracts:\s*\{\s*multicall3:/);
   });
 });
