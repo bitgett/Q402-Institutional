@@ -168,8 +168,10 @@ export function AgenticWalletExportModal({
             <ul className="text-[12px] text-white/55 space-y-1.5 leading-relaxed list-disc list-inside">
               <li>Save it to a hardware wallet or a password manager — not chat, email, or screenshots.</li>
               <li>
-                After export, Q402 still holds an encrypted copy of this key on the server.
-                Archive the wallet here (or right after reveal) to drop it from our keystore.
+                After export, Q402 still holds the AES-256-GCM encrypted copy on the
+                server. Archiving the wallet here (or right after reveal) starts a 7-day
+                grace window; the daily hard-delete cron then sweeps Q402&apos;s copy on
+                schedule.
               </li>
               <li>You&apos;ll sign a one-time challenge to confirm — that signature cannot be reused.</li>
             </ul>
@@ -220,9 +222,9 @@ export function AgenticWalletExportModal({
               className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed"
               style={{ background: "rgba(248,113,113,0.05)", borderColor: "rgba(248,113,113,0.22)", color: "#fecaca" }}
             >
-              Q402 still holds an encrypted copy of this key. If you want full custody, archive
-              the Agent Wallet now — the hard-delete cron drops the keystore record after the
-              7-day grace window.
+              Q402 still holds an AES-encrypted copy of this key. If you want full custody,
+              archive the Agent Wallet now — that starts a 7-day grace window, after which
+              the daily hard-delete cron sweeps Q402&apos;s copy on schedule.
             </div>
             <div className="flex flex-wrap gap-2">
               <button

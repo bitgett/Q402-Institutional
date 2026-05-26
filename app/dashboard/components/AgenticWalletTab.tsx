@@ -45,6 +45,7 @@ interface Props {
 
 export function AgenticWalletTab({ address, signMessage }: Props) {
   const [wallet, setWallet] = useState<AgenticWalletPublic | null | undefined>(undefined);
+  const [hasMultichainScope, setHasMultichainScope] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -72,6 +73,7 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
         return;
       }
       setWallet(data.wallet ?? null);
+      setHasMultichainScope(Boolean(data.hasMultichainScope));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setWallet(null);
@@ -128,6 +130,7 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
           wallet={wallet}
           address={address}
           signMessage={signMessage}
+          hasMultichainScope={hasMultichainScope}
           onChanged={() => void reload()}
         />
       )}

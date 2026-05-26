@@ -29,6 +29,8 @@ import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
 import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
 import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
+import { AgenticWalletWithdrawModal, type WithdrawBucket } from "./AgenticWalletWithdrawModal";
+import { AgenticWalletArchiveModal } from "./AgenticWalletArchiveModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
 
 interface BalancePayload {
@@ -49,6 +51,10 @@ interface Props {
   wallet: AgenticWalletPublic;
   address: string;
   signMessage: (message: string) => Promise<string | null>;
+  /** Server-resolved: owner has paid multichain scope. Gates the Batch
+   *  button trigger so trial users see a paid-only hint instead of
+   *  bouncing off a backend 402 mid-modal. */
+  hasMultichainScope: boolean;
   onChanged: () => void;
 }
 
@@ -56,14 +62,22 @@ function shortAddr(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: Props) {
+export function AgenticWalletCard({
+  wallet,
+  address,
+  signMessage,
+  hasMultichainScope,
+  onChanged,
+}: Props) {
   const [sendOpen, setSendOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawBucket, setWithdrawBucket] = useState<WithdrawBucket | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -118,7 +132,6 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
   }
 
   async function archive() {
-    if (!confirm("Archive this Agent Wallet? You have 7 days to restore before hard-delete.")) return;
     setArchiving(true);
     setArchiveError(null);
     try {
@@ -137,6 +150,7 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
         setArchiveError(data.error ?? "Archive failed.");
         return;
       }
+      setArchiveModalOpen(false);
       onChanged();
     } catch (e) {
       setArchiveError(e instanceof Error ? e.message : String(e));
@@ -274,10 +288,15 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
             iconArrow="down-left"
           />
           <ActionPill
-            label="Batch send"
-            disabled={archived}
+            label={hasMultichainScope ? "Batch send" : "Batch send (Paid)"}
+            disabled={archived || !hasMultichainScope}
             onClick={() => setBatchOpen(true)}
             iconArrow="grid"
+            title={
+              hasMultichainScope
+                ? undefined
+                : "Batch sends require an active multichain subscription. Open the Payment tab to activate one."
+            }
           />
         </div>
 
@@ -351,10 +370,10 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
         ) : (
           <DangerRow
             title="Archive wallet"
-            body="Soft-deletes the wallet. You have 7 days to restore before Q402 hard-deletes the keystore record."
-            cta={archiving ? "Archiving…" : "Archive"}
+            body="Soft-deletes the wallet. You have 7 days to restore before Q402 hard-deletes the keystore record on schedule."
+            cta={archiving ? "Archiving…" : "Archive…"}
             tone="danger"
-            onClick={archive}
+            onClick={() => setArchiveModalOpen(true)}
             disabled={archiving}
           />
         )}
@@ -408,22 +427,34 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
       )}
 
       {withdrawOpen && (
+        <AgenticWalletWithdrawModal
+          walletAddress={wallet.address}
+          ownerAddress={address}
+          signMessage={signMessage}
+          perTxMaxUsd={wallet.perTxMaxUsd}
+          onClose={() => setWithdrawOpen(false)}
+          onPickBucket={(bucket) => {
+            setWithdrawOpen(false);
+            setWithdrawBucket(bucket);
+          }}
+        />
+      )}
+
+      {withdrawBucket && (
         <AgenticWalletSendModal
           walletAddress={wallet.address}
           ownerAddress={address}
           signMessage={signMessage}
-          onClose={() => setWithdrawOpen(false)}
+          onClose={() => setWithdrawBucket(null)}
           onSent={() => {
-            setWithdrawOpen(false);
+            setWithdrawBucket(null);
             onChanged();
           }}
           prefillTo={address}
-          prefillAmount={
-            balance && balance.totalUsd > 0
-              ? balance.totalUsd.toFixed(2)
-              : undefined
-          }
-          titleOverride="Withdraw to your wallet"
+          prefillChain={withdrawBucket.chain}
+          prefillToken={withdrawBucket.token}
+          prefillAmount={withdrawBucket.amount}
+          titleOverride={`Withdraw ${withdrawBucket.token} on ${withdrawBucket.chain}`}
           perTxMaxUsd={wallet.perTxMaxUsd}
           dailyLimitUsd={wallet.dailyLimitUsd}
         />
@@ -466,6 +497,21 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           onRegistered={() => {
             setAgentOpen(false);
             onChanged();
+          }}
+        />
+      )}
+
+      {archiveModalOpen && (
+        <AgenticWalletArchiveModal
+          walletAddress={wallet.address}
+          balanceUsd={balance?.totalUsd ?? null}
+          archiving={archiving}
+          error={archiveError}
+          onClose={() => {
+            if (!archiving) setArchiveModalOpen(false);
+          }}
+          onConfirm={() => {
+            void archive();
           }}
         />
       )}
@@ -518,17 +564,20 @@ function ActionPill({
   onClick,
   disabled,
   iconArrow,
+  title,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
   iconArrow: "up-right" | "down-left" | "grid";
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       style={{
         background: "rgba(74,222,128,0.10)",

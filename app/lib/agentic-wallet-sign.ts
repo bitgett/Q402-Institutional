@@ -361,12 +361,39 @@ export async function fetchAuthNonce(
   return await publicClient.getTransactionCount({ address: walletAddr });
 }
 
-/** Forward a single signed payment to the canonical /api/relay route. */
+/**
+ * Forward a single signed payment to the canonical /api/relay route.
+ *
+ * Two field-shape rules the relay enforces:
+ *
+ *   1. `amount` MUST be the raw atomic-unit integer string (parsed via
+ *      `BigInt(amount)` on the relay side). The human-readable decimal
+ *      string (`"1.5"`) would either reject outright or — worse — be
+ *      coerced to an integer that diverges from what the witness
+ *      signed, so we always wire `signed.amountRaw.toString()` here.
+ *
+ *   2. Nonce field name depends on chain:
+ *         xlayer → `xlayerNonce`
+ *         stable → `stableNonce`
+ *         everything else → `nonce`
+ *      The relay reads them as separate top-level fields and 400s when
+ *      the wrong one is supplied. (`eip3009Nonce` is an X Layer
+ *      USDC-only fallback that Agentic Wallet doesn't use — we always
+ *      go EIP-7702 type-4 from the keystore.)
+ */
 export async function submitToRelay(
   baseUrl: string,
   apiKey: string,
   signed: SignedPayment,
 ): Promise<Response> {
+  const nonceStr = signed.nonceUint.toString();
+  const chainNoncePayload =
+    signed.chain === "xlayer"
+      ? { xlayerNonce: nonceStr }
+      : signed.chain === "stable"
+        ? { stableNonce: nonceStr }
+        : { nonce: nonceStr };
+
   return await fetch(`${baseUrl}/api/relay`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -376,8 +403,9 @@ export async function submitToRelay(
       token: signed.token,
       from: signed.fromAddr,
       to: signed.to,
-      amount: signed.amount,
-      nonce: signed.nonceUint.toString(),
+      // Raw atomic units, NOT the human decimal string.
+      amount: signed.amountRaw.toString(),
+      ...chainNoncePayload,
       deadline: signed.deadline.toString(),
       witnessSig: signed.witnessSig,
       authorization: signed.authorization,

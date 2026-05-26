@@ -215,6 +215,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Mode C freshness gate. Without this an *old* apiKey that's still in
+  // the keystore as `active: true` (e.g. a rotation that never marked
+  // the prior key inactive) would (a) pass `getApiKeyRecord`, (b) resolve
+  // to the owner via Mode C auth, and then (c) drain that owner's
+  // CURRENT trial/multichain quota — because below we forward the
+  // *current* sub key to /api/relay, not the presented one. So an
+  // attacker who exfiltrated a rotated key could spend off the user's
+  // active subscription. We close that by demanding the presented key
+  // be exactly the live trial OR live multichain key.
+  if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
+    const presented = body.apiKey;
+    const isCurrent =
+      presented === sub?.trialApiKey || presented === sub?.apiKey;
+    if (!isCurrent) {
+      await refundIfHeld();
+      return NextResponse.json(
+        {
+          error: "STALE_API_KEY",
+          message:
+            "This apiKey is no longer the live trial or multichain key. " +
+            "Rotate to the current key in your dashboard and retry.",
+        },
+        { status: 401 },
+      );
+    }
+  }
+
   // Pick the most-restrictive apiKey for the chosen chain. Trial keys
   // are BNB-only, so on BNB they drain first; non-BNB chains require
   // the paid key.

@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { getSubscription, hasMultichainScope } from "@/app/lib/db";
 import {
   createAgenticWallet,
   getAgenticWallet,
@@ -111,7 +112,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (!record) {
     return NextResponse.json({ wallet: null }, { status: 200 });
   }
-  return NextResponse.json({ wallet: projectPublic(record) });
+  // Surface the multichain scope alongside the wallet so the dashboard
+  // can gate features client-side (BatchModal trigger, non-BNB chain
+  // hints) without a second round-trip to /api/keys/verify.
+  const sub = await getSubscription(auth);
+  return NextResponse.json({
+    wallet: projectPublic(record),
+    hasMultichainScope: hasMultichainScope(sub),
+  });
 }
 
 // ── POST ───────────────────────────────────────────────────────────────────

@@ -30,8 +30,12 @@ interface Props {
   onSent: () => void;
   /** Pre-fill the recipient field (e.g. owner EOA for the Withdraw flow). */
   prefillTo?: string;
-  /** Pre-fill the amount field (e.g. current balance for the Withdraw flow). */
+  /** Pre-fill the amount field (e.g. bucket balance for the Withdraw flow). */
   prefillAmount?: string;
+  /** Pre-fill the chain picker (e.g. picked sweep bucket). */
+  prefillChain?: ChainKey;
+  /** Pre-fill the token picker (e.g. picked sweep bucket). */
+  prefillToken?: Token;
   /** Override the modal title — Withdraw uses "Withdraw to your wallet". */
   titleOverride?: string;
   /** Wallet-level per-tx cap, used to soft-block before hitting backend. */
@@ -96,14 +100,16 @@ export function AgenticWalletSendModal({
   onSent,
   prefillTo,
   prefillAmount,
+  prefillChain,
+  prefillToken,
   titleOverride,
   perTxMaxUsd,
   dailyLimitUsd,
 }: Props) {
-  const [chain, setChain] = useState<ChainKey>("bnb");
+  const [chain, setChain] = useState<ChainKey>(prefillChain ?? "bnb");
   const chainMeta = chainMetaFor(chain);
   const allowedTokens = chainMeta.tokens;
-  const [token, setToken] = useState<Token>("USDT");
+  const [token, setToken] = useState<Token>(prefillToken ?? "USDT");
   const [recipient, setRecipient] = useState(prefillTo ?? "");
   const [amount, setAmount] = useState(prefillAmount ?? "");
 
