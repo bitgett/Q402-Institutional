@@ -28,6 +28,7 @@ import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
 import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
 import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
+import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
 
 interface BalancePayload {
@@ -62,6 +63,7 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -249,7 +251,11 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           <StatTile
             label="Signer"
             value="Q402 server"
-            sub="encrypted key in keystore"
+            sub={
+              wallet.erc8004AgentId
+                ? `ERC-8004 · agent #${wallet.erc8004AgentId.split(":")[1]}`
+                : "encrypted key in keystore"
+            }
           />
         </div>
 
@@ -295,6 +301,26 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           >
             ⚙ Spending limits
           </button>
+          {wallet.erc8004AgentId ? (
+            <a
+              href={`https://8004scan.io/eip155:${wallet.erc8004AgentId.split(":")[0] === "bsc" ? "56" : "1"}/agent/${wallet.erc8004AgentId.split(":")[1]}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-emerald-300/85 hover:text-emerald-200 transition-colors"
+              title="View on 8004scan"
+            >
+              ◉ Agent #{wallet.erc8004AgentId.split(":")[1]} ↗
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled={archived}
+              onClick={() => setAgentOpen(true)}
+              className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+            >
+              ◉ Register on 8004scan
+            </button>
+          )}
         </div>
       </div>
 
@@ -426,6 +452,19 @@ export function AgenticWalletCard({ wallet, address, signMessage, onChanged }: P
           onClose={() => setLimitsOpen(false)}
           onSaved={() => {
             setLimitsOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+
+      {agentOpen && (
+        <AgenticWalletAgentModal
+          walletAddress={wallet.address}
+          ownerAddress={address}
+          signMessage={signMessage}
+          onClose={() => setAgentOpen(false)}
+          onRegistered={() => {
+            setAgentOpen(false);
             onChanged();
           }}
         />

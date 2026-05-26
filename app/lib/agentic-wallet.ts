@@ -205,6 +205,26 @@ export async function updateAgenticWalletLimits(
   return next;
 }
 
+/**
+ * Persist the ERC-8004 agent id assigned to this wallet after the user
+ * completed a `register` tx against the IdentityRegistry. Stored on the
+ * record so the dashboard card can render the "Agent #N" badge and the
+ * 8004scan link without re-querying the chain on every render.
+ *
+ * Stored as `{ network }:{ agentId }` (e.g. `bsc:42`) so the dashboard
+ * can build the right scan URL even for multi-chain registrations.
+ */
+export async function setErc8004AgentId(
+  ownerAddr: string,
+  network: string,
+  agentId: bigint | string | number,
+): Promise<void> {
+  const record = await getAgenticWallet(ownerAddr);
+  if (!record) throw new Error("AGENTIC_WALLET_NOT_FOUND");
+  const tag = `${network}:${String(agentId)}`;
+  await kv.set(RECORD_KEY(ownerAddr), { ...record, erc8004AgentId: tag });
+}
+
 /** Append an export event to the audit log (capped at EXPORT_LOG_CAP). */
 export async function recordExportEvent(
   ownerAddr: string,
