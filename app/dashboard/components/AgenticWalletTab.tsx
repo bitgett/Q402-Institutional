@@ -28,6 +28,7 @@ import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { AgenticWalletCard } from "./AgenticWalletCard";
 import { AgenticWalletPreview } from "./AgenticWalletPreview";
 import { AgenticWalletFooter } from "./AgenticWalletFooter";
+import { AgenticWalletDangerZone } from "./AgenticWalletDangerZone";
 
 export interface AgenticWalletPublic {
   ownerAddr: string;
@@ -140,6 +141,17 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
 
       {wallet && (
         <AgenticWalletFooter ownerAddress={address} walletAddress={wallet.address} />
+      )}
+
+      {wallet && (
+        <AgenticWalletDangerZone
+          wallet={wallet}
+          address={address}
+          signMessage={signMessage}
+          onChanged={() => void reload()}
+          balanceUsd={null}
+          onRequestBalanceRefresh={() => void reload()}
+        />
       )}
     </div>
   );

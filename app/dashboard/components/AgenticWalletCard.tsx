@@ -22,15 +22,13 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { getAuthCreds, getActionAuth } from "@/app/lib/auth-client";
+import { getAuthCreds } from "@/app/lib/auth-client";
 import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
 import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
-import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
 import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
 import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
 import { AgenticWalletWithdrawModal, type WithdrawBucket } from "./AgenticWalletWithdrawModal";
-import { AgenticWalletArchiveModal } from "./AgenticWalletArchiveModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
 import type { ChainKey } from "@/app/lib/relayer";
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
@@ -103,14 +101,8 @@ export function AgenticWalletCard({
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawBucket, setWithdrawBucket] = useState<WithdrawBucket | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
-  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
-  const [archiving, setArchiving] = useState(false);
-  const [archiveError, setArchiveError] = useState<string | null>(null);
-  const [restoring, setRestoring] = useState(false);
-  const [restoreError, setRestoreError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [balance, setBalance] = useState<BalancePayload | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -164,72 +156,11 @@ export function AgenticWalletCard({
     }
   }
 
-  async function archive() {
-    setArchiving(true);
-    setArchiveError(null);
-    try {
-      // Action-scoped challenge so a leaked session signature can't fire
-      // the 7-day destructive deletion path.
-      const auth = await getActionAuth(
-        address,
-        "agentic.archive",
-        { target: address.toLowerCase() },
-        signMessage,
-      );
-      if (!auth) {
-        setArchiveError("Sign the archive challenge in your wallet to confirm.");
-        return;
-      }
-      const res = await fetch("/api/wallet/agentic", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address,
-          nonce: auth.challenge,
-          signature: auth.signature,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        setArchiveError(data.error ?? "Archive failed.");
-        return;
-      }
-      setArchiveModalOpen(false);
-      onChanged();
-    } catch (e) {
-      setArchiveError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setArchiving(false);
-    }
-  }
-
-  async function restore() {
-    setRestoring(true);
-    setRestoreError(null);
-    try {
-      const auth = await getAuthCreds(address, signMessage);
-      if (!auth) {
-        setRestoreError("Sign the auth challenge to restore.");
-        return;
-      }
-      const res = await fetch("/api/wallet/agentic/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, nonce: auth.nonce, signature: auth.signature }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setRestoreError(data.message ?? data.error ?? "Restore failed.");
-        return;
-      }
-      onChanged();
-    } catch (e) {
-      setRestoreError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setRestoring(false);
-    }
-  }
-
+  // Card-level destructive flows (archive / restore / export) live in
+  // AgenticWalletDangerZone — surfaced at the bottom of the Agent tab
+  // so this card stays focused on identity + spending. The grace
+  // counter below is still needed for the inline "Archived · N days
+  // left" badge in the identity header.
   const archived = wallet.deletedAt !== null;
   const graceMs = 7 * 24 * 60 * 60 * 1000;
   const graceLeftDays = archived && wallet.deletedAt !== null
@@ -394,57 +325,6 @@ export function AgenticWalletCard({
         </div>
       </div>
 
-      {/* ── Danger zone — visually walled off from the safe panel above. ─── */}
-      <div
-        className="mt-4 rounded-2xl border p-5 space-y-3"
-        style={{
-          background: "rgba(248,113,113,0.03)",
-          borderColor: "rgba(248,113,113,0.25)",
-        }}
-      >
-        <div className="flex items-center gap-2">
-          <span className="text-red-300 text-[11px] uppercase tracking-[0.22em] font-semibold">
-            Danger zone
-          </span>
-          <span className="text-white/35 text-[11px]">— irreversible once the 7-day grace expires</span>
-        </div>
-
-        {archived ? (
-          <DangerRow
-            title="Restore wallet"
-            body={`Cancels the pending hard-delete. You have ${graceLeftDays ?? 0} day${graceLeftDays === 1 ? "" : "s"} of grace remaining.`}
-            cta={restoring ? "Restoring…" : "Restore"}
-            tone="safe"
-            onClick={restore}
-            disabled={restoring}
-          />
-        ) : (
-          <DangerRow
-            title="Archive wallet"
-            body="Soft-deletes the wallet. You have 7 days to restore before Q402 hard-deletes the keystore record on schedule."
-            cta={archiving ? "Archiving…" : "Archive…"}
-            tone="danger"
-            onClick={() => setArchiveModalOpen(true)}
-            disabled={archiving}
-          />
-        )}
-
-        <DangerRow
-          title="Export private key"
-          body="Reveals the raw signing key. Anyone who has it can spend the wallet's USDC / USDT immediately, on any chain. Step-up signature required."
-          cta="Export"
-          tone="danger"
-          onClick={() => setExportOpen(true)}
-          disabled={archived}
-        />
-
-        {(archiveError || restoreError) && (
-          <div className="text-[12px] text-red-300/85">
-            {archiveError ?? restoreError}
-          </div>
-        )}
-      </div>
-
       {sendOpen && (
         <AgenticWalletSendModal
           walletAddress={wallet.address}
@@ -511,24 +391,6 @@ export function AgenticWalletCard({
         />
       )}
 
-      {exportOpen && (
-        <AgenticWalletExportModal
-          walletAddress={wallet.address}
-          ownerAddress={address}
-          signMessage={signMessage}
-          onClose={() => setExportOpen(false)}
-          onArchiveRequest={() => {
-            // Route through the typed-confirm modal — the export
-            // modal must not bypass the destructive-confirm UX. The
-            // export modal will close itself first; we open the
-            // archive modal after a tick so the focus transitions
-            // cleanly.
-            setExportOpen(false);
-            setArchiveModalOpen(true);
-          }}
-        />
-      )}
-
       {limitsOpen && (
         <AgenticWalletLimitsModal
           ownerAddress={address}
@@ -558,21 +420,6 @@ export function AgenticWalletCard({
         />
       )}
 
-      {archiveModalOpen && (
-        <AgenticWalletArchiveModal
-          walletAddress={wallet.address}
-          balanceUsd={balance?.totalUsd ?? null}
-          archiving={archiving}
-          error={archiveError}
-          onRequestBalanceRefresh={() => { void fetchBalance(true); }}
-          onClose={() => {
-            if (!archiving) setArchiveModalOpen(false);
-          }}
-          onConfirm={() => {
-            void archive();
-          }}
-        />
-      )}
     </>
   );
 }
@@ -741,52 +588,6 @@ function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "grid" }) {
     return <span className="text-sm leading-none rotate-180 inline-block">↗</span>;
   }
   return <span className="text-sm leading-none inline-block">↗</span>;
-}
-
-// ── DangerRow ──────────────────────────────────────────────────────────────
-
-function DangerRow({
-  title,
-  body,
-  cta,
-  tone,
-  onClick,
-  disabled,
-}: {
-  title: string;
-  body: string;
-  cta: string;
-  tone: "danger" | "safe";
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  const danger = tone === "danger";
-  return (
-    <div
-      className="rounded-md border px-3 py-3 flex items-center justify-between gap-4"
-      style={{
-        background: "rgba(8,17,30,0.45)",
-        borderColor: "rgba(255,255,255,0.06)",
-      }}
-    >
-      <div className="min-w-0">
-        <div className="text-[13px] text-white/90 font-medium">{title}</div>
-        <div className="text-[11.5px] text-white/50 leading-relaxed mt-0.5">{body}</div>
-      </div>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={`shrink-0 px-3 py-1.5 rounded-md text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-          danger
-            ? "bg-red-500/80 text-white hover:bg-red-500"
-            : "bg-emerald-400 text-slate-900 hover:bg-emerald-300"
-        }`}
-      >
-        {cta}
-      </button>
-    </div>
-  );
 }
 
 // ── Decorative dot pattern ────────────────────────────────────────────────

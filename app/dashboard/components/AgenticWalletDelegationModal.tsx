@@ -82,23 +82,32 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
   const [status, setStatus] = useState<DelegationStatusBody | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Distinguishes between "status fetch failed" (re-fetch is the cure)
+   *  vs "clear flow failed mid-way" (re-click the Clear button is the
+   *  cure). Without this distinction the error blurb shows a useless
+   *  "retry status" link when the user simply rejected the wallet
+   *  prompt and the only sensible next action is "press Clear again." */
+  const [errorKind, setErrorKind] = useState<"status" | "clear" | null>(null);
   const [clearing, setClearing] = useState<ChainKey | null>(null);
   const [clearedTxs, setClearedTxs] = useState<Partial<Record<ChainKey, string>>>({});
 
   const load = useCallback(async () => {
     setError(null);
+    setErrorKind(null);
     setLoading(true);
     try {
       const res = await fetch(`/api/wallet/delegation-status?address=${ownerAddress}`);
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setError(body.error ?? `Status fetch failed (HTTP ${res.status}).`);
+        setErrorKind("status");
         return;
       }
       const data = (await res.json()) as DelegationStatusBody;
       setStatus(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setErrorKind("status");
     } finally {
       setLoading(false);
     }
@@ -110,16 +119,19 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
 
   async function clearChain(chain: ChainKey) {
     setError(null);
+    setErrorKind(null);
     setClearing(chain);
     try {
       const provider = getProvider();
       if (!provider) {
         setError("No wallet provider found.");
+        setErrorKind("clear");
         return;
       }
       const chainId = CHAIN_IDS[chain];
       if (!chainId) {
         setError(`Unknown chain ${chain}`);
+        setErrorKind("clear");
         return;
       }
 
@@ -159,6 +171,7 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
       const data = (await res.json().catch(() => ({}))) as { txHash?: string; error?: string; message?: string };
       if (!res.ok) {
         setError(data.message ?? data.error ?? `Clear failed (HTTP ${res.status}).`);
+        setErrorKind("clear");
         return;
       }
       if (typeof data.txHash === "string") {
@@ -181,12 +194,13 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
         if (typeof o.code === "number") code = o.code;
       }
       if (code === 4001 || /user rejected|User denied/i.test(msg)) {
-        setError("You rejected the clear authorization in your wallet.");
+        setError("You rejected the clear authorization in your wallet. Click Clear again when ready.");
       } else if (/eip[-_ ]?7702|wallet_signAuthorization/i.test(msg)) {
         setError("Your wallet doesn't support EIP-7702 signing. Update MetaMask to 12.x+ or use OKX Wallet.");
       } else {
         setError(msg);
       }
+      setErrorKind("clear");
     } finally {
       setClearing(null);
     }
@@ -239,7 +253,11 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
             style={{ background: "rgba(248,113,113,0.06)", borderColor: "rgba(248,113,113,0.22)", color: "#fecaca" }}
           >
             {error}
-            <button onClick={load} className="ml-3 underline underline-offset-2 hover:text-red-200">retry status</button>
+            {errorKind === "status" && (
+              <button onClick={load} className="ml-3 underline underline-offset-2 hover:text-red-200">
+                retry status
+              </button>
+            )}
           </div>
         )}
 
