@@ -32,11 +32,40 @@ import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
 import { AgenticWalletWithdrawModal, type WithdrawBucket } from "./AgenticWalletWithdrawModal";
 import { AgenticWalletArchiveModal } from "./AgenticWalletArchiveModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
+import type { ChainKey } from "@/app/lib/relayer";
+import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
+
+interface TokenSlice {
+  usd: number;
+  raw: string;
+  decimals: number;
+}
+
+interface ChainBucket {
+  chain: ChainKey;
+  usdc: TokenSlice | null;
+  usdt: TokenSlice | null;
+  totalUsd: number | null;
+  error?: string;
+}
 
 interface BalancePayload {
   asOf: number;
   totalUsd: number;
+  perChain: ChainBucket[];
 }
+
+const CHAIN_LABEL: Partial<Record<ChainKey, string>> = {
+  bnb: "BNB Chain",
+  eth: "Ethereum",
+  avax: "Avalanche",
+  xlayer: "X Layer",
+  stable: "Stable",
+  mantle: "Mantle",
+  injective: "Injective",
+  monad: "Monad",
+  scroll: "Scroll",
+};
 
 function formatBalance(n: number): string {
   if (!Number.isFinite(n)) return "$—";
@@ -103,7 +132,11 @@ export function AgenticWalletCard({
       if (!res.ok) return;
       const data = (await res.json()) as { balances?: BalancePayload };
       if (data.balances) {
-        setBalance({ asOf: data.balances.asOf, totalUsd: data.balances.totalUsd });
+        setBalance({
+          asOf: data.balances.asOf,
+          totalUsd: data.balances.totalUsd,
+          perChain: data.balances.perChain ?? [],
+        });
         lastFetchRef.current = Date.now();
       }
     } catch {
@@ -283,6 +316,13 @@ export function AgenticWalletCard({
             }
           />
         </div>
+
+        {/* Per-chain × per-token breakdown — surfaces "where the money
+            actually is" without making the user click into Withdraw. Only
+            non-zero buckets render; collapse when wallet is empty. */}
+        {balance && balance.totalUsd > 0 && (
+          <HoldingsBreakdown wallet={wallet.address} balance={balance} />
+        )}
 
         {/* Primary actions — Send / Receive / Batch sit here as equals. */}
         <div className="relative flex flex-wrap gap-2">
@@ -534,6 +574,84 @@ export function AgenticWalletCard({
         />
       )}
     </>
+  );
+}
+
+// ── HoldingsBreakdown ──────────────────────────────────────────────────────
+//
+// Surfaces *where* the balance sits so the user can decide whether a
+// transfer needs a chain switch, whether a chain has dust, or whether
+// a deposit landed on the wrong network. The Withdraw modal builds the
+// same per-bucket view but is gated behind a click — this preview is
+// always visible whenever the wallet is non-empty.
+//
+// Renders one row per (chain, token) bucket with usd > 0. Each row
+// links to the wallet's explorer page on that chain so a user can
+// verify the on-chain side independently. Empty chains are summarised
+// in a single trailing line ("Empty on: …") so the surface stays
+// compact when the wallet only holds value on 1–2 chains.
+
+function HoldingsBreakdown({ wallet, balance }: { wallet: string; balance: BalancePayload }) {
+  type Row = { chain: ChainKey; token: "USDT" | "USDC"; usd: number };
+  const rows: Row[] = [];
+  const emptyChains: ChainKey[] = [];
+  const failedChains: ChainKey[] = [];
+  for (const c of balance.perChain) {
+    if (c.error) { failedChains.push(c.chain); continue; }
+    const usdt = c.usdt?.usd ?? 0;
+    const usdc = c.usdc?.usd ?? 0;
+    if (usdt > 0) rows.push({ chain: c.chain, token: "USDT", usd: usdt });
+    if (usdc > 0) rows.push({ chain: c.chain, token: "USDC", usd: usdc });
+    if (usdt === 0 && usdc === 0) emptyChains.push(c.chain);
+  }
+  rows.sort((a, b) => b.usd - a.usd);
+  if (rows.length === 0) return null;
+
+  return (
+    <div
+      className="relative mt-4 rounded-xl border p-3"
+      style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
+    >
+      <div className="text-[10px] uppercase tracking-widest text-white/45 font-medium mb-2">
+        Holdings · {rows.length} bucket{rows.length === 1 ? "" : "s"}
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={`${r.chain}-${r.token}`} className="flex items-center justify-between text-[12.5px]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-white/80 font-medium">{CHAIN_LABEL[r.chain] ?? r.chain}</span>
+              <span className="text-white/45">·</span>
+              <span className="text-white/65 font-mono text-[12px]">{r.token}</span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-emerald-300 font-mono text-[12px]">
+                {r.usd < 0.01 ? "<$0.01" : `$${r.usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`}
+              </span>
+              <a
+                href={explorerAddressUrl(r.chain, wallet)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/40 hover:text-emerald-300 transition-colors text-[11px]"
+                title={`View on ${explorerLabel(r.chain)}`}
+              >
+                ↗
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+      {(emptyChains.length > 0 || failedChains.length > 0) && (
+        <div className="text-[10.5px] text-white/35 mt-2 pt-2 border-t" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+          {emptyChains.length > 0 && (
+            <span>Empty on {emptyChains.map((c) => CHAIN_LABEL[c] ?? c).join(" · ")}</span>
+          )}
+          {emptyChains.length > 0 && failedChains.length > 0 && <span> · </span>}
+          {failedChains.length > 0 && (
+            <span className="text-amber-300/70">RPC failed: {failedChains.map((c) => CHAIN_LABEL[c] ?? c).join(", ")}</span>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
