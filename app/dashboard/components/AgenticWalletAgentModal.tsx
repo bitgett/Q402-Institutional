@@ -184,15 +184,52 @@ export function AgenticWalletAgentModal({
       setStage("done");
       onRegistered(confirmed.agentId, confirmed.scanUrl);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // user-rejected-tx is a clean exit, not an error.
-      if (/user rejected|User denied/i.test(msg)) {
+      // MetaMask + EIP-1193 providers throw *plain objects* (not Error
+      // instances) so `String(e)` returns the useless "[object Object]"
+      // and `e instanceof Error` is false. Normalise to a readable
+      // string + extract the numeric code so we can branch on known
+      // EIP-1193 cases (4001 = user rejected; -32000 family = insufficient
+      // funds / rpc / etc).
+      const norm = normaliseProviderError(e);
+      if (norm.code === 4001 || /user rejected|User denied/i.test(norm.message)) {
         setError("You rejected the registration in your wallet.");
+      } else if (
+        norm.code === -32000 ||
+        /insufficient funds|insufficient balance/i.test(norm.message)
+      ) {
+        setError(
+          "Your wallet doesn't have enough BNB to pay the BSC gas (~$0.05). " +
+            "Top up a small amount of BNB on BNB Chain and try again.",
+        );
       } else {
-        setError(msg);
+        setError(norm.message);
       }
       setStage("error");
     }
+  }
+
+  function normaliseProviderError(e: unknown): { message: string; code?: number } {
+    if (e instanceof Error) {
+      // ethers / viem also tuck the EIP-1193 code into Error.cause
+      const c = (e as Error & { code?: unknown }).code;
+      const code = typeof c === "number" ? c : undefined;
+      return { message: e.message, code };
+    }
+    if (e && typeof e === "object") {
+      const o = e as { message?: unknown; code?: unknown; reason?: unknown };
+      const message =
+        typeof o.message === "string"
+          ? o.message
+          : typeof o.reason === "string"
+            ? o.reason
+            : (() => {
+                try { return JSON.stringify(o); } catch { return "Unexpected error."; }
+              })();
+      const code = typeof o.code === "number" ? o.code : undefined;
+      return { message, code };
+    }
+    if (typeof e === "string") return { message: e };
+    return { message: "Unexpected error." };
   }
 
   return (
