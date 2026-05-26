@@ -28,6 +28,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { BrowserProvider } from "ethers";
+import { getActiveProvider, ensureWalletChain } from "@/app/lib/wallet";
+import type { WalletChainKey } from "@/app/lib/wallet";
 import type { ChainKey } from "@/app/lib/relayer";
 
 interface Props {
@@ -72,11 +74,12 @@ const CHAIN_IDS: Partial<Record<ChainKey, number>> = {
   scroll: 534352,
 };
 
-function getProvider(): { request: (a: { method: string; params?: unknown[] }) => Promise<unknown> } | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as { ethereum?: unknown; okxwallet?: unknown };
-  return (w.ethereum ?? w.okxwallet) as ReturnType<typeof getProvider>;
-}
+// Delegation clearing must reuse the same provider selection the rest
+// of the dashboard uses (`getActiveProvider`) — otherwise an OKX-only
+// user who has MetaMask also installed would have us calling the
+// wrong EIP-1193 instance, with the wrong active account, on the
+// wrong chain. The naive `window.ethereum ?? window.okxwallet`
+// fallback misses the user's persisted wallet-type preference.
 
 export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared }: Props) {
   const [status, setStatus] = useState<DelegationStatusBody | null>(null);
@@ -122,9 +125,9 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
     setErrorKind(null);
     setClearing(chain);
     try {
-      const provider = getProvider();
+      const provider = getActiveProvider();
       if (!provider) {
-        setError("No wallet provider found.");
+        setError("No wallet provider found. Connect your wallet and retry.");
         setErrorKind("clear");
         return;
       }
@@ -135,15 +138,33 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
         return;
       }
 
+      // Make sure the user's wallet is actually on the chain we're
+      // clearing. Without this, OKX / MetaMask might be on Ethereum
+      // mainnet and reject the BNB Chain authorization request as
+      // "unrecognized" rather than honouring the chainId param —
+      // which surfaces to us as a vague rejection.
+      try {
+        await ensureWalletChain(chain as WalletChainKey);
+      } catch (switchErr) {
+        // Surface a clean "switch first" error instead of letting it
+        // get classified as a generic rejection below.
+        const m = switchErr instanceof Error ? switchErr.message : String(switchErr);
+        setError(`Could not switch your wallet to ${CHAIN_LABEL[chain]}. ${m}`);
+        setErrorKind("clear");
+        return;
+      }
+
       // ethers v6 BrowserProvider → signer → signer.authorize() emits a
-      // protocol-correct EIP-7702 authorization. MetaMask 12.x+ forwards
-      // to its native `wallet_signAuthorization` RPC; older wallets
-      // throw, which surfaces as a clean "wallet needs EIP-7702 support"
-      // error here.
+      // protocol-correct EIP-7702 authorization. MetaMask 12.x+ + OKX
+      // Wallet (recent) forward to their native `wallet_signAuthorization`
+      // RPC; older wallets throw, which surfaces here as a clean
+      // "wallet needs EIP-7702 support" error.
       const browserProvider = new BrowserProvider(provider as never);
       const signer = await browserProvider.getSigner(ownerAddress);
-      const tx = await signer.populateTransaction({});
-      const nonce = tx.nonce ?? (await browserProvider.getTransactionCount(ownerAddress, "pending"));
+      // Use getTransactionCount directly — populateTransaction({}) is
+      // brittle (some wallets reject it without a `to`), and we don't
+      // need the rest of the populated fields anyway.
+      const nonce = await browserProvider.getTransactionCount(ownerAddress, "pending");
 
       const auth = await signer.authorize({
         chainId,
@@ -195,10 +216,14 @@ export function AgenticWalletDelegationModal({ ownerAddress, onClose, onCleared 
       }
       if (code === 4001 || /user rejected|User denied/i.test(msg)) {
         setError("You rejected the clear authorization in your wallet. Click Clear again when ready.");
-      } else if (/eip[-_ ]?7702|wallet_signAuthorization/i.test(msg)) {
-        setError("Your wallet doesn't support EIP-7702 signing. Update MetaMask to 12.x+ or use OKX Wallet.");
+      } else if (/eip[-_ ]?7702|wallet_signAuthorization|authorize is not a function|signer\.authorize/i.test(msg)) {
+        setError(
+          "Your wallet doesn't expose EIP-7702 signing. Update MetaMask to 12.x+ " +
+            "or OKX Wallet to the latest version. (Some older wallet builds reject " +
+            "the request silently — try a recent build.)",
+        );
       } else {
-        setError(msg);
+        setError(`${msg} (code ${code ?? "n/a"})`);
       }
       setErrorKind("clear");
     } finally {
