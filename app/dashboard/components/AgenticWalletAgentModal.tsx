@@ -31,6 +31,18 @@ interface Props {
 
 type Stage = "form" | "preparing" | "awaiting-sign" | "confirming" | "done" | "error";
 
+/**
+ * Discriminator for the error stage's visual tone.
+ *
+ *   • "rejected"      — user clicked Reject in MetaMask/OKX. Soft amber
+ *                       framing, not red — this is a normal user choice,
+ *                       not a system failure.
+ *   • "insufficient"  — owner EOA can't pay BSC gas. Red + actionable
+ *                       top-up copy.
+ *   • "generic"       — anything else. Red, raw message.
+ */
+type ErrorKind = "rejected" | "insufficient" | "generic";
+
 interface PrepareResponse {
   network: "bsc";
   registry: string;
@@ -66,8 +78,15 @@ export function AgenticWalletAgentModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [errorKind, setErrorKind] = useState<ErrorKind>("generic");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [result, setResult] = useState<ConfirmResponse | null>(null);
+
+  function fail(message: string, kind: ErrorKind) {
+    setError(message);
+    setErrorKind(kind);
+    setStage("error");
+  }
 
   const valid = name.trim().length > 0 && name.trim().length <= 80;
 
@@ -82,8 +101,7 @@ export function AgenticWalletAgentModal({
       // ── Step 1: prepare (pins metadata, returns calldata) ─────────────
       const auth = await getAuthCreds(ownerAddress, signMessage);
       if (!auth) {
-        setError("Sign the auth challenge to start registration.");
-        setStage("error");
+        fail("Sign the auth challenge to start registration.", "generic");
         return;
       }
       const prepRes = await fetch("/api/wallet/agentic/register-agent", {
@@ -102,12 +120,12 @@ export function AgenticWalletAgentModal({
         | (PrepareResponse & { error?: string; message?: string })
         | Record<string, never>;
       if (!prepRes.ok) {
-        setError(
+        fail(
           ("message" in prep ? prep.message : undefined) ??
             ("error" in prep ? prep.error : undefined) ??
             "Could not prepare registration.",
+          "generic",
         );
-        setStage("error");
         return;
       }
 
@@ -115,8 +133,7 @@ export function AgenticWalletAgentModal({
       setStage("awaiting-sign");
       const provider = getProvider();
       if (!provider) {
-        setError("No wallet provider found. Connect MetaMask or OKX and retry.");
-        setStage("error");
+        fail("No wallet provider found. Connect MetaMask or OKX and retry.", "generic");
         return;
       }
       // BSC mainnet is "bnb" in our internal chain map.
@@ -176,8 +193,7 @@ export function AgenticWalletAgentModal({
         break;
       }
       if (!confirmed) {
-        setError(lastErr || "Could not confirm registration.");
-        setStage("error");
+        fail(lastErr || "Could not confirm registration.", "generic");
         return;
       }
       setResult(confirmed);
@@ -192,19 +208,19 @@ export function AgenticWalletAgentModal({
       // funds / rpc / etc).
       const norm = normaliseProviderError(e);
       if (norm.code === 4001 || /user rejected|User denied/i.test(norm.message)) {
-        setError("You rejected the registration in your wallet.");
+        fail("You cancelled the signature in your wallet.", "rejected");
       } else if (
         norm.code === -32000 ||
         /insufficient funds|insufficient balance/i.test(norm.message)
       ) {
-        setError(
-          "Your wallet doesn't have enough BNB to pay the BSC gas (~$0.05). " +
-            "Top up a small amount of BNB on BNB Chain and try again.",
+        fail(
+          "Your owner EOA doesn't have enough BNB to pay the BSC gas (~$0.05). " +
+            "Top up your owner EOA (NOT the Agent Wallet) on BNB Chain and try again.",
+          "insufficient",
         );
       } else {
-        setError(norm.message);
+        fail(norm.message, "generic");
       }
-      setStage("error");
     }
   }
 
@@ -244,13 +260,15 @@ export function AgenticWalletAgentModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
-          <div>
+          <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-400/85 font-semibold">
               ERC-8004
             </div>
-            <div className="text-white font-semibold text-lg">Register as public agent</div>
-            <div className="text-[11px] text-white/45 mt-0.5">
-              Mints an agent NFT on BNB Chain. Your Agent Wallet ({walletAddress.slice(0, 8)}…{walletAddress.slice(-4)}) is declared as the payment endpoint in the metadata.
+            <div className="text-white font-semibold text-lg leading-tight">
+              Register as public agent
+            </div>
+            <div className="text-[11px] text-white/45 mt-1 leading-relaxed">
+              Mints an agent NFT on BNB Chain · BSC gas ~$0.05
             </div>
           </div>
           {stage !== "preparing" && stage !== "confirming" && stage !== "awaiting-sign" && (
@@ -258,6 +276,22 @@ export function AgenticWalletAgentModal({
               ×
             </button>
           )}
+        </div>
+
+        <div
+          className="rounded-md border px-3 py-2 flex items-center gap-2 text-[11px]"
+          style={{
+            background: "rgba(74,222,128,0.04)",
+            borderColor: "rgba(74,222,128,0.18)",
+          }}
+        >
+          <span className="text-white/40 uppercase tracking-widest text-[9.5px] font-semibold">
+            Endpoint
+          </span>
+          <code className="font-mono text-white/80 truncate">
+            {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}
+          </code>
+          <span className="text-white/30 ml-auto text-[10px]">declared in metadata</span>
         </div>
 
         {stage === "form" && (
@@ -367,26 +401,77 @@ export function AgenticWalletAgentModal({
           </div>
         )}
 
-        {stage === "error" && (
-          <div className="space-y-3">
-            <div
-              className="rounded-md border px-3 py-2.5 text-sm"
-              style={{ background: "rgba(248,113,113,0.06)", borderColor: "rgba(248,113,113,0.25)", color: "#fecaca" }}
-            >
-              {error ?? "Something went wrong."}
+        {stage === "error" && (() => {
+          const palette =
+            errorKind === "rejected"
+              ? {
+                  bg: "rgba(252,211,77,0.06)",
+                  border: "rgba(252,211,77,0.28)",
+                  text: "#fde68a",
+                  title: "Cancelled in wallet",
+                }
+              : errorKind === "insufficient"
+                ? {
+                    bg: "rgba(248,113,113,0.06)",
+                    border: "rgba(248,113,113,0.30)",
+                    text: "#fecaca",
+                    title: "Owner EOA needs BNB",
+                  }
+                : {
+                    bg: "rgba(248,113,113,0.06)",
+                    border: "rgba(248,113,113,0.25)",
+                    text: "#fecaca",
+                    title: "Registration failed",
+                  };
+          return (
+            <div className="space-y-3">
+              <div
+                className="rounded-md border px-3 py-2.5 space-y-1"
+                style={{ background: palette.bg, borderColor: palette.border, color: palette.text }}
+              >
+                <div className="text-[11px] uppercase tracking-widest font-semibold opacity-90">
+                  {palette.title}
+                </div>
+                <div className="text-[13px] leading-relaxed">
+                  {error ?? "Something went wrong."}
+                </div>
+                {errorKind === "insufficient" && (
+                  <a
+                    href={`https://bscscan.com/address/${ownerAddress}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block text-[11px] underline hover:no-underline pt-0.5"
+                  >
+                    View your owner EOA on BscScan ↗
+                  </a>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setStage("form");
+                  }}
+                  className="px-3 py-2 rounded-md text-sm font-medium border border-white/12 text-white/75 hover:text-white hover:border-white/25"
+                >
+                  Edit details
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    void start();
+                  }}
+                  className="px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300"
+                >
+                  Try again
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setError(null);
-                setStage("form");
-              }}
-              className="w-full px-3 py-2 rounded-md text-sm font-medium border border-white/12 text-white/75"
-            >
-              Try again
-            </button>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
