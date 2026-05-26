@@ -38,14 +38,28 @@ interface InfoBody {
   apiKey?: string;
 }
 
+/**
+ * Public shape the apiKey-auth read surface returns. The owner EOA is
+ * deliberately *masked* (first 6 + last 4) rather than fully exposed:
+ * an exfiltrated apiKey already maps the wallet to its owner, but the
+ * fully-resolved owner address is not needed by MCP introspection and
+ * shouldn't be the join surface for "match this apiKey to an on-chain
+ * EOA". The masked form is enough for the AI to render "your wallet
+ * 0xABCD…1234 sits on top of MetaMask 0xDEF0…5678" — no more.
+ */
 interface PublicWallet {
-  ownerAddr: string;
+  /** Masked owner EOA — `0xAAAA…BBBB` (6 + 4). */
+  ownerAddrShort: string;
   address: string;
   createdAt: number;
   deletedAt: number | null;
   dailyLimitUsd: number | null;
   perTxMaxUsd: number | null;
   erc8004AgentId: string | null;
+}
+
+function maskAddr(addr: string): string {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -83,7 +97,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const publicWallet: PublicWallet = {
-    ownerAddr: wallet.ownerAddr,
+    ownerAddrShort: maskAddr(wallet.ownerAddr),
     address: wallet.address,
     createdAt: wallet.createdAt,
     deletedAt: wallet.deletedAt ?? null,

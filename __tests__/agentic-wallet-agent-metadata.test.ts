@@ -71,8 +71,21 @@ describe("agent-metadata-store lib", () => {
     expect(url).toBe("https://q402.test/api/wallet/agentic/agent-metadata/0xabc");
   });
 
-  it("canonicalJson is JSON.stringify with no whitespace", () => {
+  it("canonicalJson is JSON.stringify with no whitespace + recursively sorted keys", () => {
     expect(canonicalJson({ a: 1, b: 2 })).toBe('{"a":1,"b":2}');
+    // Same logical object, reversed input order — must hash the same.
+    expect(canonicalJson({ b: 2, a: 1 })).toBe('{"a":1,"b":2}');
+    expect(hashAgentMetadata({ b: 2, a: 1 })).toBe(hashAgentMetadata({ a: 1, b: 2 }));
+  });
+
+  it("sorts nested object keys recursively", () => {
+    const left = { outer: { z: 1, a: 2 }, top: "x" };
+    const right = { top: "x", outer: { a: 2, z: 1 } };
+    expect(canonicalJson(left)).toBe(canonicalJson(right));
+  });
+
+  it("leaves array element order untouched (arrays are positional)", () => {
+    expect(canonicalJson([3, 1, 2])).toBe("[3,1,2]");
   });
 });
 

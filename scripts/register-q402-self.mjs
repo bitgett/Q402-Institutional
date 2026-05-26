@@ -116,8 +116,25 @@ const METADATA = {
   },
 };
 
+/** Mirror of `app/lib/agent-metadata-store.ts::canonicalJson`. Keys
+ *  sorted recursively so server-side and CLI-side hashes converge for
+ *  identical content regardless of the producer's key ordering. */
+function canonicalJson(payload) {
+  return JSON.stringify(payload, (_key, value) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return value;
+    }
+    const sortedKeys = Object.keys(value).sort();
+    const out = {};
+    for (const k of sortedKeys) {
+      out[k] = value[k];
+    }
+    return out;
+  });
+}
+
 function hashAgentMetadata(payload) {
-  return keccak256(stringToBytes(JSON.stringify(payload)));
+  return keccak256(stringToBytes(canonicalJson(payload)));
 }
 
 function agentMetadataKey(hash) {

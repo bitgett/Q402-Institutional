@@ -421,7 +421,25 @@ type Tab = DashboardTab;
 export default function DashboardPage() {
   const { address, isConnected, signMessage, disconnect } = useWallet();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("overview");
+  // Seed the active tab from the `?tab=…` query param when present so
+  // deeplinks from /agents, the MCP setup hints, and every "open the
+  // dashboard's Agent tab" CTA actually land on the right tab. Reads
+  // window.location.search directly to avoid Next.js 16's Suspense
+  // requirement on useSearchParams in plain client components.
+  const [tab, setTab] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "overview";
+    const raw = new URLSearchParams(window.location.search).get("tab");
+    const valid: Tab[] = [
+      "overview",
+      "developer",
+      "transactions",
+      "claude",
+      "gas-tank",
+      "webhooks",
+      "agent",
+    ];
+    return raw && (valid as string[]).includes(raw) ? (raw as Tab) : "overview";
+  });
   const [keyCopied, setKeyCopied] = useState(false);
   const [depositChain, setDepositChain] = useState<{ chain: string; token: string } | null>(null);
   const [alertEmail, setAlertEmail] = useState("");

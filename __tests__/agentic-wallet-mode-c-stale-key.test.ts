@@ -1,16 +1,23 @@
 /**
  * agentic-wallet-mode-c-stale-key.test.ts
  *
- * Behavioural guard for the Mode C freshness gate added to
+ * Source-grep guard for the Mode C freshness gate added to
  * /api/wallet/agentic/send. The risk: an old apiKey that's still
  * `active: true` in KV (e.g. a rotation that didn't deactivate the
  * prior key) would pass Mode C auth — but the route forwards the
  * caller's *current* subscription apiKey to the relay, letting the
  * stale-key holder drain the user's live quota.
  *
- * Source-grep test exists alongside (`agentic-wallet-routes-auth.test.ts`)
- * for the presence of the STALE_API_KEY code; this file adds a
- * behavioural exercise via the lib functions the route uses.
+ * Scope: this file pins the *shape* of the fix (presence of the
+ * STALE_API_KEY constant, ordering relative to getSubscription, the
+ * refund-on-401 path, and the conditional-on-apiKey guard). A full
+ * behavioural exercise — mounting the route handler against mocked
+ * @vercel/kv + requireAuth + getApiKeyRecord + getSubscription —
+ * would require ~150 lines of fixtures to seed the
+ * trial/multichain/stale-key matrix; we keep that as a follow-up
+ * unit test rather than fold it in here. The route's overall auth
+ * + ratelimit + chain-gate shape is already exercised by
+ * `agentic-wallet-routes-auth.test.ts`.
  */
 
 import { describe, it, expect } from "vitest";

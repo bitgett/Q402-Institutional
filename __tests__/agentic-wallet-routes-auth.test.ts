@@ -84,6 +84,14 @@ describe("POST /api/wallet/agentic/info-by-key — apiKey-auth read endpoint", (
     expect(INFO_BY_KEY).toMatch(/dailyLimitUsd/);
     expect(INFO_BY_KEY).toMatch(/perTxMaxUsd/);
   });
+
+  it("masks the owner EOA — only the short form leaves the server", () => {
+    // An apiKey leak should not directly enumerate the wallet's owner
+    // EOA. The full address resolves on the route side; only the
+    // 6+4 mask is wired into the response shape.
+    expect(INFO_BY_KEY).toMatch(/ownerAddrShort/);
+    expect(INFO_BY_KEY).not.toMatch(/ownerAddr:\s*wallet\.ownerAddr/);
+  });
   it("never accepts a signature — that's the whole point of this endpoint", () => {
     expect(INFO_BY_KEY).not.toMatch(/requireAuth/);
   });

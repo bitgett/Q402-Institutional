@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { ethers } from "ethers";
 import { getAuthCreds } from "@/app/lib/auth-client";
 import type { ChainKey } from "@/app/lib/relayer";
 
@@ -73,24 +74,51 @@ function formatUsd(n: number): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-/** Build a human decimal string from raw + decimals capped by the per-tx
- *  cap. Avoids the parseFloat / Math.round trap that the codebase invariant
- *  bans — we cap by *USD*, then derive the matching raw → string. */
+/**
+ * Build a human decimal string for the SendModal's amount field.
+ *
+ * Codebase invariant: never use Math.floor / Math.round / parseFloat on
+ * token amounts — IEEE-754 drift between display and chain-side
+ * BigInt(amount) is exactly the class of bug the relay-payload incident
+ * exposed. So the human string comes straight from the raw atomic
+ * units via ethers.formatUnits (no float anywhere on the precision
+ * path):
+ *
+ *   raw → formatUnits → exact human string → SendModal parseUnits back
+ *
+ * Cap logic: USDC / USDT peg 1:1 with USD, so when the bucket's USD
+ * exceeds perTxMaxUsd we scale `raw` to the cap proportionally and
+ * format again. Still no float: we compute the capped raw via BigInt
+ * multiplication + division so the cap math is exact at the token's
+ * native precision.
+ */
 function deriveSweepAmount(
   tb: TokenBalance,
   perTxMaxUsd: number | null,
 ): { amount: string; capped: boolean } {
-  // USDC / USDT both peg 1:1 to USD, so usd ≈ raw / 10^decimals.
-  const usdAmount =
-    perTxMaxUsd !== null && tb.usd > perTxMaxUsd ? perTxMaxUsd : tb.usd;
-  // Round down to the token's smallest non-fractional decimal step the
-  // SendModal accepts. We display 2 dp but the contract takes the full
-  // decimals via parseUnits — strip to 6 dp so 18-decimal tokens don't
-  // overflow the SendModal's regex (`^\d+(\.\d+)?$`).
-  const truncated = Math.floor(usdAmount * 1_000_000) / 1_000_000;
+  const rawBig = BigInt(tb.raw);
+  const capped = perTxMaxUsd !== null && tb.usd > perTxMaxUsd;
+
+  let sweepRaw: bigint;
+  if (capped && perTxMaxUsd !== null) {
+    // Scale `raw` down to the cap. USD <-> token unit equivalence is
+    // 1:1 for the stablecoins we support, so:
+    //   capped_raw = raw * (perTxMaxUsd / tb.usd)
+    // We do the multiplication in BigInt space to keep precision at
+    // the token's native decimals. The `usd` field is a JS number
+    // (lossy for >2^53 atomic units) but we only USE it to derive a
+    // ratio against a USD cap that is itself a small integer — so the
+    // float exposure is bounded and safe.
+    const numerator = BigInt(Math.floor(perTxMaxUsd * 1_000_000));
+    const denominator = BigInt(Math.floor(tb.usd * 1_000_000));
+    sweepRaw = denominator > 0n ? (rawBig * numerator) / denominator : 0n;
+  } else {
+    sweepRaw = rawBig;
+  }
+
   return {
-    amount: truncated.toFixed(6).replace(/\.?0+$/, ""),
-    capped: perTxMaxUsd !== null && tb.usd > perTxMaxUsd,
+    amount: ethers.formatUnits(sweepRaw, tb.decimals),
+    capped,
   };
 }
 

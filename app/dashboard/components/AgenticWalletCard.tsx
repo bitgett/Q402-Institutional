@@ -507,6 +507,7 @@ export function AgenticWalletCard({
           balanceUsd={balance?.totalUsd ?? null}
           archiving={archiving}
           error={archiveError}
+          onRequestBalanceRefresh={() => { void fetchBalance(true); }}
           onClose={() => {
             if (!archiving) setArchiveModalOpen(false);
           }}

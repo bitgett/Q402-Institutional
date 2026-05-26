@@ -15,12 +15,37 @@
 
 import { ethers } from "ethers";
 
-/** Stable string serialisation used as the hashing input. Object key
- *  ordering matters — `JSON.stringify` follows insertion order by spec,
- *  and the metadata builder constructs the fields deterministically, so
- *  the hash is reproducible for a given content shape. */
+/**
+ * Stable string serialisation used as the hashing input.
+ *
+ * Plain `JSON.stringify` follows insertion order, which means two
+ * producers building the same logical payload via different key
+ * orderings would emit different bytes and therefore different
+ * keccak256 hashes. We sort object keys recursively before
+ * serialisation so the hash is content-determined, not call-site-
+ * determined. This is "canonical enough" for our agent-metadata
+ * use case — we are not implementing RFC 8785 (no float
+ * normalisation, no UTF-8 NFC step) because the metadata builder
+ * controls all numeric fields and the JSON values are plain
+ * ASCII strings.
+ *
+ * Idempotency contract: for *any* permutation of the same logical
+ * object tree, `canonicalJson(a) === canonicalJson(b)`.
+ */
 export function canonicalJson(payload: unknown): string {
-  return JSON.stringify(payload);
+  return JSON.stringify(payload, replacerSortKeys);
+}
+
+function replacerSortKeys(_key: string, value: unknown): unknown {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  const sortedKeys = Object.keys(value as Record<string, unknown>).sort();
+  const out: Record<string, unknown> = {};
+  for (const k of sortedKeys) {
+    out[k] = (value as Record<string, unknown>)[k];
+  }
+  return out;
 }
 
 /** keccak256 of the canonical JSON, `0x` lowercase. */

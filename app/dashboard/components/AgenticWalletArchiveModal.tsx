@@ -19,7 +19,7 @@
  * modal just collects an informed yes-or-no.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface Props {
   walletAddress: string;
@@ -29,6 +29,12 @@ interface Props {
   archiving: boolean;
   /** Last error message, surfaced inline. */
   error: string | null;
+  /** Force the parent to refetch balance immediately. The card's
+   *  polling cadence is 5 minutes, which is the wrong default for a
+   *  destructive flow — we don't want to render a stale balance the
+   *  user has to confirm against. The modal triggers this once on
+   *  mount so the displayed number is at most a few seconds old. */
+  onRequestBalanceRefresh: () => void;
   onClose: () => void;
   onConfirm: () => void;
 }
@@ -47,12 +53,24 @@ export function AgenticWalletArchiveModal({
   balanceUsd,
   archiving,
   error,
+  onRequestBalanceRefresh,
   onClose,
   onConfirm,
 }: Props) {
   const [typed, setTyped] = useState("");
   const armed = typed.trim().toUpperCase() === TYPED_CONFIRM;
   const hasBalance = balanceUsd !== null && balanceUsd > 0;
+
+  // Force a fresh balance read on mount — the card's 5-min polling
+  // cadence is the wrong default for a destructive confirm. We don't
+  // want the user to type ARCHIVE against a stale "$0.00" when a
+  // deposit just landed.
+  useEffect(() => {
+    onRequestBalanceRefresh();
+    // Intentionally fire-once on mount; the parent's polling continues
+    // independently after that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Compute the hard-delete date once at mount (today + 7 days,
   // matching SOFT_DELETE_GRACE_MS on the server). useState's lazy
