@@ -22,7 +22,8 @@ export type DashboardTab =
   | "transactions"
   | "claude"
   | "gas-tank"
-  | "webhooks";
+  | "webhooks"
+  | "agent";
 
 export interface SidebarSelection {
   view: "trial" | "multichain";
@@ -65,7 +66,8 @@ const TRIAL_TABS: TabDef[] = [
   { id: "overview",     label: "Overview",     icon: "◇" },
   { id: "developer",    label: "Developer",    icon: "{ }" },
   { id: "transactions", label: "Transactions", icon: "≡" },
-  { id: "claude",       label: "Claude",       icon: "C" },
+  { id: "claude",       label: "MCP",          icon: "⌬" },
+  { id: "agent",        label: "Agent",        icon: "✦" },
 ];
 
 // Multichain view is the full paid product — restores the surfaces that
@@ -75,7 +77,8 @@ const MULTICHAIN_TABS: TabDef[] = [
   { id: "gas-tank",     label: "Gas Tank",     icon: "⛽" },
   { id: "developer",    label: "Developer",    icon: "{ }" },
   { id: "transactions", label: "Transactions", icon: "≡" },
-  { id: "claude",       label: "Claude",       icon: "C" },
+  { id: "claude",       label: "MCP",          icon: "⌬" },
+  { id: "agent",        label: "Agent",        icon: "✦" },
 ];
 
 function shortAddr(addr: string) {

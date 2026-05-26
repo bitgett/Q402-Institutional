@@ -45,3 +45,4 @@ data/
 
 # Standalone MCP server package — published separately to npm + github.com/bitgett/q402-mcp
 mcp-server/
+.pr-body.md

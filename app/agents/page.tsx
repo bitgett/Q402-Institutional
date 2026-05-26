@@ -1,655 +1,522 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+/**
+ * /agents — Q402 Agent Wallet landing.
+ *
+ * Brand-distinct surface: deep slate base, emerald accent for the
+ * Agent-Wallet feature line, console mockup right of the hero. Avoids
+ * the navy/yellow gradient that the main landing uses while staying
+ * inside the broader "developer infrastructure" voice.
+ *
+ * No pricing tier on this page; the trial promise (2,000 sponsored TX on
+ * BNB Chain) appears in the proof row, and the page funnels into the
+ * dashboard's Agent tab.
+ */
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 
-// ─── Agent Network Animation ─────────────────────────────────────────────────
+const INSTALL_CMD = "npx @quackai/q402-mcp";
 
-const NODES = [
-  { id: "hub",     x: 50,  y: 50,  label: "Gas Tank",   color: "#4AE54A", size: 22, isHub: true },
-  { id: "a1",      x: 18,  y: 20,  label: "Agent 001",  color: "#4AE54A", size: 11 },
-  { id: "a2",      x: 82,  y: 18,  label: "Agent 002",  color: "#4AE54A", size: 11 },
-  { id: "a3",      x: 15,  y: 78,  label: "Agent 003",  color: "#4AE54A", size: 11 },
-  { id: "a4",      x: 85,  y: 75,  label: "Agent 004",  color: "#4AE54A", size: 11 },
-  { id: "a5",      x: 50,  y: 10,  label: "Agent 005",  color: "#4AE54A", size: 11 },
-  { id: "a6",      x: 50,  y: 90,  label: "Agent 006",  color: "#4AE54A", size: 11 },
-  { id: "avax",    x: 25,  y: 48,  label: "AVAX",       color: "#E84142", size: 13 },
-  { id: "bnb",     x: 75,  y: 48,  label: "BNB",        color: "#F0B90B", size: 13 },
-  { id: "eth",     x: 50,  y: 68,  label: "ETH",        color: "#627EEA", size: 13 },
+// Six lines that drip in one-by-one to make the hero feel live. Kept as
+// data so the animation timing is obvious + tweakable.
+const CONSOLE_LINES: { text: string; tone?: "muted" | "good" | "accent" | "warn"; pause?: number }[] = [
+  { text: "$ q402 agent run shop.bot", tone: "muted" },
+  { text: "agent: ordering analytics data ($3.24 USDC)", tone: "accent" },
+  { text: "→ q402_pay(chain: 'bnb', to: 0x9c…2f4a, amount: 3.24)", tone: "muted" },
+  { text: "✓ settled · gas sponsored · tx 0x4a1c…e83f", tone: "good" },
+  { text: "agent: forwarding 0.5 USDT to data provider", tone: "accent" },
+  { text: "✓ settled · 248 ms · receipt rct_aB12cd34", tone: "good" },
 ];
-
-const EDGES = [
-  ["hub","avax"],["hub","bnb"],["hub","eth"],
-  ["a1","avax"],["a1","hub"],
-  ["a2","bnb"],["a2","hub"],
-  ["a3","avax"],["a3","eth"],
-  ["a4","bnb"],["a4","eth"],
-  ["a5","hub"],["a5","bnb"],
-  ["a6","hub"],["a6","eth"],
-];
-
-function AgentNetwork() {
-  const [pulses, setPulses] = useState<{ id: number; from: string; to: string; progress: number }[]>([]);
-  const counter = useRef(0);
-  const nodesMap = Object.fromEntries(NODES.map(n => [n.id, n]));
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const edge = EDGES[Math.floor(Math.random() * EDGES.length)];
-      const [from, to] = Math.random() > 0.5 ? edge : [edge[1], edge[0]];
-      const id = ++counter.current;
-      setPulses(p => [...p, { id, from, to, progress: 0 }]);
-      setTimeout(() => setPulses(p => p.filter(x => x.id !== id)), 1200);
-    }, 320);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
-      {/* Edges */}
-      {EDGES.map(([a, b]) => {
-        const na = nodesMap[a], nb = nodesMap[b];
-        return (
-          <line
-            key={`${a}-${b}`}
-            x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
-            stroke="rgba(74,229,74,0.12)" strokeWidth="0.3"
-          />
-        );
-      })}
-
-      {/* Pulse dots */}
-      {pulses.map(pulse => {
-        const from = nodesMap[pulse.from];
-        const to   = nodesMap[pulse.to];
-        if (!from || !to) return null;
-        return (
-          <motion.circle
-            key={pulse.id}
-            r="0.8"
-            fill="#4AE54A"
-            style={{ filter: "drop-shadow(0 0 2px #4AE54A)" }}
-            initial={{ cx: from.x, cy: from.y, opacity: 1 }}
-            animate={{ cx: to.x, cy: to.y, opacity: 0 }}
-            transition={{ duration: 1.1, ease: "easeInOut" }}
-          />
-        );
-      })}
-
-      {/* Nodes */}
-      {NODES.map(n => (
-        <g key={n.id}>
-          {n.isHub && (
-            <motion.circle
-              cx={n.x} cy={n.y} r={n.size * 0.7}
-              fill="none" stroke="#4AE54A" strokeWidth="0.4" strokeOpacity="0.3"
-              animate={{ r: [n.size * 0.7, n.size * 1.1, n.size * 0.7] }}
-              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-            />
-          )}
-          <circle
-            cx={n.x} cy={n.y} r={n.size * 0.38}
-            fill={n.color}
-            fillOpacity={n.isHub ? 0.25 : 0.15}
-            stroke={n.color}
-            strokeWidth={n.isHub ? 0.5 : 0.3}
-            strokeOpacity={0.6}
-            style={{ filter: n.isHub ? `drop-shadow(0 0 3px ${n.color})` : undefined }}
-          />
-          {n.isHub && (
-            <text x={n.x} y={n.y + 0.5} textAnchor="middle" dominantBaseline="middle" fill="#4AE54A" fontSize="2.2" fontWeight="bold">
-              ⛽
-            </text>
-          )}
-        </g>
-      ))}
-    </svg>
-  );
-}
-
-// ─── Live TX Feed ─────────────────────────────────────────────────────────────
-
-const CHAINS_FEED = ["AVAX","BNB","ETH","MANTLE","INJECTIVE","XLAYER","STABLE","MONAD","SCROLL"];
-const TOKENS_FEED = ["USDC","USDT"];
-
-function randomHex(len: number) {
-  return Array.from({length: len}, () => Math.floor(Math.random()*16).toString(16)).join("");
-}
-
-function useLiveFeed() {
-  const [items, setItems] = useState<{ id: number; chain: string; token: string; amount: string; from: string; to: string; ms: number }[]>([]);
-  const counter = useRef(0);
-
-  useEffect(() => {
-    const add = () => {
-      setItems(prev => [
-        {
-          id: ++counter.current,
-          chain: CHAINS_FEED[Math.floor(Math.random() * CHAINS_FEED.length)],
-          token: TOKENS_FEED[Math.floor(Math.random() * TOKENS_FEED.length)],
-          amount: (Math.random() * 200 + 1).toFixed(2),
-          from: `0x${randomHex(4)}…${randomHex(4)}`,
-          to:   `0x${randomHex(4)}…${randomHex(4)}`,
-          ms: Math.floor(Math.random() * 300 + 80),
-        },
-        ...prev.slice(0, 11),
-      ]);
-    };
-    add();
-    const t = setInterval(add, 900);
-    return () => clearInterval(t);
-  }, []);
-
-  return items;
-}
-
-// ─── Contact Modal ────────────────────────────────────────────────────────────
-
-function ContactModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ name: "", email: "", telegram: "", agents: "", description: "" });
-  const [status, setStatus] = useState<"idle"|"sending"|"done">("idle");
-
-  async function handleSubmit() {
-    if (!form.name || !form.email) return;
-    setStatus("sending");
-    try {
-      await fetch("/api/inquiry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          appName: form.name,
-          email: form.email,
-          telegram: form.telegram,
-          category: "AI / Agents",
-          targetChain: "Multi-chain",
-          expectedVolume: form.agents ? `${form.agents} agents` : "Unknown",
-          description: `[AGENT PLAN INQUIRY]\n${form.description}`,
-        }),
-      });
-    } catch { /* best-effort */ }
-    await new Promise(r => setTimeout(r, 800));
-    setStatus("done");
-  }
-
-  const overlay = { hidden: { opacity: 0 }, visible: { opacity: 1 } };
-  const panel   = { hidden: { opacity: 0, scale: 0.96, y: 16 }, visible: { opacity: 1, scale: 1, y: 0 } };
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        variants={overlay} initial="hidden" animate="visible" exit="hidden"
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(16px)" }}
-        onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      >
-        <motion.div
-          variants={panel} initial="hidden" animate="visible" exit="hidden"
-          transition={{ type: "spring", damping: 28, stiffness: 300 }}
-          className="w-full max-w-md rounded-2xl overflow-hidden border shadow-2xl"
-          style={{ background: "#090E1A", borderColor: "rgba(74,229,74,0.2)" }}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "rgba(74,229,74,0.1)" }}>
-            <div>
-              <div className="text-green-400 font-bold text-sm uppercase tracking-widest">Agent Plan</div>
-              <div className="text-white/30 text-xs mt-0.5">
-                {status === "done" ? "Request received" : "Contact Sales"}
-              </div>
-            </div>
-            <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
-          </div>
-
-          <div className="px-6 py-6">
-            {status === "done" ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                transition={{ type: "spring" }}
-                className="text-center py-6"
-              >
-                <motion.div
-                  initial={{ scale: 0 }} animate={{ scale: 1 }}
-                  transition={{ type: "spring", delay: 0.1, damping: 12 }}
-                  className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-400/15 border border-green-400/30 flex items-center justify-center text-2xl"
-                >
-                  ✓
-                </motion.div>
-                <h2 className="text-lg font-bold mb-2">We&apos;ll be in touch</h2>
-                <p className="text-white/40 text-sm mb-6">
-                  Our team will reach out within 24 hours to set up your Agent plan and Gas Tank.
-                </p>
-                <div className="flex items-center gap-2 justify-center text-xs text-white/30">
-                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="#29B6F6">
-                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-                  </svg>
-                  or reach us at{" "}
-                  <a href="https://t.me/kwanyeonglee" target="_blank" rel="noopener noreferrer" className="text-[#29B6F6] hover:underline">@kwanyeonglee</a>
-                </div>
-              </motion.div>
-            ) : (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-                <p className="text-white/40 text-sm">Tell us about your agent pipeline and we&apos;ll get you set up.</p>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">Name / Project <span className="text-green-400">*</span></label>
-                    <input
-                      type="text" placeholder="e.g. TradingBot Pro"
-                      value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">Email <span className="text-green-400">*</span></label>
-                    <input
-                      type="email" placeholder="you@company.com"
-                      value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">Telegram</label>
-                    <input
-                      type="text" placeholder="@yourhandle"
-                      value={form.telegram} onChange={e => setForm(f => ({ ...f, telegram: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">Number of agents</label>
-                    <input
-                      type="text" placeholder="e.g. 50–200"
-                      value={form.agents} onChange={e => setForm(f => ({ ...f, agents: e.target.value }))}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] text-white/40 uppercase tracking-widest block mb-1.5">What are your agents doing?</label>
-                  <textarea
-                    rows={3} placeholder="DeFi arb bots, payment processors, yield agents..."
-                    value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 outline-none focus:border-green-400/40 transition-colors resize-none"
-                  />
-                </div>
-
-                <button
-                  onClick={handleSubmit}
-                  disabled={!form.name || !form.email || status === "sending"}
-                  className="w-full bg-green-400 text-navy font-extrabold py-4 rounded-xl hover:bg-green-300 transition-all hover:scale-[1.02] disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100"
-                >
-                  {status === "sending" ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3"/>
-                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-                      </svg>
-                      Sending…
-                    </span>
-                  ) : "Send Inquiry →"}
-                </button>
-
-                <div className="flex items-center gap-2 text-xs text-white/25 justify-center">
-                  <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 flex-shrink-0" fill="#29B6F6">
-                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-                  </svg>
-                  or DM us on Telegram:{" "}
-                  <a href="https://t.me/kwanyeonglee" target="_blank" rel="noopener noreferrer" className="text-[#29B6F6] hover:underline">@kwanyeonglee</a>
-                </div>
-              </motion.div>
-            )}
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
-const CHAIN_COLORS: Record<string, string> = {
-  AVAX: "#E84142", BNB: "#F0B90B", ETH: "#627EEA", MANTLE: "#FFFFFF", INJECTIVE: "#0082FA", XLAYER: "#CCCCCC", STABLE: "#4AE54A", MONAD: "#836EF9", SCROLL: "#EEB431",
-};
 
 export default function AgentsPage() {
-  const [showContact, setShowContact] = useState(false);
-  const feed = useLiveFeed();
-
   return (
-    <div className="min-h-screen text-white overflow-x-hidden" style={{ background: "#060B14" }}>
+    <>
       <Navbar />
 
-      {showContact && <ContactModal onClose={() => setShowContact(false)} />}
+      <main
+        className="pt-24 pb-24 px-6 relative overflow-hidden"
+        style={{
+          background:
+            "radial-gradient(900px 500px at 70% 0%, rgba(34,197,94,0.12), transparent 60%), linear-gradient(180deg, #060B14 0%, #08111E 100%)",
+          color: "#E2E8F0",
+        }}
+      >
+        <GridBacker />
 
-      {/* ── Hero ───────────────────────────────────────────────────────────── */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-20 pb-12 overflow-hidden">
-
-        {/* Animated background grid */}
-        <div className="absolute inset-0 pointer-events-none"
-          style={{
-            backgroundImage: "linear-gradient(rgba(74,229,74,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(74,229,74,0.04) 1px, transparent 1px)",
-            backgroundSize: "60px 60px",
-          }}
-        />
-        {/* Green radial glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full pointer-events-none"
-          style={{ background: "radial-gradient(circle, rgba(74,229,74,0.07) 0%, transparent 70%)" }}
-        />
-
-        <div className="relative z-10 max-w-6xl mx-auto w-full grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left: Text */}
-          <motion.div initial={{ opacity: 0, x: -32 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7, ease: "easeOut" }}>
-            <motion.div
-              initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-              className="inline-flex items-center gap-2 text-green-400 text-xs font-bold uppercase tracking-widest border border-green-400/25 bg-green-400/5 px-3 py-1.5 rounded-full mb-6"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-              AI / Agents — Live
-            </motion.div>
-
-            <h1 className="text-5xl md:text-6xl font-extrabold leading-[1.08] mb-5">
-              One Gas Tank.<br />
-              <span className="text-green-400" style={{ textShadow: "0 0 40px rgba(74,229,74,0.4)" }}>
-                Infinite Agents.
-              </span>
-            </h1>
-            <p className="text-white/50 text-lg leading-relaxed mb-8">
-              Stop managing gas wallets across 1,000+ agents on 9 chains.
-              Deposit once — every agent relays freely until the tank runs dry.
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-              <motion.button
-                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}
-                onClick={() => setShowContact(true)}
-                className="bg-green-400 text-navy font-extrabold px-8 py-4 rounded-xl hover:bg-green-300 transition-colors shadow-lg"
-                style={{ boxShadow: "0 0 32px rgba(74,229,74,0.25)" }}
-              >
-                Contact Sales →
-              </motion.button>
-              <motion.a
-                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}
-                href="/docs"
-                className="border border-white/15 text-white font-semibold px-8 py-4 rounded-xl hover:bg-white/5 transition-colors text-center"
-              >
-                Read the Docs
-              </motion.a>
-            </div>
-
-            {/* Stats */}
-            <div className="flex gap-8 mt-10">
-              {[
-                { val: "8",   label: "EVM Chains" },
-                { val: "∞",   label: "TX Quota" },
-                { val: "$0",  label: "Gas per agent" },
-              ].map((s, i) => (
-                <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.1 }}>
-                  <div className="text-2xl font-extrabold text-green-400">{s.val}</div>
-                  <div className="text-xs text-white/30 mt-0.5">{s.label}</div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Right: Agent Network + Live Feed */}
-          <motion.div initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7, delay: 0.15, ease: "easeOut" }}
-            className="flex flex-col gap-4"
-          >
-            {/* Network graph */}
-            <div className="relative rounded-2xl border border-green-400/15 overflow-hidden"
-              style={{ background: "rgba(74,229,74,0.02)", aspectRatio: "1/0.75" }}
-            >
-              <div className="absolute inset-0 p-4">
-                <AgentNetwork />
-              </div>
-              <div className="absolute top-3 left-4 text-[10px] text-green-400/50 font-mono uppercase tracking-widest">
-                agent network · live
-              </div>
-              <div className="absolute bottom-3 right-4 flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                <span className="text-[10px] text-green-400/50 font-mono">relaying</span>
-              </div>
-            </div>
-
-            {/* Live TX feed */}
-            <div className="rounded-2xl border border-white/8 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/6">
-                <span className="text-[10px] text-white/30 font-mono uppercase tracking-widest">live relay feed</span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-[10px] text-green-400/60 font-mono">live</span>
-                </span>
-              </div>
-              <div className="h-40 overflow-hidden relative">
-                <AnimatePresence initial={false}>
-                  {feed.slice(0, 7).map(item => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, y: -24 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="flex items-center gap-3 px-4 py-1.5 border-b border-white/4 text-xs"
-                    >
-                      <span className="font-bold font-mono w-14 flex-shrink-0"
-                        style={{ color: CHAIN_COLORS[item.chain] ?? "#fff" }}>
-                        {item.chain}
-                      </span>
-                      <span className="text-white/60 font-mono">{item.from}</span>
-                      <span className="text-white/25">→</span>
-                      <span className="text-white/60 font-mono">{item.to}</span>
-                      <span className="ml-auto text-green-400 font-semibold whitespace-nowrap">
-                        {item.amount} {item.token}
-                      </span>
-                      <span className="text-white/20 w-12 text-right flex-shrink-0">{item.ms}ms</span>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            </div>
-          </motion.div>
+        <div className="relative max-w-6xl mx-auto">
+          <Hero />
+          <PromptExamplesSection />
+          <ProofRow />
+          <ConsoleMockupSection />
+          <FlowSection />
+          <PatternsSection />
+          <Closing />
         </div>
-      </section>
-
-      {/* ── Problem vs Solution ──────────────────────────────────────────────── */}
-      <section className="py-20 px-6">
-        <div className="max-w-5xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-3xl font-bold mb-3">Gas management at scale is broken</h2>
-            <p className="text-white/40 text-sm">Running 100 agents across 9 chains = 800 funded wallets to maintain</p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Old way */}
-            <motion.div
-              initial={{ opacity: 0, x: -24 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.5 }}
-              className="rounded-2xl border border-red-400/15 p-6"
-              style={{ background: "rgba(248,113,113,0.03)" }}
-            >
-              <div className="text-red-400 text-xs font-bold uppercase tracking-widest mb-4">Traditional approach</div>
-              <div className="space-y-3">
-                {[
-                  "Each agent holds AVAX + BNB + ETH + OKB + USDT0 + MNT + INJ + MON + Scroll ETH",
-                  "Gas spikes drain wallets → agents go silent",
-                  "700 wallets to monitor, refill, rotate keys",
-                  "Failed TX when gas runs out mid-execution",
-                  "Separate gas logic per chain, per agent",
-                ].map((t, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm text-white/50">
-                    <span className="text-red-400/60 mt-0.5 flex-shrink-0">✕</span>
-                    {t}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-
-            {/* Q402 way */}
-            <motion.div
-              initial={{ opacity: 0, x: 24 }} whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }} transition={{ duration: 0.5, delay: 0.1 }}
-              className="rounded-2xl border border-green-400/20 p-6"
-              style={{ background: "rgba(74,229,74,0.03)" }}
-            >
-              <div className="text-green-400 text-xs font-bold uppercase tracking-widest mb-4">With Q402</div>
-              <div className="space-y-3">
-                {[
-                  "Agents hold zero gas — sign EIP-712 off-chain only",
-                  "One Gas Tank per chain funds unlimited agents",
-                  "1 API key, one deposit per chain — done",
-                  "Q402 relayer handles gas estimation & retry",
-                  "Same SDK call for all 9 chains",
-                ].map((t, i) => (
-                  <div key={i} className="flex items-start gap-2 text-sm text-white/70">
-                    <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                    {t}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Code Walkthrough ─────────────────────────────────────────────────── */}
-      <section className="py-20 px-6">
-        <div className="max-w-3xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="text-center mb-10"
-          >
-            <h2 className="text-3xl font-bold mb-2">Node.js. No browser wallet.</h2>
-            <p className="text-white/35 text-sm">Pure viem. Sign EIP-7702 authorizations server-side.</p>
-          </motion.div>
-
-          <div className="space-y-3">
-            {[
-              {
-                n: "1", label: "Initialize agent wallet",
-                code: `import { createWalletClient, http } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { avalanche } from "viem/chains";
-
-const account = privateKeyToAccount(process.env.AGENT_PRIVATE_KEY);
-const client  = createWalletClient({
-  account, chain: avalanche,
-  transport: http(process.env.AVAX_RPC),
-});`,
-              },
-              {
-                n: "2", label: "Sign EIP-7702 authorization (server-side)",
-                code: `// No MetaMask needed — viem signs directly
-const auth = await client.experimental_signAuthorization({
-  contractAddress: "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
-  nonce: await client.getTransactionCount({ address: account.address }),
-});
-// → { chainId, address, nonce, yParity, r, s }`,
-              },
-              {
-                n: "3", label: "Relay — agents pay $0, gas billed to your Gas Tank",
-                code: `const res = await fetch("https://q402.quackai.ai/api/relay", {
-  method: "POST",
-  body: JSON.stringify({
-    apiKey: process.env.Q402_MULTICHAIN_API_KEY,  // shared across all agents
-    chain: "avax", token: "USDC",
-    from: account.address, to: recipient,
-    amount: "5000000",  // 5 USDC
-    deadline: Math.floor(Date.now() / 1000) + 3600,
-    nonce: String(randomNonce),
-    witnessSig: sig,
-    authorization: auth,
-  }),
-});
-const { txHash, gasCostNative } = await res.json();
-// gasCostNative charged from your Gas Tank — agents pay $0`,
-              },
-            ].map((step, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }} transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="rounded-2xl border border-white/8 overflow-hidden"
-              >
-                <div className="flex items-center gap-3 px-4 py-3 border-b border-white/6"
-                  style={{ background: "rgba(74,229,74,0.03)" }}>
-                  <span className="w-6 h-6 rounded-full bg-green-400/15 text-green-400 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                    {step.n}
-                  </span>
-                  <span className="text-xs text-white/50 font-medium">{step.label}</span>
-                  <span className="ml-auto text-[10px] text-white/20 font-mono">javascript</span>
-                </div>
-                <pre className="p-4 text-xs text-white/65 overflow-x-auto leading-relaxed font-mono"
-                  style={{ background: "rgba(0,0,0,0.3)" }}>
-                  <code>{step.code}</code>
-                </pre>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Pricing CTA ──────────────────────────────────────────────────────── */}
-      <section className="py-20 px-6">
-        <div className="max-w-xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }} transition={{ duration: 0.6 }}
-            className="rounded-2xl border border-green-400/20 p-10 text-center relative overflow-hidden"
-            style={{ background: "linear-gradient(135deg, rgba(74,229,74,0.07) 0%, rgba(6,11,20,0.95) 100%)" }}
-          >
-            <div className="absolute inset-0 pointer-events-none"
-              style={{ background: "radial-gradient(circle at 50% 0%, rgba(74,229,74,0.12) 0%, transparent 60%)" }}
-            />
-            <div className="relative">
-              <div className="text-green-400 text-xs font-bold uppercase tracking-widest mb-4">Agent Plan</div>
-              <div className="flex items-baseline justify-center gap-1 mb-1">
-                <span className="text-white/40 text-lg">from</span>
-                <span className="text-6xl font-extrabold">$500</span>
-                <span className="text-white/40 text-lg">/30-day access</span>
-              </div>
-              <p className="text-white/35 text-sm mb-8">
-                + Gas Tank deposits (consumed at actual on-chain cost, no markup)
-              </p>
-              <ul className="text-left space-y-2.5 mb-8 max-w-xs mx-auto">
-                {[
-                  "Unlimited TX quota",
-                  "All 9 EVM chains",
-                  "Gas Tank pre-pay model",
-                  "Webhooks + real-time events",
-                  "Sandbox mode for testing",
-                  "Node.js SDK support",
-                  "Priority support",
-                ].map((f, i) => (
-                  <li key={i} className="flex items-center gap-2.5 text-sm text-white/70">
-                    <span className="text-green-400 flex-shrink-0">✓</span>{f}
-                  </li>
-                ))}
-              </ul>
-              <motion.button
-                whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }}
-                onClick={() => setShowContact(true)}
-                className="w-full bg-green-400 text-navy font-extrabold py-4 rounded-xl hover:bg-green-300 transition-colors"
-                style={{ boxShadow: "0 0 32px rgba(74,229,74,0.2)" }}
-              >
-                Contact Sales →
-              </motion.button>
-              <p className="text-white/20 text-xs mt-4">Custom pricing for pipelines with 1,000+ agents</p>
-            </div>
-          </motion.div>
-        </div>
-      </section>
+      </main>
 
       <Footer />
+    </>
+  );
+}
+
+// ── Background grid ───────────────────────────────────────────────────────
+
+function GridBacker() {
+  return (
+    <div
+      aria-hidden
+      className="absolute inset-0 pointer-events-none opacity-[0.06]"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(74,222,128,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(74,222,128,0.6) 1px, transparent 1px)",
+        backgroundSize: "60px 60px",
+        maskImage: "radial-gradient(ellipse at center, black 35%, transparent 75%)",
+        WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 75%)",
+      }}
+    />
+  );
+}
+
+// ── Hero ──────────────────────────────────────────────────────────────────
+
+function Hero() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="max-w-3xl mx-auto text-center mb-16"
+    >
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.22em] font-bold mb-6"
+        style={{ background: "rgba(74,222,128,0.10)", color: "#86efac", border: "1px solid rgba(74,222,128,0.22)" }}
+      >
+        <span>✦</span>
+        Agent Wallet
+      </div>
+      <h1 className="text-5xl md:text-6xl font-semibold tracking-tight mb-5 leading-[1.05]">
+        Give your AI a wallet
+        <span style={{ color: "#86efac" }}> it can actually use.</span>
+      </h1>
+      <p className="text-base md:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(226,232,240,0.65)" }}>
+        A dedicated wallet your AI signs through — without ever touching
+        your MetaMask. Set per-tx and per-day spend caps, send across
+        nine EVM chains, and keep the option to walk away with the keys
+        whenever you want.
+      </p>
+      <div className="flex flex-wrap justify-center gap-3 mt-7">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-semibold transition-colors"
+          style={{ background: "#22C55E", color: "#0B1A12" }}
+        >
+          Open dashboard →
+        </Link>
+        <Link
+          href="/claude"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-medium transition-colors border"
+          style={{
+            borderColor: "rgba(226,232,240,0.18)",
+            color: "rgba(226,232,240,0.85)",
+            background: "rgba(226,232,240,0.02)",
+          }}
+        >
+          Use from Claude · Codex · Cursor · Cline
+        </Link>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Prompt examples — "Try saying this" block ────────────────────────────
+//
+// Lifted out of the abstract feature list so the user immediately sees what
+// kind of *thing they could ask their AI to do* once the wallet exists.
+// Three deliberately concrete prompts: a recurring payout, a routing
+// preference, and a spending policy.
+
+function PromptExamplesSection() {
+  const prompts: { quote: string; lane: "recurring" | "routing" | "policy" }[] = [
+    {
+      quote: "Every Friday, send 25 USDT to these 8 contributors.",
+      lane: "recurring",
+    },
+    {
+      quote: "If Scroll gas is cheaper than Ethereum, use Scroll.",
+      lane: "routing",
+    },
+    {
+      quote: "Never spend more than $200 per transaction or $500 per day.",
+      lane: "policy",
+    },
+  ];
+  const laneLabel: Record<"recurring" | "routing" | "policy", string> = {
+    recurring: "recurring payout",
+    routing: "chain routing",
+    policy: "spending policy",
+  };
+  return (
+    <div className="mb-20 max-w-3xl mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.45 }}
+        className="text-center mb-7"
+      >
+        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#86efac" }}>
+          Try saying this
+        </div>
+        <div className="text-2xl md:text-3xl font-semibold tracking-tight mb-2">
+          Plain English. Real settlement.
+        </div>
+        <div className="text-sm" style={{ color: "rgba(226,232,240,0.55)" }}>
+          Works inside Claude, Codex CLI, Cursor, and Cline — same MCP tool,
+          same Agent Wallet underneath.
+        </div>
+      </motion.div>
+
+      <div className="space-y-3">
+        {prompts.map((p, i) => (
+          <motion.div
+            key={p.quote}
+            initial={{ opacity: 0, y: 8 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.4, delay: i * 0.08 }}
+            className="rounded-2xl border p-5 flex items-start gap-4"
+            style={{
+              background: "rgba(226,232,240,0.025)",
+              borderColor: "rgba(74,222,128,0.18)",
+            }}
+          >
+            <div
+              className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[14px] font-semibold"
+              style={{ background: "rgba(74,222,128,0.10)", color: "#86efac", border: "1px solid rgba(74,222,128,0.25)" }}
+              aria-hidden
+            >
+              ❝
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[18px] md:text-[19px] font-medium leading-snug" style={{ color: "#E2E8F0" }}>
+                {p.quote}
+              </div>
+              <div className="text-[10.5px] uppercase tracking-[0.18em] mt-1.5" style={{ color: "rgba(134,239,172,0.7)" }}>
+                {laneLabel[p.lane]}
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="mt-5 text-center text-[11px]" style={{ color: "rgba(226,232,240,0.4)" }}>
+        Your agent only ever spends what you let it — caps are enforced server-side
+        on every send.
+      </div>
     </div>
+  );
+}
+
+// ── Console mockup — its own section between proof + flow ─────────────────
+
+function ConsoleMockupSection() {
+  return (
+    <div className="mb-20 max-w-2xl mx-auto">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.45 }}
+        className="text-center mb-6"
+      >
+        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#86efac" }}>
+          What an agent run looks like
+        </div>
+        <div className="text-2xl font-semibold tracking-tight">
+          Two payments, no popups.
+        </div>
+      </motion.div>
+      <ConsoleMockup />
+    </div>
+  );
+}
+
+// ── Console mockup (animated) ─────────────────────────────────────────────
+
+function ConsoleMockup() {
+  const [visible, setVisible] = useState(0);
+
+  useEffect(() => {
+    if (visible >= CONSOLE_LINES.length) return;
+    const delay = 600 + (CONSOLE_LINES[visible].pause ?? 0);
+    const t = setTimeout(() => setVisible((v) => v + 1), delay);
+    return () => clearTimeout(t);
+  }, [visible]);
+
+  const colorFor = (tone?: "muted" | "good" | "accent" | "warn") => {
+    if (tone === "good") return "#86efac";
+    if (tone === "accent") return "#E2E8F0";
+    if (tone === "warn") return "#FCD34D";
+    return "rgba(226,232,240,0.45)";
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, delay: 0.1 }}
+      className="rounded-2xl border p-5 font-mono text-[13px] leading-relaxed relative"
+      style={{
+        background: "rgba(8,17,30,0.85)",
+        borderColor: "rgba(74,222,128,0.22)",
+        boxShadow: "0 0 0 1px rgba(74,222,128,0.05), 0 30px 80px rgba(0,0,0,0.35)",
+      }}
+    >
+      {/* Window chrome */}
+      <div className="flex items-center gap-1.5 mb-4">
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(239,68,68,0.55)" }} />
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(234,179,8,0.55)" }} />
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(74,222,128,0.55)" }} />
+        <span className="ml-3 text-[10px] uppercase tracking-[0.22em]" style={{ color: "rgba(226,232,240,0.35)" }}>
+          mcp · q402_pay · live
+        </span>
+      </div>
+
+      <div className="space-y-1.5 min-h-[180px]">
+        {CONSOLE_LINES.slice(0, visible).map((line, i) => (
+          <div key={i} style={{ color: colorFor(line.tone) }}>
+            {line.text}
+          </div>
+        ))}
+        {visible < CONSOLE_LINES.length && (
+          <div className="inline-block w-2 h-4 align-middle" style={{ background: "#86efac" }} />
+        )}
+      </div>
+
+      <div
+        className="mt-5 pt-3 border-t flex items-center justify-between text-[11px]"
+        style={{ borderColor: "rgba(226,232,240,0.06)", color: "rgba(226,232,240,0.4)" }}
+      >
+        <span>Real flow · sandboxed in this mockup</span>
+        <span style={{ color: "#86efac" }}>● connected</span>
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Proof row ─────────────────────────────────────────────────────────────
+
+function ProofRow() {
+  const rows: { label: string; value: string; foot: string }[] = [
+    { label: "Chains live",       value: "9 EVM chains",     foot: "BNB · ETH · AVAX · X Layer · Stable · Mantle · Injective · Monad · Scroll" },
+    { label: "Wallet popups",     value: "Zero",             foot: "Your agent signs through Q402 — your MetaMask never touched" },
+    { label: "Spend controls",    value: "Per-tx · daily",   foot: "Caps enforced at the relay on every send + batch row" },
+    { label: "Settle time",       value: "~1–3 s",           foot: "Median, single-recipient, sender pays $0 gas" },
+  ];
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.45 }}
+      className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-20"
+    >
+      {rows.map((r) => (
+        <div
+          key={r.label}
+          className="rounded-xl border p-4"
+          style={{ background: "rgba(226,232,240,0.02)", borderColor: "rgba(226,232,240,0.08)" }}
+        >
+          <div className="text-[10px] uppercase tracking-[0.18em] font-semibold mb-2" style={{ color: "rgba(226,232,240,0.4)" }}>
+            {r.label}
+          </div>
+          <div className="text-xl font-semibold mb-1" style={{ color: "#86efac" }}>
+            {r.value}
+          </div>
+          <div className="text-[11px] leading-snug" style={{ color: "rgba(226,232,240,0.5)" }}>
+            {r.foot}
+          </div>
+        </div>
+      ))}
+    </motion.div>
+  );
+}
+
+// ── Flow ──────────────────────────────────────────────────────────────────
+
+function FlowSection() {
+  const steps = [
+    {
+      n: "01",
+      title: "Install Q402 MCP",
+      body: "One package across every MCP-capable client. Same surface in Claude, Codex CLI, Cursor, and Cline.",
+      code: INSTALL_CMD,
+    },
+    {
+      n: "02",
+      title: "Mint the wallet",
+      body: "One signature from your dashboard. Q402 generates a dedicated wallet for your agent, ties it to your account, and lets you export the key anytime.",
+      code: 'POST /api/wallet/agentic\n  → { address: "0xD2…ff64", createdAt: 1717... }',
+    },
+    {
+      n: "03",
+      title: "Let the agent run",
+      body: "Your agent calls one tool and Q402 handles the rest. Server signs, relayer pays gas, every transfer comes back with a verifiable Trust Receipt.",
+      code: 'agent.pay({\n  chain: "bnb",\n  token: "USDC",\n  to:   "0x9c…2f4a",\n  amount: "3.24"\n})',
+    },
+  ];
+  return (
+    <div className="mb-20">
+      <motion.h2
+        initial={{ opacity: 0, y: 8 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.45 }}
+        className="text-3xl font-semibold tracking-tight mb-2"
+      >
+        Three steps to autonomous spend.
+      </motion.h2>
+      <p className="text-sm mb-9" style={{ color: "rgba(226,232,240,0.55)" }}>
+        Bounded by limits you set. Trust-receipted on every transfer.
+      </p>
+
+      <div className="space-y-4">
+        {steps.map((s, i) => (
+          <motion.div
+            key={s.n}
+            initial={{ opacity: 0, x: -8 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.45, delay: i * 0.08 }}
+            className="grid md:grid-cols-[120px_1fr_1.05fr] gap-5 items-start rounded-2xl border p-5"
+            style={{ background: "rgba(226,232,240,0.02)", borderColor: "rgba(226,232,240,0.07)" }}
+          >
+            <div className="text-2xl font-mono font-semibold" style={{ color: "#86efac" }}>{s.n}</div>
+            <div>
+              <div className="text-lg font-semibold mb-2">{s.title}</div>
+              <div className="text-sm leading-relaxed" style={{ color: "rgba(226,232,240,0.6)" }}>
+                {s.body}
+              </div>
+            </div>
+            <pre
+              className="rounded-md p-4 text-[12px] font-mono leading-relaxed whitespace-pre overflow-x-auto"
+              style={{
+                background: "rgba(8,17,30,0.7)",
+                color: "#cbd5e1",
+                border: "1px solid rgba(74,222,128,0.16)",
+              }}
+            >
+              {s.code}
+            </pre>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Patterns / use-case strip ────────────────────────────────────────────
+
+function PatternsSection() {
+  const patterns = [
+    {
+      eyebrow: "Streaming spend",
+      headline: "Pay per row, not per call.",
+      body: "Crawlers / RAG pipelines fan out micro-payments to data providers in real time. Limits cap the worst case.",
+    },
+    {
+      eyebrow: "Batch payouts",
+      headline: "20 recipients, one call.",
+      body: "Reward distribution, ambassador stipends, vendor invoices — submit up to 20 transfers in a single batch and get per-row results back.",
+    },
+    {
+      eyebrow: "Recurring API spend",
+      headline: "Keep the lights on, automatically.",
+      body: "Top up worker bots and partner services on cron. Reverse-direction sweep keeps the agent wallet itself funded.",
+    },
+  ];
+  return (
+    <div className="mb-20">
+      <motion.h2
+        initial={{ opacity: 0, y: 8 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.45 }}
+        className="text-3xl font-semibold tracking-tight mb-9"
+      >
+        Patterns this unlocks.
+      </motion.h2>
+
+      <div className="grid md:grid-cols-3 gap-4">
+        {patterns.map((p, i) => (
+          <motion.div
+            key={p.eyebrow}
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.4, delay: i * 0.08 }}
+            className="rounded-2xl border p-6"
+            style={{ background: "rgba(226,232,240,0.02)", borderColor: "rgba(226,232,240,0.07)" }}
+          >
+            <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-3" style={{ color: "#86efac" }}>
+              {p.eyebrow}
+            </div>
+            <div className="text-lg font-semibold mb-3">{p.headline}</div>
+            <div className="text-sm leading-relaxed" style={{ color: "rgba(226,232,240,0.6)" }}>
+              {p.body}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Closing ───────────────────────────────────────────────────────────────
+
+function Closing() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.45 }}
+      className="rounded-2xl border p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-5"
+      style={{
+        background:
+          "linear-gradient(135deg, rgba(34,197,94,0.10) 0%, rgba(8,17,30,0.6) 70%)",
+        borderColor: "rgba(74,222,128,0.22)",
+      }}
+    >
+      <div>
+        <div className="text-xl md:text-2xl font-semibold mb-1">Spin one up.</div>
+        <div className="text-sm" style={{ color: "rgba(226,232,240,0.6)" }}>
+          Free to create. Send on BNB Chain today; a multichain key opens the rest of the 9 EVM chains when you&apos;re ready.
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold"
+          style={{ background: "#22C55E", color: "#0B1A12" }}
+        >
+          Create Agent Wallet →
+        </Link>
+        <Link
+          href="/docs#claude-mcp"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium border"
+          style={{
+            borderColor: "rgba(226,232,240,0.18)",
+            color: "rgba(226,232,240,0.85)",
+            background: "rgba(226,232,240,0.02)",
+          }}
+        >
+          Read the docs
+        </Link>
+      </div>
+    </motion.div>
   );
 }

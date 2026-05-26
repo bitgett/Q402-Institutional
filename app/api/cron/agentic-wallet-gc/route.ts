@@ -1,0 +1,181 @@
+/**
+ * GET /api/cron/agentic-wallet-gc
+ *
+ * Vercel Cron sweep that hard-deletes Agent Wallet records once the
+ * 7-day soft-delete grace has elapsed. Multi-wallet aware (v2 schema).
+ *
+ * Audit fix (P0 — backend correctness):
+ *   Before hard-deleting, query the on-chain stablecoin balance. If
+ *   the wallet still holds USDC/USDT above the dust threshold, SKIP
+ *   the delete and fire a critical ops alert. The user forgot to
+ *   sweep — destroying the encrypted private key now would permanently
+ *   strand the funds. The alert hands the wallet back to ops who can
+ *   reach out, extend the grace, or operator-sweep on the user's
+ *   behalf.
+ *
+ * Authentication: shared CRON_SECRET via Authorization header.
+ *
+ * Scan pattern: kv.keys("aw:*") then filter to per-wallet record keys
+ * (which now follow `aw:{owner}:{walletId}`). Legacy single-wallet
+ * `aw:{owner}` keys are also picked up so any unmigrated owner is
+ * still swept.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { kv } from "@vercel/kv";
+
+import {
+  hardDeleteAgenticWallet,
+  SOFT_DELETE_GRACE_MS,
+  type AgenticWalletRecord,
+} from "@/app/lib/agentic-wallet";
+import { fetchAgenticBalances } from "@/app/lib/agentic-wallet-balance";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+/** Skip delete if on-chain balance is at least this many USD-equivalent. */
+const DUST_THRESHOLD_USD = 0.01;
+
+interface ScanKey {
+  key: string;
+  owner: string;
+  walletId: string;
+  isLegacy: boolean;
+}
+
+/**
+ * Classify a KV key:
+ *   `aw:{owner}`              → legacy single-wallet record (v1)
+ *   `aw:{owner}:{walletId}`   → multi-wallet record (v2)
+ * Anything with more segments (export-log, daily-spend, batch, list,
+ * default, register-tx, balance, send, agent-md) is skipped.
+ */
+function classifyRecordKey(key: string): ScanKey | null {
+  if (!key.startsWith("aw:")) return null;
+  // Exclude all non-record families up front.
+  for (const prefix of [
+    "aw:export-log:",
+    "aw:daily-spend:",
+    "aw:batch:",
+    "aw:send:",
+    "aw:list:",
+    "aw:default:",
+    "aw:register-tx:",
+    "aw:balance:",
+    "aw:agent-md:",
+  ]) {
+    if (key.startsWith(prefix)) return null;
+  }
+  const rest = key.slice("aw:".length);
+  const parts = rest.split(":");
+  if (parts.length === 1) {
+    // Legacy single-wallet record. walletId is implicit (the address
+    // lives on the record itself, not in the key).
+    return { key, owner: parts[0], walletId: "", isLegacy: true };
+  }
+  if (parts.length === 2 && /^0x[0-9a-fA-F]{40}$/.test(parts[1])) {
+    return { key, owner: parts[0], walletId: parts[1], isLegacy: false };
+  }
+  return null;
+}
+
+export async function GET(req: NextRequest): Promise<NextResponse> {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return NextResponse.json({ error: "CRON_SECRET unset — refusing to run." }, { status: 503 });
+  }
+  const auth = req.headers.get("authorization") ?? "";
+  if (auth !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  let keys: string[];
+  try {
+    keys = await kv.keys("aw:*");
+  } catch (e) {
+    console.error("[agentic-wallet-gc] kv.keys failed:", e);
+    return NextResponse.json({ error: "kv_scan_failed" }, { status: 502 });
+  }
+
+  const now = Date.now();
+  const deleted: string[] = [];
+  const skipped: { key: string; reason: string; balanceUsd?: number | null }[] = [];
+
+  for (const key of keys) {
+    const cls = classifyRecordKey(key);
+    if (!cls) continue;
+
+    const record = await kv.get<AgenticWalletRecord>(key);
+    if (!record) continue;
+    if (!record.deletedAt) continue;
+
+    const elapsed = now - record.deletedAt;
+    if (elapsed < SOFT_DELETE_GRACE_MS) {
+      skipped.push({ key, reason: "within_grace" });
+      continue;
+    }
+
+    // ── Balance check (P0 audit fix) ─────────────────────────────────
+    // Even after grace, refuse to destroy the keystore if the wallet
+    // still holds funds. Alerts ops so a human can decide whether to
+    // extend the grace, contact the user, or operator-sweep.
+    let balanceUsd: number | null = null;
+    try {
+      const balances = await fetchAgenticBalances(record.address);
+      balanceUsd = typeof balances.totalUsd === "number" ? balances.totalUsd : null;
+    } catch (e) {
+      console.error(`[agentic-wallet-gc] balance check failed for ${record.address}:`, e);
+      // Fail closed: cannot prove balance is zero → skip the delete and
+      // alert ops. Better to ask a human than risk burning funds.
+      void sendOpsAlert(
+        `agentic-wallet-gc balance check failed for ${record.ownerAddr} ` +
+          `(walletId=${cls.isLegacy ? "(legacy)" : cls.walletId}, address=${record.address}). ` +
+          `Hard-delete deferred — investigate balance manually before retrying.`,
+        "warn",
+      );
+      skipped.push({ key, reason: "balance_check_failed", balanceUsd: null });
+      continue;
+    }
+
+    if (balanceUsd !== null && balanceUsd >= DUST_THRESHOLD_USD) {
+      void sendOpsAlert(
+        `agentic-wallet-gc: HOLDING WALLET — refusing to hard-delete ${record.address} ` +
+          `(owner ${record.ownerAddr}, grace elapsed ${Math.floor(elapsed / 86_400_000)}d). ` +
+          `On-chain USDC+USDT balance ≈ $${balanceUsd.toFixed(2)}. ` +
+          `User forgot to sweep before grace expired. Either extend the grace (manual KV ` +
+          `update of deletedAt) or have ops execute a withdraw on the user's behalf.`,
+        "critical",
+      );
+      skipped.push({ key, reason: "balance_above_dust", balanceUsd });
+      continue;
+    }
+
+    try {
+      if (cls.isLegacy) {
+        // Legacy single-wallet record. The library no longer surfaces a
+        // matching delete signature — fall back to a direct KV delete
+        // for the record key + the legacy export log. Lazy migration
+        // would have moved this record on first call, but if the user
+        // hasn't touched their account since the v2 deploy it might
+        // still be sitting here.
+        await kv.del(key);
+        await kv.del(`aw:export-log:${cls.owner.toLowerCase()}`);
+      } else {
+        await hardDeleteAgenticWallet(record.ownerAddr, cls.walletId);
+      }
+      deleted.push(`${record.ownerAddr}${cls.walletId ? `/${cls.walletId}` : ""}`);
+    } catch (e) {
+      console.error(`[agentic-wallet-gc] hardDelete failed for ${record.ownerAddr}:`, e);
+      skipped.push({ key, reason: "delete_failed" });
+    }
+  }
+
+  return NextResponse.json({
+    scannedKeys: keys.length,
+    deleted,
+    skipped,
+    asOf: new Date(now).toISOString(),
+  });
+}

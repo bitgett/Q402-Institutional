@@ -127,6 +127,128 @@ export function buildChallengeMessage(addr: string, challenge: string): string {
 }
 
 /**
+ * Intent-bound challenge message.
+ *
+ * Used by fund-moving + destructive Agent Wallet routes (send, batch,
+ * export, archive). The signed message embeds the action name + every
+ * intent field (chain, token, recipient, amount, wallet, ...) so the
+ * signature is provably specific to *this* exact action. Replaying the
+ * same signed bytes against a different action or different intent
+ * fails verification.
+ *
+ * Pair with `verifyAndConsumeChallenge` — same atomic single-use
+ * semantics as the generic challenge; the only difference is the
+ * caller passes the rebuilt action message into the verifier instead
+ * of `buildChallengeMessage(addr, challenge)`.
+ *
+ * Canonical layout: action name as the second line, intent fields as
+ * `Key: value` pairs sorted by key (so client and server build the
+ * exact same bytes regardless of object iteration order), address +
+ * challenge as the trailing trust block.
+ */
+export function buildIntentMessage(
+  addr: string,
+  action: string,
+  intent: Record<string, string | number>,
+  challenge: string,
+): string {
+  const intentLines = Object.keys(intent)
+    .sort()
+    .map((k) => `${k}: ${intent[k]}`)
+    .join("\n");
+  return [
+    "Q402 Agent Wallet",
+    `Action: ${action}`,
+    "",
+    intentLines,
+    "",
+    `Address: ${addr.toLowerCase()}`,
+    `Challenge: ${challenge}`,
+  ].join("\n");
+}
+
+/**
+ * Verify a signature over a *specific* rebuilt message + consume the
+ * challenge atomically. The caller is responsible for rebuilding the
+ * expected message from server-trusted intent fields (so a client
+ * can't smuggle a signed message that bound to weaker intent).
+ *
+ * Failure modes mirror `verifyAndConsumeChallenge`.
+ */
+export async function verifyAndConsumeIntent(
+  addr: string,
+  challenge: string,
+  signature: string,
+  expectedMessage: string,
+): Promise<{ ok: true } | { ok: false; code: "NONCE_EXPIRED" | "SIG_MISMATCH" }> {
+  const key = challengeKvKey(addr);
+  const consumedKey = `auth_challenge_consumed:${addr.toLowerCase()}:${challenge}`;
+
+  try {
+    const claimed = await kv.set(consumedKey, "1", { nx: true, ex: CHALLENGE_TTL_SEC });
+    if (!claimed) return { ok: false, code: "NONCE_EXPIRED" };
+  } catch {
+    return { ok: false, code: "NONCE_EXPIRED" };
+  }
+
+  let storedChallenge: string | null;
+  try {
+    storedChallenge = await kv.get<string>(key);
+  } catch {
+    return { ok: false, code: "NONCE_EXPIRED" };
+  }
+  if (
+    !storedChallenge ||
+    storedChallenge.length !== challenge.length ||
+    !timingSafeEqual(Buffer.from(storedChallenge), Buffer.from(challenge))
+  ) {
+    return { ok: false, code: "NONCE_EXPIRED" };
+  }
+
+  try {
+    const recovered = ethers.verifyMessage(expectedMessage, signature);
+    if (recovered.toLowerCase() !== addr.toLowerCase()) {
+      return { ok: false, code: "SIG_MISMATCH" };
+    }
+  } catch {
+    return { ok: false, code: "SIG_MISMATCH" };
+  }
+
+  kv.del(key).catch(() => { /* best-effort */ });
+  return { ok: true };
+}
+
+/**
+ * Convenience: rebuild + verify in one call. Use this from route
+ * handlers so the canonical message stays under server control.
+ */
+export async function requireIntentAuth(args: {
+  address: string | null | undefined;
+  challenge: string | null | undefined;
+  signature: string | null | undefined;
+  action: string;
+  intent: Record<string, string | number>;
+}): Promise<string | { error: string; code?: string; status: number }> {
+  if (!args.address || !args.challenge || !args.signature) {
+    return { error: "address, challenge, signature required", status: 400 };
+  }
+  const addr = args.address.toLowerCase();
+  const expected = buildIntentMessage(addr, args.action, args.intent, args.challenge);
+  const result = await verifyAndConsumeIntent(addr, args.challenge, args.signature, expected);
+  if (!result.ok) {
+    if (result.code === "NONCE_EXPIRED") {
+      return {
+        error: "Challenge expired, already used, or never issued. Request a fresh one and retry.",
+        code: "NONCE_EXPIRED",
+        status: 401,
+      };
+    }
+    return { error: "Signature does not match intent.", code: "SIG_MISMATCH", status: 401 };
+  }
+  return addr;
+}
+
+/**
  * Issue a one-time challenge for `addr`.
  * Overwrites any existing challenge (only the latest is valid).
  */

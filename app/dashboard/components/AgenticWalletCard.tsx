@@ -1,0 +1,655 @@
+"use client";
+
+/**
+ * AgenticWalletCard — Agent Wallet console for the dashboard.
+ *
+ * Layout philosophy: this is a *safe box for AI spending*, not a developer
+ * panel. Information density is the enemy. The card unfolds in three
+ * progressive bands so a non-technical owner can scan top-to-bottom and
+ * understand what they're looking at:
+ *
+ *   1. Identity strip       — one-line explanation + address chip
+ *   2. Four stat tiles      — Balance · Daily cap · Per-tx cap · Signer
+ *   3. Action surfaces      — primary (Send/Receive/Batch), secondary
+ *                             (Withdraw/Limits), then a *separated*
+ *                             danger zone for Archive and Export
+ *
+ * The danger zone is intentionally walled off with a red border so an
+ * accidental click on "Export private key" can't feel like the user just
+ * hit another settings button. Same for Archive while the wallet is
+ * active. When the wallet is archived, the danger zone flips to surface
+ * Restore + the remaining grace window.
+ */
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { getAuthCreds } from "@/app/lib/auth-client";
+import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
+import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
+import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
+import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
+import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
+import { AgenticWalletWithdrawModal, type WithdrawBucket } from "./AgenticWalletWithdrawModal";
+import type { AgenticWalletPublic } from "./AgenticWalletTab";
+import type { ChainKey } from "@/app/lib/relayer";
+import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
+
+interface TokenSlice {
+  usd: number;
+  raw: string;
+  decimals: number;
+}
+
+interface ChainBucket {
+  chain: ChainKey;
+  usdc: TokenSlice | null;
+  usdt: TokenSlice | null;
+  totalUsd: number | null;
+  error?: string;
+}
+
+interface BalancePayload {
+  asOf: number;
+  totalUsd: number;
+  perChain: ChainBucket[];
+}
+
+const CHAIN_LABEL: Partial<Record<ChainKey, string>> = {
+  bnb: "BNB Chain",
+  eth: "Ethereum",
+  avax: "Avalanche",
+  xlayer: "X Layer",
+  stable: "Stable",
+  mantle: "Mantle",
+  injective: "Injective",
+  monad: "Monad",
+  scroll: "Scroll",
+};
+
+function formatBalance(n: number): string {
+  if (!Number.isFinite(n)) return "$—";
+  if (n === 0) return "$0.00";
+  if (n < 0.01) return "<$0.01";
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+const POLL_INTERVAL_MS = 5 * 60 * 1000;
+
+interface Props {
+  wallet: AgenticWalletPublic;
+  address: string;
+  signMessage: (message: string) => Promise<string | null>;
+  /** Server-resolved: owner has paid multichain scope. Gates the Batch
+   *  button trigger so trial users see a paid-only hint instead of
+   *  bouncing off a backend 402 mid-modal. */
+  hasMultichainScope: boolean;
+  /**
+   * Increment this counter (from the Tab) to force a fresh on-chain
+   * balance fetch even when the wallet record is unchanged. Audit P1
+   * fix — previously the Tab's `onChanged` callback only reloaded the
+   * wallet record, leaving Holdings stale until the 5-minute poll
+   * tick.
+   */
+  balanceRefreshTick?: number;
+  onChanged: () => void;
+}
+
+/**
+ * Build an 8004scan agent URL from the wallet record's stored
+ * `${network}:${agentId}` tag. 8004scan uses chain-slug paths
+ * (`/agents/bsc/{id}`); keep this in sync with `scanUrl()` in
+ * `app/lib/erc8004.ts`. Only the live registration network ("bsc")
+ * is reachable today via ALLOWED_NETWORKS — the fallback covers any
+ * future expansion without breaking the link.
+ */
+function agentScanUrl(tag: string): string {
+  const [network, id] = tag.split(":");
+  const slug =
+    network === "bsc-testnet" ? "bsc-testnet"
+    : network === "eth" ? "ethereum"
+    : network === "base" ? "base"
+    : network === "polygon" ? "polygon"
+    : network === "arbitrum" ? "arbitrum"
+    : network === "celo" ? "celo"
+    : "bsc";
+  return `https://8004scan.io/agents/${slug}/${id}`;
+}
+
+function shortAddr(addr: string) {
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+export function AgenticWalletCard({
+  wallet,
+  address,
+  signMessage,
+  hasMultichainScope,
+  balanceRefreshTick = 0,
+  onChanged,
+}: Props) {
+  const [sendOpen, setSendOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawBucket, setWithdrawBucket] = useState<WithdrawBucket | null>(null);
+  const [receiveOpen, setReceiveOpen] = useState(false);
+  const [limitsOpen, setLimitsOpen] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [balance, setBalance] = useState<BalancePayload | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const lastFetchRef = useRef<number>(0);
+
+  const fetchBalance = useCallback(async (force = false) => {
+    if (wallet.deletedAt !== null) return;
+    setBalanceLoading(true);
+    try {
+      const auth = await getAuthCreds(address, signMessage);
+      if (!auth) return;
+      const qs = new URLSearchParams({
+        address,
+        nonce: auth.nonce,
+        sig: auth.signature,
+        walletId: wallet.walletId,
+        ...(force ? { force: "1" } : {}),
+      }).toString();
+      const res = await fetch(`/api/wallet/agentic/balance?${qs}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { balances?: BalancePayload };
+      if (data.balances) {
+        setBalance({
+          asOf: data.balances.asOf,
+          totalUsd: data.balances.totalUsd,
+          perChain: data.balances.perChain ?? [],
+        });
+        lastFetchRef.current = Date.now();
+      }
+    } catch {
+      /* swallow — keep showing the last known balance */
+    } finally {
+      setBalanceLoading(false);
+    }
+  }, [address, signMessage, wallet.deletedAt, wallet.walletId]);
+
+  useEffect(() => {
+    void fetchBalance();
+    const interval = setInterval(() => {
+      void fetchBalance();
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [fetchBalance]);
+
+  // External refresh trigger from the Tab — bumping balanceRefreshTick
+  // forces a fresh on-chain read past the 5-minute cache. Closes the
+  // "send done but Holdings still shows pre-send total" audit gap.
+  useEffect(() => {
+    if (balanceRefreshTick > 0) {
+      void fetchBalance(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balanceRefreshTick]);
+
+  async function copyAddress() {
+    try {
+      await navigator.clipboard.writeText(wallet.address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Card-level destructive flows (archive / restore / export) live in
+  // AgenticWalletDangerZone — surfaced at the bottom of the Agent tab
+  // so this card stays focused on identity + spending. The grace
+  // counter below is still needed for the inline "Archived · N days
+  // left" badge in the identity header.
+  const archived = wallet.deletedAt !== null;
+  const graceMs = 7 * 24 * 60 * 60 * 1000;
+  const graceLeftDays = archived && wallet.deletedAt !== null
+    ? Math.max(0, Math.ceil((wallet.deletedAt + graceMs - Date.now()) / (24 * 60 * 60 * 1000)))
+    : null;
+
+  return (
+    <>
+      {/* ── Identity + stats card ─────────────────────────────────────────── */}
+      <div
+        className="rounded-2xl border p-7 relative overflow-hidden"
+        style={{
+          background: "linear-gradient(135deg, #0F1929 0%, #0A1521 100%)",
+          borderColor: "rgba(74,222,128,0.18)",
+        }}
+      >
+        <DotPattern />
+
+        {/* Header — what this is, plus the address chip */}
+        <div className="relative flex items-start justify-between gap-4 mb-5">
+          <div className="space-y-1">
+            <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-400/85 font-semibold">
+              Agent Wallet
+            </div>
+            <div className="text-white/65 text-sm leading-relaxed max-w-md">
+              A separate wallet your AI signs through. Your MetaMask stays
+              untouched — funds here are bounded by the caps below.
+            </div>
+            {archived && (
+              <div className="text-[11px] mt-2 inline-block px-2 py-0.5 rounded bg-red-500/12 text-red-300 font-medium">
+                Archived · {graceLeftDays ?? 0} day{graceLeftDays === 1 ? "" : "s"} left to restore
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={copyAddress}
+            className="rounded-full border px-3 py-1.5 flex items-center gap-2 text-[11px] font-mono text-white/65 hover:text-emerald-300 transition-colors shrink-0"
+            style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+            title="Copy address"
+          >
+            <span>{shortAddr(wallet.address)}</span>
+            <span className="text-white/30">{copied ? "✓" : "⎘"}</span>
+          </button>
+        </div>
+
+        {/* Four stat tiles. Balance is the hero (wider). */}
+        <div className="relative grid grid-cols-2 md:grid-cols-4 gap-2 mb-5">
+          <StatTile
+            label="Balance"
+            value={balance ? formatBalance(balance.totalUsd) : balanceLoading ? "…" : "$—"}
+            sub="USDC + USDT across 9 chains"
+            tone="hero"
+            action={
+              <button
+                type="button"
+                onClick={() => { void fetchBalance(true); }}
+                disabled={balanceLoading}
+                title="Refresh balance"
+                className="text-[10px] text-white/35 hover:text-emerald-300 transition-colors disabled:opacity-40"
+              >
+                {balanceLoading ? "…" : "↻"}
+              </button>
+            }
+          />
+          <StatTile
+            label="Daily cap"
+            value={wallet.dailyLimitUsd !== null ? `$${wallet.dailyLimitUsd}` : "no cap"}
+            sub={wallet.dailyLimitUsd !== null ? "resets at 00:00 UTC" : "set one in limits"}
+          />
+          <StatTile
+            label="Per-tx cap"
+            value={wallet.perTxMaxUsd !== null ? `$${wallet.perTxMaxUsd}` : "no cap"}
+            sub={wallet.perTxMaxUsd !== null ? "per single send" : "set one in limits"}
+          />
+          <StatTile
+            label="Signer"
+            value="Q402 server"
+            sub={
+              wallet.erc8004AgentId
+                ? `ERC-8004 · agent #${wallet.erc8004AgentId.split(":")[1]}`
+                : "encrypted key in keystore"
+            }
+          />
+        </div>
+
+        {/* Per-chain × per-token breakdown — surfaces "where the money
+            actually is" without making the user click into Withdraw. Only
+            non-zero buckets render; collapse when wallet is empty. */}
+        {balance && balance.totalUsd > 0 && (
+          <HoldingsBreakdown wallet={wallet.address} balance={balance} />
+        )}
+
+        {/* Primary actions — Send / Receive / Batch sit here as equals. */}
+        <div className="relative flex flex-wrap gap-2 mt-5">
+          <ActionPill
+            label="Send"
+            disabled={archived}
+            onClick={() => setSendOpen(true)}
+            iconArrow="up-right"
+          />
+          <ActionPill
+            label="Receive"
+            disabled={archived}
+            onClick={() => setReceiveOpen(true)}
+            iconArrow="down-left"
+          />
+          <ActionPill
+            label={hasMultichainScope ? "Batch send" : "Batch send (Paid)"}
+            disabled={archived || !hasMultichainScope}
+            onClick={() => setBatchOpen(true)}
+            iconArrow="grid"
+            title={
+              hasMultichainScope
+                ? undefined
+                : "Batch sends require an active multichain subscription. Open the Payment tab to activate one."
+            }
+          />
+        </div>
+
+        {/* Secondary utility row — wallet maintenance, low risk. */}
+        <div className="relative mt-4 pt-4 border-t flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]"
+          style={{ borderColor: "rgba(255,255,255,0.06)" }}
+        >
+          <button
+            type="button"
+            disabled={archived}
+            onClick={() => setWithdrawOpen(true)}
+            className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+          >
+            ↩ Withdraw to your wallet
+          </button>
+          <button
+            type="button"
+            disabled={archived}
+            onClick={() => setLimitsOpen(true)}
+            className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+          >
+            ⚙ Spending limits
+          </button>
+          {wallet.erc8004AgentId ? (
+            <a
+              href={agentScanUrl(wallet.erc8004AgentId)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-emerald-300/85 hover:text-emerald-200 transition-colors"
+              title="View on 8004scan"
+            >
+              ◉ Agent #{wallet.erc8004AgentId.split(":")[1]} ↗
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled={archived}
+              onClick={() => setAgentOpen(true)}
+              className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+            >
+              ◉ Register on 8004scan
+            </button>
+          )}
+        </div>
+      </div>
+
+      {sendOpen && (
+        <AgenticWalletSendModal
+          walletAddress={wallet.address}
+          walletId={wallet.walletId}
+          ownerAddress={address}
+          signMessage={signMessage}
+          onClose={() => setSendOpen(false)}
+          onSent={() => {
+            setSendOpen(false);
+            onChanged();
+          }}
+          perTxMaxUsd={wallet.perTxMaxUsd}
+          dailyLimitUsd={wallet.dailyLimitUsd}
+        />
+      )}
+
+      {batchOpen && (
+        <AgenticWalletBatchModal
+          walletAddress={wallet.address}
+          walletId={wallet.walletId}
+          ownerAddress={address}
+          signMessage={signMessage}
+          onClose={() => setBatchOpen(false)}
+          onSent={() => {
+            setBatchOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+
+      {receiveOpen && (
+        <AgenticWalletReceiveModal walletAddress={wallet.address} onClose={() => setReceiveOpen(false)} />
+      )}
+
+      {withdrawOpen && (
+        <AgenticWalletWithdrawModal
+          walletAddress={wallet.address}
+          walletId={wallet.walletId}
+          ownerAddress={address}
+          signMessage={signMessage}
+          perTxMaxUsd={wallet.perTxMaxUsd}
+          onClose={() => setWithdrawOpen(false)}
+          onPickBucket={(bucket) => {
+            setWithdrawOpen(false);
+            setWithdrawBucket(bucket);
+          }}
+        />
+      )}
+
+      {withdrawBucket && (
+        <AgenticWalletSendModal
+          walletAddress={wallet.address}
+          walletId={wallet.walletId}
+          ownerAddress={address}
+          signMessage={signMessage}
+          onClose={() => setWithdrawBucket(null)}
+          onSent={() => {
+            setWithdrawBucket(null);
+            onChanged();
+          }}
+          prefillTo={address}
+          prefillChain={withdrawBucket.chain}
+          prefillToken={withdrawBucket.token}
+          prefillAmount={withdrawBucket.amount}
+          titleOverride={`Withdraw ${withdrawBucket.token} on ${withdrawBucket.chain}`}
+          perTxMaxUsd={wallet.perTxMaxUsd}
+          dailyLimitUsd={wallet.dailyLimitUsd}
+        />
+      )}
+
+      {limitsOpen && (
+        <AgenticWalletLimitsModal
+          ownerAddress={address}
+          walletId={wallet.walletId}
+          signMessage={signMessage}
+          initial={{
+            dailyLimitUsd: wallet.dailyLimitUsd,
+            perTxMaxUsd: wallet.perTxMaxUsd,
+          }}
+          onClose={() => setLimitsOpen(false)}
+          onSaved={() => {
+            setLimitsOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+
+      {agentOpen && (
+        <AgenticWalletAgentModal
+          walletAddress={wallet.address}
+          walletId={wallet.walletId}
+          ownerAddress={address}
+          signMessage={signMessage}
+          onClose={() => setAgentOpen(false)}
+          onRegistered={() => {
+            setAgentOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+
+    </>
+  );
+}
+
+// ── HoldingsBreakdown ──────────────────────────────────────────────────────
+//
+// Surfaces *where* the balance sits so the user can decide whether a
+// transfer needs a chain switch, whether a chain has dust, or whether
+// a deposit landed on the wrong network. The Withdraw modal builds the
+// same per-bucket view but is gated behind a click — this preview is
+// always visible whenever the wallet is non-empty.
+//
+// Renders one row per (chain, token) bucket with usd > 0. Each row
+// links to the wallet's explorer page on that chain so a user can
+// verify the on-chain side independently. Empty chains are summarised
+// in a single trailing line ("Empty on: …") so the surface stays
+// compact when the wallet only holds value on 1–2 chains.
+
+function HoldingsBreakdown({ wallet, balance }: { wallet: string; balance: BalancePayload }) {
+  type Row = { chain: ChainKey; token: "USDT" | "USDC"; usd: number };
+  const rows: Row[] = [];
+  const emptyChains: ChainKey[] = [];
+  const failedChains: ChainKey[] = [];
+  for (const c of balance.perChain) {
+    if (c.error) { failedChains.push(c.chain); continue; }
+    const usdt = c.usdt?.usd ?? 0;
+    const usdc = c.usdc?.usd ?? 0;
+    if (usdt > 0) rows.push({ chain: c.chain, token: "USDT", usd: usdt });
+    if (usdc > 0) rows.push({ chain: c.chain, token: "USDC", usd: usdc });
+    if (usdt === 0 && usdc === 0) emptyChains.push(c.chain);
+  }
+  rows.sort((a, b) => b.usd - a.usd);
+  if (rows.length === 0) return null;
+
+  return (
+    <div
+      className="relative mt-4 rounded-xl border p-3"
+      style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
+    >
+      <div className="text-[10px] uppercase tracking-widest text-white/45 font-medium mb-2">
+        Holdings · {rows.length} bucket{rows.length === 1 ? "" : "s"}
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((r) => (
+          <div key={`${r.chain}-${r.token}`} className="flex items-center justify-between text-[12.5px]">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-white/80 font-medium">{CHAIN_LABEL[r.chain] ?? r.chain}</span>
+              <span className="text-white/45">·</span>
+              <span className="text-white/65 font-mono text-[12px]">{r.token}</span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-emerald-300 font-mono text-[12px]">
+                {r.usd < 0.01 ? "<$0.01" : `$${r.usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`}
+              </span>
+              <a
+                href={explorerAddressUrl(r.chain, wallet)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white/40 hover:text-emerald-300 transition-colors text-[11px]"
+                title={`View on ${explorerLabel(r.chain)}`}
+              >
+                ↗
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+      {(emptyChains.length > 0 || failedChains.length > 0) && (
+        <div className="text-[10.5px] text-white/35 mt-2 pt-2 border-t" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+          {emptyChains.length > 0 && (
+            <span>Empty on {emptyChains.map((c) => CHAIN_LABEL[c] ?? c).join(" · ")}</span>
+          )}
+          {emptyChains.length > 0 && failedChains.length > 0 && <span> · </span>}
+          {failedChains.length > 0 && (
+            <span className="text-amber-300/70">RPC failed: {failedChains.map((c) => CHAIN_LABEL[c] ?? c).join(", ")}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── StatTile ───────────────────────────────────────────────────────────────
+
+function StatTile({
+  label,
+  value,
+  sub,
+  tone,
+  action,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone?: "hero";
+  action?: ReactNode;
+}) {
+  const hero = tone === "hero";
+  return (
+    <div
+      className={`rounded-xl border p-3 ${hero ? "md:col-span-1" : ""}`}
+      style={{
+        background: hero ? "rgba(74,222,128,0.06)" : "rgba(255,255,255,0.02)",
+        borderColor: hero ? "rgba(74,222,128,0.22)" : "rgba(255,255,255,0.06)",
+      }}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <div className="text-[10px] text-white/45 uppercase tracking-widest font-medium">
+          {label}
+        </div>
+        {action}
+      </div>
+      <div className={`text-white tracking-tight ${hero ? "text-2xl font-semibold" : "text-base font-medium"}`}>
+        {value}
+      </div>
+      <div className="text-[11px] text-white/35 mt-0.5">{sub}</div>
+    </div>
+  );
+}
+
+// ── ActionPill ─────────────────────────────────────────────────────────────
+
+function ActionPill({
+  label,
+  onClick,
+  disabled,
+  iconArrow,
+  title,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  iconArrow: "up-right" | "down-left" | "grid";
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      style={{
+        background: "rgba(74,222,128,0.10)",
+        color: "#86efac",
+        border: "1px solid rgba(74,222,128,0.25)",
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled) e.currentTarget.style.background = "rgba(74,222,128,0.16)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "rgba(74,222,128,0.10)";
+      }}
+    >
+      <ArrowIcon kind={iconArrow} />
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "grid" }) {
+  if (kind === "grid") {
+    return <span className="text-sm leading-none">⇉</span>;
+  }
+  if (kind === "down-left") {
+    return <span className="text-sm leading-none rotate-180 inline-block">↗</span>;
+  }
+  return <span className="text-sm leading-none inline-block">↗</span>;
+}
+
+// ── Decorative dot pattern ────────────────────────────────────────────────
+
+function DotPattern() {
+  return (
+    <div
+      aria-hidden
+      className="absolute top-0 right-0 h-full w-1/2 pointer-events-none opacity-40"
+      style={{
+        background:
+          "radial-gradient(circle, rgba(74,222,128,0.25) 1px, transparent 1.5px) 0 0 / 14px 14px",
+        maskImage: "linear-gradient(to left, black 0%, black 30%, transparent 80%)",
+        WebkitMaskImage: "linear-gradient(to left, black 0%, black 30%, transparent 80%)",
+      }}
+    />
+  );
+}
