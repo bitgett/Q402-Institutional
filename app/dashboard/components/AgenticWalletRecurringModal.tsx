@@ -232,6 +232,28 @@ export function AgenticWalletRecurringModal({
           <button onClick={onClose} className="text-white/40 hover:text-white text-sm" disabled={submitting}>✕</button>
         </div>
 
+        {/* Daily-cap bypass disclosure. Users naturally assume that
+            "this wallet's daily cap" applies to every outgoing transfer
+            — including recurring ones. It doesn't: a recurring rule IS
+            the ceiling the user authorised at create time, and the cron
+            fires through a separate code path that doesn't decrement
+            the daily-spend bucket. Surfacing this BEFORE create avoids
+            the "I thought my $100/day cap would stop this" support
+            ticket. */}
+        <div
+          className="mb-4 rounded-md border p-3 text-[12px]"
+          style={{
+            background: "rgba(74,222,128,0.05)",
+            borderColor: "rgba(74,222,128,0.20)",
+            color: "rgba(226,232,240,0.78)",
+          }}
+        >
+          <strong className="text-emerald-300">Heads up:</strong>{" "}
+          recurring fires don&apos;t count against this wallet&apos;s daily cap.
+          The rule&apos;s amount × frequency is the spend ceiling you&apos;re
+          authorising right now. Per-tx max still applies on every fire.
+        </div>
+
         {/* Label (optional) */}
         <Field label="Label (optional)">
           <input

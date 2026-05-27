@@ -44,7 +44,7 @@
 import { kv } from "@vercel/kv";
 import { ethers } from "ethers";
 
-import type { AgenticChainKey, AgenticToken } from "./agentic-wallet-sign.js";
+import type { AgenticChainKey, AgenticToken } from "./agentic-wallet-sign";
 
 export const RECURRING_NEXT_ACTION_ZSET = "aw:recurring:next-action";
 
@@ -52,6 +52,31 @@ export const RECURRING_NEXT_ACTION_ZSET = "aw:recurring:next-action";
 export const MIN_CANCEL_WINDOW_HOURS = 24;
 /** Sanity ceiling; longer than this and the rule effectively never fires on time. */
 export const MAX_CANCEL_WINDOW_HOURS = 24 * 14;
+
+/**
+ * Backoff applied on a transient cron failure (relay 5xx, RPC down,
+ * sign error). The rule's ZSET score is pushed forward by this much so
+ * the failing rule doesn't pin the front of the queue and starve every
+ * other due rule behind it. Picked at 5 min so a quick recovery still
+ * tries within one cron interval (15min) but a chain-wide RPC outage
+ * doesn't burn every tick.
+ */
+export const TRANSIENT_BACKOFF_MS = 5 * 60 * 1000;
+
+/**
+ * If the planned fire time has elapsed by MORE than this when the cron
+ * finally gets to the rule (cron downtime, paused-then-resumed-late,
+ * etc.), the cron does NOT replay the missed fire — it jumps forward
+ * to the next future slot. Policy decision: better to under-pay one
+ * cycle than double-pay several weeks of catch-up. Currently the
+ * threshold is the rule's own `cancelWindowHours`, so a "you got
+ * notified 24h in advance" promise is the same threshold for "did
+ * this fire actually happen recently enough that you'd still
+ * expect it".
+ */
+function catchUpThresholdMs(rule: { cancelWindowHours: number }): number {
+  return rule.cancelWindowHours * 60 * 60 * 1000;
+}
 
 /**
  * The longest cancel window that can fit inside one frequency interval.
@@ -154,6 +179,59 @@ function ruleListKey(owner: string, walletId: string): string {
 
 function zsetMember(owner: string, walletId: string, ruleId: string): string {
   return `${lower(owner)}/${lower(walletId)}/${ruleId}`;
+}
+
+/**
+ * Per-slot fire-lock. Keyed on (ruleId, nextRunAt) so the lock is
+ * unique to this specific scheduled fire — a successful fire's lock
+ * lingers until expiry, which is exactly what blocks a duplicate
+ * cron tick (or a stale retry after a KV write failure) from re-
+ * firing the same slot. The next scheduled fire has a different
+ * nextRunAt → different lock key → can proceed.
+ *
+ * TTL is intentionally longer than `maxDuration` of the cron route so
+ * even a worst-case "cron timed out mid-relay, retry happens 5 min
+ * later" hits the lingering lock and aborts. Set generously since the
+ * key auto-expires.
+ */
+const FIRE_LOCK_TTL_SEC = 60 * 60; // 1h
+function fireLockKey(ruleId: string, slotMs: number): string {
+  return `aw:recurring:fire-lock:${ruleId}:${slotMs}`;
+}
+
+/**
+ * Create-idempotency claim. Keyed on the canonical shape of the rule
+ * (owner | walletId | freq | chain | token | recipient | amount). If
+ * a user retries POST after a network blip, the same body hashes to
+ * the same key and the second create returns the cached ruleId.
+ *
+ * TTL kept tight (10 min) — long enough to absorb a normal client
+ * retry, short enough that an intentional "create the same rule
+ * shape again on purpose 30 minutes later" still works.
+ */
+const CREATE_CLAIM_TTL_SEC = 10 * 60;
+function createClaimKey(fp: string): string {
+  return `aw:recurring:create:${fp}`;
+}
+function createFingerprint(args: {
+  ownerAddr: string;
+  walletId: string;
+  frequency: string;
+  chain: string;
+  token: string;
+  recipient: string;
+  amount: string;
+}): string {
+  const seed = [
+    lower(args.ownerAddr),
+    lower(args.walletId),
+    args.frequency,
+    args.chain,
+    args.token,
+    lower(args.recipient),
+    args.amount,
+  ].join("|");
+  return ethers.keccak256(ethers.toUtf8Bytes(seed)).slice(2, 18);
 }
 
 export function parseZsetMember(
@@ -312,6 +390,39 @@ function generateRuleId(): string {
 export async function createRecurringRule(
   input: CreateRuleInput,
 ): Promise<RecurringRule> {
+  // ── Idempotency claim. SET NX a fingerprint of the canonical rule
+  //    shape; if the same body hits us again within the window, return
+  //    the rule the first call created instead of authoring a duplicate.
+  //    Critical for an "automation engine" — a dropped POST response
+  //    shouldn't translate to a second recurring payment getting set up.
+  const fp = createFingerprint({
+    ownerAddr: input.ownerAddr,
+    walletId: input.walletId,
+    frequency: input.frequency,
+    chain: input.chain,
+    token: input.token,
+    recipient: input.recipient,
+    amount: input.amount,
+  });
+  const claimKey = createClaimKey(fp);
+  const claimedRuleId = await kv.set(claimKey, "pending", {
+    nx: true,
+    ex: CREATE_CLAIM_TTL_SEC,
+  });
+  if (claimedRuleId === null) {
+    // A previous call with this exact shape is in flight or already
+    // landed. Resolve the ruleId it produced and return that rule.
+    const existing = await kv.get<string>(claimKey);
+    if (existing && existing !== "pending") {
+      const cached = await getRecurringRule(input.ownerAddr, input.walletId, existing);
+      if (cached) return cached;
+    }
+    throw new RecurringValidationError(
+      "DUPLICATE_IN_FLIGHT",
+      "An identical recurring rule is being created right now. Retry in a few seconds.",
+    );
+  }
+
   // ── Validation ───────────────────────────────────────────────────────
   if (!isFrequencyEnum(input.frequency)) {
     throw new RecurringValidationError("INVALID_FREQUENCY", `Frequency must be one of: daily, weekly:<day>, monthly:<N>, monthly:last (got "${input.frequency}").`);
@@ -369,9 +480,7 @@ export async function createRecurringRule(
     createdAt: now,
   };
 
-  // Persist record first, then list (NX so concurrent retries don't
-  // duplicate the ruleId in the list — the ruleId is random anyway so
-  // we shouldn't hit this in practice). ZSET last so a partial write
+  // Persist record first, then list. ZSET last so a partial write
   // never leaves a rule the cron can fire against without a record.
   await kv.set(ruleKey(rule.ownerAddr, rule.walletId, ruleId), rule);
   // RPUSH to preserve creation order in the list.
@@ -380,6 +489,11 @@ export async function createRecurringRule(
     score: computeNextActionAt(rule),
     member: zsetMember(rule.ownerAddr, rule.walletId, ruleId),
   });
+
+  // Stamp the idempotency claim with the resolved ruleId so a retry
+  // can resolve to the same rule (the NX claim above was "pending"
+  // until this point).
+  await kv.set(claimKey, ruleId, { ex: CREATE_CLAIM_TTL_SEC });
 
   return rule;
 }
@@ -644,14 +758,62 @@ export async function markRulePending(
 }
 
 /**
+ * Try to claim the right to fire `rule` for its current slot. Returns
+ * `{ ok: true }` if the cron should proceed with sign+relay; returns
+ * `{ ok: false, reason }` if a concurrent tick already owns this slot
+ * or the slot was already fired and the rule simply hasn't been moved
+ * forward yet (KV write race after a successful relay).
+ *
+ * The lock key includes `rule.nextRunAt` so each scheduled fire has a
+ * unique lock. The NEXT scheduled fire gets a different slot → new
+ * lock key → can proceed normally.
+ *
+ * Critical for post-relay idempotency: if a cron tick successfully
+ * relays but the follow-up `recordRuleFired` KV write fails, the rule
+ * stays in its "pending fire" state. A retry tick pulls the same
+ * rule, calls `claimFireSlot`, finds the lock from the first tick
+ * still held — aborts. No double-fire on chain.
+ */
+export async function claimFireSlot(
+  rule: RecurringRule,
+): Promise<{ ok: boolean; reason?: string }> {
+  const claim = await kv.set(fireLockKey(rule.ruleId, rule.nextRunAt), "in-flight", {
+    nx: true,
+    ex: FIRE_LOCK_TTL_SEC,
+  });
+  if (claim === null) {
+    return { ok: false, reason: "fire-lock held — concurrent tick or post-relay retry" };
+  }
+  return { ok: true };
+}
+
+/**
+ * Release the fire-lock manually. Called when fire was aborted BEFORE
+ * any relay attempt (e.g. wallet missing, sub lapsed) so a subsequent
+ * retry isn't blocked for the lock's full TTL. NOT called after a
+ * successful relay — the lock SHOULD persist so a retry-after-KV-fail
+ * sees it.
+ */
+export async function releaseFireSlot(rule: RecurringRule): Promise<void> {
+  await kv.del(fireLockKey(rule.ruleId, rule.nextRunAt));
+}
+
+/**
  * Finalise a successful fire. Advances nextRunAt to the next slot,
  * clears pendingFireAt, updates counters. Re-queues into ZSET.
+ *
+ * Catch-up: next slot is computed from `max(now, rule.nextRunAt)`, not
+ * from `rule.nextRunAt` alone. If the cron has been down and the rule
+ * fired once on resume, we jump ALL THE WAY forward to the next future
+ * slot — we don't replay every missed daily/weekly fire. Better to
+ * under-pay one cycle than double-pay several weeks.
  */
 export async function recordRuleFired(
   rule: RecurringRule,
   amountUsd: number,
   nowMs: number,
 ): Promise<RecurringRule> {
+  const baseline = Math.max(nowMs, rule.nextRunAt);
   const next: RecurringRule = {
     ...rule,
     lastRunAt: nowMs,
@@ -659,7 +821,7 @@ export async function recordRuleFired(
     pendingFireAt: null,
     totalFiredCount: rule.totalFiredCount + 1,
     totalSpentUsd: rule.totalSpentUsd + amountUsd,
-    nextRunAt: computeNextFireAt(rule.frequency, rule.nextRunAt),
+    nextRunAt: computeNextFireAt(rule.frequency, baseline),
   };
   await kv.set(ruleKey(rule.ownerAddr, rule.walletId, rule.ruleId), next);
   await kv.zadd(RECURRING_NEXT_ACTION_ZSET, {
@@ -667,6 +829,43 @@ export async function recordRuleFired(
     member: zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId),
   });
   return next;
+}
+
+/**
+ * Catch-up jump. Called when the cron pulls a rule whose nextRunAt is
+ * MORE than `catchUpThresholdMs(rule)` in the past — the planned fire
+ * was so long ago that replaying it would surprise the user. Skip the
+ * stale fire entirely, advance to the next future slot, clear pending,
+ * re-queue into ZSET. No relay, no balance change.
+ *
+ * If `pendingFireAt` was set, the user got an alert for a fire that
+ * never landed. They're un-surprised by the no-show because the rule
+ * row already showed "Pending — fires <when>" + the inline skip/cancel
+ * controls. The next cron cycle will alert them on the new slot
+ * normally.
+ */
+export async function skipStaleSlot(
+  rule: RecurringRule,
+  nowMs: number,
+): Promise<RecurringRule> {
+  const next: RecurringRule = {
+    ...rule,
+    pendingFireAt: null,
+    nextRunAt: computeNextFireAt(rule.frequency, nowMs),
+    lastError: "skipped stale slot (cron resumed after the planned fire time)",
+  };
+  await kv.set(ruleKey(rule.ownerAddr, rule.walletId, rule.ruleId), next);
+  await kv.zadd(RECURRING_NEXT_ACTION_ZSET, {
+    score: computeNextActionAt(next),
+    member: zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId),
+  });
+  return next;
+}
+
+/** Tell the cron whether this rule's nextRunAt is too stale to fire. */
+export function isStaleSlot(rule: RecurringRule, nowMs: number): boolean {
+  if (nowMs <= rule.nextRunAt) return false;
+  return nowMs - rule.nextRunAt > catchUpThresholdMs(rule);
 }
 
 /**
@@ -694,15 +893,41 @@ export async function recordRuleCapExceeded(
 
 /**
  * Record a transient failure (RPC down, relay 502, etc.). Does NOT
- * advance nextRunAt or change status — the next cron tick will retry.
- * pendingFireAt stays set so the user still sees "pending" rather
- * than the rule appearing to fire on schedule from their POV.
+ * advance `nextRunAt` or change status — the next cron tick will
+ * retry — but DOES push the ZSET score forward by
+ * `TRANSIENT_BACKOFF_MS` so a chronically-failing rule at the front of
+ * the queue doesn't block every other due rule from being pulled this
+ * tick. If the failure is just a flap, the rule re-enters the queue
+ * 5min later (well within one cron interval) and tries again.
+ *
+ * pendingFireAt stays set so the user keeps seeing "pending" in the
+ * dashboard.
  */
 export async function recordRuleTransientError(
   rule: RecurringRule,
   reason: string,
+  nowMs: number,
 ): Promise<void> {
   const next: RecurringRule = { ...rule, lastError: reason };
   await kv.set(ruleKey(rule.ownerAddr, rule.walletId, rule.ruleId), next);
-  // Leave ZSET as-is — same nextActionAt, cron will try again.
+  // Push the ZSET score forward so failing rules don't pin the front
+  // of the queue (queue-starvation guard).
+  const member = zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId);
+  const backedOff = nowMs + TRANSIENT_BACKOFF_MS;
+  await kv.zadd(RECURRING_NEXT_ACTION_ZSET, { score: backedOff, member });
+}
+
+/**
+ * Remove the rule from the ZSET without changing its record. Used by
+ * the cron when it pulls a rule and discovers the wallet is gone or
+ * archived — without this cleanup the same stale entry would be pulled
+ * (and skipped) every tick forever. The cascade hooks
+ * (pause/resume/deleteForHardDelete) own the rule's record state;
+ * this just stops the cron from re-considering it.
+ */
+export async function removeFromActionZset(rule: RecurringRule): Promise<void> {
+  await kv.zrem(
+    RECURRING_NEXT_ACTION_ZSET,
+    zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId),
+  );
 }
