@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
+import { ThemedSelect } from "./ThemedSelect";
 
 interface Props {
   walletId: string;
@@ -252,16 +253,16 @@ export function AgenticWalletRecurringModal({
             <KindButton active={kind === "monthly-last"} onClick={() => setKind("monthly-last")} disabled={submitting}>Last of month</KindButton>
           </div>
           {kind === "weekly" && (
-            <select
+            <ThemedSelect<Weekday>
               value={weekday}
-              onChange={(e) => setWeekday(e.target.value as Weekday)}
-              className="w-full bg-[#0B1626] border border-white/10 rounded-md px-3 py-2 text-sm text-white"
+              onChange={setWeekday}
+              options={Object.entries(WEEKDAY_LABEL).map(([key, label]) => ({
+                value: key as Weekday,
+                label,
+              }))}
               disabled={submitting}
-            >
-              {Object.entries(WEEKDAY_LABEL).map(([key, label]) => (
-                <option key={key} value={key}>{label}</option>
-              ))}
-            </select>
+              ariaLabel="Day of the week"
+            />
           )}
           {kind === "monthly" && (
             <input
@@ -283,18 +284,20 @@ export function AgenticWalletRecurringModal({
 
         {/* Chain × Token */}
         <Field label="Chain">
-          <select
+          <ThemedSelect<ChainKey>
             value={chain}
-            onChange={(e) => setChain(e.target.value as ChainKey)}
-            className="w-full bg-[#0B1626] border border-white/10 rounded-md px-3 py-2 text-sm text-white"
+            onChange={setChain}
+            options={CHAIN_META.map((c) => ({
+              value: c.key,
+              label: c.label,
+              meta: c.multichainOnly
+                ? hasMultichainScope ? "multichain" : "paid only"
+                : undefined,
+              disabled: c.multichainOnly && !hasMultichainScope,
+            }))}
             disabled={submitting}
-          >
-            {CHAIN_META.map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}{c.multichainOnly && !hasMultichainScope ? " (multichain only)" : ""}
-              </option>
-            ))}
-          </select>
+            ariaLabel="Chain"
+          />
         </Field>
 
         <Field label="Token">

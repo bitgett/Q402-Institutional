@@ -18,6 +18,7 @@ import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
 import { friendlyError, type FriendlyError, type BackendError } from "@/app/lib/agentic-wallet-friendly-error";
 import { useModalEscape } from "./useModalEscape";
+import { ThemedSelect } from "./ThemedSelect";
 import type { ChainKey } from "@/app/lib/relayer";
 
 interface Props {
@@ -266,18 +267,12 @@ export function AgenticWalletBatchModal({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Chain</div>
-                <select
+                <ThemedSelect<ChainKey>
                   value={chain}
-                  onChange={(e) => setChain(e.target.value as ChainKey)}
-                  className="w-full rounded-md border px-3 py-2 text-sm text-white"
-                  style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.05)" }}
-                >
-                  {CHAIN_OPTIONS.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setChain}
+                  options={CHAIN_OPTIONS.map((c) => ({ value: c.key, label: c.label }))}
+                  ariaLabel="Chain"
+                />
               </div>
               <div>
                 <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Token</div>
