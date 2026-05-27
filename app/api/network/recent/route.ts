@@ -46,6 +46,7 @@ interface RelayedTxRow {
   tokenAmount?: number | string;
   tokenSymbol?: string;
   relayedAt?: string;
+  relayTxHash?: string;
 }
 
 interface RecentTxEntry {
@@ -55,6 +56,11 @@ interface RecentTxEntry {
   amountUsd: number;
   token: string;
   ts: number;
+  /** Settlement tx hash. Already public on the chain explorer (anyone can
+   *  look up the relayer EOA's outbound TXs on BscScan and find these), so
+   *  exposing it here just lets downstream pollers (viz, dashboards) link
+   *  to the explorer instead of forcing viewers to hunt by sender + amount. */
+  txHash: string;
 }
 
 interface RecentResponse {
@@ -110,7 +116,13 @@ async function computeRecent(limit: number): Promise<RecentResponse> {
       const token = typeof tx.tokenSymbol === "string" ? tx.tokenSymbol : "USDT";
       const parsed = Date.parse(tx.relayedAt ?? "");
       const ts = Number.isFinite(parsed) ? parsed : 0;
-      all.push({ from, to, chain, amountUsd: rowAmountUsd(tx), token, ts });
+      // Validate the tx hash before surfacing — a malformed value would
+      // make the viz link out to a dead bscscan/etherscan page.
+      const txHash =
+        typeof tx.relayTxHash === "string" && /^0x[0-9a-fA-F]{64}$/.test(tx.relayTxHash)
+          ? tx.relayTxHash
+          : "";
+      all.push({ from, to, chain, amountUsd: rowAmountUsd(tx), token, ts, txHash });
     }
   }
 
