@@ -94,8 +94,26 @@ const defaultKey = (owner: string) => `aw:default:${lower(owner)}`;
 const createLockKey = (owner: string) => `aw:create-lock:${lower(owner)}`;
 const exportLogKey = (owner: string, walletId: string) =>
   `aw:export-log:${lower(owner)}:${lower(walletId)}`;
+/**
+ * Daily-spend storage. Suffix `-c` distinguishes the cents-integer
+ * v2 schema from the legacy float (`aw:daily-spend:…`). Legacy keys
+ * carry a 48h TTL so the v1 surface auto-flushes naturally after a
+ * deploy — no active migration needed; the codebase only writes to v2
+ * from here forward. Cents storage eliminates the IEEE-754 drift that
+ * accumulated over 10⁴+ small charges per day (≤$0.0001/day at the
+ * worst-case cap, but never decreases — a one-way error that always
+ * tightened the effective cap).
+ */
 const dailySpendKey = (owner: string, walletId: string, dateUtc: string) =>
-  `aw:daily-spend:${lower(owner)}:${lower(walletId)}:${dateUtc}`;
+  `aw:daily-spend-c:${lower(owner)}:${lower(walletId)}:${dateUtc}`;
+
+/** USD → cents, banker-safe rounding. Caller must validate `amountUsd > 0`. */
+function usdToCents(amountUsd: number): number {
+  return Math.round(amountUsd * 100);
+}
+function centsToUsd(cents: number): number {
+  return cents / 100;
+}
 
 const CREATE_LOCK_TTL_SEC = 10;
 
@@ -563,6 +581,12 @@ export async function getExportLog(
 /**
  * Sum of USD-equivalent stablecoin sent today (UTC) from the specific
  * Agentic Wallet. Returns 0 when no spend recorded or KV is unreachable.
+ *
+ * Storage is integer cents (no IEEE-754 drift). The return is still
+ * a USD float so callers that compare against USD caps don't need to
+ * change shape — but the underlying accumulator is exact within ±0.5¢
+ * (the round-trip at the boundary), bounded forever rather than
+ * accumulating per-charge.
  */
 export async function getDailySpendUsd(
   ownerAddr: string,
@@ -572,7 +596,7 @@ export async function getDailySpendUsd(
     const v = await kv.get<number>(
       dailySpendKey(ownerAddr, walletId, todayUtc()),
     );
-    return typeof v === "number" && Number.isFinite(v) ? v : 0;
+    return typeof v === "number" && Number.isFinite(v) ? centsToUsd(v) : 0;
   } catch {
     return 0;
   }
@@ -604,8 +628,8 @@ export async function checkDailyLimit(
 
 /**
  * Atomically reserve `amountUsd` of today's daily-spend budget for the
- * given wallet. Combines read + write into a single INCRBYFLOAT so
- * concurrent sends from the same wallet can't burst past the cap.
+ * given wallet. Uses INCRBY on integer cents so concurrent sends can't
+ * burst past the cap AND the accumulator never accrues float drift.
  *
  * Caller MUST call `refundDailySpend` on any downstream failure (relay
  * error, network drop) so the budget releases.
@@ -623,34 +647,39 @@ export async function chargeAgainstDailyLimit(
     return { allowed: true, total: 0 };
   }
   const key = dailySpendKey(ownerAddr, walletId, todayUtc());
+  const amountCents = usdToCents(amountUsd);
+  const limitCents =
+    typeof limitUsd === "number" && Number.isFinite(limitUsd) && limitUsd > 0
+      ? usdToCents(limitUsd)
+      : 0;
 
-  let nextTotal: number;
+  let nextTotalCents: number;
   try {
-    const v = await kv.incrbyfloat(key, amountUsd);
-    nextTotal = typeof v === "number" ? v : Number(v);
+    const v = await kv.incrby(key, amountCents);
+    nextTotalCents = typeof v === "number" ? v : Number(v);
   } catch {
-    if (typeof limitUsd !== "number" || limitUsd <= 0) {
+    if (limitCents <= 0) {
       return { allowed: true, total: 0 };
     }
-    return { allowed: false, spent: 0, limit: limitUsd, requested: amountUsd };
+    return { allowed: false, spent: 0, limit: limitUsd!, requested: amountUsd };
   }
 
   try { await kv.expire(key, DAILY_SPEND_TTL_SEC); } catch { /* best-effort */ }
 
-  if (typeof limitUsd === "number" && limitUsd > 0 && nextTotal > limitUsd) {
-    try { await kv.incrbyfloat(key, -amountUsd); } catch { /* best-effort */ }
+  if (limitCents > 0 && nextTotalCents > limitCents) {
+    try { await kv.incrby(key, -amountCents); } catch { /* best-effort */ }
     return {
       allowed: false,
-      spent: Math.max(0, nextTotal - amountUsd),
-      limit: limitUsd,
+      spent: Math.max(0, centsToUsd(nextTotalCents - amountCents)),
+      limit: limitUsd!,
       requested: amountUsd,
     };
   }
 
-  return { allowed: true, total: nextTotal };
+  return { allowed: true, total: centsToUsd(nextTotalCents) };
 }
 
-/** Release a previously-charged daily-spend reservation. */
+/** Release a previously-charged daily-spend reservation. Cents-storage. */
 export async function refundDailySpend(
   ownerAddr: string,
   walletId: string,
@@ -659,7 +688,7 @@ export async function refundDailySpend(
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
   const key = dailySpendKey(ownerAddr, walletId, todayUtc());
   try {
-    await kv.incrbyfloat(key, -amountUsd);
+    await kv.incrby(key, -usdToCents(amountUsd));
   } catch {
     /* best-effort — next day's TTL flushes the key anyway. */
   }
@@ -677,7 +706,7 @@ export async function recordDailySpend(
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
   const key = dailySpendKey(ownerAddr, walletId, todayUtc());
   try {
-    await kv.incrbyfloat(key, amountUsd);
+    await kv.incrby(key, usdToCents(amountUsd));
     await kv.expire(key, DAILY_SPEND_TTL_SEC);
   } catch {
     /* best-effort — the TX already settled. */

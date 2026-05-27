@@ -21,6 +21,7 @@ import {
   type FriendlyError,
   type BackendError,
 } from "@/app/lib/agentic-wallet-friendly-error";
+import { useModalEscape } from "./useModalEscape";
 
 interface Props {
   walletAddress: string;
@@ -127,6 +128,7 @@ export function AgenticWalletSendModal({
   }, [allowedTokens, token]);
 
   const [submitting, setSubmitting] = useState(false);
+  useModalEscape(onClose, submitting);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [success, setSuccess] = useState<{ txHash: string } | null>(null);
   /**

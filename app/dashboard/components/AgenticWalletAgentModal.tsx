@@ -26,6 +26,7 @@ import { ensureWalletChain, getActiveProvider } from "@/app/lib/wallet";
 import type { WalletChainKey } from "@/app/lib/wallet";
 import { buildQ402AgentMetadata } from "@/app/lib/erc8004";
 import { hashAgentMetadata } from "@/app/lib/agent-metadata-store";
+import { useModalEscape } from "./useModalEscape";
 
 interface Props {
   walletAddress: string;
@@ -93,6 +94,14 @@ export function AgenticWalletAgentModal({
    */
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
+  // Block Escape while ANY of the multi-step flow is in flight —
+  // closing mid-mint would orphan an on-chain NFT (gas already paid,
+  // confirm never runs) and the next open of the modal mints a
+  // duplicate.
+  useModalEscape(
+    onClose,
+    stage === "preparing" || stage === "awaiting-sign" || stage === "confirming",
+  );
 
   function fail(message: string, kind: ErrorKind) {
     if (!aliveRef.current) return;

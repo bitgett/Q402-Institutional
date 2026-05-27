@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ethers } from "ethers";
 import { getAuthCreds } from "@/app/lib/auth-client";
+import { useModalEscape } from "./useModalEscape";
 import type { ChainKey } from "@/app/lib/relayer";
 
 interface Props {
@@ -133,6 +134,9 @@ export function AgenticWalletWithdrawModal({
   onPickBucket,
 }: Props) {
   const [loading, setLoading] = useState(true);
+  // Withdraw is read-only (just lists buckets) so Escape is always
+  // safe — pass `false` for disabled.
+  useModalEscape(onClose, false);
   const [error, setError] = useState<string | null>(null);
   const [balances, setBalances] = useState<BalancesPayload | null>(null);
 

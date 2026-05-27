@@ -247,10 +247,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 402 },
     );
   }
-  const apiKey = sub?.apiKey;
-  if (!apiKey) {
+  const apiKeyMaybe = sub?.apiKey;
+  if (!apiKeyMaybe) {
     return NextResponse.json({ error: "NO_API_KEY" }, { status: 402 });
   }
+  // Snapshot post-guard so the closure in `processRow` sees a
+  // narrowed `string` (TS doesn't propagate the narrow through
+  // closures of a let-binding).
+  const apiKey: string = apiKeyMaybe;
 
   const relayerKey = loadRelayerKey();
   if (!relayerKey.ok) {
@@ -324,8 +328,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // TX consumes it; subsequent rows still attach the same value to
   // their authorizationList — the EVM silently skips the stale entries
   // and the inner transferWithAuthorization runs against the EOA's
-  // newly-applied delegation. Sequential nonces would break parallel
-  // submission ordering, which is the wrong trade-off here.
+  // newly-applied delegation.
+  //
+  // CRITICAL: row 0 MUST commit before rows 1..N fire. Otherwise:
+  //   - On chains that strictly enforce EIP-7702 stale-auth semantics
+  //     (BNB / Ethereum / Avalanche — battle-tested) parallel rows
+  //     with the same nonce are silently dropped at the auth-list
+  //     stage but the inner call still executes against the freshly-
+  //     applied delegation. Safe.
+  //   - On chains with custom EVM forks (Reth-based Stable, op-stack
+  //     Mantle, Sequencer-based Injective, Monad's parallel exec,
+  //     Scroll's zkEVM) the stale-auth handling is UNVERIFIED. A
+  //     stricter implementation might revert the WHOLE tx — meaning
+  //     a paid user pays the daily-cap reservation for 20 rows of
+  //     deterministic revert.
+  //
+  // Serialising row 0 lands the delegation on-chain first; rows 1..N
+  // then fire in parallel against an EOA that's ALREADY delegated.
+  // Their stale auth entries become a no-op even on strict chains
+  // because the EOA's code field already matches the impl.
   let authNonce: number;
   try {
     authNonce = await fetchAuthNonce(body.chain, wallet.address as Address);
@@ -336,41 +357,47 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "auth_nonce_failed" }, { status: 502 });
   }
 
-  // Process rows in parallel. The shared apiKey is billed per
-  // successful settlement; the canonical relay route handles its own
-  // sequencing/locking on the apiKey side.
-  const results: BatchResultRow[] = await Promise.all(
-    rows.map(async (row): Promise<BatchResultRow> => {
-      try {
-        const signed = await signAgenticPayment({
-          privateKey: pk as Hex,
-          chain: body.chain as AgenticChainKey,
-          token: body.token as AgenticToken,
-          to: row.to as Address,
-          amount: row.amount,
-          facilitator,
-          authorizationNonce: authNonce,
-        });
-        const resp = await submitToRelay(baseUrl, apiKey, signed);
-        const data = await resp.json().catch(() => null);
-        if (resp.ok && data && typeof data === "object" && "txHash" in data) {
-          return { to: row.to, amount: row.amount, ok: true, txHash: (data as { txHash: string }).txHash };
-        }
-        const errMsg =
-          data && typeof data === "object" && "error" in data
-            ? String((data as { error: unknown }).error)
-            : `relay_http_${resp.status}`;
-        return { to: row.to, amount: row.amount, ok: false, error: errMsg };
-      } catch (e) {
-        return {
-          to: row.to,
-          amount: row.amount,
-          ok: false,
-          error: e instanceof Error ? e.message : String(e),
-        };
+  async function processRow(row: { to: string; amount: string }): Promise<BatchResultRow> {
+    try {
+      const signed = await signAgenticPayment({
+        privateKey: pk as Hex,
+        chain: body.chain as AgenticChainKey,
+        token: body.token as AgenticToken,
+        to: row.to as Address,
+        amount: row.amount,
+        facilitator,
+        authorizationNonce: authNonce,
+      });
+      const resp = await submitToRelay(baseUrl, apiKey, signed);
+      const data = await resp.json().catch(() => null);
+      if (resp.ok && data && typeof data === "object" && "txHash" in data) {
+        return { to: row.to, amount: row.amount, ok: true, txHash: (data as { txHash: string }).txHash };
       }
-    }),
-  );
+      const errMsg =
+        data && typeof data === "object" && "error" in data
+          ? String((data as { error: unknown }).error)
+          : `relay_http_${resp.status}`;
+      return { to: row.to, amount: row.amount, ok: false, error: errMsg };
+    } catch (e) {
+      return {
+        to: row.to,
+        amount: row.amount,
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+
+  // Row 0 commits the delegation. Rows 1..N parallelise against the
+  // now-delegated EOA. If row 0 fails entirely the whole batch is
+  // effectively a no-op (no delegation, no settlements) — fail fast
+  // rather than fan out 20 doomed signatures.
+  const firstResult = await processRow(rows[0]);
+  let restResults: BatchResultRow[] = [];
+  if (rows.length > 1) {
+    restResults = await Promise.all(rows.slice(1).map(processRow));
+  }
+  const results: BatchResultRow[] = [firstResult, ...restResults];
 
   const successful = results.filter((r) => r.ok);
   const finalRecord: BatchRecord = {

@@ -13,8 +13,9 @@
  * message so the signature is provably tied to *this* exact change.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
+import { useModalEscape } from "./useModalEscape";
 
 interface Props {
   ownerAddress: string;
@@ -38,20 +39,7 @@ export function AgenticWalletLimitsModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
-  // Use a ref so the ESC-key handler reads the current `saving` value
-  // without re-binding the listener every render.
-  const savingRef = useRef(saving);
-  useEffect(() => { savingRef.current = saving; }, [saving]);
-
-  // Escape closes — gated on `saving` so users can't bail mid-PATCH and
-  // strand the modal trying to setState on an unmounted tree.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !savingRef.current) onClose();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  useModalEscape(onClose, saving);
 
   function parseField(raw: string): number | null | "invalid" {
     const t = raw.trim();

@@ -12,6 +12,7 @@ const mockKv = vi.hoisted(() => ({
   ltrim: vi.fn(),
   lrange: vi.fn(),
   incrbyfloat: vi.fn(),
+  incrby: vi.fn(),
   expire: vi.fn(),
 }));
 
@@ -63,6 +64,13 @@ beforeEach(() => {
     return Promise.resolve("OK");
   });
   mockKv.incrbyfloat.mockImplementation((key: string, delta: number) => {
+    const current = typeof store.get(key) === "number" ? (store.get(key) as number) : 0;
+    const next = current + delta;
+    store.set(key, next);
+    return Promise.resolve(next);
+  });
+  // Daily-spend now uses INCRBY against integer cents (no float drift).
+  mockKv.incrby.mockImplementation((key: string, delta: number) => {
     const current = typeof store.get(key) === "number" ? (store.get(key) as number) : 0;
     const next = current + delta;
     store.set(key, next);

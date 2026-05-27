@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useModalEscape } from "./useModalEscape";
 
 interface Props {
   walletAddress: string;
@@ -60,6 +61,7 @@ export function AgenticWalletArchiveModal({
   const [typed, setTyped] = useState("");
   const armed = typed.trim().toUpperCase() === TYPED_CONFIRM;
   const hasBalance = balanceUsd !== null && balanceUsd > 0;
+  useModalEscape(onClose, archiving);
 
   // Force a fresh balance read on mount — the card's 5-min polling
   // cadence is the wrong default for a destructive confirm. We don't

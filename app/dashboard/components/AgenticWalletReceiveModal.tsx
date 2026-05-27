@@ -14,6 +14,7 @@
 import { useState } from "react";
 import type { ChainKey } from "@/app/lib/relayer";
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
+import { useModalEscape } from "./useModalEscape";
 
 interface ChainOption {
   key: ChainKey;
@@ -42,6 +43,8 @@ interface Props {
 export function AgenticWalletReceiveModal({ walletAddress, onClose }: Props) {
   const [chain, setChain] = useState<ChainKey>("bnb");
   const [copied, setCopied] = useState(false);
+  // Receive is read-only — Escape is always safe.
+  useModalEscape(onClose, false);
   const chainCfg = RECEIVE_CHAINS.find((c) => c.key === chain) ?? RECEIVE_CHAINS[0];
 
   async function copy() {
