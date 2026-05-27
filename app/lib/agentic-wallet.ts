@@ -415,7 +415,10 @@ export function decryptPrivateKey(record: AgenticWalletRecord): Hex {
 
 /**
  * Soft-delete a specific wallet. The hard delete is performed by the
- * GC cron after `SOFT_DELETE_GRACE_MS`.
+ * GC cron after `SOFT_DELETE_GRACE_MS`. Cascades: every active
+ * recurring rule attached to this wallet transitions to
+ * "paused-by-archive" so the cron stops firing them. User-paused and
+ * cancelled rules stay in their current state.
  */
 export async function softDeleteAgenticWallet(
   ownerAddr: string,
@@ -428,9 +431,22 @@ export async function softDeleteAgenticWallet(
     recordKey(ownerAddr, walletId),
     { ...record, deletedAt: Date.now() },
   );
+  // Cascade — pause recurring rules that were active. Best-effort: a
+  // failure here only leaves the rule queued in the ZSET; the cron's
+  // own per-rule "wallet active?" check rejects the fire anyway.
+  try {
+    const { pauseRulesForArchive } = await import("./agentic-wallet-recurring.js");
+    await pauseRulesForArchive(ownerAddr, walletId);
+  } catch (e) {
+    console.error("[agentic-wallet] cascade pause failed:", e);
+  }
 }
 
-/** Clear the soft-delete marker if still within the grace window. */
+/**
+ * Clear the soft-delete marker if still within the grace window.
+ * Cascades: every "paused-by-archive" rule resumes with a fresh
+ * nextRunAt ≥ now + cancelWindow. User-paused rules stay paused.
+ */
 export async function restoreAgenticWallet(
   ownerAddr: string,
   walletId: string,
@@ -444,6 +460,13 @@ export async function restoreAgenticWallet(
   const next: AgenticWalletRecord = { ...record };
   delete next.deletedAt;
   await kv.set(recordKey(ownerAddr, walletId), next);
+  // Cascade — resume rules that the archive automatically paused.
+  try {
+    const { resumeRulesForRestore } = await import("./agentic-wallet-recurring.js");
+    await resumeRulesForRestore(ownerAddr, walletId);
+  } catch (e) {
+    console.error("[agentic-wallet] cascade resume failed:", e);
+  }
 }
 
 /**
@@ -451,8 +474,8 @@ export async function restoreAgenticWallet(
  * window has elapsed AND on-chain balance is empty (the cron is
  * responsible for the balance check; this function trusts the caller).
  *
- * Removes the wallet record, audit log, list entry, and re-elects the
- * default if this was the default wallet.
+ * Removes the wallet record, audit log, list entry, recurring rules
+ * (cascade), and re-elects the default if this was the default wallet.
  */
 export async function hardDeleteAgenticWallet(
   ownerAddr: string,
@@ -460,6 +483,16 @@ export async function hardDeleteAgenticWallet(
 ): Promise<void> {
   const owner = lower(ownerAddr);
   const id = lower(walletId);
+  // Cascade-delete recurring rules FIRST so a fire racing the hard-
+  // delete sees the rule already gone (cron's per-rule wallet check
+  // would also catch it via getActiveAgenticWallet, but defence in
+  // depth is cheap here).
+  try {
+    const { deleteRulesForHardDelete } = await import("./agentic-wallet-recurring.js");
+    await deleteRulesForHardDelete(owner, id);
+  } catch (e) {
+    console.error("[agentic-wallet] cascade delete failed:", e);
+  }
   await kv.del(recordKey(owner, id));
   await kv.del(exportLogKey(owner, id));
 

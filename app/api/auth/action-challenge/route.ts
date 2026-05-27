@@ -50,6 +50,9 @@ const ALLOWED_ACTIONS = new Set([
   "agentic.register.confirm",
   "agentic.limits",
   "agentic.restore",
+  "agentic.recurring.create",
+  "agentic.recurring.update",
+  "agentic.recurring.cancel",
 ]);
 
 function isAddress(s: unknown): s is string {
