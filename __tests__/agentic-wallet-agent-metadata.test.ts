@@ -149,7 +149,10 @@ describe("POST /api/wallet/agentic/register-agent — writes self-hosted metadat
   it("hashes the metadata, writes to KV at agentMetadataKey, and builds an https agentURI", () => {
     expect(writerSrc).toMatch(/hashAgentMetadata\(metadata\)/);
     expect(writerSrc).toMatch(/agentMetadataKey\(hash\)/);
-    expect(writerSrc).toMatch(/agentMetadataUrl\(appOrigin\(\),\s*hash\)/);
+    // appOrigin is a `getAppOrigin(req)`-derived const now (was a
+    // local fn before the preview-leak fix). The URL builder accepts
+    // either shape — assert on the variable form that landed.
+    expect(writerSrc).toMatch(/agentMetadataUrl\(appOrigin,\s*hash\)/);
   });
 
   it("returns metadataHash + canonicalBytes in the response so the UI can verify content", () => {

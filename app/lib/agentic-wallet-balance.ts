@@ -53,8 +53,17 @@ export interface ChainBalance {
 export interface AgenticBalances {
   /** ms-epoch when the snapshot was taken. */
   asOf: number;
-  /** Aggregate across every chain that returned a value. */
+  /** Aggregate across every chain that returned a value. Chains that
+   *  errored (RPC down, multicall3 missing, USDC contract revert) are
+   *  EXCLUDED from this sum — see `unreachableChains` for the safety
+   *  flag any fail-closed caller MUST consult. */
   totalUsd: number;
+  /** Chain keys whose USDC+USDT read failed entirely. Empty when all
+   *  chains responded. The GC cron uses this to refuse hard-delete
+   *  whenever it's non-empty — without it, an RPC outage on a chain
+   *  that holds funds would let the cron treat balance as 0 and burn
+   *  the keystore. */
+  unreachableChains: string[];
   perChain: ChainBalance[];
 }
 
@@ -182,17 +191,31 @@ async function readChainBalances(
 
 /**
  * Read every supported chain's USDC + USDT balance in parallel. Failing
- * chains are returned with `totalUsd: null` so the caller can render
- * "—" for those rows without poisoning the aggregate.
+ * chains are returned with `totalUsd: null` so the dashboard can
+ * render "—" for those rows without poisoning the aggregate — AND
+ * surfaced in `unreachableChains` so fail-closed callers (the GC
+ * hard-delete cron) can refuse to treat null-as-zero.
+ *
+ * A chain counts as "unreachable" when either:
+ *   - the per-chain try/catch hit the outer fallback (RPC throw,
+ *     multicall3 missing, viem transport error), OR
+ *   - both per-token reads inside the per-chain branch returned a
+ *     `failure` status (caught at the `usdc===null && usdt===null`
+ *     guard inside `readChainBalances`).
+ * In both cases `c.totalUsd === null` is the load-bearing signal.
  */
 export async function fetchAgenticBalances(walletAddr: string): Promise<AgenticBalances> {
   const addr = getAddress(walletAddr) as Address;
   const chains = Object.keys(AGENTIC_CHAINS) as AgenticChainKey[];
   const perChain = await Promise.all(chains.map((c) => readChainBalances(c, addr)));
   const totalUsd = perChain.reduce((sum, c) => sum + (c.totalUsd ?? 0), 0);
+  const unreachableChains = perChain
+    .filter((c) => c.totalUsd === null)
+    .map((c) => c.chain);
   return {
     asOf: Date.now(),
     totalUsd,
+    unreachableChains,
     perChain,
   };
 }

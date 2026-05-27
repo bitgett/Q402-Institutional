@@ -20,10 +20,12 @@
  * IdentityRegistry address + chainId to switch to.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { ensureWalletChain, getActiveProvider } from "@/app/lib/wallet";
 import type { WalletChainKey } from "@/app/lib/wallet";
+import { buildQ402AgentMetadata } from "@/app/lib/erc8004";
+import { hashAgentMetadata } from "@/app/lib/agent-metadata-store";
 
 interface Props {
   walletAddress: string;
@@ -77,8 +79,23 @@ export function AgenticWalletAgentModal({
   const [errorKind, setErrorKind] = useState<ErrorKind>("generic");
   const [txHash, setTxHash] = useState<string | null>(null);
   const [result, setResult] = useState<ConfirmResponse | null>(null);
+  /**
+   * Synchronous double-click guard. AgentModal is the worst offender if
+   * not gated — a second `start()` call before the first finishes mints
+   * a SECOND NFT (real BSC gas, real on-chain identity collision) and
+   * leaves the dashboard pointing at whichever finished last. Locked
+   * across the entire start() pipeline (prepare + sign + confirm).
+   */
+  const inFlightRef = useRef(false);
+  /**
+   * AbortController so the 6×5s confirm poll stops firing wallet
+   * popups + setStates after the user closes the modal mid-poll.
+   */
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
 
   function fail(message: string, kind: ErrorKind) {
+    if (!aliveRef.current) return;
     setError(message);
     setErrorKind(kind);
     setStage("error");
@@ -87,7 +104,10 @@ export function AgenticWalletAgentModal({
   const valid = name.trim().length > 0 && name.trim().length <= 80;
 
   async function start() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     if (!valid) {
+      inFlightRef.current = false;
       setError("Agent name is required (1–80 chars).");
       return;
     }
@@ -95,12 +115,28 @@ export function AgenticWalletAgentModal({
     setStage("preparing");
     try {
       // ── Step 1: prepare — intent-bound (`agentic.register`). Signed
-      //     message embeds walletId + network + name so a leaked
-      //     session sig can't publish a different wallet's identity. ─
+      //     message embeds walletId + network + the FULL canonical
+      //     metadata hash so a buggy/malicious client can't sign with
+      //     `name="legit"` and mutate description/imageUrl in the body.
+      //     Hash convergence requires the client to use the same
+      //     `appOrigin` value as the server — we use
+      //     `window.location.origin` which matches `getAppOrigin(req)`
+      //     server-side (req-derived) and the canonical APP_ORIGIN env
+      //     when set.
+      const trimmedName = name.trim();
+      const trimmedDesc = description.trim();
+      const previewMetadata = buildQ402AgentMetadata({
+        name: trimmedName,
+        description: trimmedDesc.length > 0 ? trimmedDesc : undefined,
+        walletAddress,
+        relayBaseUrl: window.location.origin,
+        mcpPackage: "@quackai/q402-mcp",
+      });
+      const metadataHash = hashAgentMetadata(previewMetadata).toLowerCase();
       const prepAuth = await getActionAuth(
         ownerAddress,
         "agentic.register",
-        { walletId, network: "bsc", name: name.trim() },
+        { walletId, network: "bsc", metadataHash },
         signMessage,
       );
       if (!prepAuth) {
@@ -115,9 +151,10 @@ export function AgenticWalletAgentModal({
           walletId,
           nonce: prepAuth.challenge,
           signature: prepAuth.signature,
-          name: name.trim(),
-          description: description.trim() || undefined,
+          name: trimmedName,
+          description: trimmedDesc || undefined,
           network: "bsc",
+          metadataHash,
         }),
       });
       const prep = (await prepRes.json().catch(() => ({}))) as
@@ -167,13 +204,16 @@ export function AgenticWalletAgentModal({
       // Small initial delay so the receipt is more likely indexed.
       await new Promise((r) => setTimeout(r, 4000));
 
-      // Up to 6 polls × 5s = 30s window. BSC blocks are ~3s. Confirm
-      // is now intent-bound on (walletId, txHash, network) — mint a
-      // fresh challenge per attempt so the canonical bytes match the
-      // post-receipt-known txHash.
+      // Up to 6 polls × 5s = 30s window. BSC blocks are ~3s. Each
+      // iteration bails out early if the modal was closed so wallet
+      // popups don't keep firing as ghosts after user dismissal.
       let confirmed: ConfirmResponse | null = null;
       let lastErr = "";
       for (let i = 0; i < 6; i++) {
+        if (!aliveRef.current) {
+          lastErr = "Modal closed before confirmation completed.";
+          break;
+        }
         const confAuth = await getActionAuth(
           ownerAddress,
           "agentic.register.confirm",
@@ -184,6 +224,7 @@ export function AgenticWalletAgentModal({
           lastErr = "Sign the confirm challenge in your wallet.";
           break;
         }
+        if (!aliveRef.current) break;
         const confRes = await fetch("/api/wallet/agentic/register-agent/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -252,6 +293,8 @@ export function AgenticWalletAgentModal({
               : "";
         fail(norm.message + tail, "generic");
       }
+    } finally {
+      inFlightRef.current = false;
     }
   }
 

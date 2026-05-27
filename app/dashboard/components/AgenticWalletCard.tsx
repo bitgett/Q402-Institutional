@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { getAuthCreds } from "@/app/lib/auth-client";
+import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
 import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
@@ -90,6 +90,10 @@ interface Props {
    * tick.
    */
   balanceRefreshTick?: number;
+  /** Tab-level callback so the latest aggregate USD balance can be
+   *  lifted up for the DangerZone's ArchiveModal warning. Card pushes
+   *  every successful refresh; Tab caches the most recent number. */
+  onBalance?: (totalUsd: number | null) => void;
   onChanged: () => void;
 }
 
@@ -124,6 +128,7 @@ export function AgenticWalletCard({
   signMessage,
   hasMultichainScope,
   balanceRefreshTick = 0,
+  onBalance,
   onChanged,
 }: Props) {
   const [sendOpen, setSendOpen] = useState(false);
@@ -152,14 +157,23 @@ export function AgenticWalletCard({
         ...(force ? { force: "1" } : {}),
       }).toString();
       const res = await fetch(`/api/wallet/agentic/balance?${qs}`);
+      if (res.status === 401) {
+        // Session sig expired — wipe the cached nonce so the next call
+        // mints a fresh one instead of silently re-using the stale
+        // creds forever and showing the user a frozen balance.
+        clearAuthCache(address);
+        return;
+      }
       if (!res.ok) return;
       const data = (await res.json()) as { balances?: BalancePayload };
       if (data.balances) {
-        setBalance({
+        const next: BalancePayload = {
           asOf: data.balances.asOf,
           totalUsd: data.balances.totalUsd,
           perChain: data.balances.perChain ?? [],
-        });
+        };
+        setBalance(next);
+        onBalance?.(next.totalUsd);
         lastFetchRef.current = Date.now();
       }
     } catch {
@@ -167,7 +181,7 @@ export function AgenticWalletCard({
     } finally {
       setBalanceLoading(false);
     }
-  }, [address, signMessage, wallet.deletedAt, wallet.walletId]);
+  }, [address, signMessage, wallet.deletedAt, wallet.walletId, onBalance]);
 
   useEffect(() => {
     void fetchBalance();

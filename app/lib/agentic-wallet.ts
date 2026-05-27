@@ -128,21 +128,35 @@ async function migrateLegacyIfNeeded(ownerAddr: string): Promise<void> {
   if (!legacy) return; // nothing to migrate
 
   const walletId = lower(legacy.address);
-  // Promote the wallet record under the new key shape.
-  await kv.set(recordKey(owner, walletId), legacy);
-  // Initialise the list + default. SET NX so concurrent migrations don't
-  // clobber each other.
-  await kv.set(listKey(owner), [walletId]);
-  await kv.set(defaultKey(owner), walletId);
+  // Promote the wallet record under the new key shape. NX so two
+  // concurrent migrations don't both rewrite the same record (idempotent
+  // for identical content, but skipping the second write is cheaper).
+  await kv.set(recordKey(owner, walletId), legacy, { nx: true });
+
+  // Initialise the list. NX is LOAD-BEARING here:
+  //   - Concurrent migration: the second caller's NX fails → returns
+  //     immediately, never re-overwrites the just-built list.
+  //   - Concurrent `createAgenticWallet` race: createAgenticWallet
+  //     calls migrate BEFORE acquiring its create-lock and then
+  //     appends to the list. Without NX on this write, the migration
+  //     can fire AFTER the create-lock's `set(list, [legacyId,
+  //     newId])` and clobber it back to `[legacyId]`, dropping the
+  //     fresh wallet from the index → orphan record. With NX the
+  //     migration's list write only lands when no list exists yet.
+  const listClaimed = await kv.set(listKey(owner), [walletId], { nx: true });
+  if (!listClaimed) {
+    // Another path (concurrent migration OR a createAgenticWallet
+    // that already initialised the list with our legacy + a new
+    // entry) already populated `listKey`. Stop — don't touch default
+    // either, the winning path handles it.
+    return;
+  }
+  await kv.set(defaultKey(owner), walletId, { nx: true });
 
   // Audit log: copy if present, then drop the legacy key.
   try {
     const oldLog = await kv.lrange<ExportLogEntry>(legacyExportLogKey(owner), 0, -1);
     if (Array.isArray(oldLog) && oldLog.length > 0) {
-      // lpush takes newest first; the legacy log already stored newest-
-      // first (recordExportEvent pushed to the head), so re-push in the
-      // SAME order — reverse so the first iteration pushes the oldest
-      // and the last pushes the newest.
       for (const entry of [...oldLog].reverse()) {
         await kv.lpush(exportLogKey(owner, walletId), entry);
       }
@@ -152,10 +166,21 @@ async function migrateLegacyIfNeeded(ownerAddr: string): Promise<void> {
     /* best-effort */
   }
 
-  // Legacy keys stay readable for one more tick to absorb any in-flight
-  // requests against the old shape, then the next administrative
-  // touch can clean them up. We don't `kv.del` here intentionally — a
-  // race during migration could otherwise drop a wallet on the floor.
+  // Delete the legacy keys now that the v2 surface is fully populated.
+  // Was kept around in the previous revision to "absorb in-flight
+  // requests"; in practice the cron's scan was still picking up the
+  // legacy record forever (it had no deletedAt, so cron correctly
+  // skipped it — but the key persisted, growing the `kv.keys("aw:*")`
+  // surface). Once we've successfully written the new list under SET NX,
+  // any future read goes through `aw:list:{owner}` and never touches the
+  // legacy key, so cleanup is safe.
+  try {
+    await kv.del(legacyRecordKey(owner));
+    await kv.del(legacyExportLogKey(owner));
+  } catch {
+    /* best-effort — next cron sweep will see the stale key, log a
+       benign skip, and a future migration call retries the delete. */
+  }
 }
 
 // ── Listing + default ────────────────────────────────────────────────────
