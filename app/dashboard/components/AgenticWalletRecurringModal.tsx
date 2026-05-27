@@ -74,6 +74,17 @@ function buildFrequencyString(kind: FrequencyKind, weekday: Weekday, monthDay: n
   return `monthly:${monthDay}`;
 }
 
+/**
+ * Hours within ONE frequency interval. The cancel-window must not
+ * exceed this — otherwise subsequent fires would silently honour only
+ * `interval` hours of notice, breaking the promise on the modal.
+ */
+function maxCancelWindowForKind(kind: FrequencyKind): number {
+  if (kind === "daily") return 24;
+  if (kind === "weekly") return 24 * 7;
+  return 24 * 28; // shortest possible month (February)
+}
+
 function isAddress(s: string) { return /^0x[0-9a-fA-F]{40}$/.test(s.trim()); }
 function isDecimalAmount(s: string) { return /^\d+(\.\d+)?$/.test(s.trim()) && Number(s) > 0; }
 
@@ -113,6 +124,8 @@ export function AgenticWalletRecurringModal({
     typeof perTxMaxUsd === "number" && amountNum > perTxMaxUsd;
 
   const chainGated = chainMeta.multichainOnly && !hasMultichainScope;
+  const cancelWindowMax = maxCancelWindowForKind(kind);
+  const cancelWindowTooLong = cancelWindowHours > cancelWindowMax;
 
   const canSubmit =
     !submitting &&
@@ -120,7 +133,8 @@ export function AgenticWalletRecurringModal({
     isAddress(recipient) &&
     isDecimalAmount(amount) &&
     !overPerTxCap &&
-    cancelWindowHours >= 24;
+    cancelWindowHours >= 24 &&
+    !cancelWindowTooLong;
 
   async function submit() {
     if (inFlightRef.current) return;
@@ -143,6 +157,11 @@ export function AgenticWalletRecurringModal({
     }
     if (cancelWindowHours < 24) {
       setError("Cancel window must be at least 24 hours so you always have time to skip or cancel a pending fire.");
+      inFlightRef.current = false;
+      return;
+    }
+    if (cancelWindowTooLong) {
+      setError(`Cancel window can't exceed one interval (${cancelWindowMax}h for ${kind}). Otherwise subsequent fires would silently lose notice time.`);
       inFlightRef.current = false;
       return;
     }
@@ -324,15 +343,15 @@ export function AgenticWalletRecurringModal({
           <input
             type="number"
             min={24}
-            max={336}
+            max={cancelWindowMax}
             step={1}
             value={cancelWindowHours}
-            onChange={(e) => setCancelWindowHours(Math.max(24, Math.min(336, Number(e.target.value))))}
-            className="w-full bg-[#0B1626] border border-white/10 rounded-md px-3 py-2 text-sm text-white"
+            onChange={(e) => setCancelWindowHours(Math.max(24, Math.min(cancelWindowMax, Number(e.target.value))))}
+            className={`w-full bg-[#0B1626] border rounded-md px-3 py-2 text-sm text-white ${cancelWindowTooLong ? "border-rose-400/50" : "border-white/10"}`}
             disabled={submitting}
           />
           <div className="mt-1 text-[11px] text-white/40">
-            How long before each fire you can still cancel or skip it. Minimum 24h, max 14 days.
+            How long before each fire you can still cancel or skip it. Minimum 24h; max {cancelWindowMax}h for {kind} so the cancel notice fits inside one interval.
           </div>
         </Field>
 

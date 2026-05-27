@@ -350,11 +350,18 @@ function RuleRow({
               {busy("pause") ? "…" : "Pause"}
             </button>
           )}
-          {(rule.status === "paused" || rule.status === "paused-by-archive") && (
+          {(rule.status === "paused" ||
+            rule.status === "paused-by-archive" ||
+            rule.status === "fired-cap-exceeded") && (
             <button
               onClick={() => onAction("resume")}
               disabled={anyBusy || walletArchived}
               className="text-emerald-300 hover:text-emerald-200 transition-colors disabled:opacity-40"
+              title={
+                rule.status === "fired-cap-exceeded"
+                  ? "Resume after raising the per-tx cap or re-subscribing"
+                  : undefined
+              }
             >
               {busy("resume") ? "…" : "Resume"}
             </button>

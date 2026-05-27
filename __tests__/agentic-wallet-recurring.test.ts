@@ -331,6 +331,22 @@ describe("createRecurringRule", () => {
       "INVALID_CANCEL_WINDOW",
     );
   });
+  it("rejects cancel window > frequency interval (daily + 48h)", async () => {
+    await expectThrowsCode(
+      () => createRecurringRule({ ...VALID_INPUT, frequency: "daily", cancelWindowHours: 48 }),
+      "CANCEL_WINDOW_EXCEEDS_FREQUENCY",
+    );
+  });
+  it("rejects cancel window > frequency interval (weekly + 200h)", async () => {
+    await expectThrowsCode(
+      () => createRecurringRule({ ...VALID_INPUT, frequency: "weekly:fri", cancelWindowHours: 200 }),
+      "CANCEL_WINDOW_EXCEEDS_FREQUENCY",
+    );
+  });
+  it("accepts cancel window exactly at the frequency interval (weekly + 168h)", async () => {
+    const r = await createRecurringRule({ ...VALID_INPUT, frequency: "weekly:fri", cancelWindowHours: 168 });
+    expect(r.cancelWindowHours).toBe(168);
+  });
 });
 
 // ── listRecurringRules ordering ───────────────────────────────────────────
@@ -386,6 +402,24 @@ describe("applyUserStatusAction", () => {
     const r = await createRecurringRule(VALID_INPUT);
     await applyUserStatusAction(TEST_OWNER, TEST_WALLET, r.ruleId, "pause");
     await applyUserStatusAction(TEST_OWNER, TEST_WALLET, r.ruleId, "resume");
+    const m = zsetStore.get(RECURRING_NEXT_ACTION_ZSET);
+    expect(m?.size).toBe(1);
+  });
+
+  it("resume works from fired-cap-exceeded (user fixed the cap)", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    // Simulate the cron transitioning the rule to "fired-cap-exceeded".
+    const { recordRuleCapExceeded } = await import("@/app/lib/agentic-wallet-recurring");
+    const fresh = (await getRecurringRule(TEST_OWNER, TEST_WALLET, r.ruleId))!;
+    await recordRuleCapExceeded(fresh, "Amount $200 now exceeds per-tx cap $100", Date.now());
+    const beforeResume = (await getRecurringRule(TEST_OWNER, TEST_WALLET, r.ruleId))!;
+    expect(beforeResume.status).toBe("fired-cap-exceeded");
+    expect(beforeResume.lastError).toContain("exceeds");
+    // User raises the cap, then resumes.
+    const resumed = await applyUserStatusAction(TEST_OWNER, TEST_WALLET, r.ruleId, "resume");
+    expect(resumed.status).toBe("active");
+    expect(resumed.lastError).toBeNull();
+    // Re-queued into ZSET.
     const m = zsetStore.get(RECURRING_NEXT_ACTION_ZSET);
     expect(m?.size).toBe(1);
   });
