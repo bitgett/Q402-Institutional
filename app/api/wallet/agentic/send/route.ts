@@ -4,7 +4,7 @@
  * Server-mediated single-recipient send from a specific Agent Wallet.
  * Q402 holds the AES-GCM-encrypted private key; signing happens here.
  *
- * Idempotency (audit P1 fix):
+ * Idempotency:
  *   Each send is fingerprinted by
  *     keccak(owner | walletId | chain | token | recipient | amount) [16 hex]
  *   and claimed via SET NX in KV under `aw:send:{fp}` for ~10 minutes.

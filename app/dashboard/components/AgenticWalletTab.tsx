@@ -66,8 +66,8 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
   /**
    * Counter the Card listens to via a useEffect — bumping it forces a
    * fresh on-chain balance fetch even when the wallet record itself is
-   * unchanged. Closes audit P1 #5 (Holdings refresh): previously
-   * onChanged just reloaded the wallet record, never the balance.
+   * unchanged. Without this, onChanged would only reload the wallet
+   * record and Holdings would never re-fetch after a send/withdraw.
    */
   const [balanceRefreshTick, setBalanceRefreshTick] = useState(0);
   /**

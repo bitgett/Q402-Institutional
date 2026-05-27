@@ -13,8 +13,9 @@
  *   3. The wallet must not be soft-deleted. Archived wallets cannot
  *      export; restore first.
  *   4. Every successful export is appended to the per-wallet audit log.
- *      A KV failure on audit fires an ops alert (recordExportEvent
- *      rethrows — see audit P1 #5 in agentic-wallet.ts).
+ *      A KV failure on the audit log fires an ops alert
+ *      (recordExportEvent rethrows on KV error so the export never
+ *      slips past the audit trail; see agentic-wallet.ts).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -96,10 +97,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "decrypt_failed" }, { status: 500 });
   }
 
-  // Audit log — recordExportEvent now rethrows on KV failure (audit P1
-  // #5). Catching here so the export still succeeds, but firing a
-  // critical ops alert because the key was revealed without an audit
-  // row.
+  // Audit log — recordExportEvent rethrows on KV failure. Catch here so
+  // the export still succeeds for the user, but fire a critical ops
+  // alert because the key was revealed without an audit row landing.
   await recordExportEvent(owner, body.walletId, { ip }).catch((e) => {
     console.error("[agentic-wallet/export] audit log failed:", e);
     void sendOpsAlert(

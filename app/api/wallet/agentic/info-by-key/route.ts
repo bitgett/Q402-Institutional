@@ -6,10 +6,9 @@
  * the apiKey owner's default wallet) and can also list all wallets
  * (`list: true`).
  *
- * Audit fix (P1 #3): excludes soft-deleted wallets. Previously this
- * route returned the full record even after archive — a leaked apiKey
- * could enumerate caps + addresses of a wallet in its 7-day grace
- * window.
+ * Excludes soft-deleted wallets. Returning archived records here would
+ * let a leaked apiKey enumerate caps + addresses of a wallet inside
+ * its 7-day grace window.
  */
 
 import { NextRequest, NextResponse } from "next/server";

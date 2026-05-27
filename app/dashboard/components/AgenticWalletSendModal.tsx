@@ -171,8 +171,8 @@ export function AgenticWalletSendModal({
     try {
       // Intent-bound auth — server rebuilds the canonical message from
       // `(walletId, chain, token, recipient, amount)`. Server's
-      // separate fingerprint cache (audit P1 #4) makes the actual
-      // payment idempotent on a fresh-challenge retry.
+      // separate fingerprint cache makes the actual payment idempotent
+      // on a fresh-challenge retry.
       const to = recipient.trim();
       const intent: Record<string, string> = {
         walletId,
