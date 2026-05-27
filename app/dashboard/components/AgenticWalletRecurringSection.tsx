@@ -199,16 +199,35 @@ export function AgenticWalletRecurringSection({
   const visibleRules = rules.filter((r) => r.status !== "cancelled");
 
   return (
-    <div className="mt-4 pt-4 border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[10px] uppercase tracking-widest text-white/40 font-semibold">
-          Recurring payments
+    <div
+      className="mt-5 rounded-xl border p-4"
+      style={{
+        background: "linear-gradient(135deg, rgba(74,222,128,0.04) 0%, rgba(74,222,128,0.01) 100%)",
+        borderColor: "rgba(74,222,128,0.22)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-[14px]" aria-hidden>⏱</span>
+            <div className="text-[12px] uppercase tracking-[0.18em] text-emerald-300 font-semibold">
+              Recurring payments
+            </div>
+          </div>
+          <div className="text-[11.5px] text-white/55 leading-snug">
+            Schedule weekly payouts, monthly subscriptions, or treasury sweeps. Your AI fires each one with a cancel window first.
+          </div>
         </div>
         <button
           type="button"
           onClick={() => setModalOpen(true)}
           disabled={walletArchived}
-          className="text-[11px] text-emerald-300 hover:text-emerald-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{
+            background: "rgba(74,222,128,0.15)",
+            color: "#86efac",
+            border: "1px solid rgba(74,222,128,0.40)",
+          }}
           title={walletArchived ? "Restore the wallet to add new schedules" : undefined}
         >
           + New schedule
@@ -216,7 +235,7 @@ export function AgenticWalletRecurringSection({
       </div>
 
       {loading && (
-        <div className="text-[12px] text-white/40 py-2">Loading schedules…</div>
+        <div className="text-[12px] text-white/40 py-3 text-center">Loading schedules…</div>
       )}
 
       {!loading && error && (
@@ -226,8 +245,37 @@ export function AgenticWalletRecurringSection({
       )}
 
       {!loading && !error && visibleRules.length === 0 && (
-        <div className="text-[12px] text-white/40 py-2">
-          No schedules yet. Set one up to automate weekly payouts, monthly subscriptions, or treasury sweeps.
+        <div
+          className="rounded-lg border border-dashed p-4 mt-1"
+          style={{ borderColor: "rgba(74,222,128,0.18)" }}
+        >
+          <div className="text-[12.5px] text-white/70 mb-2 font-medium">
+            No schedules yet. Try one of these patterns:
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {[
+              { icon: "📅", title: "Weekly payouts",      copy: "Every Friday → contractor list" },
+              { icon: "🔁", title: "Monthly subscriptions", copy: "1st of every month → vendor" },
+              { icon: "💰", title: "Treasury sweep",      copy: "Last day → ops wallet" },
+            ].map((preset) => (
+              <div
+                key={preset.title}
+                className="rounded-md border p-2.5"
+                style={{
+                  background: "rgba(255,255,255,0.015)",
+                  borderColor: "rgba(255,255,255,0.06)",
+                }}
+              >
+                <div className="text-[12px] text-white/85 font-medium mb-0.5">
+                  <span className="mr-1.5" aria-hidden>{preset.icon}</span>
+                  {preset.title}
+                </div>
+                <div className="text-[10.5px] text-white/45 leading-snug">
+                  {preset.copy}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

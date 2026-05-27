@@ -304,12 +304,11 @@ export function AgenticWalletCard({
           />
         </div>
 
-        {/* Per-chain × per-token breakdown — surfaces "where the money
-            actually is" without making the user click into Withdraw. Only
-            non-zero buckets render; collapse when wallet is empty. */}
-        {balance && balance.totalUsd > 0 && (
-          <HoldingsBreakdown wallet={wallet.address} balance={balance} />
-        )}
+        {/* 9-chain coverage grid — always visible. Surfaces both the
+            full chain support footprint AND where the balance sits, so
+            the user sees at a glance "I have $4 on BNB, $0 elsewhere"
+            instead of "$4 total somewhere". */}
+        <ChainCoverageGrid wallet={wallet.address} balance={balance} />
 
         {/* Primary actions — Send / Receive / Batch sit here as equals. */}
         <div className="relative flex flex-wrap gap-2 mt-5">
@@ -498,20 +497,120 @@ export function AgenticWalletCard({
   );
 }
 
+// ── ChainCoverageGrid ──────────────────────────────────────────────────────
+//
+// Always-visible 9-chain grid. Each cell = one chain, showing the chain
+// logo + label + (USDC + USDT) sub-totals in USD. Cells with $0 render
+// dimmed so the eye still walks past them; cells with balance get a
+// subtle accent ring. Surfaces both "Q402 supports these 9 chains" AND
+// "here's where my money actually sits" in one row, replacing the old
+// conditional HoldingsBreakdown that only appeared when the wallet was
+// non-empty.
+
+const CHAIN_ICON: Partial<Record<ChainKey, { src: string; alt: string }>> = {
+  bnb:       { src: "/bnb.png",       alt: "BNB Chain" },
+  eth:       { src: "/eth.png",       alt: "Ethereum" },
+  avax:      { src: "/avax.png",      alt: "Avalanche" },
+  xlayer:    { src: "/xlayer.png",    alt: "X Layer" },
+  stable:    { src: "/stable.jpg",    alt: "Stable" },
+  mantle:    { src: "/mantle.png",    alt: "Mantle" },
+  injective: { src: "/injective.png", alt: "Injective" },
+  monad:     { src: "/monad.png",     alt: "Monad" },
+  scroll:    { src: "/scroll.png",    alt: "Scroll" },
+};
+const CHAIN_ORDER: ChainKey[] = ["bnb", "eth", "avax", "xlayer", "stable", "mantle", "injective", "monad", "scroll"];
+
+function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: BalancePayload | null }) {
+  const byChain = new Map<ChainKey, { usdc: number; usdt: number; total: number; error?: string }>();
+  if (balance) {
+    for (const c of balance.perChain) {
+      byChain.set(c.chain, {
+        usdc: c.usdc?.usd ?? 0,
+        usdt: c.usdt?.usd ?? 0,
+        total: c.totalUsd ?? 0,
+        error: c.error,
+      });
+    }
+  }
+
+  return (
+    <div
+      className="relative mt-4 rounded-xl border p-3"
+      style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[10px] uppercase tracking-widest text-white/45 font-medium">
+          Balance by chain · 9 chains
+        </div>
+        {balance && (
+          <div className="text-[10px] text-white/35">
+            USDC + USDT
+          </div>
+        )}
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-1.5">
+        {CHAIN_ORDER.map((chain) => {
+          const slice = byChain.get(chain);
+          const total = slice?.total ?? 0;
+          const hasFunds = total > 0;
+          const icon = CHAIN_ICON[chain];
+          return (
+            <a
+              key={chain}
+              href={explorerAddressUrl(chain, wallet)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`View on ${explorerLabel(chain)}`}
+              className="group relative rounded-lg border p-2 flex flex-col items-center gap-1 transition-colors"
+              style={{
+                background: hasFunds ? "rgba(74,222,128,0.05)" : "rgba(255,255,255,0.01)",
+                borderColor: hasFunds ? "rgba(74,222,128,0.25)" : "rgba(255,255,255,0.05)",
+              }}
+            >
+              {/* Chain logo. /public assets at 20px — Next/Image is overkill;
+                  these are static and inline so no LCP optimisation buys anything. */}
+              {icon ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={icon.src}
+                  alt={icon.alt}
+                  width={20}
+                  height={20}
+                  className={`rounded-full ${hasFunds ? "" : "opacity-50"}`}
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-white/10" aria-hidden />
+              )}
+              <div className={`text-[10px] font-medium leading-none truncate w-full text-center ${hasFunds ? "text-white/85" : "text-white/45"}`}>
+                {CHAIN_LABEL[chain] ?? chain}
+              </div>
+              <div className={`text-[10.5px] font-mono leading-none ${hasFunds ? "text-emerald-300" : "text-white/30"}`}>
+                {slice?.error
+                  ? <span className="text-amber-300/70">RPC</span>
+                  : total < 0.01 && total > 0
+                    ? "<$0.01"
+                    : `$${total.toFixed(2)}`}
+              </div>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── HoldingsBreakdown ──────────────────────────────────────────────────────
 //
-// Surfaces *where* the balance sits so the user can decide whether a
-// transfer needs a chain switch, whether a chain has dust, or whether
-// a deposit landed on the wrong network. The Withdraw modal builds the
-// same per-bucket view but is gated behind a click — this preview is
-// always visible whenever the wallet is non-empty.
+// (Retained for any caller that still wants the row-per-bucket view —
+// the wallet card itself now uses ChainCoverageGrid above. Kept exported
+// so other surfaces can opt in to the same data presentation.)
 //
 // Renders one row per (chain, token) bucket with usd > 0. Each row
 // links to the wallet's explorer page on that chain so a user can
 // verify the on-chain side independently. Empty chains are summarised
 // in a single trailing line ("Empty on: …") so the surface stays
 // compact when the wallet only holds value on 1–2 chains.
-
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function HoldingsBreakdown({ wallet, balance }: { wallet: string; balance: BalancePayload }) {
   type Row = { chain: ChainKey; token: "USDT" | "USDC"; usd: number };
   const rows: Row[] = [];
