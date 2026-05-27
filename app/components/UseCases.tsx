@@ -46,8 +46,8 @@ const TABS: Tab[] = [
     category: "Agent Infrastructure · New",
     hook:     "Tell your agent. It pays.",
     description:
-      "Let Claude, Codex, Cursor, Cline — or your own agent — call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Eight tools (q402_doctor for one-prompt setup), signed Trust Receipts on every settlement, sandbox-safe defaults.",
-    chips: ["8 MCP TOOLS", "BATCH × 20", "TRUST RECEIPTS", "FREE TRIAL"],
+      "Let Claude, Codex, Cursor, Cline — or your own agent — call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Nine tools (q402_doctor for one-prompt setup, q402_agentic_info for Agent-Wallet introspection), signed Trust Receipts on every settlement, sandbox-safe defaults.",
+    chips: ["9 MCP TOOLS", "BATCH × 20", "TRUST RECEIPTS", "FREE TRIAL"],
     transcript: [
       { role: "you",   body: "Send 5 USDC to 0xd8dA...6045 on BNB." },
       {

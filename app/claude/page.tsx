@@ -578,7 +578,7 @@ export default function ClaudePage() {
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
           <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
-            eight tools · one package
+            nine tools · one package
           </div>
           <h2 className="text-2xl md:text-4xl font-bold mb-2">
             Only what an agent should reach for.

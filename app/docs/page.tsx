@@ -487,6 +487,11 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
                     <td className="px-4 py-3 text-white/40 text-xs">private key</td>
                     <td className="px-4 py-3">Per-chain EIP-7702 delegation status for the EOA derived from <code className="text-white/60 text-xs">Q402_PRIVATE_KEY</code>. Read-only — no signing, no on-chain action.</td>
                   </tr>
+                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_agentic_info</code></td>
+                    <td className="px-4 py-3 text-white/40 text-xs">api key</td>
+                    <td className="px-4 py-3">Introspect your server-managed Agent Wallets: addresses, per-wallet caps, daily-spend used, ERC-8004 agent id, sub-balances per chain. Drives Mode C (server-managed Agent Wallet) — no private key needed on the client. Read-only.</td>
+                  </tr>
                   <tr>
                     <td className="px-4 py-3"><code className="text-yellow text-xs">q402_clear_delegation</code></td>
                     <td className="px-4 py-3 text-white/40 text-xs">private key</td>
@@ -498,28 +503,39 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Sandbox vs live mode</h3>
             <p className="text-white/55 text-sm mb-3">
-              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a fake transaction hash with <code className="text-yellow text-xs">success: false</code> and <code className="text-yellow text-xs">sandbox: true</code>, no funds move, no gas-tank credit is consumed. The doctor walks you through enabling live mode; the env file <code className="text-yellow text-xs">q402_doctor</code> writes ships the three secret lines uncommented but <strong>empty</strong> — paste your values on the right of <code className="text-yellow text-xs">=</code>, no <code className="text-yellow text-xs">#</code> to remove. The live-mode gate only flips once both a real key and a valid 32-byte private key are present, so saving the template as-is stays in sandbox automatically. Set the flag to <code className="text-yellow text-xs">0</code> to force sandbox even with real keys (e.g. for chained testing):
+              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a fake transaction hash with <code className="text-yellow text-xs">success: false</code> and <code className="text-yellow text-xs">sandbox: true</code>, no funds move, no gas-tank credit is consumed. To go live you need an API key plus a signing path. Q402 supports three signing modes — pick ONE:
+            </p>
+            <ul className="text-white/55 text-sm mb-3 space-y-1.5 list-disc pl-5">
+              <li><strong className="text-white/70">Mode A</strong> — set <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code> to your MetaMask EOA&apos;s hex private key. Simplest, but after the first payment that EOA shows &ldquo;Smart account&rdquo; in MetaMask (EIP-7702 delegation, reversible via <code className="text-yellow text-xs">q402_clear_delegation</code>).</li>
+              <li><strong className="text-white/70">Mode B</strong> — set <code className="text-yellow text-xs">Q402_AGENTIC_PRIVATE_KEY</code> to an exported Agent Wallet PK from the dashboard. Signs locally just like Mode A, but the signer is your dedicated Agent Wallet — your MetaMask is never touched.</li>
+              <li><strong className="text-white/70">Mode C</strong> — paid Multichain key only, no private key on your machine. Q402 holds the AES-256-GCM-encrypted Agent Wallet key on the server and signs on your behalf. Optionally set <code className="text-yellow text-xs">Q402_AGENT_WALLET_ADDRESS</code> to pick among multiple wallets.</li>
+            </ul>
+            <p className="text-white/55 text-sm mb-3">
+              The env file <code className="text-yellow text-xs">q402_doctor</code> writes ships every secret line empty — paste only the row(s) for the mode you picked. The live-mode gate only flips once an API key + at least one valid signing path is available, so saving the template as-is stays in sandbox automatically. Set <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=0</code> to force sandbox even with real keys (e.g. for chained testing):
             </p>
             <CodeBlock lang="bash" code={`# ~/.q402/mcp.env — what q402_doctor creates on first install.
 # Paste your values on the right of \`=\`. Q402_ENABLE_REAL_PAYMENTS
 # already defaults to 1 — the gate refuses empty values, so partial
 # setups stay in sandbox automatically.
 
-# Free Trial — BNB only, 2,000 sponsored TX (from /event)
-Q402_TRIAL_API_KEY=
+# ── API key (pick one or both for auto-routing) ──
+Q402_TRIAL_API_KEY=          # Free Trial, BNB only (from /event)
+Q402_MULTICHAIN_API_KEY=     # Paid Multichain, all 9 chains (from /payment)
 
-# Paid Multichain — all 9 chains (from /payment)
-Q402_MULTICHAIN_API_KEY=
-
-# Hex EVM private key (0x + 64 hex chars). A separate MetaMask account
-# dedicated to Q402 keeps your existing balances and history tidy.
+# ── Signing path — pick ONE of Mode A / B / C ──
+# Mode A: your MetaMask EOA's hex private key
 Q402_PRIVATE_KEY=
+# Mode B: exported Agent Wallet pk from dashboard (keeps MetaMask untouched)
+Q402_AGENTIC_PRIVATE_KEY=
+# Mode C: no PK needed. Paid Multichain key alone + server-managed Agent Wallet.
+#   Optional picker when you have multiple wallets:
+# Q402_AGENT_WALLET_ADDRESS=0x...
 
 # Live mode switch:
 #   0 = sandbox (test mode, no funds move)
 #   1 = real on-chain payments
-# Default 1 — safe because mode only flips to live when BOTH a live
-# API key AND a valid 32-byte private key are populated above.
+# Default 1 — safe because mode only flips to live when an API key AND
+# at least one valid signing path (A/B/C) are populated above.
 Q402_ENABLE_REAL_PAYMENTS=1
 
 # Default Q402 deployment. Only change for self-hosted.
