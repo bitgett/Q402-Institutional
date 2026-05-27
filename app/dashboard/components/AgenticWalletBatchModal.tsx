@@ -17,6 +17,7 @@ import { getActionAuth } from "@/app/lib/auth-client";
 import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
 import { friendlyError, type FriendlyError, type BackendError } from "@/app/lib/agentic-wallet-friendly-error";
+import { useModalEscape } from "./useModalEscape";
 import type { ChainKey } from "@/app/lib/relayer";
 
 interface Props {
@@ -99,6 +100,7 @@ export function AgenticWalletBatchModal({
   }, [allowedTokens, token]);
   const [rows, setRows] = useState<Row[]>([{ to: "", amount: "" }]);
   const [submitting, setSubmitting] = useState(false);
+  useModalEscape(onClose, submitting);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [resp, setResp] = useState<BatchResponse | null>(null);
   const inFlightRef = useRef(false);

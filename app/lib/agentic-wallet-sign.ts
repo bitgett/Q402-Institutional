@@ -134,7 +134,11 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     domainVersion: "1",
     tokens: {
       USDC: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
-      USDT: { address: "0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", decimals: 6 },
+      // USDT0 (LayerZero OFT) — Mantle's official 2025-11-27 USDT.
+      // Legacy canonical-bridged USDT (0x201EBa5...) sunset 2026-02-03.
+      // Shares the 0x779Ded… address with Stable via CREATE3 — but
+      // decimals differ per chain (Mantle 6, Stable 18). Per manifest.
+      USDT: { address: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6 },
     },
   },
   injective: {

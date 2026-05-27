@@ -35,7 +35,7 @@
  * To resume after a partial run, swap OLD <-> NEW and finish the tail.
  */
 
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { parseArgs } from "node:util";
 
 const ALGO = "aes-256-gcm";
@@ -145,8 +145,47 @@ async function setRecord(key, record) {
   await kvRequest(["SET", key, JSON.stringify(record)]);
 }
 
+// ── Checkpoint journal ──────────────────────────────────────────────────
+// A per-rotation KV slot tracks which records have already been re-
+// wrapped under NEW_KEY. Lets a mid-flight crash (OOM, transient KV
+// 5xx, Ctrl+C) resume cleanly on re-run instead of leaving the
+// keystore half-OLD / half-NEW. Slot key includes the SHA-256 prefix
+// of the NEW key so two distinct rotations don't share state.
+const ROTATION_ID = createHash("sha256").update(NEW).digest("hex").slice(0, 16);
+const JOURNAL_KEY = `aw:rotate-keystore:${ROTATION_ID}`;
+const JOURNAL_TTL_SEC = 7 * 24 * 60 * 60; // 7 days — enough for ops cleanup
+
+async function loadJournal() {
+  try {
+    const raw = await kvRequest(["GET", JOURNAL_KEY]);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+async function saveJournal(done) {
+  // Best-effort; rotation continues even if journal write fails (the
+  // next run might re-rotate already-rotated records, which the
+  // second-chance NEW_KEY decrypt handles cleanly).
+  try {
+    const arr = Array.from(done);
+    await kvRequest(["SET", JOURNAL_KEY, JSON.stringify(arr), "EX", String(JOURNAL_TTL_SEC)]);
+  } catch (e) {
+    process.stderr.write(`[rotate-keystore] journal write failed: ${e}\n`);
+  }
+}
+
 async function main() {
   process.stderr.write(`[rotate-keystore] ${DRY_RUN ? "DRY RUN — no writes" : "LIVE — writing rotated records"}\n`);
+  process.stderr.write(`[rotate-keystore] rotation id (NEW key prefix): ${ROTATION_ID}\n`);
+
+  const done = DRY_RUN ? new Set() : await loadJournal();
+  if (done.size > 0) {
+    process.stderr.write(`[rotate-keystore] resume — ${done.size} record(s) already rotated in a prior run\n`);
+  }
+
   const keys = await scanOwnerKeys();
   process.stderr.write(`[rotate-keystore] scanned ${keys.length} owner record(s)\n`);
 
@@ -154,10 +193,17 @@ async function main() {
   if (LIMIT) process.stderr.write(`[rotate-keystore] capped at --limit=${LIMIT}\n`);
 
   let rotated = 0;
+  let alreadyRotated = 0;
   let skipped = 0;
   const errors = [];
+  let journalDirty = false;
 
   for (const key of slice) {
+    if (done.has(key)) {
+      alreadyRotated++;
+      continue;
+    }
+
     let record;
     try {
       record = await getRecord(key);
@@ -174,10 +220,22 @@ async function main() {
     let plaintext;
     try {
       plaintext = decrypt(record.encryptedPK, OLD);
-    } catch (e) {
-      skipped++;
-      errors.push({ key, stage: "decrypt", error: String(e) });
-      continue;
+    } catch {
+      // OLD decrypt failed — try NEW. If THAT succeeds, the record was
+      // already rotated in a prior run (and we just hadn't journalled
+      // it). Mark journal-done and proceed. Otherwise the key really
+      // mismatches and we skip + log.
+      try {
+        decrypt(record.encryptedPK, NEW);
+        done.add(key);
+        journalDirty = true;
+        alreadyRotated++;
+        continue;
+      } catch (e2) {
+        skipped++;
+        errors.push({ key, stage: "decrypt", error: String(e2) });
+        continue;
+      }
     }
 
     if (DRY_RUN) {
@@ -188,14 +246,28 @@ async function main() {
     const newBlob = encrypt(plaintext, NEW);
     try {
       await setRecord(key, { ...record, encryptedPK: newBlob });
+      done.add(key);
+      journalDirty = true;
       rotated++;
+      // Flush journal every 25 successful rotations so a crash near
+      // the end doesn't lose the entire run's progress. The trade-off
+      // is up to 25 records re-rotated on resume (idempotent thanks
+      // to the NEW-key second-chance branch above).
+      if (rotated % 25 === 0) {
+        await saveJournal(done);
+        journalDirty = false;
+      }
     } catch (e) {
       errors.push({ key, stage: "set", error: String(e) });
     }
   }
 
+  if (journalDirty && !DRY_RUN) {
+    await saveJournal(done);
+  }
+
   process.stderr.write(
-    `[rotate-keystore] done — ${rotated} rotated, ${skipped} skipped, ${errors.length} errored\n`,
+    `[rotate-keystore] done — ${rotated} rotated, ${alreadyRotated} already-rotated, ${skipped} skipped, ${errors.length} errored\n`,
   );
 
   if (errors.length > 0) {
@@ -211,7 +283,11 @@ async function main() {
       `[rotate-keystore] NEXT STEP: update Vercel KEY_ENCRYPTION_KEY to the new value:\n` +
       `  vercel env rm KEY_ENCRYPTION_KEY production\n` +
       `  vercel env add KEY_ENCRYPTION_KEY production\n` +
-      `  vercel redeploy --prod\n`,
+      `  vercel redeploy --prod\n` +
+      `\n[rotate-keystore] journal at ${JOURNAL_KEY} (7-day TTL). Delete after rotation is fully\n` +
+      `confirmed:  curl -X POST -H "Authorization: Bearer $KV_REST_API_TOKEN" \\\n` +
+      `  -H "Content-Type: application/json" \\\n` +
+      `  $KV_REST_API_URL/del/${encodeURIComponent(JOURNAL_KEY)}\n`,
     );
   }
 }

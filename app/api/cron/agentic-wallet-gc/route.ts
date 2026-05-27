@@ -86,23 +86,47 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const denial = requireCronAuth(req);
   if (denial) return denial;
 
-  let keys: string[];
-  try {
-    keys = await kv.keys("aw:*");
-  } catch (e) {
-    console.error("[agentic-wallet-gc] kv.keys failed:", e);
-    return NextResponse.json({ error: "kv_scan_failed" }, { status: 502 });
-  }
-
+  // Cursor-based SCAN instead of `kv.keys("aw:*")`. The old approach
+  // pulled every `aw:*` key into a single in-memory array — fine at
+  // current scale but unbounded; at ~100k records the 60s function
+  // timeout would burn before we got to candidate filtering. SCAN
+  // pages in chunks so the worker can iterate in steady-state memory.
+  //
+  // We still process synchronously per record (the balance check is
+  // the slow part, not the scan), but a single oversized batch can't
+  // OOM the runtime anymore.
+  const SCAN_COUNT = 200;
   const now = Date.now();
   const deleted: string[] = [];
   const skipped: { key: string; reason: string; balanceUsd?: number | null }[] = [];
+  let scanned = 0;
+  let cursor: string | number = 0;
+  let scanIters = 0;
 
-  for (const key of keys) {
-    const cls = classifyRecordKey(key);
-    if (!cls) continue;
+  do {
+    let page: string[];
+    try {
+      // @vercel/kv types `scan` as returning `[string | number, string[]]`
+      // but TS infers union widths poorly through the loop's mutated
+      // `cursor` var — annotate explicitly.
+      const res: [string | number, string[]] = await kv.scan(cursor, {
+        match: "aw:*",
+        count: SCAN_COUNT,
+      });
+      cursor = res[0];
+      page = res[1];
+    } catch (e) {
+      console.error("[agentic-wallet-gc] kv.scan failed:", e);
+      return NextResponse.json({ error: "kv_scan_failed" }, { status: 502 });
+    }
+    scanIters++;
+    scanned += page.length;
 
-    const record = await kv.get<AgenticWalletRecord>(key);
+    for (const key of page) {
+      const cls = classifyRecordKey(key);
+      if (!cls) continue;
+
+      const record = await kv.get<AgenticWalletRecord>(key);
     if (!record) continue;
     if (!record.deletedAt) continue;
 
@@ -192,10 +216,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       console.error(`[agentic-wallet-gc] hardDelete failed for ${record.ownerAddr}:`, e);
       skipped.push({ key, reason: "delete_failed" });
     }
-  }
+    } // end for(page)
+    // SCAN returns cursor === "0" / 0 once the iteration is complete.
+    // Stop both when the cursor wraps AND defensively when we've spent
+    // an absurd number of iterations (e.g. KV reports an infinite
+    // cursor due to a server-side bug) so the function timeout
+    // doesn't burn here.
+    if (String(cursor) === "0" || scanIters > 10_000) break;
+  } while (true);
 
   return NextResponse.json({
-    scannedKeys: keys.length,
+    scannedKeys: scanned,
+    scanIterations: scanIters,
     deleted,
     skipped,
     asOf: new Date(now).toISOString(),

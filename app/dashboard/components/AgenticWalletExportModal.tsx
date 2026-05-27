@@ -20,6 +20,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
+import { useModalEscape } from "./useModalEscape";
 
 interface Props {
   walletAddress: string;
@@ -42,6 +43,10 @@ export function AgenticWalletExportModal({
   onArchiveRequest,
 }: Props) {
   const [stage, setStage] = useState<Stage>("warn");
+  // Block Escape while loading (in-flight POST) AND while revealing
+  // (don't let a stray Escape bypass the explicit "I've saved it" /
+  // "Archive wallet now" buttons before the auto-clear timer expires).
+  useModalEscape(onClose, stage === "loading" || stage === "reveal");
   const [pk, setPk] = useState<string | null>(null);
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
