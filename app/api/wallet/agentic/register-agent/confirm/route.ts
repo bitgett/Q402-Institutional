@@ -22,6 +22,7 @@ import { kv } from "@vercel/kv";
 
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { getAppOrigin } from "@/app/lib/app-origin";
 import {
   getActiveAgenticWallet,
   setErc8004AgentId,
@@ -198,24 +199,59 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // resolving the public agent. Block by fetching the on-chain
   // agentURI's metadata and verifying its q402 service walletAddress
   // matches the wallet whose record we're about to stamp.
+  //
+  // Posture is asymmetric by URI kind:
+  //
+  //   - Self-hosted URIs (our own `${APP_ORIGIN}/api/wallet/agentic/
+  //     agent-metadata/{hash}`): we control the route, the metadata
+  //     is content-addressed in our KV. A fetch failure here is a
+  //     real signal (KV down, hash typo, replay against a stale
+  //     hash) — fail closed.
+  //   - Third-party URIs: user could have minted with metadata they
+  //     host themselves (ipfs://, an arbitrary https). Fetch failure
+  //     is plausibly transient — keep the old non-fatal behaviour.
+  const appOriginPrefix = `${getAppOrigin(req).replace(/\/$/, "")}/api/wallet/agentic/agent-metadata/`;
+  const isSelfHosted = parsed.agentURI.startsWith(appOriginPrefix);
+
   let metadataWalletAddr: string | null = null;
+  let metadataFetchOk = false;
+  let metadataServiceFound = false;
   try {
     const metaRes = await fetch(parsed.agentURI, { method: "GET" });
     if (metaRes.ok) {
+      metadataFetchOk = true;
       const meta = (await metaRes.json()) as {
         services?: Array<{ name?: string; walletAddress?: string }>;
       };
       const q402Svc = meta.services?.find((s) => s?.name === "q402");
+      if (q402Svc) metadataServiceFound = true;
       metadataWalletAddr =
         typeof q402Svc?.walletAddress === "string" ? q402Svc.walletAddress.toLowerCase() : null;
     }
   } catch (e) {
-    // Non-fatal — the metadata URL might be a third-party host the
-    // user supplied. We only enforce the match for our own URIs (the
-    // self-hosted ones the dashboard's prepare flow produces). If
-    // we can't fetch, we let the mismatch check below decide.
     console.error("[register-agent/confirm] metadata fetch for cross-check failed:", e);
   }
+
+  // Fail closed for self-hosted URIs that can't be validated. A
+  // self-hosted URI we can't reach OR that lacks a q402 service
+  // entry means we cannot prove the agent points at THIS walletId —
+  // safer to reject than to stamp a possibly-mismatched agentId.
+  if (isSelfHosted && (!metadataFetchOk || !metadataServiceFound)) {
+    return NextResponse.json(
+      {
+        error: "SELF_HOSTED_METADATA_UNVERIFIABLE",
+        message:
+          "Could not verify the self-hosted agent metadata that the NFT points at. " +
+          (!metadataFetchOk
+            ? "The metadata URL did not return 200."
+            : "The metadata does not contain a q402 service entry to cross-check against the walletId."),
+        agentURI: parsed.agentURI,
+        agentId: parsed.agentId.toString(),
+      },
+      { status: 502 },
+    );
+  }
+
   if (metadataWalletAddr !== null && metadataWalletAddr !== body.walletId.toLowerCase()) {
     return NextResponse.json(
       {
