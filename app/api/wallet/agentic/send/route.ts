@@ -50,8 +50,18 @@ import {
 import type { Address, Hex } from "viem";
 
 export const runtime = "nodejs";
+// Explicit budget — Vercel's default function timeout is 10s on Hobby,
+// 60s on Pro. We need enough headroom that a slow relay leg doesn't
+// kill us mid-flight (the claim TTL below caps how long an alive
+// claim can shadow-lock).
+export const maxDuration = 60;
 
-const IDEMPOTENCY_TTL_SEC = 10 * 60;
+// Bumped 10 → 30 min so a slow relay leg (congested mempool, multi-
+// chain re-route, RPC retry) doesn't expire the claim while the relay
+// is still in-flight — otherwise a client-side retry would slip past
+// the SET NX and double-spend. 30 min comfortably exceeds the
+// maxDuration of the relay route + Vercel function timeout.
+const IDEMPOTENCY_TTL_SEC = 30 * 60;
 
 interface SendBody {
   chain?: string;
@@ -99,8 +109,18 @@ function isPositiveDecimalString(s: unknown): s is string {
 
 /**
  * Send-level fingerprint. Mirrors `agenticBatchFingerprint` but binds
- * walletId so a fresh wallet's first send doesn't collide with another
- * wallet's prior send to the same recipient/amount.
+ * walletId AND key-scope so retries that differ on those axes don't
+ * collide. Key-scope matters because:
+ *   - Trial keys can only settle on BNB. A user retrying the same
+ *     (recipient, amount) with their Multichain key after a Trial
+ *     failure must NOT be deadlocked by the prior failed Trial
+ *     attempt's cached `failed` record. Including the scope (or
+ *     "owner-sig" sentinel) gives each path its own fingerprint slot.
+ *   - apiKey rotation likewise produces a new fingerprint, so a stale-
+ *     key failure doesn't trap the legit-key retry.
+ *
+ * `scope` is one of "trial" | "multichain" | "owner-sig" — the auth
+ * mode used to authorise THIS specific call.
  */
 function agenticSendFingerprint(
   owner: string,
@@ -109,6 +129,7 @@ function agenticSendFingerprint(
   token: string,
   to: string,
   amount: string,
+  scope: string,
 ): string {
   const seed = [
     owner.toLowerCase(),
@@ -117,6 +138,7 @@ function agenticSendFingerprint(
     token,
     to.toLowerCase(),
     amount,
+    scope,
   ].join("|");
   return ethers.keccak256(ethers.toUtf8Bytes(seed)).slice(2, 18);
 }
@@ -264,7 +286,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // get() and the final set(): both racers saw cached=null and both
   // settled. Mirror batch's atomic claim — the loser falls through to
   // the cached record returned by the winner.
-  const fp = agenticSendFingerprint(owner, walletId, body.chain, body.token, body.to, body.amount);
+  //
+  // Scope: bundled into the fingerprint so a Trial-key failure on BNB
+  // doesn't shadow-lock a Multichain-key retry of the same intent.
+  // For owner-sig calls there's no apiKey distinction, so all owner-
+  // sig requests for the same (wallet, chain, token, to, amount) hash
+  // to one slot — that's correct: the canonical retry contract for
+  // owner-sig is "fresh challenge same intent → cached settled
+  // result". For apiKey calls we include the first 12 chars of the
+  // key so rotating keys (or trial↔multichain) produces a fresh slot.
+  const scope =
+    typeof body.apiKey === "string" && body.apiKey.length > 0
+      ? `apikey_${body.apiKey.slice(0, 12)}`
+      : "owner-sig";
+  const fp = agenticSendFingerprint(
+    owner,
+    walletId,
+    body.chain,
+    body.token,
+    body.to,
+    body.amount,
+    scope,
+  );
   const idempotencyKey = sendKey(fp);
   const startedAt = Date.now();
   const sendId = randomBytes(8).toString("hex");
@@ -274,18 +317,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Lost the race — surface whichever record landed. Mirrors batch
     // route's pattern: when concurrent retries beat us we return the
     // winner's state instead of inventing a parallel settlement.
+    //
+    // Response shape contract for MCP / dashboard:
+    //   - SUCCESS replay: HTTP 200 with the original relayBody + `txHash`
+    //   - FAILED replay:  HTTP from the original relayStatus (e.g. 402)
+    //   - PROCESSING replay: HTTP 202 + `pending: true` so clients can
+    //     distinguish "still in flight" from "settled". MCP needs the
+    //     `pending` flag because checking `resp.ok && body.txHash` would
+    //     otherwise mis-classify 202 (no txHash yet) as a failure.
     const live = await kv.get<SendRecord>(idempotencyKey);
     if (live) {
+      const isProcessing = live.status === "processing";
+      const httpStatus = live.relayStatus ?? (isProcessing ? 202 : 500);
       return NextResponse.json(
         {
           ...((live.relayBody as Record<string, unknown>) ?? {}),
           idempotent: true,
+          ...(isProcessing ? { pending: true, retryAfterSec: 5 } : {}),
           status: live.status,
           startedAt: live.startedAt,
           finishedAt: live.finishedAt,
           sendId: live.sendId,
         },
-        { status: live.relayStatus ?? 202 },
+        {
+          status: httpStatus,
+          ...(isProcessing ? { headers: { "Retry-After": "5" } } : {}),
+        },
       );
     }
     // Race window where the claim disappeared between SET NX and GET
@@ -463,8 +520,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     relayBody: relayBody ?? null,
     relayStatus: relayResponse.status,
   };
+  // Success → keep the cached settlement for the full TTL so retries
+  // (network blip, slow client) see the original txHash.
+  // Failure → short TTL (60s) so a genuine remediated retry isn't
+  // shadow-locked to a stale failed record. Long enough to absorb an
+  // immediate double-click; short enough that the user can change a
+  // gas tank, rotate a key, or just retry within a minute.
+  const finalTtl = success ? IDEMPOTENCY_TTL_SEC : 60;
   try {
-    await kv.set(idempotencyKey, finalRecord, { ex: IDEMPOTENCY_TTL_SEC });
+    await kv.set(idempotencyKey, finalRecord, { ex: finalTtl });
   } catch (e) {
     // Cache write failed AFTER the relay either settled or rejected.
     // The claim is still alive as `processing` and will stay that way

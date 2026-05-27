@@ -18,7 +18,7 @@
  * on close. Q402's standard `recordExportEvent` audit fires server-side.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
 
 interface Props {
@@ -47,6 +47,16 @@ export function AgenticWalletExportModal({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [remaining, setRemaining] = useState(Math.floor(AUTO_CLEAR_MS / 1000));
+  /**
+   * Double-click guard. Without it, a fast double-tap on
+   * "Sign challenge and reveal" mints two action-challenges, opens
+   * two wallet popups, and POSTs twice to /export — the second POST
+   * uses a fresh signature against a different challenge so it can
+   * also succeed, exposing the key TWICE (auditable as two separate
+   * audit-log entries but UX-confusing + over-counts toward the
+   * route's 5/300s rate limit).
+   */
+  const inFlightRef = useRef(false);
 
   // Auto-clear the revealed key after AUTO_CLEAR_MS. The countdown
   // resets via an internal ref tied to the deadline so we avoid calling
@@ -71,6 +81,8 @@ export function AgenticWalletExportModal({
   }, [pk]);
 
   async function runExport() {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setStage("loading");
     setError(null);
     try {
@@ -115,6 +127,8 @@ export function AgenticWalletExportModal({
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setStage("error");
+    } finally {
+      inFlightRef.current = false;
     }
   }
 

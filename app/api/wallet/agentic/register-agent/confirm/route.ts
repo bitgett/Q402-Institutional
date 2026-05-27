@@ -190,6 +190,48 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // ── walletId ↔ agentURI cross-check ───────────────────────────────────
+  // The same owner may have multiple Agent Wallets (max 10). An owner
+  // could mint NFT-X against wallet A's metadata, then call confirm
+  // with walletId=B + the same txHash, attaching X's agentId to B's
+  // record — B would then advertise A's payment endpoint to anyone
+  // resolving the public agent. Block by fetching the on-chain
+  // agentURI's metadata and verifying its q402 service walletAddress
+  // matches the wallet whose record we're about to stamp.
+  let metadataWalletAddr: string | null = null;
+  try {
+    const metaRes = await fetch(parsed.agentURI, { method: "GET" });
+    if (metaRes.ok) {
+      const meta = (await metaRes.json()) as {
+        services?: Array<{ name?: string; walletAddress?: string }>;
+      };
+      const q402Svc = meta.services?.find((s) => s?.name === "q402");
+      metadataWalletAddr =
+        typeof q402Svc?.walletAddress === "string" ? q402Svc.walletAddress.toLowerCase() : null;
+    }
+  } catch (e) {
+    // Non-fatal — the metadata URL might be a third-party host the
+    // user supplied. We only enforce the match for our own URIs (the
+    // self-hosted ones the dashboard's prepare flow produces). If
+    // we can't fetch, we let the mismatch check below decide.
+    console.error("[register-agent/confirm] metadata fetch for cross-check failed:", e);
+  }
+  if (metadataWalletAddr !== null && metadataWalletAddr !== body.walletId.toLowerCase()) {
+    return NextResponse.json(
+      {
+        error: "WALLET_AGENTURI_MISMATCH",
+        message:
+          "The on-chain agentURI's q402 service points at a different wallet than the walletId " +
+          "you're confirming against. This usually means the NFT was minted with metadata for " +
+          "one of your other wallets — confirm with that wallet's walletId instead.",
+        metadataWalletAddress: metadataWalletAddr,
+        walletId: body.walletId.toLowerCase(),
+        agentId: parsed.agentId.toString(),
+      },
+      { status: 409 },
+    );
+  }
+
   // Atomically claim the txHash so a concurrent retry can't re-parse +
   // overwrite. The race window is small (we already authed + fetched
   // receipt) but a SET NX is cheap insurance.

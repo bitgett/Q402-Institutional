@@ -31,6 +31,7 @@ import {
 } from "@/app/lib/agentic-wallet";
 import { fetchAgenticBalances } from "@/app/lib/agentic-wallet-balance";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
+import { requireCronAuth } from "@/app/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -82,14 +83,8 @@ function classifyRecordKey(key: string): ScanKey | null {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: "CRON_SECRET unset — refusing to run." }, { status: 503 });
-  }
-  const auth = req.headers.get("authorization") ?? "";
-  if (auth !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  const denial = requireCronAuth(req);
+  if (denial) return denial;
 
   let keys: string[];
   try {
@@ -117,25 +112,52 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       continue;
     }
 
-    // ── Balance check (P0 audit fix) ─────────────────────────────────
+    // ── Balance check (P0 audit fix v2) ──────────────────────────────
     // Even after grace, refuse to destroy the keystore if the wallet
-    // still holds funds. Alerts ops so a human can decide whether to
-    // extend the grace, contact the user, or operator-sweep.
+    // still holds funds OR if we can't prove it doesn't. Two failure
+    // modes covered:
+    //
+    //   (a) `fetchAgenticBalances` throws → outer catch → skip.
+    //   (b) `fetchAgenticBalances` returns BUT some chain failed —
+    //       the per-chain catch suppressed the error, contributed 0
+    //       to `totalUsd`. Without this guard a chain whose RPC was
+    //       down, or whose multicall3 wasn't deployed (Stable /
+    //       Injective / Monad / Mantle / Scroll have community-deploy
+    //       canonical-address gaps), would let the cron see "$0" and
+    //       hard-delete a wallet whose funds live on that chain.
+    //
+    // Fail closed on either path: skip the delete + page ops.
     let balanceUsd: number | null = null;
+    let unreachableChains: string[] = [];
     try {
       const balances = await fetchAgenticBalances(record.address);
-      balanceUsd = typeof balances.totalUsd === "number" ? balances.totalUsd : null;
+      balanceUsd = balances.totalUsd;
+      unreachableChains = balances.unreachableChains;
     } catch (e) {
       console.error(`[agentic-wallet-gc] balance check failed for ${record.address}:`, e);
-      // Fail closed: cannot prove balance is zero → skip the delete and
-      // alert ops. Better to ask a human than risk burning funds.
       void sendOpsAlert(
-        `agentic-wallet-gc balance check failed for ${record.ownerAddr} ` +
+        `agentic-wallet-gc balance check threw for ${record.ownerAddr} ` +
           `(walletId=${cls.isLegacy ? "(legacy)" : cls.walletId}, address=${record.address}). ` +
           `Hard-delete deferred — investigate balance manually before retrying.`,
         "warn",
       );
       skipped.push({ key, reason: "balance_check_failed", balanceUsd: null });
+      continue;
+    }
+
+    if (unreachableChains.length > 0) {
+      // Per-chain RPC suppressed an error; cannot prove the wallet is
+      // empty on those chains. Skip + alert — funds on the unreachable
+      // chain would be permanently stranded if we proceeded.
+      void sendOpsAlert(
+        `agentic-wallet-gc: chain(s) unreachable for ${record.address} ` +
+          `(owner ${record.ownerAddr}). Cannot verify zero balance on: ` +
+          `${unreachableChains.join(", ")}. Hard-delete deferred. ` +
+          `Likely cause: RPC outage or missing Multicall3 deployment ` +
+          `on a community-deploy chain.`,
+        "critical",
+      );
+      skipped.push({ key, reason: "chain_unreachable", balanceUsd });
       continue;
     }
 

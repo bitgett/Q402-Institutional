@@ -31,6 +31,7 @@ import {
   encodeRegister,
   type Erc8004Network,
 } from "@/app/lib/erc8004";
+import { getAppOrigin } from "@/app/lib/app-origin";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -44,19 +45,33 @@ interface PrepareBody {
   description?: string;
   imageUrl?: string;
   network?: Erc8004Network;
+  /**
+   * Client-computed keccak256 of the canonical metadata JSON. Bound
+   * into the intent challenge so a malicious or buggy client can't
+   * sign with `name="legit"` and then mutate `description`/`imageUrl`
+   * in the body — the rebuild here MUST hash to the same value or
+   * the request is rejected.
+   *
+   * Compute on the client with `hashAgentMetadata(buildQ402AgentMetadata(
+   *   { name, description, imageUrl, walletAddress, relayBaseUrl, mcpPackage }))`.
+   * The `relayBaseUrl` must match `window.location.origin` (matches
+   * the server's `getAppOrigin(req)` whenever APP_ORIGIN env is unset
+   * — on prod the env is set, and the client sees the canonical URL,
+   * so they converge).
+   */
+  metadataHash?: string;
 }
 
 const ALLOWED_NETWORKS: Erc8004Network[] = ["bsc"];
 const MAX_IMAGE_URL = 300;
 
-function appOrigin(): string {
-  return process.env.APP_ORIGIN ?? "https://q402.quackai.ai";
+function isMetadataHash(s: unknown): s is string {
+  return typeof s === "string" && /^0x[0-9a-fA-F]{64}$/.test(s);
 }
 
 function isHttpsUrl(s: string): boolean {
   try {
-    const u = new URL(s);
-    return u.protocol === "https:";
+    return new URL(s).protocol === "https:";
   } catch {
     return false;
   }
@@ -110,8 +125,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
     imageUrl = body.imageUrl;
   }
+  if (!isMetadataHash(body.metadataHash)) {
+    return NextResponse.json(
+      { error: "METADATA_HASH_REQUIRED", message: "Client must compute + send keccak256 of canonical metadata JSON for intent binding." },
+      { status: 400 },
+    );
+  }
+  const claimedMetadataHash = body.metadataHash.toLowerCase();
 
   // ── Intent-bound auth ─────────────────────────────────────────────────
+  // Intent embeds the FULL metadata hash (not just name+network+wallet)
+  // so description / imageUrl tampering after signing fails verification.
+  // The hash is rebuilt below from the request body using the same
+  // canonical JSON convention the client used; mismatch → reject.
   const authResult = await requireIntentAuth({
     address: body.address ?? null,
     challenge: body.nonce ?? null,
@@ -120,7 +146,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     intent: {
       walletId: body.walletId.toLowerCase(),
       network,
-      name,
+      metadataHash: claimedMetadataHash,
     },
   });
   if (typeof authResult !== "string") {
@@ -138,16 +164,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Build + self-host metadata ─────────────────────────────────────────
+  // `getAppOrigin(req)` honours APP_ORIGIN env if set (prod), else
+  // derives from request host. This keeps preview deploys self-
+  // consistent: the agentURI we hand the user points at the SAME deploy
+  // they signed against, not at a canonical URL that lacks the metadata.
+  // The client must use `window.location.origin` for its own hash
+  // computation so the two converge.
+  const appOrigin = getAppOrigin(req);
   const metadata = buildQ402AgentMetadata({
     name,
     description: description.length > 0 ? description : undefined,
     walletAddress: wallet.address,
-    relayBaseUrl: appOrigin(),
+    relayBaseUrl: appOrigin,
     mcpPackage: "@quackai/q402-mcp",
     imageUrl,
   });
 
   const hash = hashAgentMetadata(metadata);
+  if (hash.toLowerCase() !== claimedMetadataHash) {
+    // Body fields differ from what the client signed. Either a malicious
+    // client trying to publish metadata that differs from the signed
+    // intent, OR a client/server canonical-JSON drift bug.
+    return NextResponse.json(
+      {
+        error: "METADATA_HASH_MISMATCH",
+        message: "The server-rebuilt metadata does not hash to the client-signed value. Body fields must be byte-identical to what was signed.",
+        expected: claimedMetadataHash,
+        computed: hash.toLowerCase(),
+      },
+      { status: 400 },
+    );
+  }
   try {
     await kv.set(agentMetadataKey(hash), metadata);
   } catch (e) {
@@ -155,7 +202,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "metadata_store_failed" }, { status: 502 });
   }
 
-  const agentURI = agentMetadataUrl(appOrigin(), hash);
+  const agentURI = agentMetadataUrl(appOrigin, hash);
 
   const cfg = ERC8004_NETWORKS[network];
   const calldata = encodeRegister(agentURI);

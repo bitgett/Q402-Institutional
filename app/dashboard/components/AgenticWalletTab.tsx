@@ -70,6 +70,18 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
    * onChanged just reloaded the wallet record, never the balance.
    */
   const [balanceRefreshTick, setBalanceRefreshTick] = useState(0);
+  /**
+   * Most-recent aggregate USD balance from the active wallet's Card.
+   * Lifted up so the DangerZone's ArchiveModal can render an accurate
+   * "you still have funds" warning. Without this lift, the modal was
+   * receiving `balanceUsd={null}` literally → the funds-warning code
+   * path at AgenticWalletArchiveModal.tsx never fired and users
+   * could archive funded wallets with no signal beyond the typed-
+   * ARCHIVE gate.
+   *
+   * Card publishes via `onBalance(usd)`; null means "not yet fetched".
+   */
+  const [activeBalanceUsd, setActiveBalanceUsd] = useState<number | null>(null);
 
   const reload = useCallback(async (): Promise<ListResponse | null> => {
     setError(null);
@@ -196,12 +208,24 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
         hasMultichainScope={meta.hasMultichainScope}
       />
 
+      {/*
+        `key={activeWallet.walletId}` forces a fresh subtree mount when
+        the user switches wallets via the selector. Without it React
+        reconciles the existing Card + any open modal inside it by
+        position, leaving stale modal state alongside the new wallet
+        prop — a Send modal opened for wallet A would silently start
+        submitting against wallet B mid-flight. Remounting also resets
+        the Card's balance state so the new wallet's number doesn't
+        flash the previous wallet's total.
+      */}
       <AgenticWalletCard
+        key={activeWallet.walletId}
         wallet={activeWallet}
         address={address}
         signMessage={signMessage}
         hasMultichainScope={meta.hasMultichainScope}
         balanceRefreshTick={balanceRefreshTick}
+        onBalance={setActiveBalanceUsd}
         onChanged={() => {
           void reload();
           setBalanceRefreshTick((t) => t + 1);
@@ -220,7 +244,7 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
           void reload();
           setBalanceRefreshTick((t) => t + 1);
         }}
-        balanceUsd={null}
+        balanceUsd={activeBalanceUsd}
         onRequestBalanceRefresh={() => setBalanceRefreshTick((t) => t + 1)}
       />
     </div>

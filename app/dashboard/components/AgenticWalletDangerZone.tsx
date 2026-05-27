@@ -25,7 +25,7 @@
  * page, small.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletArchiveModal } from "./AgenticWalletArchiveModal";
@@ -61,6 +61,11 @@ export function AgenticWalletDangerZone({
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  // Synchronous guards — destructive actions must not double-fire.
+  // setArchiving / setRestoring race the second click because state
+  // updates batch; the ref check resolves synchronously at click time.
+  const archiveInFlightRef = useRef(false);
+  const restoreInFlightRef = useRef(false);
 
   const archived = wallet.deletedAt !== null;
   const graceLeftDays = archived && wallet.deletedAt !== null
@@ -76,6 +81,8 @@ export function AgenticWalletDangerZone({
   const walletId = wallet.address.toLowerCase();
 
   async function archive() {
+    if (archiveInFlightRef.current) return;
+    archiveInFlightRef.current = true;
     setArchiving(true);
     setArchiveError(null);
     try {
@@ -111,11 +118,14 @@ export function AgenticWalletDangerZone({
     } catch (e) {
       setArchiveError(e instanceof Error ? e.message : String(e));
     } finally {
+      archiveInFlightRef.current = false;
       setArchiving(false);
     }
   }
 
   async function restore() {
+    if (restoreInFlightRef.current) return;
+    restoreInFlightRef.current = true;
     setRestoring(true);
     setRestoreError(null);
     try {
@@ -150,6 +160,7 @@ export function AgenticWalletDangerZone({
     } catch (e) {
       setRestoreError(e instanceof Error ? e.message : String(e));
     } finally {
+      restoreInFlightRef.current = false;
       setRestoring(false);
     }
   }
