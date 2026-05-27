@@ -1575,7 +1575,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Title row — view toggle + tab nav now live in the sidebar. The
             page title doubles as the active view + tab context. */}
         <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
