@@ -23,6 +23,8 @@ const mockKv = vi.hoisted(() => ({
   incrbyfloat: vi.fn(),
   incrby: vi.fn(),
   expire: vi.fn(),
+  // Track raw set calls with options so tests can assert SET NX semantics.
+  __setOptions: new Map<string, { nx?: boolean; ex?: number } | undefined>(),
 }));
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
@@ -43,8 +45,15 @@ import {
   recordRuleFired,
   computeNextActionAt,
   parseZsetMember,
+  claimFireSlot,
+  releaseFireSlot,
+  removeFromActionZset,
+  isStaleSlot,
+  skipStaleSlot,
+  recordRuleTransientError,
   RecurringValidationError,
   MIN_CANCEL_WINDOW_HOURS,
+  TRANSIENT_BACKOFF_MS,
   RECURRING_NEXT_ACTION_ZSET,
 } from "@/app/lib/agentic-wallet-recurring";
 
@@ -73,7 +82,8 @@ beforeEach(() => {
   mockKv.get.mockImplementation((key: string) =>
     Promise.resolve(store.get(key) ?? null),
   );
-  mockKv.set.mockImplementation((key: string, value: unknown) => {
+  mockKv.set.mockImplementation((key: string, value: unknown, opts?: { nx?: boolean; ex?: number }) => {
+    if (opts?.nx && store.has(key)) return Promise.resolve(null);
     store.set(key, value);
     return Promise.resolve("OK");
   });
@@ -500,5 +510,136 @@ describe("cron lifecycle helpers", () => {
     expect(fired.totalSpentUsd).toBe(25);
     expect(fired.pendingFireAt).toBeNull();
     expect(fired.nextRunAt).toBeGreaterThan(prevNextRun);
+  });
+});
+
+// ── Catch-up policy ──────────────────────────────────────────────────────
+
+describe("catch-up policy (cron resumes after downtime)", () => {
+  it("isStaleSlot is false for a normal due rule", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    expect(isStaleSlot(r, Date.now())).toBe(false);
+  });
+
+  it("isStaleSlot is true when nextRunAt is more than cancelWindow in the past", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    // 25h beyond a 24h cancel window → stale.
+    const longGoneNow = r.nextRunAt + 25 * 60 * 60 * 1000;
+    expect(isStaleSlot(r, longGoneNow)).toBe(true);
+  });
+
+  it("skipStaleSlot advances nextRunAt to a future slot without firing", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    const longGoneNow = r.nextRunAt + 25 * 60 * 60 * 1000;
+    const advanced = await skipStaleSlot(r, longGoneNow);
+    expect(advanced.totalFiredCount).toBe(0);
+    expect(advanced.nextRunAt).toBeGreaterThan(longGoneNow);
+    expect(advanced.lastError).toContain("stale slot");
+  });
+
+  it("recordRuleFired jumps to the next future slot when cron is late (never replays missed weeks)", async () => {
+    const r = await createRecurringRule({ ...VALID_INPUT, frequency: "daily" });
+    // Cron wakes 5 days after the planned fire.
+    const lateNow = r.nextRunAt + 5 * 24 * 60 * 60 * 1000;
+    const fired = await recordRuleFired(r, 25, lateNow);
+    // New nextRunAt must be in the future relative to `now`, not just
+    // relative to the original nextRunAt (otherwise we'd replay each
+    // missed day for the next 4 cron ticks).
+    expect(fired.nextRunAt).toBeGreaterThan(lateNow);
+    // Same fire, single counter increment.
+    expect(fired.totalFiredCount).toBe(1);
+  });
+});
+
+// ── Fire-lock semantics ──────────────────────────────────────────────────
+
+describe("fire-lock per slot", () => {
+  it("first claim succeeds; second claim on same slot is rejected", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    const first = await claimFireSlot(r);
+    expect(first.ok).toBe(true);
+    const second = await claimFireSlot(r);
+    expect(second.ok).toBe(false);
+    expect(second.reason).toContain("fire-lock");
+  });
+
+  it("releaseFireSlot frees the lock so a retry can proceed", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    await claimFireSlot(r);
+    await releaseFireSlot(r);
+    const retry = await claimFireSlot(r);
+    expect(retry.ok).toBe(true);
+  });
+
+  it("the next scheduled slot gets its own lock (different nextRunAt → different key)", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    const first = await claimFireSlot(r);
+    expect(first.ok).toBe(true);
+    // Simulate the rule advancing to the next slot after a successful fire.
+    const fired = await recordRuleFired(r, 25, Date.now());
+    const nextSlot = await claimFireSlot(fired);
+    expect(nextSlot.ok).toBe(true);
+  });
+});
+
+// ── Transient backoff (queue-starvation guard) ───────────────────────────
+
+describe("transient backoff", () => {
+  it("recordRuleTransientError pushes the ZSET score forward by TRANSIENT_BACKOFF_MS", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    const member = `${TEST_OWNER.toLowerCase()}/${TEST_WALLET.toLowerCase()}/${r.ruleId}`;
+    const zset = zsetStore.get(RECURRING_NEXT_ACTION_ZSET)!;
+    const scoreBefore = zset.get(member);
+    expect(typeof scoreBefore).toBe("number");
+    const now = Date.now();
+    await recordRuleTransientError(r, "relay 502", now);
+    const scoreAfter = zset.get(member);
+    expect(scoreAfter).toBe(now + TRANSIENT_BACKOFF_MS);
+    // The rule itself is unchanged except for lastError.
+    const fresh = (await getRecurringRule(TEST_OWNER, TEST_WALLET, r.ruleId))!;
+    expect(fresh.lastError).toBe("relay 502");
+    expect(fresh.status).toBe("active");
+  });
+});
+
+// ── Create idempotency ───────────────────────────────────────────────────
+
+describe("createRecurringRule idempotency", () => {
+  it("two creates with the same canonical shape return the same rule (not a duplicate)", async () => {
+    const r1 = await createRecurringRule(VALID_INPUT);
+    const r2 = await createRecurringRule(VALID_INPUT);
+    expect(r2.ruleId).toBe(r1.ruleId);
+    const rules = await listRecurringRules(TEST_OWNER, TEST_WALLET);
+    expect(rules.length).toBe(1);
+  });
+
+  it("different amount → different fingerprint → different rule", async () => {
+    const r1 = await createRecurringRule({ ...VALID_INPUT, amount: "25" });
+    const r2 = await createRecurringRule({ ...VALID_INPUT, amount: "50" });
+    expect(r2.ruleId).not.toBe(r1.ruleId);
+    const rules = await listRecurringRules(TEST_OWNER, TEST_WALLET);
+    expect(rules.length).toBe(2);
+  });
+
+  it("different recipient → different fingerprint → different rule", async () => {
+    const otherRecip = "0x4444444444444444444444444444444444444444";
+    const r1 = await createRecurringRule(VALID_INPUT);
+    const r2 = await createRecurringRule({ ...VALID_INPUT, recipient: otherRecip });
+    expect(r2.ruleId).not.toBe(r1.ruleId);
+  });
+});
+
+// ── ZSET cleanup ─────────────────────────────────────────────────────────
+
+describe("removeFromActionZset", () => {
+  it("removes the rule from ZSET without changing its record", async () => {
+    const r = await createRecurringRule(VALID_INPUT);
+    const member = `${TEST_OWNER.toLowerCase()}/${TEST_WALLET.toLowerCase()}/${r.ruleId}`;
+    expect(zsetStore.get(RECURRING_NEXT_ACTION_ZSET)?.has(member)).toBe(true);
+    await removeFromActionZset(r);
+    expect(zsetStore.get(RECURRING_NEXT_ACTION_ZSET)?.has(member)).toBe(false);
+    // Record is intact.
+    const fresh = await getRecurringRule(TEST_OWNER, TEST_WALLET, r.ruleId);
+    expect(fresh).not.toBeNull();
   });
 });

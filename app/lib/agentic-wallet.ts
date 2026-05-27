@@ -33,6 +33,11 @@ import { ethers } from "ethers";
 import type { Hex } from "viem";
 import { kv } from "@vercel/kv";
 import { encrypt, decrypt, loadMasterKey, type EncryptedBlob } from "./keystore";
+import {
+  pauseRulesForArchive,
+  resumeRulesForRestore,
+  deleteRulesForHardDelete,
+} from "./agentic-wallet-recurring";
 
 export interface AgenticWalletRecord {
   /** Lowercased owner EOA (the user's MetaMask / OKX address). */
@@ -435,7 +440,6 @@ export async function softDeleteAgenticWallet(
   // failure here only leaves the rule queued in the ZSET; the cron's
   // own per-rule "wallet active?" check rejects the fire anyway.
   try {
-    const { pauseRulesForArchive } = await import("./agentic-wallet-recurring.js");
     await pauseRulesForArchive(ownerAddr, walletId);
   } catch (e) {
     console.error("[agentic-wallet] cascade pause failed:", e);
@@ -462,7 +466,6 @@ export async function restoreAgenticWallet(
   await kv.set(recordKey(ownerAddr, walletId), next);
   // Cascade — resume rules that the archive automatically paused.
   try {
-    const { resumeRulesForRestore } = await import("./agentic-wallet-recurring.js");
     await resumeRulesForRestore(ownerAddr, walletId);
   } catch (e) {
     console.error("[agentic-wallet] cascade resume failed:", e);
@@ -488,7 +491,6 @@ export async function hardDeleteAgenticWallet(
   // would also catch it via getActiveAgenticWallet, but defence in
   // depth is cheap here).
   try {
-    const { deleteRulesForHardDelete } = await import("./agentic-wallet-recurring.js");
     await deleteRulesForHardDelete(owner, id);
   } catch (e) {
     console.error("[agentic-wallet] cascade delete failed:", e);

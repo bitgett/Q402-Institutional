@@ -62,6 +62,11 @@ import {
   recordRuleFired,
   recordRuleCapExceeded,
   recordRuleTransientError,
+  claimFireSlot,
+  releaseFireSlot,
+  removeFromActionZset,
+  isStaleSlot,
+  skipStaleSlot,
   type RecurringRule,
 } from "@/app/lib/agentic-wallet-recurring";
 
@@ -77,6 +82,8 @@ interface PerRuleOutcome {
   outcome:
     | "alert-sent"
     | "fired"
+    | "skipped-stale-slot"
+    | "skipped-fire-lock-held"
     | "skipped-wallet-missing"
     | "skipped-wallet-archived"
     | "skipped-subscription-lapsed"
@@ -93,12 +100,21 @@ async function processOneRule(
 ): Promise<PerRuleOutcome> {
   const ruleKey = `${rule.ownerAddr}/${rule.walletId}/${rule.ruleId}`;
 
+  // ── Catch-up gate. If the planned fire is too far in the past, jump
+  //    forward instead of replaying. Applies to both phases.
+  if (isStaleSlot(rule, nowMs)) {
+    await skipStaleSlot(rule, nowMs);
+    return { ruleKey, walletId: rule.walletId, outcome: "skipped-stale-slot" };
+  }
+
   // ── Phase A: alert (pendingFireAt was null) ─────────────────────────
   if (rule.pendingFireAt === null) {
-    // Confirm the wallet still exists + active. Skip if not (will be
-    // cleaned up by archive cascade or hard-delete cascade).
     const wallet = await getActiveAgenticWallet(rule.ownerAddr, rule.walletId);
     if (!wallet) {
+      // Wallet hard-deleted but ZSET still has the rule (cascade may
+      // have raced or failed). Drop from the queue so the cron stops
+      // re-considering this stale entry every tick.
+      await removeFromActionZset(rule);
       return { ruleKey, walletId: rule.walletId, outcome: "skipped-wallet-missing" };
     }
     await markRulePending(rule, nowMs);
@@ -106,17 +122,21 @@ async function processOneRule(
   }
 
   // ── Phase B: fire ────────────────────────────────────────────────────
+
+  // 1. Wallet must still exist + be active.
   const wallet = await getActiveAgenticWallet(rule.ownerAddr, rule.walletId);
   if (!wallet) {
-    // Wallet vanished between alert and fire (archived OR hard-deleted
-    // mid-window). Cascade should have already paused/deleted; this is
-    // a belt-and-suspenders no-op.
+    // Wallet was archived after the alert. Drop from ZSET; cascade
+    // will have set status=paused-by-archive on the rule already (or
+    // not, if the cascade itself failed — defensive ZREM here closes
+    // the loop either way).
+    await removeFromActionZset(rule);
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-wallet-archived" };
   }
 
-  // Per-tx max — re-checked at fire because the user may have lowered
-  // the cap after rule creation. Terminal state: rule freezes until
-  // user fixes it (raise cap OR cancel + recreate).
+  // 2. Per-tx max — re-checked at fire because the user may have
+  //    lowered the cap after rule creation. Terminal state: rule
+  //    freezes until user fixes it.
   const amountUsd = Number(rule.amount);
   if (
     wallet.perTxMaxUsd !== undefined &&
@@ -131,9 +151,8 @@ async function processOneRule(
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-per-tx-exceeded" };
   }
 
-  // Subscription gate — only relevant for non-BNB chains. If a paid
-  // sub lapsed, freeze the rule rather than hammering /relay with a
-  // doomed call.
+  // 3. Subscription gate — non-BNB needs multichain. Terminal if
+  //    lapsed; user re-subscribes + resumes manually.
   const sub = await getSubscription(rule.ownerAddr);
   if (rule.chain !== "bnb" && !hasMultichainScope(sub)) {
     await recordRuleCapExceeded(
@@ -144,8 +163,6 @@ async function processOneRule(
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-subscription-lapsed" };
   }
 
-  // Pick the apiKey the same way Mode C send does: BNB → trial OR paid;
-  // anything else → paid only.
   const apiKey = rule.chain === "bnb"
     ? (sub?.trialApiKey || sub?.apiKey)
     : sub?.apiKey;
@@ -158,17 +175,39 @@ async function processOneRule(
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-no-api-key" };
   }
 
+  // 4. Claim the per-slot fire-lock BEFORE any relay work. Lock key
+  //    = (ruleId, nextRunAt) so each scheduled fire has its own
+  //    unique slot. Concurrent cron tick / retry-after-KV-fail both
+  //    hit the same key and abort here. Lock persists for an hour
+  //    after success — long enough to outlive any retry that follows
+  //    a recordRuleFired KV write failure.
+  const claim = await claimFireSlot(rule);
+  if (!claim.ok) {
+    return {
+      ruleKey,
+      walletId: rule.walletId,
+      outcome: "skipped-fire-lock-held",
+      error: claim.reason,
+    };
+  }
+
   const relayerKey = loadRelayerKey();
   if (!relayerKey.ok) {
-    await recordRuleTransientError(rule, "relayer key not loaded");
+    // Release the lock so a quick retry (next tick or manual cron
+    // re-run) isn't blocked for the full TTL; the relayer-key
+    // recovery is a config fix, not a re-fire race.
+    await releaseFireSlot(rule);
+    await recordRuleTransientError(rule, "relayer key not loaded", nowMs);
     return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: "relay_unavailable" };
   }
 
-  // Sign + submit. Errors here are TRANSIENT — the rule stays pending,
-  // cron retries on the next tick. Permanent failures (PK rotation,
-  // missing keystore) need ops intervention; the lastError field
-  // surfaces them in the dashboard.
+  // 5. Sign + submit. Errors before the relay actually settles =
+  //    transient (release lock, back off). Errors AFTER the relay
+  //    responds with a txHash = success path; we keep the lock so a
+  //    failed recordRuleFired write doesn't get re-fired by the next
+  //    tick.
   let txHash: string | undefined;
+  let releasedLockEarly = false;
   try {
     const pk = decryptPrivateKey(wallet);
     const signed = await signAgenticPayment({
@@ -183,16 +222,27 @@ async function processOneRule(
     const respBody = (await resp.json().catch(() => null)) as { txHash?: string; error?: string } | null;
     if (!resp.ok || !respBody || typeof respBody.txHash !== "string") {
       const errMsg = respBody?.error ?? `relay HTTP ${resp.status}`;
-      await recordRuleTransientError(rule, errMsg);
+      // Relay rejected — nothing settled. Release the lock so the
+      // next tick can retry the same slot.
+      await releaseFireSlot(rule);
+      releasedLockEarly = true;
+      await recordRuleTransientError(rule, errMsg, nowMs);
       return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: errMsg };
     }
     txHash = respBody.txHash;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    await recordRuleTransientError(rule, msg);
+    if (!releasedLockEarly) await releaseFireSlot(rule);
+    await recordRuleTransientError(rule, msg, nowMs);
     return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: msg };
   }
 
+  // 6. Settled. Update the rule record + ZSET. If THIS write fails,
+  //    the lock we still hold blocks the next tick from re-firing the
+  //    same slot — the rule will look stuck-pending in the dashboard
+  //    until ops re-runs the cron or until the lock TTL expires (1h),
+  //    by which point recordRuleFired has typically retried via the
+  //    transient path. Trade-off favoured: silence over double-spend.
   await recordRuleFired(rule, amountUsd, nowMs);
   return { ruleKey, walletId: rule.walletId, outcome: "fired", txHash };
 }

@@ -26,6 +26,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { getActiveAgenticWallet } from "@/app/lib/agentic-wallet";
+import { getSubscription, hasMultichainScope } from "@/app/lib/db";
 import { isAgenticChainKey } from "@/app/lib/agentic-wallet-sign";
 import {
   createRecurringRule,
@@ -194,6 +195,28 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   const wallet = await getActiveAgenticWallet(owner, walletId);
   if (!wallet) {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
+  }
+
+  // ── Subscription gate. Non-BNB recurring needs a paid Multichain
+  //    subscription — otherwise the cron would catch this at fire time
+  //    and freeze the rule. Block at create so the user gets the
+  //    friendly error in the modal instead of "your rule mysteriously
+  //    stopped firing two weeks later".
+  if (body.chain !== "bnb") {
+    const sub = await getSubscription(owner);
+    if (!hasMultichainScope(sub)) {
+      return NextResponse.json(
+        {
+          error: "SUBSCRIPTION_REQUIRED",
+          message:
+            "Recurring on " +
+            String(body.chain).toUpperCase() +
+            " requires the paid Multichain subscription. " +
+            "Stay on BNB Chain (free) or upgrade your plan.",
+        },
+        { status: 402 },
+      );
+    }
   }
 
   // ── Per-tx cap check at create time (NOT at fire time — see docblock)
