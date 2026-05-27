@@ -5,12 +5,10 @@
  * the caller picks a specific walletId; that wallet's address is the
  * payment endpoint declared in the agent metadata.
  *
- * Audit fix (P1 #1 — auth+crypto): now intent-bound (`agentic.register`).
- * Embeds walletId + name + network in the canonical message so a leaked
- * session sig can't publish a public agent identity. Previously a
- * session signature was enough — sufficient if the user signs that
- * session, but the canonical model is "every fund-moving or identity-
- * publishing action takes a fresh challenge".
+ * Intent-bound auth (`agentic.register`): embeds walletId + name +
+ * network in the canonical message so a leaked session sig can't
+ * publish a public agent identity. Every fund-moving or identity-
+ * publishing action takes a fresh challenge.
  */
 
 import { NextRequest, NextResponse } from "next/server";

@@ -81,10 +81,9 @@ function formatUsd(n: number): string {
  *
  * Codebase invariant: never use Math.floor / Math.round / parseFloat on
  * token amounts — IEEE-754 drift between display and chain-side
- * BigInt(amount) is exactly the class of bug the relay-payload incident
- * exposed. So the human string comes straight from the raw atomic
- * units via ethers.formatUnits (no float anywhere on the precision
- * path):
+ * BigInt(amount) is the exact class of bug we're avoiding. The human
+ * string comes straight from the raw atomic units via ethers.formatUnits
+ * (no float anywhere on the precision path):
  *
  *   raw → formatUnits → exact human string → SendModal parseUnits back
  *

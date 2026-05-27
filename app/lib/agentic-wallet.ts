@@ -185,13 +185,11 @@ async function migrateLegacyIfNeeded(ownerAddr: string): Promise<void> {
   }
 
   // Delete the legacy keys now that the v2 surface is fully populated.
-  // Was kept around in the previous revision to "absorb in-flight
-  // requests"; in practice the cron's scan was still picking up the
-  // legacy record forever (it had no deletedAt, so cron correctly
-  // skipped it — but the key persisted, growing the `kv.keys("aw:*")`
-  // surface). Once we've successfully written the new list under SET NX,
-  // any future read goes through `aw:list:{owner}` and never touches the
-  // legacy key, so cleanup is safe.
+  // Keeping them around would leave a record with no deletedAt that the
+  // GC cron's scan correctly skips but still has to materialise on every
+  // pass, slowly growing the `aw:*` surface. Once the new list under
+  // `aw:list:{owner}` is written under SET NX, every future read goes
+  // through it and never touches the legacy key, so cleanup is safe.
   try {
     await kv.del(legacyRecordKey(owner));
     await kv.del(legacyExportLogKey(owner));
@@ -554,7 +552,8 @@ export async function recordExportEvent(
   const key = exportLogKey(ownerAddr, walletId);
   const entry: ExportLogEntry = { ts: Date.now(), ip: meta.ip };
   // Intentionally NOT swallowing errors — route handler escalates a KV
-  // failure as a critical ops alert. See audit P1 #5.
+  // failure as a critical ops alert so a PK reveal never slips past the
+  // audit trail.
   await kv.lpush(key, entry);
   await kv.ltrim(key, 0, EXPORT_LOG_CAP - 1);
 }

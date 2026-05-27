@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
   //
   // The full multi-chain matrix below is what the protocol shipped on v1.27.
   // The emergency feature flag BNB_FOCUS_MODE (see app/lib/feature-flags.ts)
-  // can collapse the matrix to BNB+USDC/USDT for incident response; the
+  // can collapse the matrix to BNB+USDC/USDT for emergency narrowing; the
   // 9-chain entries stay in this file so flipping the flag back to false
   // (current default) restores the full surface with zero code churn.
   //

@@ -4,7 +4,7 @@
  * Vercel Cron sweep that hard-deletes Agent Wallet records once the
  * 7-day soft-delete grace has elapsed. Multi-wallet aware (v2 schema).
  *
- * Audit fix (P0 — backend correctness):
+ * Balance-aware delete:
  *   Before hard-deleting, query the on-chain stablecoin balance. If
  *   the wallet still holds USDC/USDT above the dust threshold, SKIP
  *   the delete and fire a critical ops alert. The user forgot to
@@ -141,7 +141,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       continue;
     }
 
-    // ── Balance check (P0 audit fix v2) ──────────────────────────────
+    // ── Balance check ─────────────────────────────────────────────────
     // Even after grace, refuse to destroy the keystore if the wallet
     // still holds funds OR if we can't prove it doesn't. Two failure
     // modes covered:

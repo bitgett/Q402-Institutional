@@ -6,14 +6,13 @@
  *
  * Multi-wallet Phase 3: takes walletId.
  *
- * Audit fixes:
- *   - P1 #1 (auth+crypto): intent-bound `agentic.register.confirm`
- *     with txHash + walletId in the canonical message. Stops session-
- *     sig replay across confirm operations.
- *   - P1 #2 (auth+crypto): SET NX claim on `aw:register-tx:{net}:{tx}`
- *     so the same txHash can't be re-parsed and overwrite the wallet's
- *     agentId. A second confirm call with the same txHash returns the
- *     cached result.
+ * Auth + idempotency:
+ *   - Intent-bound `agentic.register.confirm` with txHash + walletId in
+ *     the canonical message. Stops session-sig replay across confirm
+ *     operations.
+ *   - SET NX claim on `aw:register-tx:{net}:{tx}` so the same txHash
+ *     can't be re-parsed and overwrite the wallet's agentId. A second
+ *     confirm call with the same txHash returns the cached result.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -113,7 +112,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Idempotency: SET NX claim on the txHash ───────────────────────────
   // If a previous confirm already parsed this txHash, return the cached
-  // result — no re-parse, no agentId overwrite (audit P1 #2).
+  // result — no re-parse, no agentId overwrite.
   const txKey = registerTxKey(network, body.txHash);
   const cached = await kv.get<RegisterTxRecord>(txKey);
   if (cached) {
