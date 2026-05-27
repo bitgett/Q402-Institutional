@@ -293,11 +293,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // sig requests for the same (wallet, chain, token, to, amount) hash
   // to one slot — that's correct: the canonical retry contract for
   // owner-sig is "fresh challenge same intent → cached settled
-  // result". For apiKey calls we include the first 12 chars of the
-  // key so rotating keys (or trial↔multichain) produces a fresh slot.
+  // result". For apiKey calls we hash the WHOLE key (full keccak)
+  // not a 12-char prefix — the v0.6.0 prefix slice only carried ~64
+  // bits after the shared `q402_live_` prefix, giving a non-zero
+  // (if tiny) collision risk between rotated keys of the same owner.
+  // Full keccak makes the scope segment cryptographically distinct
+  // for any distinct key without leaking the key itself into KV.
   const scope =
     typeof body.apiKey === "string" && body.apiKey.length > 0
-      ? `apikey_${body.apiKey.slice(0, 12)}`
+      ? `apikey_${ethers.keccak256(ethers.toUtf8Bytes(body.apiKey)).slice(2, 18)}`
       : "owner-sig";
   const fp = agenticSendFingerprint(
     owner,

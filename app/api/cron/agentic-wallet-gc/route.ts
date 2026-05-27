@@ -13,12 +13,17 @@
  *   reach out, extend the grace, or operator-sweep on the user's
  *   behalf.
  *
- * Authentication: shared CRON_SECRET via Authorization header.
+ * Authentication: shared CRON_SECRET via Authorization header (timing-
+ * safe via `requireCronAuth`).
  *
- * Scan pattern: kv.keys("aw:*") then filter to per-wallet record keys
- * (which now follow `aw:{owner}:{walletId}`). Legacy single-wallet
- * `aw:{owner}` keys are also picked up so any unmigrated owner is
- * still swept.
+ * Scan pattern: cursor-based `kv.scan(cursor, { match: "aw:*", count })`
+ * with COUNT 200, looped until the cursor wraps. Filters each page to
+ * per-wallet record keys (which follow `aw:{owner}:{walletId}`).
+ * Legacy single-wallet `aw:{owner}` keys are also picked up so any
+ * unmigrated owner is still swept. Previous revision used
+ * `kv.keys("aw:*")` which materialised the entire namespace into a
+ * single in-memory array — fine at current scale, would OOM the 60s
+ * function timeout at ~100k records.
  */
 
 import { NextRequest, NextResponse } from "next/server";
