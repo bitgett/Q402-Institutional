@@ -53,6 +53,25 @@ export const MIN_CANCEL_WINDOW_HOURS = 24;
 /** Sanity ceiling; longer than this and the rule effectively never fires on time. */
 export const MAX_CANCEL_WINDOW_HOURS = 24 * 14;
 
+/**
+ * The longest cancel window that can fit inside one frequency interval.
+ * If we let `cancelWindow > frequencyInterval`, the second-and-onward
+ * fires would silently honour only `frequencyInterval` hours of notice
+ * (the first fire gets the full window because we add it onto `now`,
+ * but subsequent slots are spaced at the natural interval and the
+ * alert would fire in the past). Validate at create time so the
+ * promise on the modal — "you'll have N hours to cancel each fire" —
+ * is true for every fire, not just the first.
+ */
+export function maxCancelWindowForFrequency(f: FrequencyEnum): number {
+  if (f === "daily") return 24;
+  if (f.startsWith("weekly:")) return 24 * 7;
+  // monthly: shortest possible month is February at 28 days. Use that
+  // floor so a "monthly:15" rule fired on Jan 15 doesn't see its
+  // Feb 15 cancel window collapse.
+  return 24 * 28;
+}
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -314,6 +333,13 @@ export async function createRecurringRule(
       `cancelWindowHours must be an integer between ${MIN_CANCEL_WINDOW_HOURS} and ${MAX_CANCEL_WINDOW_HOURS}.`,
     );
   }
+  const maxForFreq = maxCancelWindowForFrequency(input.frequency);
+  if (cancelWindow > maxForFreq) {
+    throw new RecurringValidationError(
+      "CANCEL_WINDOW_EXCEEDS_FREQUENCY",
+      `cancelWindowHours (${cancelWindow}h) cannot exceed the frequency interval (${maxForFreq}h for ${input.frequency}). Subsequent fires would silently honour only ${maxForFreq}h of notice, breaking the promise on the modal.`,
+    );
+  }
   if (typeof input.label === "string" && input.label.length > 64) {
     throw new RecurringValidationError("INVALID_LABEL", "label must be ≤64 chars.");
   }
@@ -424,22 +450,33 @@ export async function applyUserStatusAction(
       break;
     }
     case "resume": {
-      // Can only resume from "paused" or "paused-by-archive". For
-      // "paused-by-archive", the archive cascade owns the resume; we
-      // still let the user resume manually if they want.
-      if (rule.status !== "paused" && rule.status !== "paused-by-archive") {
+      // Resume from any non-active, non-cancelled state:
+      //   - "paused" (user-paused)
+      //   - "paused-by-archive" (cascaded; user can still resume manually
+      //     before the wallet itself is restored — though the cron will
+      //     refuse to fire on an archived wallet anyway)
+      //   - "fired-cap-exceeded" (user has presumably raised the cap or
+      //     re-subscribed; resuming clears the lastError so the next
+      //     tick treats it as a fresh active rule)
+      if (
+        rule.status !== "paused" &&
+        rule.status !== "paused-by-archive" &&
+        rule.status !== "fired-cap-exceeded"
+      ) {
         throw new RecurringValidationError(
-          "NOT_PAUSED",
+          "NOT_RESUMABLE",
           `Cannot resume from status "${rule.status}".`,
         );
       }
       next.status = "active";
-      // If nextRunAt is in the past (pause was longer than one cycle),
-      // roll it forward to the next slot ≥ now + cancelWindow.
+      // If nextRunAt is in the past (pause was longer than one cycle, or
+      // cap-exceeded sat for a while), roll it forward to the next slot
+      // ≥ now + cancelWindow.
       if (next.nextRunAt < now + next.cancelWindowHours * HOUR_MS) {
         next.nextRunAt = computeFirstFireAt(next.frequency, now, next.cancelWindowHours);
       }
       next.pendingFireAt = null;
+      next.lastError = null;
       break;
     }
     case "skip-next": {
