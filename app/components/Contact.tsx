@@ -85,7 +85,7 @@ const PROMPTS: PromptCard[] = [
   },
   {
     category: "Scheduled recurring",
-    status:   "ROADMAP",
+    status:   "LIVE",
     prompt: [
       { t: "“Every month on the "  },
       { t: "7th",         hl: true },
@@ -95,8 +95,8 @@ const PROMPTS: PromptCard[] = [
       { t: "5th",         hl: true },
       { t: ".”"                    },
     ],
-    reply: "Recurring payout with a cancel window. Your agent confirms before each run.",
-    tags:  ["scheduled", "cancel window", "agent notify"],
+    reply: "Set the rule once on the wallet, get a cancel window before every fire, walk away.",
+    tags:  ["scheduled", "cancel window", "wallet-attached"],
   },
   {
     category: "Treasury automation",

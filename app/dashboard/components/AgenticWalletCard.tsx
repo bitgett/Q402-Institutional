@@ -29,6 +29,7 @@ import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
 import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
 import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
 import { AgenticWalletWithdrawModal, type WithdrawBucket } from "./AgenticWalletWithdrawModal";
+import { AgenticWalletRecurringSection } from "./AgenticWalletRecurringSection";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
 import type { ChainKey } from "@/app/lib/relayer";
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
@@ -378,6 +379,18 @@ export function AgenticWalletCard({
             </button>
           )}
         </div>
+
+        {/* Recurring payments — list + create. Lives inside the wallet
+            card so pending fires surface in context with the rest of
+            the wallet state instead of a top-of-page strip. */}
+        <AgenticWalletRecurringSection
+          walletId={wallet.walletId}
+          ownerAddress={address}
+          signMessage={signMessage}
+          perTxMaxUsd={wallet.perTxMaxUsd}
+          hasMultichainScope={hasMultichainScope}
+          walletArchived={archived}
+        />
       </div>
 
       {sendOpen && (
