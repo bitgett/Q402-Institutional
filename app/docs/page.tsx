@@ -104,7 +104,7 @@ export default function DocsPage() {
         <div className="h-px w-full" style={{ background: "linear-gradient(90deg, transparent 0%, rgba(245,197,24,0.4) 30%, rgba(245,197,24,0.4) 70%, transparent 100%)" }} />
       </nav>
 
-      <div className="max-w-7xl mx-auto flex pt-14">
+      <div className="max-w-[96rem] mx-auto flex pt-14">
         {/* Sidebar */}
         <aside className="hidden lg:flex w-64 flex-shrink-0 flex-col sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto border-r" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(5,9,18,0.6)" }}>
           {/* Sidebar header */}
@@ -143,7 +143,7 @@ export default function DocsPage() {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 min-w-0 max-w-3xl">
+        <main className="flex-1 min-w-0 max-w-6xl">
           {/* Docs hero banner */}
           <div className="px-8 pt-12 pb-10 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "linear-gradient(180deg, rgba(245,197,24,0.04) 0%, transparent 100%)" }}>
             <div className="flex items-center gap-2 mb-4">
@@ -445,32 +445,32 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
             <p className="text-white/55 text-sm mb-3">
               Q402 supports three signing paths. Pick one when <code className="text-yellow text-xs">q402_doctor</code> asks. You can change later by editing <code className="text-yellow text-xs">~/.q402/mcp.env</code> and restarting your client.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              <div className="rounded-lg border p-4 relative" style={{ background: "rgba(74,222,128,0.04)", borderColor: "rgba(74,222,128,0.30)" }}>
-                <div className="absolute -top-2 right-3 text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded bg-emerald-500 text-black">Recommended</div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/85 font-semibold mb-1">Mode C</div>
-                <div className="text-white font-semibold text-sm mb-2">Server-managed</div>
-                <p className="text-[12px] text-white/65 leading-relaxed mb-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+              <div className="rounded-xl border p-6 relative" style={{ background: "rgba(74,222,128,0.04)", borderColor: "rgba(74,222,128,0.30)" }}>
+                <div className="absolute -top-2.5 right-4 text-[10px] uppercase tracking-widest font-bold px-2.5 py-0.5 rounded bg-emerald-500 text-black">Recommended</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300/85 font-semibold mb-1.5">Mode C</div>
+                <div className="text-white font-semibold text-base mb-3">Server-managed</div>
+                <p className="text-[13px] text-white/65 leading-relaxed mb-4">
                   Q402 holds an encrypted Agent Wallet for you. <span className="text-emerald-300 font-medium">No private key in your env.</span> No MetaMask popup. Best for AI agents and most users.
                 </p>
-                <pre className="text-[10.5px] text-emerald-300/85 font-mono bg-black/30 rounded px-2 py-1 leading-tight">{`Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
+                <pre className="text-[11.5px] text-emerald-300/85 font-mono bg-black/30 rounded-md px-3 py-2 leading-relaxed overflow-x-auto">{`Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
-              <div className="rounded-lg border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">Mode B</div>
-                <div className="text-white font-semibold text-sm mb-2">Local Agent Wallet PK</div>
-                <p className="text-[12px] text-white/65 leading-relaxed mb-3">
+              <div className="rounded-xl border p-6" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1.5">Mode B</div>
+                <div className="text-white font-semibold text-base mb-3">Local Agent Wallet PK</div>
+                <p className="text-[13px] text-white/65 leading-relaxed mb-4">
                   Same Agent Wallet as Mode C, but you hold the PK. Export from the dashboard once. Signs locally — key never leaves your machine. MetaMask never touched.
                 </p>
-                <pre className="text-[10.5px] text-yellow font-mono bg-black/30 rounded px-2 py-1 leading-tight whitespace-pre">{`Q402_AGENTIC_PRIVATE_KEY=0x...
+                <pre className="text-[11.5px] text-yellow font-mono bg-black/30 rounded-md px-3 py-2 leading-relaxed overflow-x-auto whitespace-pre">{`Q402_AGENTIC_PRIVATE_KEY=0x...
 Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
-              <div className="rounded-lg border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">Mode A</div>
-                <div className="text-white font-semibold text-sm mb-2">Your MetaMask EOA</div>
-                <p className="text-[12px] text-white/65 leading-relaxed mb-3">
-                  Your existing EOA signs directly via EIP-7702. The &quot;Smart account&quot; marker after first use is normal + reversible with <code className="text-yellow text-[10px]">q402_clear_delegation</code>. <span className="text-amber-200/80">Use a fresh wallet.</span>
+              <div className="rounded-xl border p-6" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1.5">Mode A</div>
+                <div className="text-white font-semibold text-base mb-3">Your MetaMask EOA</div>
+                <p className="text-[13px] text-white/65 leading-relaxed mb-4">
+                  Your existing EOA signs directly via EIP-7702. The &quot;Smart account&quot; marker after first use is normal + reversible with <code className="text-yellow text-[11px]">q402_clear_delegation</code>. <span className="text-amber-200/80">Use a fresh wallet.</span>
                 </p>
-                <pre className="text-[10.5px] text-yellow font-mono bg-black/30 rounded px-2 py-1 leading-tight whitespace-pre">{`Q402_PRIVATE_KEY=0x...
+                <pre className="text-[11.5px] text-yellow font-mono bg-black/30 rounded-md px-3 py-2 leading-relaxed overflow-x-auto whitespace-pre">{`Q402_PRIVATE_KEY=0x...
 Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
             </div>
