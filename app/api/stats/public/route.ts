@@ -31,7 +31,7 @@
 import { NextResponse } from "next/server";
 import { getStatsCounters } from "@/app/lib/db";
 
-const CACHE_HEADER = "public, s-maxage=10, stale-while-revalidate=60";
+const CACHE_HEADER = "public, s-maxage=60, stale-while-revalidate=120";
 
 // CORS — public dashboards may consume this from any origin. The
 // response carries only aggregate counts (no per-account fields), so

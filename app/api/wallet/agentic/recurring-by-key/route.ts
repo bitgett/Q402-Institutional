@@ -7,12 +7,16 @@
  * call into the same scheduler the dashboard uses without holding
  * a signing key.
  *
- * Risk posture mirrors POST /api/wallet/agentic/send: a compromised
- * apiKey can drain at most {perTxMaxUsd, dailyLimitUsd} worth per
- * cycle, with the additional throttle that each rule is bounded by
- * the per-wallet cap configured on the dashboard. There's no path
- * here to authorize a one-shot send larger than those caps — the
- * recurring scheduler itself runs the same cap checks every cycle.
+ * Risk posture: a compromised apiKey can author rules whose individual
+ * fires are bounded by `perTxMaxUsd` on the wallet (the recurring cron
+ * fire path enforces per-tx only — see /api/cron/recurring-payouts).
+ * The dashboard-configured `dailyLimitUsd` is currently enforced on
+ * MANUAL sends through /api/wallet/agentic/send, NOT on recurring
+ * fires; an attacker with an apiKey could schedule N rules at
+ * `perTxMaxUsd` and burn `N × perTxMaxUsd` per day until the wallet
+ * is empty. Treat apiKey leak as a perTxMax-bound (not dailyLimit-
+ * bound) credential. Wallet drain remains capped by the Agent
+ * Wallet's USDC balance — the relayer never tops up.
  *
  * Body
  *   {
@@ -71,6 +75,7 @@ interface RecurringByKeyBody {
 // but keeps the surface useful for the AI to reason about ("when's the
 // next fire", "how many have happened so far", "what's the cap").
 function projectRule(rule: RecurringRule) {
+  const amountPerFire = rule.recipients.reduce((acc, r) => acc + Number(r.amount), 0);
   return {
     ruleId:            rule.ruleId,
     walletId:          rule.walletId,
@@ -80,11 +85,16 @@ function projectRule(rule: RecurringRule) {
     chain:             rule.chain,
     token:             rule.token,
     recipients:        rule.recipients,
+    recipientCount:    rule.recipients.length,
+    amountPerFire:     amountPerFire.toString(),
     cancelWindowHours: rule.cancelWindowHours,
     createdAt:         rule.createdAt,
     nextRunAt:         rule.nextRunAt,
-    firedCount:        rule.firedCount,
-    lastFiredAt:       rule.lastFiredAt,
+    pendingFireAt:     rule.pendingFireAt,
+    lastRunAt:         rule.lastRunAt,
+    totalFiredCount:   rule.totalFiredCount,
+    totalSpentUsd:     rule.totalSpentUsd,
+    cancelledAt:       rule.cancelledAt ?? null,
     lastError:         rule.lastError ?? null,
   };
 }
@@ -120,7 +130,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (typeof body.apiKey !== "string" || body.apiKey.length === 0) {
     return NextResponse.json({ error: "API_KEY_REQUIRED" }, { status: 400 });
   }
-  if (body.apiKey.startsWith("q402_test_")) {
+  // Reject both modern (`q402_test_`) and legacy (`q402_sandbox_`)
+  // sandbox prefixes — the rest of the codebase carries the legacy
+  // pattern too, and a leaked sandbox key shouldn't be able to author
+  // recurring rules even if it can't actually relay.
+  if (body.apiKey.startsWith("q402_test_") || body.apiKey.startsWith("q402_sandbox_")) {
     return NextResponse.json(
       { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for recurring rules." },
       { status: 401 },

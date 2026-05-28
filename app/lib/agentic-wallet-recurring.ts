@@ -75,8 +75,18 @@ export const TRANSIENT_BACKOFF_MS = 5 * 60 * 1000;
  * this fire actually happen recently enough that you'd still
  * expect it".
  */
+/** Minimum tolerable lateness for a fire. The recurring-payouts cron
+ *  doesn't fire at the exact millisecond — it depends on the Vercel
+ *  daily slot or the Render hourly heartbeat, plus a tx-record write
+ *  inside the request lifecycle. A rule scheduled at 10:07 UTC will
+ *  realistically be picked up by the 11:00 UTC heartbeat tick, ~53
+ *  minutes late. We need the stale threshold to cover that drift
+ *  even when the per-rule cancel window is 0 (the new default for
+ *  hourly cadences), otherwise hourly fires would all skip as stale. */
+const HEARTBEAT_GRACE_MS = 2 * 60 * 60 * 1000; // 2h — covers a missed heartbeat too
+
 function catchUpThresholdMs(rule: { cancelWindowHours: number }): number {
-  return rule.cancelWindowHours * 60 * 60 * 1000;
+  return Math.max(rule.cancelWindowHours * 60 * 60 * 1000, HEARTBEAT_GRACE_MS);
 }
 
 /**
@@ -279,6 +289,39 @@ function zsetMember(owner: string, walletId: string, ruleId: string): string {
 const FIRE_LOCK_TTL_SEC = 60 * 60; // 1h
 function fireLockKey(ruleId: string, slotMs: number): string {
   return `aw:recurring:fire-lock:${ruleId}:${slotMs}`;
+}
+
+/** Durable "already settled" marker keyed by (rule, slot). Written
+ *  AFTER a successful on-chain relay so the post-relay path can
+ *  short-circuit re-entry even if recordRuleFired's KV write loses
+ *  the race and the next heartbeat picks the same slot again. The
+ *  fire-lock alone is insufficient — it carries a 1h TTL, and an
+ *  hourly cadence whose recordRuleFired write failed would see the
+ *  lock expire right before the next heartbeat arrives. The marker
+ *  carries a 90-day TTL: long enough to survive any plausible
+ *  scheduler outage on a slot, short enough that hourly-cadence
+ *  KV pressure stays bounded (24×90 = 2160 markers per rule at
+ *  worst, each ~80 bytes). */
+const FIRED_MARKER_TTL_SEC = 90 * 24 * 60 * 60;
+function firedMarkerKey(ruleId: string, slotMs: number): string {
+  return `aw:recurring:fired:${ruleId}:${slotMs}`;
+}
+
+/** Set the durable fired-marker for (rule, slot). Idempotent SET NX:
+ *  if the marker already exists the second writer treats it as
+ *  "already fired" without overwriting. Exported so callers in the
+ *  cron path can write the marker INSIDE the same KV pipeline as
+ *  recordRuleFired's other writes. */
+export async function markSlotFired(ruleId: string, slotMs: number): Promise<void> {
+  await kv.set(firedMarkerKey(ruleId, slotMs), "1", { ex: FIRED_MARKER_TTL_SEC });
+}
+
+/** Check whether a slot has already been fired. Used by claimFireSlot
+ *  to refuse re-entry on a slot whose fire-lock has expired but whose
+ *  marker survives. */
+async function slotAlreadyFired(ruleId: string, slotMs: number): Promise<boolean> {
+  const v = await kv.get<string>(firedMarkerKey(ruleId, slotMs));
+  return typeof v === "string" && v.length > 0;
 }
 
 /**
@@ -910,6 +953,14 @@ export async function markRulePending(
 export async function claimFireSlot(
   rule: RecurringRule,
 ): Promise<{ ok: boolean; reason?: string }> {
+  // Durable marker check FIRST — if a previous tick relayed
+  // successfully but its recordRuleFired write dropped (KV blip,
+  // function timeout), the fire-lock would have expired 1h later and
+  // a fresh tick would race in. The marker is the only thing that
+  // outlives the lock and prevents a second on-chain send.
+  if (await slotAlreadyFired(rule.ruleId, rule.nextRunAt)) {
+    return { ok: false, reason: "slot already fired (durable marker present)" };
+  }
   const claim = await kv.set(fireLockKey(rule.ruleId, rule.nextRunAt), "in-flight", {
     nx: true,
     ex: FIRE_LOCK_TTL_SEC,
@@ -954,6 +1005,7 @@ export async function recordRuleFired(
   partialFailureNote: string | null = null,
 ): Promise<RecurringRule> {
   const baseline = Math.max(nowMs, rule.nextRunAt);
+  const firedSlot = rule.nextRunAt;
   const next: RecurringRule = {
     ...rule,
     lastRunAt: nowMs,
@@ -963,6 +1015,12 @@ export async function recordRuleFired(
     totalSpentUsd: rule.totalSpentUsd + amountUsd,
     nextRunAt: computeNextFireAt(rule.frequency, baseline),
   };
+  // Write the durable fired-marker BEFORE the rule-state update so a
+  // failure here (KV blip, function timeout) doesn't leave the rule
+  // looking "still pending" to a re-entering heartbeat. The marker
+  // is the load-bearing guard against on-chain double-send; the rule
+  // update is bookkeeping for the dashboard.
+  await markSlotFired(rule.ruleId, firedSlot);
   await kv.set(ruleKey(rule.ownerAddr, rule.walletId, rule.ruleId), next);
   await kv.zadd(RECURRING_NEXT_ACTION_ZSET, {
     score: computeNextActionAt(next),
