@@ -63,6 +63,7 @@ import {
   recordRuleCapExceeded,
   recordRuleTransientError,
   claimFireSlot,
+  advanceAfterMissedBookkeeping,
   releaseFireSlot,
   removeFromActionZset,
   isStaleSlot,
@@ -89,7 +90,8 @@ interface PerRuleOutcome {
     | "skipped-subscription-lapsed"
     | "skipped-no-api-key"
     | "skipped-per-tx-exceeded"
-    | "transient-error";
+    | "transient-error"
+    | "recovered-missed-bookkeeping";
   txHash?: string;
   /** Multi-recipient rules: number of rows that successfully settled. */
   settled?: number;
@@ -112,7 +114,15 @@ async function processOneRule(
   }
 
   // ── Phase A: alert (pendingFireAt was null) ─────────────────────────
-  if (rule.pendingFireAt === null) {
+  // Skip the alert phase entirely when the user opted into a zero-second
+  // cancel window. The two-phase design (alert tick → fire tick) was
+  // built around giving a human time to skip a pending fire; with
+  // cancelWindowHours === 0 the user explicitly chose "no advance
+  // notice, just fire", and putting an alert tick in front would
+  // stretch an hourly:1 cadence into effectively two-hour fires
+  // because the next heartbeat is up to 60min later. Honour the
+  // user's choice by falling straight through to Phase B.
+  if (rule.pendingFireAt === null && rule.cancelWindowHours > 0) {
     const wallet = await getActiveAgenticWallet(rule.ownerAddr, rule.walletId);
     if (!wallet) {
       // Wallet hard-deleted but ZSET still has the rule (cascade may
@@ -190,6 +200,21 @@ async function processOneRule(
   //    a recordRuleFired KV write failure.
   const claim = await claimFireSlot(rule);
   if (!claim.ok) {
+    if (claim.alreadyFired) {
+      // Marker proves the on-chain TX landed on a previous tick, but
+      // the bookkeeping write (rule state + ZSET advance) didn't. Run
+      // ONLY the bookkeeping side now so the rule moves past the
+      // stuck slot — no relay, no second on-chain send. Without this,
+      // every future heartbeat would also hit the marker and bail,
+      // leaving the user with a rule that appears "never to fire".
+      await advanceAfterMissedBookkeeping(rule, nowMs);
+      return {
+        ruleKey,
+        walletId: rule.walletId,
+        outcome: "recovered-missed-bookkeeping",
+        error: claim.reason,
+      };
+    }
     return {
       ruleKey,
       walletId: rule.walletId,

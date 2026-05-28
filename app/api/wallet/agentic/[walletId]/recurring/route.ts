@@ -184,7 +184,12 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     recipients.push({ to: row.to.toLowerCase(), amount: row.amount });
   }
   const cancelWindowHours = body.cancelWindowHours ?? MIN_CANCEL_WINDOW_HOURS;
-  if (!Number.isInteger(cancelWindowHours) || cancelWindowHours < MIN_CANCEL_WINDOW_HOURS) {
+  // Fractional values are valid (e.g. 0.5h for hourly:1 cadence — the
+  // modal lets the user pick a 30-minute cancel runway via the
+  // step={0.5} number input). The library-side `createRecurringRule`
+  // also accepts fractional, so this route guard previously rejected
+  // a payload the model + the lib were happy with.
+  if (!Number.isFinite(cancelWindowHours) || cancelWindowHours < MIN_CANCEL_WINDOW_HOURS) {
     return NextResponse.json({ error: "INVALID_CANCEL_WINDOW" }, { status: 400 });
   }
 
