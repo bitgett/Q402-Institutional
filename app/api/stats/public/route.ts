@@ -1,37 +1,41 @@
 /**
  * GET /api/stats/public
  *
- * Reads the precomputed daily rollup at `stats:public:summary` (written
- * by /api/cron/stats-rollup once a day from receipt:* — the durable,
- * 1-year-TTL source of truth). Falls back to a synthesized empty
- * summary if the key is missing so the public panel never 500s.
+ * Aggregate, anonymous usage stats for the public dashboard. Reads
+ * five materialized counter keys written by /api/relay's after()
+ * hook — no SCAN, no per-render fan-out. Counters are seeded from
+ * receipt:* (the durable 1-year TTL source of truth) via a one-time
+ * backfill, then every successful live relay increments them
+ * atomically.
  *
- * Why precomputed
- *   The previous implementation SCAN-ed `relaytx:*` on every request,
- *   then for each key fetched the full LIST. After the 2026-05-27
- *   relaytx eviction incident, that source was gutted (12 keys
- *   survived) so the panel showed 29 unique payers when receipt:*
- *   actually had 779 worth of history. Switching to a precomputed
- *   summary (a) restores the correct numbers immediately, (b) makes
- *   the panel an O(1) GET so KV bandwidth stops being load-bearing
- *   on every render, and (c) anchors the public view to a TTL-
- *   protected key so future evictions on volatile namespaces don't
- *   silently regress the metrics again.
+ * History
+ *   v1: SCAN relaytx:* on every request. Cheap when the namespace
+ *       had a few hundred keys; once it grew past a few thousand it
+ *       saturated KV bandwidth on every panel render and was a
+ *       direct contributor to the 2026-05-27 LRU eviction that
+ *       wiped relaytx:*.
+ *   v2: Daily rollup into stats:public:summary. Restored the panel
+ *       but the 24h staleness regressed the "real-time" feel.
+ *   v3 (this): Materialized counters. Real-time, O(1) reads,
+ *       LRU-safe (hot tier).
  *
- * Hard constraints
- *   - DO NOT touch subscription records (`sub:*`) — provisioned-only
- *     wallets, email pseudos, sandbox testers, admin grants all show
- *     up there and should not inflate counts.
- *   - DO NOT echo per-account data — only aggregate counters leave
- *     this route.
- *   - DO exclude sandbox txs (handled inside the rollup).
+ * Hard constraints — every line of this file is written to one of these:
+ *   - DO NOT touch subscription records. Provisioned-only wallets,
+ *     email pseudos, sandbox testers, and admin grants all show up in
+ *     `sub:*` but should NOT inflate user counts here. The counter
+ *     hook in /api/relay already filters sandbox calls upstream.
+ *   - DO NOT echo back tx hashes, API keys, raw wallet lists, emails,
+ *     or any per-account metadata. Only aggregate counters + per-chain
+ *     rollups leave this route.
  */
 import { NextResponse } from "next/server";
-import { kv } from "@vercel/kv";
-import type { StatsSummary } from "@/app/api/cron/stats-rollup/route";
+import { getStatsCounters } from "@/app/lib/db";
 
-const CACHE_HEADER = "public, s-maxage=60, stale-while-revalidate=120";
+const CACHE_HEADER = "public, s-maxage=10, stale-while-revalidate=60";
 
+// CORS — public dashboards may consume this from any origin. The
+// response carries only aggregate counts (no per-account fields), so
+// `*` is acceptable here.
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -45,42 +49,25 @@ const RESPONSE_HEADERS: Record<string, string> = {
   ...CORS_HEADERS,
 };
 
-const SUMMARY_KEY = "stats:public:summary";
-
 interface PublicStats {
   totalSettlements: number;
-  uniquePayers: number;
+  uniquePayers:     number;
   uniqueRecipients: number;
-  totalVolumeUsd: number;
-  perChain: Record<string, { settlements: number; volumeUsd: number }>;
-  asOf: string;
+  totalVolumeUsd:   number;
+  perChain:         Record<string, { settlements: number; volumeUsd: number }>;
+  asOf:             string;
 }
-
-const EMPTY_STATS: PublicStats = {
-  totalSettlements: 0,
-  uniquePayers: 0,
-  uniqueRecipients: 0,
-  totalVolumeUsd: 0,
-  perChain: {},
-  asOf: new Date(0).toISOString(),
-};
 
 export async function GET() {
   try {
-    const summary = await kv.get<StatsSummary>(SUMMARY_KEY);
-    if (!summary) {
-      // First-boot path or post-incident — rollup hasn't run yet.
-      // Return an empty shape so the panel renders the schema
-      // instead of an error toast.
-      return NextResponse.json(EMPTY_STATS, { headers: RESPONSE_HEADERS });
-    }
+    const c = await getStatsCounters();
     const out: PublicStats = {
-      totalSettlements: summary.totalSettlements,
-      uniquePayers:     summary.uniquePayers,
-      uniqueRecipients: summary.uniqueRecipients,
-      totalVolumeUsd:   summary.totalVolumeUsd,
-      perChain:         summary.perChain,
-      asOf:             summary.computedAt,
+      totalSettlements: c.totalSettlements,
+      uniquePayers:     c.uniquePayers,
+      uniqueRecipients: c.uniqueRecipients,
+      totalVolumeUsd:   c.totalVolumeUsd,
+      perChain:         c.perChain,
+      asOf:             new Date().toISOString(),
     };
     return NextResponse.json(out, { headers: RESPONSE_HEADERS });
   } catch (err) {

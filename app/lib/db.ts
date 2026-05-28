@@ -701,6 +701,99 @@ export async function recordRelayedTx(address: string, tx: RelayedTx) {
   }
 }
 
+// ── Public stats counters (materialized, real-time) ──────────────────────────
+// Per /api/stats/public — instead of SCAN-ing a source namespace on every
+// render (the old design that helped trigger the 2026-05-27 relaytx eviction),
+// every successful live relay does six small atomic writes here. Reads are
+// then five O(1) Redis ops. KV stays cheap regardless of namespace size, and
+// these keys are accessed often enough to sit in the LRU hot tier so a future
+// memory squeeze targets cold history (receipt:*, with its 1-year TTL safety
+// net) before it can touch counters.
+const STATS_COUNTER_SETTLEMENTS = "stats:counter:settlements";
+const STATS_COUNTER_VOLUME_USD  = "stats:counter:volumeUsd";
+const STATS_SET_PAYERS          = "stats:set:payers";
+const STATS_SET_RECIPIENTS      = "stats:set:recipients";
+const STATS_HASH_PER_CHAIN      = "stats:hash:perChain";
+
+/**
+ * Increment all public-stats counters for a single successful relay.
+ * Called from /api/relay's after() so the response is never delayed by
+ * stats accounting; each Redis op is atomic, so concurrent relays
+ * cannot corrupt the counts.
+ *
+ * Sandbox calls MUST be filtered upstream — these counters are the public
+ * panel's "real settlements" view.
+ */
+export async function incrStatsCounters(opts: {
+  payer:      string;
+  recipient:  string;
+  chain:      string;
+  amountUsd:  number;
+}): Promise<void> {
+  const usd = Number.isFinite(opts.amountUsd) && opts.amountUsd > 0 ? opts.amountUsd : 0;
+  const payer     = opts.payer.toLowerCase();
+  const recipient = opts.recipient.toLowerCase();
+  const chain     = opts.chain && opts.chain.length > 0 ? opts.chain : "unknown";
+  await Promise.all([
+    kv.incr(STATS_COUNTER_SETTLEMENTS),
+    kv.incrbyfloat(STATS_COUNTER_VOLUME_USD, usd),
+    kv.sadd(STATS_SET_PAYERS, payer),
+    kv.sadd(STATS_SET_RECIPIENTS, recipient),
+    kv.hincrby(STATS_HASH_PER_CHAIN, `${chain}:settlements`, 1),
+    kv.hincrbyfloat(STATS_HASH_PER_CHAIN, `${chain}:volumeUsd`, usd),
+  ]);
+}
+
+export interface StatsCounters {
+  totalSettlements: number;
+  totalVolumeUsd:   number;
+  uniquePayers:     number;
+  uniqueRecipients: number;
+  perChain:         Record<string, { settlements: number; volumeUsd: number }>;
+}
+
+/**
+ * Read every public-stats counter in one fan-out. Five O(1) KV ops, no SCAN.
+ * Missing/empty keys degrade to zero so a fresh deployment doesn't 500 the
+ * public panel before the first backfill or relay has had a chance to write.
+ */
+export async function getStatsCounters(): Promise<StatsCounters> {
+  const [settlements, volume, payersCount, recipientsCount, hash] = await Promise.all([
+    kv.get<number>(STATS_COUNTER_SETTLEMENTS),
+    kv.get<string | number>(STATS_COUNTER_VOLUME_USD),
+    kv.scard(STATS_SET_PAYERS),
+    kv.scard(STATS_SET_RECIPIENTS),
+    kv.hgetall<Record<string, string | number>>(STATS_HASH_PER_CHAIN),
+  ]);
+
+  const perChain: Record<string, { settlements: number; volumeUsd: number }> = {};
+  if (hash) {
+    for (const [k, v] of Object.entries(hash)) {
+      const sep = k.indexOf(":");
+      if (sep < 0) continue;
+      const chain = k.slice(0, sep);
+      const field = k.slice(sep + 1);
+      if (!chain || (field !== "settlements" && field !== "volumeUsd")) continue;
+      const bucket = perChain[chain] ?? { settlements: 0, volumeUsd: 0 };
+      const num = typeof v === "string" ? Number(v) : v;
+      if (!Number.isFinite(num)) continue;
+      if (field === "settlements") bucket.settlements = num;
+      else                          bucket.volumeUsd   = Math.round(num * 100) / 100;
+      perChain[chain] = bucket;
+    }
+  }
+
+  const vNum = typeof volume === "string" ? Number(volume) : volume;
+  const settlementsNum = typeof settlements === "number" ? settlements : Number(settlements);
+  return {
+    totalSettlements: Number.isFinite(settlementsNum) && settlementsNum > 0 ? settlementsNum : 0,
+    totalVolumeUsd:   Number.isFinite(vNum) ? Math.round((vNum as number) * 100) / 100 : 0,
+    uniquePayers:     payersCount ?? 0,
+    uniqueRecipients: recipientsCount ?? 0,
+    perChain,
+  };
+}
+
 /** @deprecated Use getRelayedTxs with months param */
 export async function getGasUsed(address: string): Promise<RelayedTx[]> {
   return getRelayedTxs(address);
