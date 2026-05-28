@@ -67,6 +67,12 @@ const FREQUENCY_LABEL: Record<string, string> = {
 
 function formatFrequency(f: string): string {
   if (FREQUENCY_LABEL[f]) return FREQUENCY_LABEL[f];
+  if (f.startsWith("hourly:")) {
+    const n = Number(f.slice("hourly:".length));
+    if (Number.isFinite(n)) {
+      return n === 1 ? "Every hour" : `Every ${n} hours`;
+    }
+  }
   if (f.startsWith("monthly:")) {
     const n = Number(f.slice("monthly:".length));
     if (Number.isFinite(n)) {
