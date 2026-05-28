@@ -23,6 +23,7 @@ const mockKv = vi.hoisted(() => ({
   get: vi.fn(),
   set: vi.fn(),
   keys: vi.fn(),
+  scan: vi.fn(),
   lrange: vi.fn(),
   llen: vi.fn(),
   del: vi.fn(),
@@ -66,6 +67,25 @@ beforeEach(() => {
     }
     return Promise.resolve(out);
   });
+  // SCAN mirrors KEYS but pages. The route is migrated to use SCAN
+  // instead of KEYS to stay under Upstash's 10MB per-request cap; the
+  // mock returns everything in one page since the test fixture is
+  // small. Guard the pattern check the same way as KEYS does.
+  mockKv.scan.mockImplementation(
+    (_cursor: number | string, opts: { match?: string; count?: number }) => {
+      const pattern = opts?.match ?? "";
+      if (!pattern.startsWith("relaytx:")) {
+        throw new Error(`unexpected kv.scan pattern: ${pattern}`);
+      }
+      const match = pattern.replace("relaytx:", "").replace("*", "");
+      const out: string[] = [];
+      for (const k of store.keys()) {
+        if (k.startsWith("relaytx:") && k.includes(match)) out.push(k);
+      }
+      // Cursor "0" signals completion to the caller.
+      return Promise.resolve([0, out]);
+    },
+  );
   mockKv.lrange.mockImplementation(() => Promise.resolve([])); // legacy-shape path
   mockKv.get.mockImplementation((key: string) =>
     Promise.resolve(store.get(key) ?? null),
@@ -204,7 +224,7 @@ describe("OPTIONS /api/stats/public — browser preflight", () => {
 
 describe("GET /api/stats/public — fail-soft", () => {
   it("returns 500 stats_unavailable with no internal detail on KV failure", async () => {
-    mockKv.keys.mockRejectedValueOnce(new Error("internal KV explosion at /sub:* shard 17"));
+    mockKv.scan.mockRejectedValueOnce(new Error("internal KV explosion at /sub:* shard 17"));
     const { GET } = await import(ROUTE);
     const res = await GET();
     expect(res.status).toBe(500);
@@ -245,11 +265,18 @@ describe("/api/stats/public source guards", () => {
     expect(code).not.toMatch(/from\s+["'].*\/auth["']/);
     // The only KV key scan in this file must be relaytx:* — anything
     // else (sub:*, apikey:*, email_to_addr:*, …) would broaden the
-    // privacy surface beyond aggregate-only.
-    const keyScans = code.match(/kv\.keys\(\s*["'`][^"'`]+["'`]\s*\)/g) ?? [];
-    expect(keyScans.length).toBeGreaterThan(0);
-    for (const scan of keyScans) {
-      expect(scan).toContain("relaytx:");
+    // privacy surface beyond aggregate-only. Covers both legacy
+    // `kv.keys("relaytx:*")` calls AND the cursor-based replacement
+    // `kv.scan(cursor, { match: "relaytx:*", ... })` so the migration
+    // off `kv.keys` (Upstash 10MB request cap) keeps the same guard.
+    const keysCalls = code.match(/kv\.keys\(\s*["'`][^"'`]+["'`]\s*\)/g) ?? [];
+    const scanCalls = code.match(/kv\.scan\(\s*[^)]*match\s*:\s*["'`][^"'`]+["'`][^)]*\)/g) ?? [];
+    expect(keysCalls.length + scanCalls.length).toBeGreaterThan(0);
+    for (const call of keysCalls) {
+      expect(call).toContain("relaytx:");
+    }
+    for (const call of scanCalls) {
+      expect(call).toContain("relaytx:");
     }
   });
 
