@@ -286,8 +286,7 @@ const VALID_INPUT = {
   frequency: "weekly:fri" as const,
   chain: "bnb" as const,
   token: "USDT" as const,
-  recipient: TEST_RECIP,
-  amount: "25",
+  recipients: [{ to: TEST_RECIP, amount: "25" }],
 };
 
 describe("createRecurringRule", () => {
@@ -304,7 +303,8 @@ describe("createRecurringRule", () => {
     const rule = await createRecurringRule(VALID_INPUT);
     const got = await getRecurringRule(TEST_OWNER, TEST_WALLET, rule.ruleId);
     expect(got).not.toBeNull();
-    expect(got?.amount).toBe("25");
+    expect(got?.recipients).toHaveLength(1);
+    expect(got?.recipients[0].amount).toBe("25");
   });
 
   it("registers into the next-action ZSET", async () => {
@@ -319,20 +319,36 @@ describe("createRecurringRule", () => {
       "INVALID_FREQUENCY",
     );
   });
-  it("rejects invalid recipient", async () => {
+  it("rejects invalid recipient address", async () => {
     await expectThrowsCode(
-      () => createRecurringRule({ ...VALID_INPUT, recipient: "0xnotahex" }),
+      () => createRecurringRule({ ...VALID_INPUT, recipients: [{ to: "0xnotahex", amount: "25" }] }),
       "INVALID_RECIPIENT",
     );
   });
   it("rejects negative or zero amount", async () => {
     await expectThrowsCode(
-      () => createRecurringRule({ ...VALID_INPUT, amount: "0" }),
+      () => createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "0" }] }),
       "INVALID_AMOUNT",
     );
     await expectThrowsCode(
-      () => createRecurringRule({ ...VALID_INPUT, amount: "-5" }),
+      () => createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "-5" }] }),
       "INVALID_AMOUNT",
+    );
+  });
+  it("rejects empty recipients array", async () => {
+    await expectThrowsCode(
+      () => createRecurringRule({ ...VALID_INPUT, recipients: [] }),
+      "RECIPIENTS_REQUIRED",
+    );
+  });
+  it("rejects more than MAX_RECIPIENTS_PAID rows", async () => {
+    const rows = Array.from({ length: 21 }, (_, i) => ({
+      to: `0x${i.toString(16).padStart(40, "0")}`,
+      amount: "1",
+    }));
+    await expectThrowsCode(
+      () => createRecurringRule({ ...VALID_INPUT, recipients: rows }),
+      "TOO_MANY_RECIPIENTS",
     );
   });
   it("rejects cancel window below MIN", async () => {
@@ -363,9 +379,9 @@ describe("createRecurringRule", () => {
 
 describe("listRecurringRules", () => {
   it("orders active rules first, then paused, then cancelled", async () => {
-    const r1 = await createRecurringRule({ ...VALID_INPUT, amount: "1" });
-    const r2 = await createRecurringRule({ ...VALID_INPUT, amount: "2" });
-    const r3 = await createRecurringRule({ ...VALID_INPUT, amount: "3" });
+    const r1 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "1" }] });
+    const r2 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "2" }] });
+    const r3 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "3" }] });
     await applyUserStatusAction(TEST_OWNER, TEST_WALLET, r2.ruleId, "pause");
     await applyUserStatusAction(TEST_OWNER, TEST_WALLET, r3.ruleId, "cancel");
     const rules = await listRecurringRules(TEST_OWNER, TEST_WALLET);
@@ -439,8 +455,8 @@ describe("applyUserStatusAction", () => {
 
 describe("cascade hooks", () => {
   it("pauseRulesForArchive only pauses active rules", async () => {
-    const r1 = await createRecurringRule({ ...VALID_INPUT, amount: "1" });
-    const r2 = await createRecurringRule({ ...VALID_INPUT, amount: "2" });
+    const r1 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "1" }] });
+    const r2 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "2" }] });
     await applyUserStatusAction(TEST_OWNER, TEST_WALLET, r2.ruleId, "pause");
     const result = await pauseRulesForArchive(TEST_OWNER, TEST_WALLET);
     expect(result.pausedCount).toBe(1);
@@ -451,8 +467,8 @@ describe("cascade hooks", () => {
   });
 
   it("resumeRulesForRestore resumes only paused-by-archive (user-paused stays)", async () => {
-    const r1 = await createRecurringRule({ ...VALID_INPUT, amount: "1" });
-    const r2 = await createRecurringRule({ ...VALID_INPUT, amount: "2" });
+    const r1 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "1" }] });
+    const r2 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "2" }] });
     await applyUserStatusAction(TEST_OWNER, TEST_WALLET, r2.ruleId, "pause");
     await pauseRulesForArchive(TEST_OWNER, TEST_WALLET);
     const result = await resumeRulesForRestore(TEST_OWNER, TEST_WALLET);
@@ -464,8 +480,8 @@ describe("cascade hooks", () => {
   });
 
   it("deleteRulesForHardDelete removes all rules + their ZSET entries", async () => {
-    await createRecurringRule({ ...VALID_INPUT, amount: "1" });
-    await createRecurringRule({ ...VALID_INPUT, amount: "2" });
+    await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "1" }] });
+    await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "2" }] });
     const result = await deleteRulesForHardDelete(TEST_OWNER, TEST_WALLET);
     expect(result.deletedCount).toBe(2);
     const rules = await listRecurringRules(TEST_OWNER, TEST_WALLET);
@@ -614,8 +630,8 @@ describe("createRecurringRule idempotency", () => {
   });
 
   it("different amount → different fingerprint → different rule", async () => {
-    const r1 = await createRecurringRule({ ...VALID_INPUT, amount: "25" });
-    const r2 = await createRecurringRule({ ...VALID_INPUT, amount: "50" });
+    const r1 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "25" }] });
+    const r2 = await createRecurringRule({ ...VALID_INPUT, recipients: [{ to: TEST_RECIP, amount: "50" }] });
     expect(r2.ruleId).not.toBe(r1.ruleId);
     const rules = await listRecurringRules(TEST_OWNER, TEST_WALLET);
     expect(rules.length).toBe(2);
@@ -624,8 +640,74 @@ describe("createRecurringRule idempotency", () => {
   it("different recipient → different fingerprint → different rule", async () => {
     const otherRecip = "0x4444444444444444444444444444444444444444";
     const r1 = await createRecurringRule(VALID_INPUT);
-    const r2 = await createRecurringRule({ ...VALID_INPUT, recipient: otherRecip });
+    const r2 = await createRecurringRule({
+      ...VALID_INPUT,
+      recipients: [{ to: otherRecip, amount: "25" }],
+    });
     expect(r2.ruleId).not.toBe(r1.ruleId);
+  });
+
+  it("recipients in different order hash the same (fingerprint sorts before keccak)", async () => {
+    const a = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const b = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    const r1 = await createRecurringRule({
+      ...VALID_INPUT,
+      recipients: [{ to: a, amount: "10" }, { to: b, amount: "20" }],
+    });
+    const r2 = await createRecurringRule({
+      ...VALID_INPUT,
+      recipients: [{ to: b, amount: "20" }, { to: a, amount: "10" }],
+    });
+    expect(r2.ruleId).toBe(r1.ruleId);
+  });
+});
+
+// ── Multi-recipient + legacy migration ───────────────────────────────────
+
+describe("multi-recipient + legacy shape migration", () => {
+  it("accepts 5-row payroll under VALID_INPUT shape", async () => {
+    const rows = Array.from({ length: 5 }, (_, i) => ({
+      to: `0x${(i + 1).toString(16).padStart(40, "0")}`,
+      amount: `${10 + i}`,
+    }));
+    const rule = await createRecurringRule({ ...VALID_INPUT, recipients: rows });
+    expect(rule.recipients).toHaveLength(5);
+    const fetched = (await getRecurringRule(TEST_OWNER, TEST_WALLET, rule.ruleId))!;
+    expect(fetched.recipients).toHaveLength(5);
+  });
+
+  it("lazy-migrates a legacy {recipient, amount} record on read", async () => {
+    // Write a legacy-shape rule directly into the in-memory store —
+    // mirrors what a pre-v0.6.2 record looks like in production KV.
+    const legacyKey = `aw:recurring:${TEST_OWNER.toLowerCase()}:${TEST_WALLET.toLowerCase()}:legacy123`;
+    store.set(legacyKey, {
+      ruleId: "legacy123",
+      walletId: TEST_WALLET.toLowerCase(),
+      ownerAddr: TEST_OWNER.toLowerCase(),
+      label: null,
+      frequency: "daily",
+      chain: "bnb",
+      token: "USDT",
+      recipient: TEST_RECIP, // ← legacy field
+      amount: "7.50",        // ← legacy field
+      cancelWindowHours: 24,
+      nextRunAt: Date.now() + 24 * 60 * 60 * 1000,
+      pendingFireAt: null,
+      lastRunAt: null,
+      lastError: null,
+      totalFiredCount: 0,
+      totalSpentUsd: 0,
+      status: "active",
+      createdAt: Date.now(),
+    });
+    const fetched = await getRecurringRule(TEST_OWNER, TEST_WALLET, "legacy123");
+    expect(fetched).not.toBeNull();
+    // Coerced into the new shape.
+    expect(fetched?.recipients).toHaveLength(1);
+    expect(fetched?.recipients[0]).toEqual({ to: TEST_RECIP, amount: "7.50" });
+    // Legacy fields stripped.
+    expect((fetched as unknown as { recipient?: string }).recipient).toBeUndefined();
+    expect((fetched as unknown as { amount?: string }).amount).toBeUndefined();
   });
 });
 

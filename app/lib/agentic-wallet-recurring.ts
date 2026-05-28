@@ -138,6 +138,25 @@ export type RecurringStatus =
   | "cancelled"
   | "fired-cap-exceeded";
 
+/**
+ * A single payout row in a recurring rule. Multi-recipient rules fan
+ * out into N of these per slot. Single-recipient rules just have a
+ * 1-row array. Per-row amounts are independent so a payroll rule can
+ * pay each contractor a different amount on the same schedule.
+ */
+export interface RecurringRecipient {
+  /** Lowercased 0x-prefixed EVM address. */
+  to: string;
+  /** Human-decimal amount string (e.g. "25.50"). Per-row, so a 5-person
+   *  payroll can carry 5 different amounts under one schedule. */
+  amount: string;
+}
+
+/** Trial-tier subscribers: same cap as batch send. */
+export const MAX_RECIPIENTS_TRIAL = 5;
+/** Paid Multichain subscribers: same cap as batch send (20). */
+export const MAX_RECIPIENTS_PAID = 20;
+
 export interface RecurringRule {
   ruleId: string;
   walletId: string;       // lowercased wallet address
@@ -147,8 +166,16 @@ export interface RecurringRule {
   frequency: FrequencyEnum;
   chain: AgenticChainKey;
   token: AgenticToken;
-  recipient: string;      // lowercased
-  amount: string;         // human decimal string
+  /**
+   * Multi-recipient payout list (1 — MAX_RECIPIENTS_PAID rows). Always
+   * stored as an array even when there's only one recipient — single-
+   * recipient is just `recipients.length === 1`. Pre-v0.6.2 rules
+   * stored `recipient: string + amount: string` directly on the rule;
+   * `coerceRuleShape()` migrates those into the unified array form on
+   * read (best-effort, leaves the record alone if the rule's already
+   * in new shape).
+   */
+  recipients: RecurringRecipient[];
 
   cancelWindowHours: number;
 
@@ -163,6 +190,45 @@ export interface RecurringRule {
 
   createdAt: number;
   cancelledAt?: number;
+}
+
+/**
+ * Legacy single-recipient shape (pre-v0.6.2). Read-only — we never
+ * write rules in this shape anymore, but rules created before the
+ * multi-recipient migration land in KV with these fields directly
+ * on the rule (instead of `recipients: [...]`). `coerceRuleShape()`
+ * normalises both shapes into the unified `recipients` array form.
+ */
+interface LegacyRuleFields {
+  recipient?: string;
+  amount?: string;
+}
+
+/**
+ * Normalise a raw KV record into the unified `recipients: [...]`
+ * shape. Idempotent — running it twice (or on an already-new record)
+ * returns the same object. Used by every read path.
+ */
+function coerceRuleShape(raw: RecurringRule & LegacyRuleFields): RecurringRule {
+  // Already new shape? Skip.
+  if (Array.isArray(raw.recipients) && raw.recipients.length > 0) {
+    return raw;
+  }
+  // Legacy single-recipient. Build the 1-row array; preserve everything else.
+  if (typeof raw.recipient === "string" && typeof raw.amount === "string") {
+    const next: RecurringRule = {
+      ...raw,
+      recipients: [{ to: raw.recipient, amount: raw.amount }],
+    };
+    // Strip legacy fields so they don't keep showing up in JSON output.
+    delete (next as RecurringRule & LegacyRuleFields).recipient;
+    delete (next as RecurringRule & LegacyRuleFields).amount;
+    return next;
+  }
+  // No recipients at all (corrupt rule). Return as-is with empty array
+  // so downstream code sees a consistent shape; cron path will skip
+  // empty rules.
+  return { ...raw, recipients: [] };
 }
 
 // ── Key helpers ──────────────────────────────────────────────────────────
@@ -213,25 +279,47 @@ const CREATE_CLAIM_TTL_SEC = 10 * 60;
 function createClaimKey(fp: string): string {
   return `aw:recurring:create:${fp}`;
 }
+/**
+ * Stable fingerprint of a rule's spend shape. For multi-recipient
+ * rules the recipients list is sorted by (to, amount) before hashing
+ * so two clients sending the same logical rule with different array
+ * ordering still hash to the same key — `[A, B]` and `[B, A]` are
+ * the same recurring obligation.
+ */
 function createFingerprint(args: {
   ownerAddr: string;
   walletId: string;
   frequency: string;
   chain: string;
   token: string;
-  recipient: string;
-  amount: string;
+  recipients: RecurringRecipient[];
 }): string {
+  const normRecipients = args.recipients
+    .map((r) => `${lower(r.to)}=${r.amount}`)
+    .sort();
   const seed = [
     lower(args.ownerAddr),
     lower(args.walletId),
     args.frequency,
     args.chain,
     args.token,
-    lower(args.recipient),
-    args.amount,
+    normRecipients.join(","),
   ].join("|");
   return ethers.keccak256(ethers.toUtf8Bytes(seed)).slice(2, 18);
+}
+
+/**
+ * Same shape hash as the create-fingerprint, but exposed for the API
+ * route's intent-binding canonical message: the user signs a hash of
+ * the recipients list so a leaked session sig can't author a rule
+ * with a different set of recipients than the modal showed.
+ */
+export function recipientsCanonicalHash(recipients: RecurringRecipient[]): string {
+  const norm = recipients
+    .map((r) => `${lower(r.to)}=${r.amount}`)
+    .sort()
+    .join(",");
+  return ethers.keccak256(ethers.toUtf8Bytes(norm)).slice(2, 18);
 }
 
 export function parseZsetMember(
@@ -366,8 +454,8 @@ export interface CreateRuleInput {
   frequency: FrequencyEnum;
   chain: AgenticChainKey;
   token: AgenticToken;
-  recipient: string;
-  amount: string;
+  /** 1 — MAX_RECIPIENTS_PAID rows. Caller validates trial-vs-paid cap. */
+  recipients: RecurringRecipient[];
   cancelWindowHours?: number;
 }
 
@@ -401,8 +489,7 @@ export async function createRecurringRule(
     frequency: input.frequency,
     chain: input.chain,
     token: input.token,
-    recipient: input.recipient,
-    amount: input.amount,
+    recipients: input.recipients,
   });
   const claimKey = createClaimKey(fp);
   const claimedRuleId = await kv.set(claimKey, "pending", {
@@ -427,15 +514,36 @@ export async function createRecurringRule(
   if (!isFrequencyEnum(input.frequency)) {
     throw new RecurringValidationError("INVALID_FREQUENCY", `Frequency must be one of: daily, weekly:<day>, monthly:<N>, monthly:last (got "${input.frequency}").`);
   }
-  if (!ADDR_RE.test(input.recipient)) {
-    throw new RecurringValidationError("INVALID_RECIPIENT", "recipient must be a 0x-prefixed 20-byte address.");
+  if (!Array.isArray(input.recipients) || input.recipients.length === 0) {
+    throw new RecurringValidationError("RECIPIENTS_REQUIRED", "At least one recipient row is required.");
   }
-  if (!AMOUNT_RE.test(input.amount)) {
-    throw new RecurringValidationError("INVALID_AMOUNT", "amount must be a decimal string (e.g. \"25.5\").");
+  if (input.recipients.length > MAX_RECIPIENTS_PAID) {
+    throw new RecurringValidationError(
+      "TOO_MANY_RECIPIENTS",
+      `A recurring rule can have at most ${MAX_RECIPIENTS_PAID} recipients (got ${input.recipients.length}).`,
+    );
   }
-  const amountNum = Number(input.amount);
-  if (!Number.isFinite(amountNum) || amountNum <= 0) {
-    throw new RecurringValidationError("INVALID_AMOUNT", "amount must be > 0.");
+  for (let i = 0; i < input.recipients.length; i++) {
+    const row = input.recipients[i];
+    if (!row || !ADDR_RE.test(row.to)) {
+      throw new RecurringValidationError(
+        "INVALID_RECIPIENT",
+        `recipients[${i}].to must be a 0x-prefixed 20-byte address.`,
+      );
+    }
+    if (!AMOUNT_RE.test(row.amount)) {
+      throw new RecurringValidationError(
+        "INVALID_AMOUNT",
+        `recipients[${i}].amount must be a decimal string (e.g. "25.5").`,
+      );
+    }
+    const n = Number(row.amount);
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new RecurringValidationError(
+        "INVALID_AMOUNT",
+        `recipients[${i}].amount must be > 0.`,
+      );
+    }
   }
   const cancelWindow = input.cancelWindowHours ?? MIN_CANCEL_WINDOW_HOURS;
   if (!Number.isInteger(cancelWindow) || cancelWindow < MIN_CANCEL_WINDOW_HOURS || cancelWindow > MAX_CANCEL_WINDOW_HOURS) {
@@ -467,8 +575,7 @@ export async function createRecurringRule(
     frequency: input.frequency,
     chain: input.chain,
     token: input.token,
-    recipient: lower(input.recipient),
-    amount: input.amount,
+    recipients: input.recipients.map((r) => ({ to: lower(r.to), amount: r.amount })),
     cancelWindowHours: cancelWindow,
     nextRunAt: firstFireAt,
     pendingFireAt: null,
@@ -503,8 +610,9 @@ export async function getRecurringRule(
   walletId: string,
   ruleId: string,
 ): Promise<RecurringRule | null> {
-  const rule = await kv.get<RecurringRule>(ruleKey(ownerAddr, walletId, ruleId));
-  return rule ?? null;
+  const raw = await kv.get<RecurringRule & LegacyRuleFields>(ruleKey(ownerAddr, walletId, ruleId));
+  if (!raw) return null;
+  return coerceRuleShape(raw);
 }
 
 export async function listRecurringRules(
@@ -807,17 +915,24 @@ export async function releaseFireSlot(rule: RecurringRule): Promise<void> {
  * fired once on resume, we jump ALL THE WAY forward to the next future
  * slot — we don't replay every missed daily/weekly fire. Better to
  * under-pay one cycle than double-pay several weeks.
+ *
+ * `partialFailureNote`: for multi-recipient rules where some rows
+ * settled and some failed, the cron passes a human-readable summary
+ * here. It lands in `lastError` so the dashboard surfaces "3/5 fired;
+ * failed rows: [3] relay HTTP 502" inline with the rule row. Pass
+ * `null` for an all-rows-succeeded fire.
  */
 export async function recordRuleFired(
   rule: RecurringRule,
   amountUsd: number,
   nowMs: number,
+  partialFailureNote: string | null = null,
 ): Promise<RecurringRule> {
   const baseline = Math.max(nowMs, rule.nextRunAt);
   const next: RecurringRule = {
     ...rule,
     lastRunAt: nowMs,
-    lastError: null,
+    lastError: partialFailureNote,
     pendingFireAt: null,
     totalFiredCount: rule.totalFiredCount + 1,
     totalSpentUsd: rule.totalSpentUsd + amountUsd,

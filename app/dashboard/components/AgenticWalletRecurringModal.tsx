@@ -3,20 +3,41 @@
 /**
  * AgenticWalletRecurringModal — create a new recurring rule.
  *
- * Mirrors AgenticWalletSendModal's shape (chain × token × recipient ×
- * amount) and adds a frequency picker + cancel-window slider. Intent
- * is bound to the full spend shape so a leaked session sig can't
- * author a different rule.
+ * Multi-recipient: 1 to 20 rows per rule (trial subscriptions cap at
+ * 5; paid Multichain reaches 20 — same envelope as batch send). Each
+ * row carries its own amount so a payroll rule can pay each
+ * contractor a different number under one schedule.
  *
- * Per-tx cap is checked client-side BEFORE signing — if the amount
- * exceeds it, the modal shows a hard error instead of letting the
- * user sign a doomed rule.
+ * Per-row per-tx cap is checked client-side BEFORE signing — if any
+ * row's amount exceeds the cap, the modal shows a hard error instead
+ * of letting the user sign a rule the cron would later freeze.
+ *
+ * Intent message hashes the recipients list with keccak256 over the
+ * sorted, canonical (to, amount) tuples — matches the server-side
+ * `recipientsCanonicalHash` exactly. Lets the canonical message stay
+ * scalar-typed while still binding every row.
  */
 
 import { useEffect, useRef, useState } from "react";
+import { ethers } from "ethers";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
 import { ThemedSelect } from "./ThemedSelect";
+
+/** Trial cap (mirrors batch send + server-side enforcement). */
+const MAX_RECIPIENTS_TRIAL = 5;
+/** Paid Multichain cap (same as batch send). */
+const MAX_RECIPIENTS_PAID = 20;
+
+/** Recompute client-side what `recipientsCanonicalHash(...)` produces
+ *  on the server. Sort by canonical `to=amount` string, join, keccak. */
+function recipientsHashClient(rows: { to: string; amount: string }[]): string {
+  const norm = rows
+    .map((r) => `${r.to.toLowerCase()}=${r.amount}`)
+    .sort()
+    .join(",");
+  return ethers.keccak256(ethers.toUtf8Bytes(norm)).slice(2, 18);
+}
 
 interface Props {
   walletId: string;
@@ -101,8 +122,9 @@ export function AgenticWalletRecurringModal({
   const [chain, setChain] = useState<ChainKey>("bnb");
   const chainMeta = CHAIN_META.find((c) => c.key === chain) ?? CHAIN_META[0];
   const [token, setToken] = useState<Token>("USDT");
-  const [recipient, setRecipient] = useState("");
-  const [amount, setAmount] = useState("");
+  const [rows, setRows] = useState<Array<{ to: string; amount: string }>>([
+    { to: "", amount: "" },
+  ]);
   const [label, setLabel] = useState("");
   const [kind, setKind] = useState<FrequencyKind>("weekly");
   const [weekday, setWeekday] = useState<Weekday>("fri");
@@ -118,41 +140,65 @@ export function AgenticWalletRecurringModal({
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
 
-  const recipientValid = recipient === "" || isAddress(recipient);
-  const amountValid = amount === "" || isDecimalAmount(amount);
-  const amountNum = isDecimalAmount(amount) ? Number(amount) : 0;
-  const overPerTxCap =
-    typeof perTxMaxUsd === "number" && amountNum > perTxMaxUsd;
+  const recipientCap = hasMultichainScope ? MAX_RECIPIENTS_PAID : MAX_RECIPIENTS_TRIAL;
+
+  // Per-row validation. Each row is independent — flag bad ones so the
+  // user can fix them one by one rather than getting a single ambiguous
+  // error after submit.
+  const rowFlags = rows.map((row, idx) => {
+    const addrOk = row.to === "" || isAddress(row.to);
+    const amtOk = row.amount === "" || isDecimalAmount(row.amount);
+    const amtNum = isDecimalAmount(row.amount) ? Number(row.amount) : 0;
+    const overCap = typeof perTxMaxUsd === "number" && amtNum > perTxMaxUsd;
+    const filled = row.to !== "" && row.amount !== "";
+    return { idx, addrOk, amtOk, overCap, filled };
+  });
+  const allFilledValid = rowFlags.every((r) => r.filled && r.addrOk && r.amtOk && !r.overCap);
+  const anyOverCap = rowFlags.some((r) => r.overCap);
+  const totalAmountPerFire = rows.reduce(
+    (acc, r) => acc + (isDecimalAmount(r.amount) ? Number(r.amount) : 0),
+    0,
+  );
 
   const chainGated = chainMeta.multichainOnly && !hasMultichainScope;
   const cancelWindowMax = maxCancelWindowForKind(kind);
   const cancelWindowTooLong = cancelWindowHours > cancelWindowMax;
+  const overRecipientCap = rows.length > recipientCap;
 
   const canSubmit =
     !submitting &&
     !chainGated &&
-    isAddress(recipient) &&
-    isDecimalAmount(amount) &&
-    !overPerTxCap &&
+    !overRecipientCap &&
+    allFilledValid &&
     cancelWindowHours >= 24 &&
     !cancelWindowTooLong;
+
+  function updateRow(idx: number, patch: Partial<{ to: string; amount: string }>) {
+    setRows((cur) => cur.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  }
+  function addRow() {
+    if (rows.length >= recipientCap) return;
+    setRows((cur) => [...cur, { to: "", amount: "" }]);
+  }
+  function removeRow(idx: number) {
+    setRows((cur) => (cur.length === 1 ? cur : cur.filter((_, i) => i !== idx)));
+  }
 
   async function submit() {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setError(null);
-    if (!isAddress(recipient)) {
-      setError("Recipient must be a 0x-prefixed 20-byte address.");
+    if (overRecipientCap) {
+      setError(`Up to ${recipientCap} recipients per rule on this plan.`);
       inFlightRef.current = false;
       return;
     }
-    if (!isDecimalAmount(amount)) {
-      setError("Amount must be a positive decimal (e.g. 25 or 25.50).");
-      inFlightRef.current = false;
-      return;
-    }
-    if (overPerTxCap) {
-      setError(`Amount exceeds this wallet's per-tx cap ($${perTxMaxUsd}). Lower the amount or raise the cap first.`);
+    if (!allFilledValid) {
+      if (anyOverCap) {
+        setError(`At least one row's amount exceeds this wallet's per-tx cap ($${perTxMaxUsd}).`);
+      } else {
+        setError("Every row needs a valid recipient address (0x...) and a positive amount.");
+      }
       inFlightRef.current = false;
       return;
     }
@@ -170,21 +216,25 @@ export function AgenticWalletRecurringModal({
     setSubmitting(true);
     try {
       const frequency = buildFrequencyString(kind, weekday, monthDay);
-      const recipientLower = recipient.trim().toLowerCase();
+      const normRows = rows.map((r) => ({
+        to: r.to.trim().toLowerCase(),
+        amount: r.amount.trim(),
+      }));
+      const recipientsHash = recipientsHashClient(normRows);
       const intent: Record<string, string | number> = {
         walletId,
         frequency,
         chain,
         token,
-        recipient: recipientLower,
-        amount: amount.trim(),
+        recipientsHash,
+        recipientCount: normRows.length,
         cancelWindowHours,
       };
       const auth = await getActionAuth(ownerAddress, "agentic.recurring.create", intent, signMessage);
       if (!auth) {
         setError(
           "Sign the rule challenge in your wallet to authorise the recurring payment. " +
-          "The signature is bound to this exact recipient + amount + frequency.",
+          "The signature is bound to the exact recipients list + amounts + frequency.",
         );
         return;
       }
@@ -201,8 +251,7 @@ export function AgenticWalletRecurringModal({
             frequency,
             chain,
             token,
-            recipient: recipientLower,
-            amount: amount.trim(),
+            recipients: normRows,
             cancelWindowHours,
           }),
         },
@@ -330,35 +379,73 @@ export function AgenticWalletRecurringModal({
           </div>
         </Field>
 
-        {/* Recipient + amount */}
-        <Field label="Recipient">
-          <input
-            type="text"
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            placeholder="0x…"
-            className={`w-full bg-[#0B1626] border rounded-md px-3 py-2 text-sm font-mono text-white placeholder:text-white/30 focus:outline-none ${
-              recipientValid ? "border-white/10 focus:border-emerald-400/40" : "border-rose-400/50"
-            }`}
-            disabled={submitting}
-          />
-        </Field>
-
-        <Field label={`Amount (${token})`}>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="25"
-            className={`w-full bg-[#0B1626] border rounded-md px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none ${
-              amountValid ? "border-white/10 focus:border-emerald-400/40" : "border-rose-400/50"
-            }`}
-            disabled={submitting}
-          />
-          {overPerTxCap && (
+        {/* Recipients — multi-row list, up to recipientCap rows */}
+        <Field
+          label={`Recipients (${rows.length}/${recipientCap})`}
+        >
+          <div className="space-y-1.5">
+            {rows.map((row, i) => {
+              const flags = rowFlags[i];
+              return (
+                <div key={i} className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={row.to}
+                    onChange={(e) => updateRow(i, { to: e.target.value })}
+                    placeholder="0x…"
+                    className={`flex-[3] min-w-0 bg-[#0B1626] border rounded-md px-2.5 py-1.5 text-[12.5px] font-mono text-white placeholder:text-white/25 focus:outline-none ${
+                      flags.addrOk ? "border-white/10 focus:border-emerald-400/40" : "border-rose-400/50"
+                    }`}
+                    disabled={submitting}
+                    aria-label={`Recipient ${i + 1} address`}
+                  />
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={row.amount}
+                    onChange={(e) => updateRow(i, { amount: e.target.value })}
+                    placeholder="25"
+                    className={`flex-1 min-w-[5rem] bg-[#0B1626] border rounded-md px-2.5 py-1.5 text-[12.5px] text-white placeholder:text-white/25 focus:outline-none text-right ${
+                      flags.amtOk && !flags.overCap ? "border-white/10 focus:border-emerald-400/40" : "border-rose-400/50"
+                    }`}
+                    disabled={submitting}
+                    aria-label={`Recipient ${i + 1} amount`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeRow(i)}
+                    disabled={submitting || rows.length === 1}
+                    title={rows.length === 1 ? "At least one recipient required" : "Remove this row"}
+                    className="shrink-0 px-2 text-white/40 hover:text-rose-300 transition-colors disabled:opacity-25 disabled:cursor-not-allowed"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px]">
+            <button
+              type="button"
+              onClick={addRow}
+              disabled={submitting || rows.length >= recipientCap}
+              className="text-emerald-300 hover:text-emerald-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              title={rows.length >= recipientCap ? `Max ${recipientCap} on this plan` : "Add another recipient"}
+            >
+              + Add recipient
+            </button>
+            <div className="text-white/40">
+              Per-fire total: <span className="text-white/70">{totalAmountPerFire.toFixed(2)} {token}</span>
+            </div>
+          </div>
+          {anyOverCap && (
             <div className="mt-1 text-[11px] text-rose-300/85">
-              Above this wallet&apos;s per-tx cap (${perTxMaxUsd}). Raise the cap or lower the amount.
+              At least one row exceeds this wallet&apos;s per-tx cap (${perTxMaxUsd}). Raise the cap or lower that amount.
+            </div>
+          )}
+          {!hasMultichainScope && rows.length > 1 && (
+            <div className="mt-1 text-[11px] text-white/40">
+              Trial subscriptions can include up to {MAX_RECIPIENTS_TRIAL} recipients per rule. Upgrade to Multichain for up to {MAX_RECIPIENTS_PAID}.
             </div>
           )}
         </Field>

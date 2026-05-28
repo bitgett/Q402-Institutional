@@ -22,8 +22,10 @@ interface RuleView {
   frequency: string;
   chain: string;
   token: string;
-  recipient: string;
-  amount: string;
+  recipients: Array<{ to: string; amount: string }>;
+  recipientCount: number;
+  /** Sum of all row amounts, stringified. Server-computed. */
+  amountPerFire: string;
   cancelWindowHours: number;
   nextRunAt: number;
   pendingFireAt: number | null;
@@ -209,7 +211,7 @@ export function AgenticWalletRecurringSection({
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-[14px]" aria-hidden>⏱</span>
+            <ClockIcon className="w-3.5 h-3.5 text-emerald-300" />
             <div className="text-[12px] uppercase tracking-[0.18em] text-emerald-300 font-semibold">
               Recurring payments
             </div>
@@ -254,24 +256,24 @@ export function AgenticWalletRecurringSection({
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {[
-              { icon: "📅", title: "Weekly payouts",      copy: "Every Friday → contractor list" },
-              { icon: "🔁", title: "Monthly subscriptions", copy: "1st of every month → vendor" },
-              { icon: "💰", title: "Treasury sweep",      copy: "Last day → ops wallet" },
-            ].map((preset) => (
+              { Icon: CalendarIcon, title: "Weekly payouts",      copy: "Every Friday → contractor list" },
+              { Icon: RefreshIcon,  title: "Monthly subscriptions", copy: "1st of every month → vendor" },
+              { Icon: VaultIcon,    title: "Treasury sweep",      copy: "Last day → ops wallet" },
+            ].map(({ Icon, title, copy }) => (
               <div
-                key={preset.title}
+                key={title}
                 className="rounded-md border p-2.5"
                 style={{
                   background: "rgba(255,255,255,0.015)",
                   borderColor: "rgba(255,255,255,0.06)",
                 }}
               >
-                <div className="text-[12px] text-white/85 font-medium mb-0.5">
-                  <span className="mr-1.5" aria-hidden>{preset.icon}</span>
-                  {preset.title}
+                <div className="text-[12px] text-white/85 font-medium mb-0.5 flex items-center gap-1.5">
+                  <Icon className="w-3.5 h-3.5 text-emerald-300/85 shrink-0" />
+                  {title}
                 </div>
                 <div className="text-[10.5px] text-white/45 leading-snug">
-                  {preset.copy}
+                  {copy}
                 </div>
               </div>
             ))}
@@ -331,13 +333,20 @@ function RuleRow({
     ? "border-amber-400/40 bg-amber-400/[0.04]"
     : "border-white/10 bg-white/[0.02]";
 
+  const recipientCount = rule.recipientCount ?? rule.recipients.length;
+  const single = recipientCount === 1;
+  const summaryText = single
+    ? `${rule.amountPerFire} ${rule.token} → ${formatRecipient(rule.recipients[0]?.to ?? "")}`
+    : `${rule.amountPerFire} ${rule.token} → ${recipientCount} recipients`;
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div className={`mb-2 rounded-md border ${ringClass} p-3`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="text-[13px] text-white font-medium truncate">
-              {rule.label ?? `${rule.amount} ${rule.token} → ${formatRecipient(rule.recipient)}`}
+              {rule.label ?? summaryText}
             </div>
             {pending && (
               <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-amber-400/15 text-amber-200">
@@ -362,8 +371,36 @@ function RuleRow({
           </div>
 
           <div className="mt-1 text-[11px] text-white/55">
-            {formatFrequency(rule.frequency)} · {rule.amount} {rule.token} on {rule.chain.toUpperCase()} → <code className="font-mono text-white/65">{formatRecipient(rule.recipient)}</code>
+            {formatFrequency(rule.frequency)} · {rule.amountPerFire} {rule.token} on {rule.chain.toUpperCase()}
+            {single ? (
+              <> → <code className="font-mono text-white/65">{formatRecipient(rule.recipients[0]?.to ?? "")}</code></>
+            ) : (
+              <>
+                {" "}·{" "}
+                <button
+                  type="button"
+                  onClick={() => setExpanded((e) => !e)}
+                  className="text-emerald-300 hover:text-emerald-200 transition-colors"
+                >
+                  {recipientCount} recipients {expanded ? "▾" : "▸"}
+                </button>
+              </>
+            )}
           </div>
+
+          {!single && expanded && (
+            <div
+              className="mt-2 rounded-md border p-2 space-y-1"
+              style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
+            >
+              {rule.recipients.map((r, i) => (
+                <div key={`${r.to}-${i}`} className="flex items-center justify-between text-[10.5px] font-mono">
+                  <span className="text-white/65">{r.to}</span>
+                  <span className="text-emerald-300">{r.amount} {rule.token}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="mt-1 text-[11px] text-white/45">
             {formatNextRun(rule)}
@@ -424,5 +461,47 @@ function RuleRow({
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Inline icons ──────────────────────────────────────────────────────────
+// Hand-rolled SVGs to replace the emoji used earlier — emoji rendered
+// platform-specific (Apple vs Windows vs Linux) and broke the tonal
+// match with the rest of the emerald-on-dark UI. Keep them tiny + tinted.
+
+function ClockIcon(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className} aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function CalendarIcon(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className} aria-hidden>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+function RefreshIcon(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className} aria-hidden>
+      <path d="M20 11a8 8 0 0 0-14.6-4M4 5v5h5" />
+      <path d="M4 13a8 8 0 0 0 14.6 4M20 19v-5h-5" />
+    </svg>
+  );
+}
+
+function VaultIcon(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={props.className} aria-hidden>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <circle cx="12" cy="12" r="3.5" />
+      <path d="M12 8.5v-1M12 16.5v-1M15.5 12h1M7.5 12h1" />
+    </svg>
   );
 }
