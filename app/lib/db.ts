@@ -430,7 +430,12 @@ export async function getGasDeposits(address: string): Promise<GasDeposit[]> {
     const list = await kv.lrange<GasDeposit>(gasDepKey(address), 0, -1);
     if (list.length > 0) return list;
   } catch { /* WRONGTYPE — legacy JSON array key */ }
-  return (await kv.get<GasDeposit[]>(gasDepKey(address))) ?? [];
+  try {
+    return (await kv.get<GasDeposit[]>(gasDepKey(address))) ?? [];
+  } catch {
+    // Third-type clobber — see getRelayedTxs for the matching defensive fallback.
+    return [];
+  }
 }
 
 /**
@@ -564,8 +569,17 @@ export async function getRelayedTxs(
         const list = await kv.lrange<RelayedTx>(key, start, -1);
         if (list.length > 0) return list;
       } catch { /* WRONGTYPE — legacy JSON array key */ }
-      const arr = (await kv.get<RelayedTx[]>(key)) ?? [];
-      return Number.isFinite(limitPerMonth) ? arr.slice(-Math.max(1, Math.floor(limitPerMonth))) : arr;
+      try {
+        const arr = (await kv.get<RelayedTx[]>(key)) ?? [];
+        return Number.isFinite(limitPerMonth) ? arr.slice(-Math.max(1, Math.floor(limitPerMonth))) : arr;
+      } catch {
+        // WRONGTYPE on get too — the key has been clobbered to a third type
+        // (hash / set / zset) that fits neither the modern LIST format nor
+        // the legacy JSON-array-as-string format. Treat as empty so the
+        // monthly fetch degrades gracefully instead of taking down every
+        // relay call that needs gas-balance accounting.
+        return [] as RelayedTx[];
+      }
     })
   );
   return results.flat();
@@ -580,8 +594,13 @@ export async function getThisMonthTxCount(address: string): Promise<number> {
     const len = await kv.llen(key);
     if (len > 0) return len;
   } catch { /* WRONGTYPE — legacy format */ }
-  const txs = await kv.get<RelayedTx[]>(key);
-  return txs?.length ?? 0;
+  try {
+    const txs = await kv.get<RelayedTx[]>(key);
+    return txs?.length ?? 0;
+  } catch {
+    // Third-type clobber — see getRelayedTxs for the matching defensive fallback.
+    return 0;
+  }
 }
 
 function recentMonths(count: number): string[] {
@@ -626,7 +645,12 @@ export async function getGasUsedTotals(address: string): Promise<Record<string, 
       );
     }
   } catch { /* WRONGTYPE — legacy JSON object key */ }
-  return (await kv.get<Record<string, number>>(gasUsedKey(address))) ?? {};
+  try {
+    return (await kv.get<Record<string, number>>(gasUsedKey(address))) ?? {};
+  } catch {
+    // Third-type clobber — see getRelayedTxs for the matching defensive fallback.
+    return {};
+  }
 }
 
 /**
@@ -648,8 +672,14 @@ export async function recordRelayedTx(address: string, tx: RelayedTx) {
     if (len > MAX_TX_HISTORY) kv.ltrim(key, -MAX_TX_HISTORY, -1).catch(() => {});
   } catch {
     // Legacy fallback for existing JSON array keys
-    const existing = (await kv.get<RelayedTx[]>(key)) ?? [];
-    if (existing.length < MAX_TX_HISTORY) await kv.set(key, [...existing, tx]);
+    try {
+      const existing = (await kv.get<RelayedTx[]>(key)) ?? [];
+      if (existing.length < MAX_TX_HISTORY) await kv.set(key, [...existing, tx]);
+    } catch {
+      // Third-type clobber on the key — neither LIST nor JSON-array-string.
+      // Dropping the record is the safest outcome; the on-chain TX is the
+      // source of truth and the receipt was already created upstream.
+    }
   }
 
   if (tx.gasCostNative > 0) {
@@ -658,9 +688,15 @@ export async function recordRelayedTx(address: string, tx: RelayedTx) {
       await kv.hincrbyfloat(gasUsedKey(address), tx.chain, tx.gasCostNative);
     } catch {
       // Legacy fallback for existing JSON object keys
-      const totals = (await kv.get<Record<string, number>>(gasUsedKey(address))) ?? {};
-      totals[tx.chain] = (totals[tx.chain] ?? 0) + tx.gasCostNative;
-      await kv.set(gasUsedKey(address), totals);
+      try {
+        const totals = (await kv.get<Record<string, number>>(gasUsedKey(address))) ?? {};
+        totals[tx.chain] = (totals[tx.chain] ?? 0) + tx.gasCostNative;
+        await kv.set(gasUsedKey(address), totals);
+      } catch {
+        // Third-type clobber on gasUsedKey — neither HASH nor JSON-object-string.
+        // Drop the increment; getBillableGasUsedTotals recomputes from relay
+        // history anyway, so the dashboard total still reconciles.
+      }
     }
   }
 }
