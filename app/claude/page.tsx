@@ -435,6 +435,114 @@ export default function ClaudePage() {
         </div>
       </section>
 
+      {/* ── WALLET MODE PICKER ─────────────────────────────────────────── */}
+      <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
+          <div className="mb-8">
+            <div className="text-[10px] uppercase tracking-[0.22em] text-yellow/80 font-bold mb-2">
+              3 wallet modes · pick one
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">
+              Do I need a private key?
+            </h2>
+            <p className="text-white/65 text-sm md:text-base max-w-2xl leading-relaxed">
+              Depends which mode. Two modes sign locally with a private key; one
+              lets Q402&apos;s server sign for you. Most users want{" "}
+              <span className="text-emerald-300 font-semibold">Mode C</span> — no PK,
+              just an API key.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Mode C — Recommended */}
+            <div
+              className="rounded-lg border p-5 relative"
+              style={{
+                background: "rgba(74,222,128,0.04)",
+                borderColor: "rgba(74,222,128,0.30)",
+              }}
+            >
+              <div className="absolute -top-2 right-3 text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded bg-emerald-500 text-black">
+                Recommended
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/85 font-semibold mb-1">
+                Mode C
+              </div>
+              <div className="text-white font-semibold text-base mb-2">
+                Server signs for you
+              </div>
+              <div className="text-[12.5px] text-white/65 leading-relaxed mb-3">
+                Q402 holds an encrypted Agent Wallet for you. <span className="text-emerald-300 font-medium">No private key in your env.</span>{" "}
+                No MetaMask popup. No Smart-account marker. Best for AI agents + most users.
+              </div>
+              <div className="text-[10.5px] text-white/45 leading-relaxed">
+                Set in <code className="text-yellow text-[10px]">~/.q402/mcp.env</code>:
+              </div>
+              <pre className="mt-1 text-[10.5px] text-emerald-300/85 font-mono bg-black/30 rounded px-2 py-1 leading-tight">
+{`Q402_MULTICHAIN_API_KEY=q402_live_…`}
+              </pre>
+            </div>
+
+            {/* Mode B */}
+            <div
+              className="rounded-lg border p-5"
+              style={{
+                background: "rgba(255,255,255,0.02)",
+                borderColor: "rgba(255,255,255,0.08)",
+              }}
+            >
+              <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">
+                Mode B
+              </div>
+              <div className="text-white font-semibold text-base mb-2">
+                Local Agent Wallet PK
+              </div>
+              <div className="text-[12.5px] text-white/65 leading-relaxed mb-3">
+                Same Agent Wallet as Mode C, but YOU hold the private key. Export it from the dashboard once, paste into the env. MCP signs locally — key never leaves your machine. Your MetaMask is never touched.
+              </div>
+              <div className="text-[10.5px] text-white/45 leading-relaxed">
+                Set in <code className="text-yellow text-[10px]">~/.q402/mcp.env</code>:
+              </div>
+              <pre className="mt-1 text-[10.5px] text-yellow font-mono bg-black/30 rounded px-2 py-1 leading-tight whitespace-pre">
+{`Q402_AGENTIC_PRIVATE_KEY=0x…
+Q402_MULTICHAIN_API_KEY=q402_live_…`}
+              </pre>
+            </div>
+
+            {/* Mode A */}
+            <div
+              className="rounded-lg border p-5"
+              style={{
+                background: "rgba(255,255,255,0.02)",
+                borderColor: "rgba(255,255,255,0.08)",
+              }}
+            >
+              <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">
+                Mode A
+              </div>
+              <div className="text-white font-semibold text-base mb-2">
+                Your MetaMask EOA signs
+              </div>
+              <div className="text-[12.5px] text-white/65 leading-relaxed mb-3">
+                Your existing EOA signs directly. EIP-7702 delegates it to Q402 for the call — the wallet shows a &quot;Smart account&quot; marker after first use (normal + reversible). Best for power users who want their MetaMask address to be the on-chain payer. <span className="text-amber-200/80">Use a fresh wallet.</span>
+              </div>
+              <div className="text-[10.5px] text-white/45 leading-relaxed">
+                Set in <code className="text-yellow text-[10px]">~/.q402/mcp.env</code>:
+              </div>
+              <pre className="mt-1 text-[10.5px] text-yellow font-mono bg-black/30 rounded px-2 py-1 leading-tight whitespace-pre">
+{`Q402_PRIVATE_KEY=0x…
+Q402_MULTICHAIN_API_KEY=q402_live_…`}
+              </pre>
+            </div>
+          </div>
+
+          <div className="mt-6 text-[11px] text-white/45 leading-relaxed max-w-2xl">
+            You can change later by editing <code className="text-yellow">~/.q402/mcp.env</code> and restarting your MCP client.{" "}
+            <code className="text-yellow">q402_doctor</code> on first install also asks the question and walks you through whichever mode you pick.
+          </div>
+        </div>
+      </section>
+
       {/* ── LIVE QUOTE SIMULATION ──────────────────────────────────────── */}
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
