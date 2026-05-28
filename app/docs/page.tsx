@@ -441,7 +441,41 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
               🔒 Q402 never asks you to paste your private key into chat. The MCP server signs payments LOCALLY on your machine — your key never leaves your device.
             </Callout>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">3 · Tools exposed</h3>
+            <h3 id="wallet-modes" className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">3 · Wallet modes — which signing path?</h3>
+            <p className="text-white/55 text-sm mb-3">
+              Q402 supports three signing paths. Pick one when <code className="text-yellow text-xs">q402_doctor</code> asks. You can change later by editing <code className="text-yellow text-xs">~/.q402/mcp.env</code> and restarting your client.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div className="rounded-lg border p-4 relative" style={{ background: "rgba(74,222,128,0.04)", borderColor: "rgba(74,222,128,0.30)" }}>
+                <div className="absolute -top-2 right-3 text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded bg-emerald-500 text-black">Recommended</div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/85 font-semibold mb-1">Mode C</div>
+                <div className="text-white font-semibold text-sm mb-2">Server-managed</div>
+                <p className="text-[12px] text-white/65 leading-relaxed mb-3">
+                  Q402 holds an encrypted Agent Wallet for you. <span className="text-emerald-300 font-medium">No private key in your env.</span> No MetaMask popup. Best for AI agents and most users.
+                </p>
+                <pre className="text-[10.5px] text-emerald-300/85 font-mono bg-black/30 rounded px-2 py-1 leading-tight">{`Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
+              </div>
+              <div className="rounded-lg border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">Mode B</div>
+                <div className="text-white font-semibold text-sm mb-2">Local Agent Wallet PK</div>
+                <p className="text-[12px] text-white/65 leading-relaxed mb-3">
+                  Same Agent Wallet as Mode C, but you hold the PK. Export from the dashboard once. Signs locally — key never leaves your machine. MetaMask never touched.
+                </p>
+                <pre className="text-[10.5px] text-yellow font-mono bg-black/30 rounded px-2 py-1 leading-tight whitespace-pre">{`Q402_AGENTIC_PRIVATE_KEY=0x...
+Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
+              </div>
+              <div className="rounded-lg border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">Mode A</div>
+                <div className="text-white font-semibold text-sm mb-2">Your MetaMask EOA</div>
+                <p className="text-[12px] text-white/65 leading-relaxed mb-3">
+                  Your existing EOA signs directly via EIP-7702. The &quot;Smart account&quot; marker after first use is normal + reversible with <code className="text-yellow text-[10px]">q402_clear_delegation</code>. <span className="text-amber-200/80">Use a fresh wallet.</span>
+                </p>
+                <pre className="text-[10.5px] text-yellow font-mono bg-black/30 rounded px-2 py-1 leading-tight whitespace-pre">{`Q402_PRIVATE_KEY=0x...
+Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
+              </div>
+            </div>
+
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <table className="w-full text-sm">
                 <thead>
