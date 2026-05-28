@@ -85,7 +85,7 @@ const CHAINS = {
     impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     // USDT0 is both the gas token and the transfer token on Stable (18 decimals).
     token: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0",
-    explorer: "https://stablescan.org/tx/",
+    explorer: "https://stablescan.xyz/tx/",
   },
   mantle: {
     id: 5000, name: "Mantle", domainName: "Q402 Mantle",

@@ -154,8 +154,8 @@
       },
       "nativeToken": "USDT0",
       "notes": "USDT0 is both the gas token and the transfer token. API token keys 'USDC' and 'USDT' both resolve to the USDT0 address.",
-      "explorer": "https://stablescan.org",
-      "verifyUrl": "https://stablescan.org/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
+      "explorer": "https://stablescan.xyz",
+      "verifyUrl": "https://stablescan.xyz/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
     },
     "monad": {
       "name": "Monad",
