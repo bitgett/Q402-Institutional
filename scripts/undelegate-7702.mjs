@@ -41,7 +41,7 @@ const CHAINS = {
   xlayer: { id: 196,   rpc: "https://rpc.xlayer.tech",              explorer: "https://www.oklink.com/xlayer/tx/" },
   mantle: { id: 5000,  rpc: "https://rpc.mantle.xyz",               explorer: "https://explorer.mantle.xyz/tx/" },
   injective: { id: 1776, rpc: "https://sentry.evm-rpc.injective.network/", explorer: "https://blockscout.injective.network/tx/" },
-  stable: { id: 988,   rpc: "https://rpc.stable.xyz",               explorer: "https://stablescan.org/tx/" },
+  stable: { id: 988,   rpc: "https://rpc.stable.xyz",               explorer: "https://stablescan.xyz/tx/" },
   monad:  { id: 143,   rpc: "https://rpc.monad.xyz",                explorer: "https://monadscan.com/tx/" },
   scroll: { id: 534352, rpc: "https://rpc.scroll.io",                explorer: "https://scrollscan.com/tx/" },
 };

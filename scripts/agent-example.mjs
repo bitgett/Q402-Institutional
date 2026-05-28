@@ -113,7 +113,7 @@ const CHAINS = {
       USDT: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18 },
     },
     nativeCurrency: { name: "USDT0", symbol: "USDT0", decimals: 18 },
-    explorerBase: "https://stablescan.org/tx/",
+    explorerBase: "https://stablescan.xyz/tx/",
     nonceField: "stableNonce",
   },
   mantle: {
