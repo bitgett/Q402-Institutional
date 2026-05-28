@@ -73,7 +73,14 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
 };
 
 
+// Module-level step tracker — set immediately before each KV call inside
+// handleRelay so the catch block in POST can report which step blew up.
+// Race condition is acceptable for diagnosis (all concurrent calls are
+// failing at the same step anyway under the WRONGTYPE bug).
+let lastRelayStep = "init";
+
 export async function POST(req: NextRequest) {
+  lastRelayStep = "POST-entry";
   try {
     return await handleRelay(req);
   } catch (err) {
@@ -92,7 +99,7 @@ export async function POST(req: NextRequest) {
       ? (err.stack ?? "").split("\n").slice(0, 6).map((s) => s.trim()).join(" | ")
       : "";
     return NextResponse.json(
-      { error: `relay_failed: ${message}`, stack },
+      { error: `relay_failed at step=${lastRelayStep}: ${message}`, step: lastRelayStep, stack },
       { status: 500 },
     );
   }
@@ -125,6 +132,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
 
   // ── 0. Rate limit: 60 relay calls / 60 s per IP (fail-closed — KV down = block) ──
   const ip = getClientIP(req);
+  lastRelayStep = "rateLimit:ip";
   if (!(await rateLimit(ip, "relay", 60, 60, false))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
@@ -299,6 +307,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── 3. API Key validation ────────────────────────────────────────────────
+  lastRelayStep = "getApiKeyRecord";
   const keyRecord = await getApiKeyRecord(apiKey);
   if (!keyRecord || !keyRecord.active) {
     return NextResponse.json({ error: "Invalid or inactive API key" }, { status: 401 });
@@ -309,6 +318,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   const isSandbox = keyRecord.isSandbox === true;
 
   // ── 3b. Per-API-key rate limit (30 relay calls / 60s per key, fail-closed) ─
+  lastRelayStep = "rateLimit:apiKey";
   if (!(await rateLimit(apiKey, "relay-key", 30, 60, false))) {
     return NextResponse.json({ error: "Too many requests for this API key" }, { status: 429 });
   }
@@ -324,6 +334,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // the key's scope is keyRecord.plan, set at generation time and
   // immutable except via updateApiKeyPlan (which payment-activate only
   // calls on the paid slots).
+  lastRelayStep = "getSubscription";
   const subscription = await getSubscription(keyRecord.address);
   const isTrialScopedKey = keyRecord.plan === "trial";
   if (subscription) {
@@ -451,6 +462,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     !!subscription?.trialExpiresAt &&
     new Date(subscription.trialExpiresAt) > new Date();
   if (!isSandbox && !isActiveTrial) {
+    lastRelayStep = "getGasBalance";
     const gasBalance   = await getGasBalance(keyRecord.address);
     const chainBalance = gasBalance[chain] ?? 0;
     if (chainBalance <= MIN_GAS_BALANCE[chain]) {
@@ -496,7 +508,9 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   if (!isSandbox) {
     creditScope = isTrialScopedKey ? "trial" : "paid";
     const seed = await seedFromLegacy(keyRecord.address, creditScope);
+    lastRelayStep = "initScopedQuotaIfNeeded";
     await initScopedQuotaIfNeeded(keyRecord.address, creditScope, seed);
+    lastRelayStep = "decrementScopedCredit";
     const dec = await decrementScopedCredit(keyRecord.address, creditScope);
     if (!dec.ok) {
       return NextResponse.json({
@@ -614,6 +628,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
         // `creditScope` is the source of truth — never re-derive from
         // isTrialScopedKey here (it'd still be correct today but is
         // fragile to future scope-determination refactors).
+        lastRelayStep = "refundScopedCredit";
         await refundScopedCredit(keyRecord.address, creditScope);
       } catch (e) {
         console.error("[relay] credit refund failed after relay failure:", e);
@@ -642,6 +657,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // Webhook config fetched once and reused below for both receipt's initial
   // delivery state and the actual dispatch. Sandbox is excluded entirely
   // (Q402-SEC-002).
+  lastRelayStep = "getWebhookConfig";
   const webhookCfg = isSandbox ? null : await getWebhookConfig(keyRecord.address);
 
   // ── 10a. Trust Receipt — settlement record + cryptographic proof ─────────
@@ -690,6 +706,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
 
   let receiptId:  string | null = null;
   let receiptUrl: string | null = null;
+  lastRelayStep = "createReceipt";
   try {
     const receipt = await createReceipt(receiptInput);
     receiptId  = receipt.receiptId;
