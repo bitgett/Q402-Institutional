@@ -19,10 +19,6 @@
     {
       "path": "/api/cron/recurring-payouts",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/stats-rollup",
-      "schedule": "0 1 * * *"
     }
   ]
 }
