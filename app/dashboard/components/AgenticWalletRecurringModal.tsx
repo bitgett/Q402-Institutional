@@ -507,7 +507,7 @@ export function AgenticWalletRecurringModal({
             disabled={submitting}
           />
           <div className="mt-1 text-[11px] text-white/40">
-            Lead time before each fire during which you can still skip or cancel it. Set 0 to fire immediately with no alert window — the rule itself can still be paused or deleted at any time. Max {cancelWindowMax}h for {kind} so the alert can't outrun the cycle.
+            Lead time before each fire during which you can still skip or cancel it. Set 0 to fire immediately with no alert window — the rule itself can still be paused or deleted at any time. Max {cancelWindowMax}h for {kind} so the alert can&apos;t outrun the cycle.
           </div>
         </Field>
 

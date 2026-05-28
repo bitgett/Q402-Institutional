@@ -3,93 +3,60 @@
  *
  * Behavioural + source-grep coverage for /api/stats/public.
  *
- * Behavioural: KV is mocked with a small relayed-tx fixture (live + sandbox,
- * multi-chain, mixed string/number amounts, duplicate payers). The route's
- * GET handler must surface the aggregate-only schema with sandbox rows
- * excluded.
- *
- * Source-grep: pins the privacy + CORS invariants so a future refactor
- * cannot quietly start scanning subscription records, rename
- * uniquePayers/uniqueRecipients, drop the cache header, or echo per-row
- * fields back out.
+ * v3 architecture: the route reads precomputed materialized counters
+ * via getStatsCounters() — five O(1) KV ops (two GETs, two SCARDs, one
+ * HGETALL) against the `stats:counter:*` / `stats:set:*` /
+ * `stats:hash:*` namespace. The old per-render SCAN over `relaytx:*`
+ * was retired after the 2026-05-27 LRU-eviction incident gutted that
+ * source. Sandbox filtering moved upstream to the relay route's
+ * incrStatsCounters hook, so this endpoint no longer touches sandbox
+ * prefixes itself.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const store = new Map<string, unknown>();
+const counters = {
+  settlements: 0,
+  volumeUsd: 0 as number | string,
+  payers: new Set<string>(),
+  recipients: new Set<string>(),
+  perChain: {} as Record<string, string | number>,
+};
 
 const mockKv = vi.hoisted(() => ({
   get: vi.fn(),
-  set: vi.fn(),
-  keys: vi.fn(),
-  scan: vi.fn(),
-  lrange: vi.fn(),
-  llen: vi.fn(),
-  del: vi.fn(),
-  incrby: vi.fn(),
-  decrby: vi.fn(),
-  sadd: vi.fn(),
-  smembers: vi.fn(),
+  scard: vi.fn(),
+  hgetall: vi.fn(),
 }));
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
 
-interface FakeRow {
-  apiKey?: string;
-  chain?: string;
-  fromUser?: string;
-  toUser?: string;
-  tokenAmount?: number | string;
-}
-
-function seedRelayHistory(map: Record<string, FakeRow[]>) {
-  for (const [key, rows] of Object.entries(map)) {
-    // Store under the JSON-array shape so the route's legacy fallback
-    // exercises (lrange returns empty here, then get returns the array).
-    store.set(key, rows);
-  }
-}
-
 beforeEach(() => {
-  store.clear();
+  counters.settlements = 0;
+  counters.volumeUsd = 0;
+  counters.payers = new Set();
+  counters.recipients = new Set();
+  counters.perChain = {};
   vi.clearAllMocks();
-  mockKv.keys.mockImplementation((pattern: string) => {
-    if (!pattern.startsWith("relaytx:")) {
-      // The route should NEVER scan anything else. Surface this loud so
-      // a future regression that adds a sub:* scan fails the test.
-      throw new Error(`unexpected kv.keys pattern: ${pattern}`);
-    }
-    const match = pattern.replace("relaytx:", "").replace("*", "");
-    const out: string[] = [];
-    for (const k of store.keys()) {
-      if (k.startsWith("relaytx:") && k.includes(match)) out.push(k);
-    }
-    return Promise.resolve(out);
+
+  // Only `stats:counter:*` GETs are allowed — any other key being
+  // fetched here would mean a regression that broadened the privacy
+  // surface beyond aggregate counters.
+  mockKv.get.mockImplementation((key: string) => {
+    if (key === "stats:counter:settlements") return Promise.resolve(counters.settlements);
+    if (key === "stats:counter:volumeUsd")   return Promise.resolve(counters.volumeUsd);
+    throw new Error(`unexpected kv.get key: ${key}`);
   });
-  // SCAN mirrors KEYS but pages. The route is migrated to use SCAN
-  // instead of KEYS to stay under Upstash's 10MB per-request cap; the
-  // mock returns everything in one page since the test fixture is
-  // small. Guard the pattern check the same way as KEYS does.
-  mockKv.scan.mockImplementation(
-    (_cursor: number | string, opts: { match?: string; count?: number }) => {
-      const pattern = opts?.match ?? "";
-      if (!pattern.startsWith("relaytx:")) {
-        throw new Error(`unexpected kv.scan pattern: ${pattern}`);
-      }
-      const match = pattern.replace("relaytx:", "").replace("*", "");
-      const out: string[] = [];
-      for (const k of store.keys()) {
-        if (k.startsWith("relaytx:") && k.includes(match)) out.push(k);
-      }
-      // Cursor "0" signals completion to the caller.
-      return Promise.resolve([0, out]);
-    },
-  );
-  mockKv.lrange.mockImplementation(() => Promise.resolve([])); // legacy-shape path
-  mockKv.get.mockImplementation((key: string) =>
-    Promise.resolve(store.get(key) ?? null),
-  );
+  mockKv.scard.mockImplementation((key: string) => {
+    if (key === "stats:set:payers")     return Promise.resolve(counters.payers.size);
+    if (key === "stats:set:recipients") return Promise.resolve(counters.recipients.size);
+    throw new Error(`unexpected kv.scard key: ${key}`);
+  });
+  mockKv.hgetall.mockImplementation((key: string) => {
+    if (key === "stats:hash:perChain") return Promise.resolve(counters.perChain);
+    throw new Error(`unexpected kv.hgetall key: ${key}`);
+  });
 });
 
 const ROUTE = "@/app/api/stats/public/route";
@@ -121,72 +88,66 @@ describe("GET /api/stats/public — aggregate behaviour", () => {
     expect(JSON.stringify(body)).not.toMatch(/0x[a-f0-9]{40}/i);
   });
 
-  it("aggregates live txs across chains and dedupes payers + recipients", async () => {
-    seedRelayHistory({
-      "relaytx:0xaaa:2026-05": [
-        { apiKey: "q402_live_a", chain: "bnb",  fromUser: "0xPAYER1", toUser: "0xR1", tokenAmount: "0.5" },
-        { apiKey: "q402_live_a", chain: "bnb",  fromUser: "0xPAYER1", toUser: "0xR2", tokenAmount: "1.0" },
-      ],
-      "relaytx:0xbbb:2026-05": [
-        { apiKey: "q402_live_b", chain: "eth",  fromUser: "0xPAYER2", toUser: "0xR1", tokenAmount: 2.25  },
-        { apiKey: "q402_live_b", chain: "avax", fromUser: "0xPAYER1", toUser: "0xR3", tokenAmount: 0.10  },
-      ],
-    });
+  it("surfaces counter values verbatim and rounds volume to cents", async () => {
+    counters.settlements = 21183;
+    counters.volumeUsd   = 54293.961234;
+    counters.payers.add("0xpayer1");
+    counters.payers.add("0xpayer2");
+    counters.recipients.add("0xr1");
+    counters.recipients.add("0xr2");
+    counters.recipients.add("0xr3");
+    counters.perChain = {
+      "bnb:settlements":  21000,
+      "bnb:volumeUsd":    "54290.50",
+      "eth:settlements":  183,
+      "eth:volumeUsd":    "3.46",
+    };
 
     const { GET } = await import(ROUTE);
     const body = await (await GET()).json();
 
-    expect(body.totalSettlements).toBe(4);
-    // 0xPAYER1 appears in 3 rows but counts once. 0xPAYER2 once.
+    expect(body.totalSettlements).toBe(21183);
     expect(body.uniquePayers).toBe(2);
-    // 0xR1 / 0xR2 / 0xR3 — three distinct recipients.
     expect(body.uniqueRecipients).toBe(3);
-    // 0.5 + 1.0 + 2.25 + 0.10 = 3.85
-    expect(body.totalVolumeUsd).toBeCloseTo(3.85, 2);
-
-    expect(body.perChain.bnb).toEqual({ settlements: 2, volumeUsd: 1.5  });
-    expect(body.perChain.eth).toEqual({ settlements: 1, volumeUsd: 2.25 });
-    expect(body.perChain.avax).toEqual({ settlements: 1, volumeUsd: 0.1 });
+    expect(body.totalVolumeUsd).toBeCloseTo(54293.96, 2);
+    expect(body.perChain.bnb).toEqual({ settlements: 21000, volumeUsd: 54290.50 });
+    expect(body.perChain.eth).toEqual({ settlements: 183, volumeUsd: 3.46 });
   });
 
-  it("excludes rows with q402_test_ and q402_sandbox_ api keys", async () => {
-    seedRelayHistory({
-      "relaytx:0xaaa:2026-05": [
-        { apiKey: "q402_live_a",    chain: "bnb", fromUser: "0xP1", toUser: "0xR1", tokenAmount: 1 },
-        { apiKey: "q402_test_x",    chain: "bnb", fromUser: "0xSB", toUser: "0xR1", tokenAmount: 99 },
-        { apiKey: "q402_sandbox_y", chain: "eth", fromUser: "0xSB", toUser: "0xR1", tokenAmount: 50 },
-      ],
-    });
-
-    const { GET } = await import(ROUTE);
-    const body = await (await GET()).json();
-
-    expect(body.totalSettlements).toBe(1);
-    expect(body.uniquePayers).toBe(1);
-    expect(body.totalVolumeUsd).toBe(1);
-    expect(body.perChain.eth).toBeUndefined();      // only sandbox eth rows → no bucket
-    expect(body.perChain.bnb.settlements).toBe(1);  // sandbox bnb dropped
-  });
-
-  it("ignores malformed rows without throwing", async () => {
-    seedRelayHistory({
-      "relaytx:0xaaa:2026-05": [
-        { apiKey: "q402_live_a", chain: "bnb", fromUser: "0xP1", toUser: "0xR1", tokenAmount: 1 },
-        // missing fields / wrong types — should not crash aggregation
-        { apiKey: "q402_live_a", chain: "bnb", fromUser: 123 as unknown as string, toUser: null as unknown as string, tokenAmount: "NaN" },
-        { apiKey: "q402_live_a", chain: "",    fromUser: "0xP2", toUser: "0xR2", tokenAmount: -5 },
-      ],
-    });
+  it("degrades to zero when counters are missing rather than 500ing", async () => {
+    mockKv.get.mockResolvedValue(null);
+    mockKv.scard.mockResolvedValue(0);
+    mockKv.hgetall.mockResolvedValue(null);
 
     const { GET } = await import(ROUTE);
     const res = await GET();
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.totalSettlements).toBe(3);
-    expect(body.totalVolumeUsd).toBe(1); // negative / NaN dropped
-    // Empty chain string falls into the "unknown" bucket so the row count
-    // still surfaces somewhere visible to the consumer.
-    expect(body.perChain.unknown).toBeTruthy();
+    expect(body.totalSettlements).toBe(0);
+    expect(body.uniquePayers).toBe(0);
+    expect(body.uniqueRecipients).toBe(0);
+    expect(body.totalVolumeUsd).toBe(0);
+    expect(body.perChain).toEqual({});
+  });
+
+  it("ignores malformed hash entries without throwing", async () => {
+    counters.settlements = 5;
+    counters.perChain = {
+      "bnb:settlements":      5,
+      "bnb:volumeUsd":        "12.34",
+      // Garbage entries that a future migration might leak in
+      "no-colon-key":         "ignored",
+      "bnb:unknownField":     "ignored",
+      "bnb:settlements:extra": "ignored",
+    };
+
+    const { GET } = await import(ROUTE);
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.totalSettlements).toBe(5);
+    expect(body.perChain.bnb).toEqual({ settlements: 5, volumeUsd: 12.34 });
+    expect(Object.keys(body.perChain)).toEqual(["bnb"]);
   });
 });
 
@@ -224,14 +185,13 @@ describe("OPTIONS /api/stats/public — browser preflight", () => {
 
 describe("GET /api/stats/public — fail-soft", () => {
   it("returns 500 stats_unavailable with no internal detail on KV failure", async () => {
-    mockKv.scan.mockRejectedValueOnce(new Error("internal KV explosion at /sub:* shard 17"));
+    mockKv.get.mockRejectedValueOnce(new Error("internal KV explosion at /sub:* shard 17"));
     const { GET } = await import(ROUTE);
     const res = await GET();
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body).toEqual({ error: "stats_unavailable" });
-    // Must NOT echo the upstream error message — would leak schema /
-    // ops detail.
+    // Must NOT echo the upstream error message — would leak schema / ops detail.
     expect(JSON.stringify(body)).not.toMatch(/sub:/);
     expect(JSON.stringify(body)).not.toMatch(/shard/);
   });
@@ -248,6 +208,11 @@ const routeSource = readFileSync(
   "utf8",
 );
 
+const dbSource = readFileSync(
+  resolve(__dirname, "..", "app", "lib", "db.ts"),
+  "utf8",
+);
+
 describe("/api/stats/public source guards", () => {
   it("does not import or call subscription helpers", () => {
     // Strip comment lines + block-comment bodies first so doc-comment
@@ -256,28 +221,21 @@ describe("/api/stats/public source guards", () => {
     const code = routeSource
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^\s*\/\/.*$/gm, "");
-    // Call sites: `getSubscription(...)` / `setSubscription(...)`.
     expect(code).not.toMatch(/\bgetSubscription\s*\(/);
     expect(code).not.toMatch(/\bsetSubscription\s*\(/);
-    // Import sites: `import { ..., getSubscription, ... } from ...` or
-    // `import getSubscription from ...`.
     expect(code).not.toMatch(/import[\s\S]+?getSubscription[\s\S]+?from/);
     expect(code).not.toMatch(/from\s+["'].*\/auth["']/);
-    // The only KV key scan in this file must be relaytx:* — anything
-    // else (sub:*, apikey:*, email_to_addr:*, …) would broaden the
-    // privacy surface beyond aggregate-only. Covers both legacy
-    // `kv.keys("relaytx:*")` calls AND the cursor-based replacement
-    // `kv.scan(cursor, { match: "relaytx:*", ... })` so the migration
-    // off `kv.keys` (Upstash 10MB request cap) keeps the same guard.
-    const keysCalls = code.match(/kv\.keys\(\s*["'`][^"'`]+["'`]\s*\)/g) ?? [];
-    const scanCalls = code.match(/kv\.scan\(\s*[^)]*match\s*:\s*["'`][^"'`]+["'`][^)]*\)/g) ?? [];
-    expect(keysCalls.length + scanCalls.length).toBeGreaterThan(0);
-    for (const call of keysCalls) {
-      expect(call).toContain("relaytx:");
-    }
-    for (const call of scanCalls) {
-      expect(call).toContain("relaytx:");
-    }
+  });
+
+  it("reads the precomputed counters only — no SCAN over arbitrary KV", () => {
+    const code = routeSource
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    // Aggregate path is materialized — no kv.keys / kv.scan in the route.
+    expect(code).not.toMatch(/kv\.keys\(/);
+    expect(code).not.toMatch(/kv\.scan\(/);
+    // The route delegates to getStatsCounters in db.ts.
+    expect(code).toMatch(/getStatsCounters/);
   });
 
   it("response schema uses uniquePayers + uniqueRecipients, not uniqueWallets", () => {
@@ -286,9 +244,17 @@ describe("/api/stats/public source guards", () => {
     expect(routeSource).not.toMatch(/uniqueWallets/);
   });
 
-  it("filters sandbox prefixes", () => {
-    expect(routeSource).toMatch(/q402_test_/);
-    expect(routeSource).toMatch(/q402_sandbox_/);
+  it("sandbox filter lives upstream in the relay-route hook (not in stats route)", () => {
+    // The counters are incremented only on non-sandbox relays — see
+    // incrStatsCounters call site in app/api/relay/route.ts. Pinning the
+    // filter location here so a future refactor doesn't quietly let
+    // sandbox txs leak into the public panel.
+    const relaySource = readFileSync(
+      resolve(__dirname, "..", "app", "api", "relay", "route.ts"),
+      "utf8",
+    );
+    expect(relaySource).toMatch(/incrStatsCounters/);
+    expect(relaySource).toMatch(/!isSandbox/);
   });
 
   it("sets Cache-Control + CORS headers", () => {
@@ -298,28 +264,14 @@ describe("/api/stats/public source guards", () => {
     expect(routeSource).toMatch(/Access-Control-Allow-Methods/);
   });
 
-  it("does not echo per-row fields back out", () => {
-    // The response interface should NOT include any of these tokens —
-    // they would mean we're surfacing individual relayed-tx data.
-    const ifaceBlock = routeSource.match(
-      /interface\s+PublicStats\s*\{[\s\S]+?\n\}/,
-    );
-    expect(ifaceBlock).toBeTruthy();
-    const body = ifaceBlock![0];
-    expect(body).not.toMatch(/relayTxHash/);
-    expect(body).not.toMatch(/apiKey/);
-    expect(body).not.toMatch(/email/);
-    expect(body).not.toMatch(/fromUser/);
-    expect(body).not.toMatch(/toUser/);
-    expect(body).not.toMatch(/address/);
-  });
-
-  it("exports both GET and OPTIONS handlers", () => {
-    expect(routeSource).toMatch(/export\s+async\s+function\s+GET\b/);
-    expect(routeSource).toMatch(/export\s+async\s+function\s+OPTIONS\b/);
-  });
-
-  it("error path returns the generic 'stats_unavailable' code only", () => {
-    expect(routeSource).toMatch(/error:\s*["']stats_unavailable["']/);
+  it("counter key prefixes are stable", () => {
+    // If these prefixes ever change, the backfill script + the runtime
+    // hook + this read path all need to move in lockstep. Lock them
+    // here so a partial refactor surfaces as a test failure.
+    expect(dbSource).toMatch(/stats:counter:settlements/);
+    expect(dbSource).toMatch(/stats:counter:volumeUsd/);
+    expect(dbSource).toMatch(/stats:set:payers/);
+    expect(dbSource).toMatch(/stats:set:recipients/);
+    expect(dbSource).toMatch(/stats:hash:perChain/);
   });
 });

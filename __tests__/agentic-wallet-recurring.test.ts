@@ -351,9 +351,12 @@ describe("createRecurringRule", () => {
       "TOO_MANY_RECIPIENTS",
     );
   });
-  it("rejects cancel window below MIN", async () => {
+  it("rejects negative cancel window (MIN is 0)", async () => {
+    // MIN_CANCEL_WINDOW_HOURS dropped from 24 → 0 to support hourly:N
+    // cadences whose intervals are below 24h. Any non-negative value
+    // up to the per-frequency cap is now valid; only negatives throw.
     await expectThrowsCode(
-      () => createRecurringRule({ ...VALID_INPUT, cancelWindowHours: 12 }),
+      () => createRecurringRule({ ...VALID_INPUT, cancelWindowHours: -1 }),
       "INVALID_CANCEL_WINDOW",
     );
   });
