@@ -99,9 +99,41 @@ async function loadRelayedTxRowKey(key: string): Promise<RelayedTxRow[]> {
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
+/** Cursor-based SCAN page size. Mirrors the agentic-wallet-gc cron's
+ *  page size — small enough to keep individual round-trips well under
+ *  Upstash's 10MB request cap, large enough that ~1k relaytx keys
+ *  finish in a handful of round-trips. */
+const SCAN_COUNT = 200;
+/** Hard ceiling on SCAN iterations as a defensive guard against
+ *  a server-side bug that returns a non-terminating cursor. At
+ *  COUNT=200 this covers ~2M keys before tripping. */
+const MAX_SCAN_ITERS = 10_000;
+
+async function scanRelaytxKeys(): Promise<string[]> {
+  // Cursor-based SCAN replaces the old `kv.keys("relaytx:*")`. The
+  // KEYS variant materialises every matching key into one Redis
+  // response — once the namespace grows past a few thousand entries
+  // it would blow past Upstash's 10MB per-request cap and hard-reject
+  // the call. SCAN pages the result so we stay under the cap regardless
+  // of namespace size.
+  const out: string[] = [];
+  let cursor: string | number = 0;
+  let iters = 0;
+  do {
+    const res: [string | number, string[]] = await kv.scan(cursor, {
+      match: "relaytx:*",
+      count: SCAN_COUNT,
+    });
+    cursor = res[0];
+    out.push(...res[1]);
+    iters++;
+    if (String(cursor) === "0" || iters > MAX_SCAN_ITERS) break;
+  } while (true);
+  return out;
+}
 
 async function computeRecent(limit: number): Promise<RecentResponse> {
-  const keys = await kv.keys("relaytx:*");
+  const keys = await scanRelaytxKeys();
   const all: RecentTxEntry[] = [];
 
   for (const key of keys) {

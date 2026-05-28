@@ -98,12 +98,38 @@ async function loadRelayedTxKey(key: string): Promise<RelayedTx[]> {
   }
 }
 
+/** Cursor-based SCAN page size. Same value as the network/recent route
+ *  uses — small enough to keep individual round-trips under Upstash's
+ *  10MB request cap regardless of namespace size. */
+const SCAN_COUNT = 200;
+const MAX_SCAN_ITERS = 10_000;
+
+async function scanRelaytxKeys(): Promise<string[]> {
+  // Cursor-based SCAN replaces `kv.keys("relaytx:*")`. The KEYS
+  // command materialises every matching key into a single Redis
+  // response — once the namespace passes a few thousand entries it
+  // exceeds Upstash's 10MB request cap and the call hard-rejects.
+  // SCAN pages the result so the request stays bounded regardless of
+  // how big the relay history grows. Same shape as the agentic-wallet-gc
+  // cron uses for its `aw:*` sweep.
+  const out: string[] = [];
+  let cursor: string | number = 0;
+  let iters = 0;
+  do {
+    const res: [string | number, string[]] = await kv.scan(cursor, {
+      match: "relaytx:*",
+      count: SCAN_COUNT,
+    });
+    cursor = res[0];
+    out.push(...res[1]);
+    iters++;
+    if (String(cursor) === "0" || iters > MAX_SCAN_ITERS) break;
+  } while (true);
+  return out;
+}
+
 async function computeStats(): Promise<PublicStats> {
-  // kv.keys is fine for the relay-history scale (low thousands of keys
-  // even after a year of activity); switch to cursor-based scan if the
-  // shape ever explodes. Crucially, the match pattern restricts the
-  // scan to `relaytx:*` only — `sub:*` is never touched here.
-  const keys = await kv.keys("relaytx:*");
+  const keys = await scanRelaytxKeys();
 
   let totalSettlements = 0;
   let totalVolumeUsd = 0;
