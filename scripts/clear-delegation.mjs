@@ -83,7 +83,7 @@ const CHAINS = {
   eth:       { id: 1,      rpc: "https://ethereum.publicnode.com" },
   avax:      { id: 43114,  rpc: "https://api.avax.network/ext/bc/C/rpc" },
   xlayer:    { id: 196,    rpc: "https://rpc.xlayer.tech" },
-  stable:    { id: 988,    rpc: "https://rpc.stablecoin.network" },
+  stable:    { id: 988,    rpc: "https://rpc.stable.xyz" },
   mantle:    { id: 5000,   rpc: "https://rpc.mantle.xyz" },
   injective: { id: 1776,   rpc: "https://sentry.evm-rpc.injective.network/" },
   monad:     { id: 143,    rpc: "https://rpc.monad.xyz" },

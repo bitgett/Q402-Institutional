@@ -17,7 +17,7 @@ const CHAINS = [
   { key: "injective", name: "Injective", token: "INJ", rpc: "https://sentry.evm-rpc.injective.network/", blockWindow: 800, explorer: "https://blockscout.injective.network/tx/" },
   { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",    blockWindow: 300, explorer: "https://snowtrace.io/tx/" },
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                  blockWindow: 200, explorer: "https://www.oklink.com/xlayer/tx/" },
-  { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 600, explorer: "https://stable-explorer.io/tx/" },
+  { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 600, explorer: "https://stablescan.xyz/tx/" },
   { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                    blockWindow: 6000, explorer: "https://monadscan.com/tx/" },
   { key: "scroll", name: "Scroll",    token: "ETH",   rpc: "https://rpc.scroll.io",                    blockWindow: 1200, explorer: "https://scrollscan.com/tx/" },
 ];
