@@ -245,25 +245,15 @@ export function AgenticWalletCard({
               A separate wallet your AI signs through. Your MetaMask stays
               untouched — funds here are bounded by the caps below.
             </div>
-            <details className="text-[11.5px] text-white/55 mt-1 leading-relaxed group max-w-md">
-              <summary className="cursor-pointer text-emerald-300/75 hover:text-emerald-300 font-medium select-none">
-                Connecting from an AI agent / MCP? Pick a mode →
-              </summary>
-              <div className="mt-2 space-y-1.5 pl-1">
-                <div>
-                  <span className="text-emerald-300/85 font-medium">C · Server-managed (recommended).</span>{" "}
-                  No private key in your env. Q402 holds the Agent Wallet key encrypted. Just paste your API key in <code className="font-mono text-[10.5px]">~/.q402/mcp.env</code> and the AI can pay.
-                </div>
-                <div>
-                  <span className="text-emerald-300/85 font-medium">B · Local Agent Wallet PK.</span>{" "}
-                  You hold the PK yourself. Use the Export button in the danger zone below, paste into <code className="font-mono text-[10.5px]">Q402_AGENTIC_PRIVATE_KEY</code>. MetaMask never touched.
-                </div>
-                <div>
-                  <span className="text-emerald-300/85 font-medium">A · Your own MetaMask EOA.</span>{" "}
-                  Use a fresh wallet. Your EOA signs directly via EIP-7702; the &quot;Smart account&quot; marker after first use is normal. Put the PK in <code className="font-mono text-[10.5px]">Q402_PRIVATE_KEY</code>.
-                </div>
-              </div>
-            </details>
+            <div className="text-[11.5px] text-white/55 mt-1 leading-relaxed max-w-md">
+              Connecting from an AI agent / MCP?{" "}
+              <a
+                href="/docs#wallet-modes"
+                className="text-emerald-300/85 hover:text-emerald-300 font-medium"
+              >
+                Pick a wallet mode (A / B / C) →
+              </a>
+            </div>
             {archived && (
               <div className="text-[11px] mt-2 inline-block px-2 py-0.5 rounded bg-red-500/12 text-red-300 font-medium">
                 Archived · {graceLeftDays ?? 0} day{graceLeftDays === 1 ? "" : "s"} left to restore
