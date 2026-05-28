@@ -91,6 +91,10 @@ interface PerRuleOutcome {
     | "skipped-per-tx-exceeded"
     | "transient-error";
   txHash?: string;
+  /** Multi-recipient rules: number of rows that successfully settled. */
+  settled?: number;
+  /** Multi-recipient rules: number of rows that hit a per-row error. */
+  failed?: number;
   error?: string;
 }
 
@@ -134,21 +138,24 @@ async function processOneRule(
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-wallet-archived" };
   }
 
-  // 2. Per-tx max — re-checked at fire because the user may have
-  //    lowered the cap after rule creation. Terminal state: rule
-  //    freezes until user fixes it.
-  const amountUsd = Number(rule.amount);
-  if (
-    wallet.perTxMaxUsd !== undefined &&
-    wallet.perTxMaxUsd !== null &&
-    amountUsd > wallet.perTxMaxUsd
-  ) {
-    await recordRuleCapExceeded(
-      rule,
-      `Amount $${amountUsd} now exceeds the wallet's per-tx cap $${wallet.perTxMaxUsd}.`,
-      nowMs,
-    );
-    return { ruleKey, walletId: rule.walletId, outcome: "skipped-per-tx-exceeded" };
+  // 2. Per-tx max — re-checked at fire (per-row, since each recipient
+  //    is its own settlement). If ANY recipient row now exceeds the
+  //    wallet's per-tx cap, the rule is terminal: the user must raise
+  //    the cap (or cancel + recreate) before resuming. Better to
+  //    freeze entirely than partial-fire a payroll where one row
+  //    silently drops.
+  if (wallet.perTxMaxUsd !== undefined && wallet.perTxMaxUsd !== null) {
+    for (let i = 0; i < rule.recipients.length; i++) {
+      const n = Number(rule.recipients[i].amount);
+      if (n > wallet.perTxMaxUsd) {
+        await recordRuleCapExceeded(
+          rule,
+          `recipients[${i}] amount $${n} now exceeds the wallet's per-tx cap $${wallet.perTxMaxUsd}.`,
+          nowMs,
+        );
+        return { ruleKey, walletId: rule.walletId, outcome: "skipped-per-tx-exceeded" };
+      }
+    }
   }
 
   // 3. Subscription gate — non-BNB needs multichain. Terminal if
@@ -201,50 +208,98 @@ async function processOneRule(
     return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: "relay_unavailable" };
   }
 
-  // 5. Sign + submit. Errors before the relay actually settles =
-  //    transient (release lock, back off). Errors AFTER the relay
-  //    responds with a txHash = success path; we keep the lock so a
-  //    failed recordRuleFired write doesn't get re-fired by the next
-  //    tick.
-  let txHash: string | undefined;
-  let releasedLockEarly = false;
-  try {
-    const pk = decryptPrivateKey(wallet);
-    const signed = await signAgenticPayment({
-      privateKey: pk as Hex,
-      chain: rule.chain,
-      token: rule.token,
-      to: rule.recipient as Address,
-      amount: rule.amount,
-      facilitator: relayerKey.address as Address,
-    });
-    const resp = await submitToRelay(internalBaseUrl(), apiKey, signed);
-    const respBody = (await resp.json().catch(() => null)) as { txHash?: string; error?: string } | null;
-    if (!resp.ok || !respBody || typeof respBody.txHash !== "string") {
-      const errMsg = respBody?.error ?? `relay HTTP ${resp.status}`;
-      // Relay rejected — nothing settled. Release the lock so the
-      // next tick can retry the same slot.
-      await releaseFireSlot(rule);
-      releasedLockEarly = true;
-      await recordRuleTransientError(rule, errMsg, nowMs);
-      return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: errMsg };
+  // 5. Sign + submit, sequentially per recipient. Two failure modes:
+  //
+  //    (a) FIRST recipient fails before any settles → treat as a
+  //        rule-level transient error, release the lock, retry next
+  //        tick. Nothing has actually moved on chain.
+  //    (b) PARTIAL success — N of M recipients settled, then one
+  //        failed. We cannot rollback the N already on-chain. Advance
+  //        the schedule, record the rows that landed, surface the
+  //        failure in lastError so the dashboard shows "K of M fired:
+  //        <reason for row K+1>" and the user can decide whether to
+  //        manually re-send to the missed recipients (the rule will
+  //        not retry the missed rows itself — that's by design, to
+  //        avoid surprise double-pays after the user has manually
+  //        topped them up).
+  //
+  //    Lock semantics still apply at the rule level: a successful
+  //    fire-slot keeps its lock held until TTL even on partial-success
+  //    paths so a retry tick can't re-attempt the rows that ALREADY
+  //    settled.
+  const settledRows: Array<{ to: string; amount: string; txHash: string }> = [];
+  const failedRows: Array<{ to: string; amount: string; reason: string; index: number }> = [];
+  let firstFailureBeforeAnySuccess: string | null = null;
+
+  for (let i = 0; i < rule.recipients.length; i++) {
+    const row = rule.recipients[i];
+    try {
+      const pk = decryptPrivateKey(wallet);
+      const signed = await signAgenticPayment({
+        privateKey: pk as Hex,
+        chain: rule.chain,
+        token: rule.token,
+        to: row.to as Address,
+        amount: row.amount,
+        facilitator: relayerKey.address as Address,
+      });
+      const resp = await submitToRelay(internalBaseUrl(), apiKey, signed);
+      const respBody = (await resp.json().catch(() => null)) as { txHash?: string; error?: string } | null;
+      if (!resp.ok || !respBody || typeof respBody.txHash !== "string") {
+        const errMsg = respBody?.error ?? `relay HTTP ${resp.status}`;
+        if (settledRows.length === 0) {
+          firstFailureBeforeAnySuccess = errMsg;
+          break;
+        }
+        failedRows.push({ to: row.to, amount: row.amount, reason: errMsg, index: i });
+        continue;
+      }
+      settledRows.push({ to: row.to, amount: row.amount, txHash: respBody.txHash });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (settledRows.length === 0) {
+        firstFailureBeforeAnySuccess = msg;
+        break;
+      }
+      failedRows.push({ to: row.to, amount: row.amount, reason: msg, index: i });
     }
-    txHash = respBody.txHash;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!releasedLockEarly) await releaseFireSlot(rule);
-    await recordRuleTransientError(rule, msg, nowMs);
-    return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: msg };
   }
 
-  // 6. Settled. Update the rule record + ZSET. If THIS write fails,
-  //    the lock we still hold blocks the next tick from re-firing the
-  //    same slot — the rule will look stuck-pending in the dashboard
-  //    until ops re-runs the cron or until the lock TTL expires (1h),
-  //    by which point recordRuleFired has typically retried via the
-  //    transient path. Trade-off favoured: silence over double-spend.
-  await recordRuleFired(rule, amountUsd, nowMs);
-  return { ruleKey, walletId: rule.walletId, outcome: "fired", txHash };
+  // Case (a) — zero recipients settled. Release lock, transient retry.
+  if (firstFailureBeforeAnySuccess !== null && settledRows.length === 0) {
+    await releaseFireSlot(rule);
+    await recordRuleTransientError(rule, firstFailureBeforeAnySuccess, nowMs);
+    return {
+      ruleKey,
+      walletId: rule.walletId,
+      outcome: "transient-error",
+      error: firstFailureBeforeAnySuccess,
+    };
+  }
+
+  // 6. At least one settled. Update the rule record + ZSET. If THIS
+  //    write fails, the lock we still hold blocks the next tick from
+  //    re-firing the same slot — the rule will look stuck-pending in
+  //    the dashboard until ops re-runs the cron or until the lock TTL
+  //    expires (1h), by which point recordRuleFired has typically
+  //    retried via the transient path. Silence over double-spend.
+  const settledUsdTotal = settledRows.reduce((acc, r) => acc + Number(r.amount), 0);
+  const partialFailureNote =
+    failedRows.length > 0
+      ? `${settledRows.length}/${rule.recipients.length} fired; failed rows: ${failedRows
+          .map((f) => `[${f.index}] ${f.reason}`)
+          .join("; ")}`
+      : null;
+  await recordRuleFired(rule, settledUsdTotal, nowMs, partialFailureNote);
+
+  return {
+    ruleKey,
+    walletId: rule.walletId,
+    outcome: "fired",
+    txHash: settledRows[0]?.txHash,
+    settled: settledRows.length,
+    failed: failedRows.length,
+  };
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {

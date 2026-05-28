@@ -32,10 +32,14 @@ import {
   createRecurringRule,
   isFrequencyEnum,
   listRecurringRules,
+  recipientsCanonicalHash,
   RecurringValidationError,
   MIN_CANCEL_WINDOW_HOURS,
+  MAX_RECIPIENTS_TRIAL,
+  MAX_RECIPIENTS_PAID,
   type FrequencyEnum,
   type RecurringRule,
+  type RecurringRecipient,
 } from "@/app/lib/agentic-wallet-recurring";
 import type { AgenticChainKey, AgenticToken } from "@/app/lib/agentic-wallet-sign";
 
@@ -50,6 +54,10 @@ function isHexAddress(s: unknown): s is string {
 }
 
 function projectRule(rule: RecurringRule) {
+  // Aggregate amount per fire — convenient client-side summary for
+  // the rules list ("3 recipients · $75/run"). Avoids re-summing in
+  // every UI consumer.
+  const amountPerFire = rule.recipients.reduce((acc, r) => acc + Number(r.amount), 0);
   return {
     ruleId:             rule.ruleId,
     walletId:           rule.walletId,
@@ -57,8 +65,9 @@ function projectRule(rule: RecurringRule) {
     frequency:          rule.frequency,
     chain:              rule.chain,
     token:              rule.token,
-    recipient:          rule.recipient,
-    amount:             rule.amount,
+    recipients:         rule.recipients,
+    recipientCount:     rule.recipients.length,
+    amountPerFire:      amountPerFire.toString(),
     cancelWindowHours:  rule.cancelWindowHours,
     nextRunAt:          rule.nextRunAt,
     pendingFireAt:      rule.pendingFireAt,
@@ -120,8 +129,9 @@ interface CreateBody {
   frequency?: string;
   chain?: string;
   token?: string;
-  recipient?: string;
-  amount?: string;
+  /** Multi-recipient payout list (1 — 20 rows). Per-row amount so a
+   *  payroll rule can carry different amounts under one schedule. */
+  recipients?: Array<{ to?: string; amount?: string }>;
   cancelWindowHours?: number;
 }
 
@@ -153,11 +163,25 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   if (body.token !== "USDC" && body.token !== "USDT") {
     return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
   }
-  if (!isHexAddress(body.recipient)) {
-    return NextResponse.json({ error: "INVALID_RECIPIENT" }, { status: 400 });
+  if (!Array.isArray(body.recipients) || body.recipients.length === 0) {
+    return NextResponse.json({ error: "RECIPIENTS_REQUIRED" }, { status: 400 });
   }
-  if (typeof body.amount !== "string" || body.amount.length === 0) {
-    return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+  if (body.recipients.length > MAX_RECIPIENTS_PAID) {
+    return NextResponse.json(
+      { error: "TOO_MANY_RECIPIENTS", message: `Max ${MAX_RECIPIENTS_PAID} recipients per rule.` },
+      { status: 400 },
+    );
+  }
+  const recipients: RecurringRecipient[] = [];
+  for (let i = 0; i < body.recipients.length; i++) {
+    const row = body.recipients[i];
+    if (!row || !isHexAddress(row.to) || typeof row.amount !== "string" || row.amount.length === 0) {
+      return NextResponse.json(
+        { error: "INVALID_RECIPIENT_ROW", message: `recipients[${i}] must be { to: 0x..., amount: "decimal" }.` },
+        { status: 400 },
+      );
+    }
+    recipients.push({ to: row.to.toLowerCase(), amount: row.amount });
   }
   const cancelWindowHours = body.cancelWindowHours ?? MIN_CANCEL_WINDOW_HOURS;
   if (!Number.isInteger(cancelWindowHours) || cancelWindowHours < MIN_CANCEL_WINDOW_HOURS) {
@@ -166,8 +190,11 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
 
   const frequency = body.frequency as FrequencyEnum;
 
-  // ── Intent-bound auth — the canonical message embeds spend shape +
-  //    cancel window so a leaked session sig can't author a different rule.
+  // ── Intent-bound auth — the canonical message embeds the rule's
+  //    spend shape (recipients fingerprinted as a single hash so the
+  //    intent dictionary stays scalar-typed) so a leaked session sig
+  //    can't author a rule with a different recipient set.
+  const recipientsHash = recipientsCanonicalHash(recipients);
   const authResult = await requireIntentAuth({
     address: body.address ?? null,
     challenge: body.nonce ?? null,
@@ -178,8 +205,8 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       frequency,
       chain: body.chain,
       token: body.token,
-      recipient: body.recipient.toLowerCase(),
-      amount: body.amount,
+      recipientsHash,
+      recipientCount: recipients.length,
       cancelWindowHours,
     },
   });
@@ -197,43 +224,58 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
 
-  // ── Subscription gate. Non-BNB recurring needs a paid Multichain
-  //    subscription — otherwise the cron would catch this at fire time
-  //    and freeze the rule. Block at create so the user gets the
-  //    friendly error in the modal instead of "your rule mysteriously
-  //    stopped firing two weeks later".
-  if (body.chain !== "bnb") {
-    const sub = await getSubscription(owner);
-    if (!hasMultichainScope(sub)) {
-      return NextResponse.json(
-        {
-          error: "SUBSCRIPTION_REQUIRED",
-          message:
-            "Recurring on " +
-            String(body.chain).toUpperCase() +
-            " requires the paid Multichain subscription. " +
-            "Stay on BNB Chain (free) or upgrade your plan.",
-        },
-        { status: 402 },
-      );
-    }
+  // ── Subscription gate. Non-BNB recurring AND multi-recipient batches
+  //    above the trial cap both require a paid Multichain subscription.
+  //    Block at create so the user sees a friendly modal error instead
+  //    of the cron silently freezing the rule weeks later.
+  const sub = await getSubscription(owner);
+  const isPaid = hasMultichainScope(sub);
+  if (body.chain !== "bnb" && !isPaid) {
+    return NextResponse.json(
+      {
+        error: "SUBSCRIPTION_REQUIRED",
+        message:
+          "Recurring on " +
+          String(body.chain).toUpperCase() +
+          " requires the paid Multichain subscription. " +
+          "Stay on BNB Chain (free) or upgrade your plan.",
+      },
+      { status: 402 },
+    );
+  }
+  if (!isPaid && recipients.length > MAX_RECIPIENTS_TRIAL) {
+    return NextResponse.json(
+      {
+        error: "RECIPIENT_CAP_TRIAL",
+        message:
+          `Trial subscriptions can include up to ${MAX_RECIPIENTS_TRIAL} recipients per ` +
+          `recurring rule. You sent ${recipients.length}. Upgrade to Multichain for up ` +
+          `to ${MAX_RECIPIENTS_PAID}, or trim the list.`,
+        maxAllowed: MAX_RECIPIENTS_TRIAL,
+      },
+      { status: 402 },
+    );
   }
 
   // ── Per-tx cap check at create time (NOT at fire time — see docblock)
-  const amountUsd = Number(body.amount);
-  if (
-    wallet.perTxMaxUsd !== undefined &&
-    wallet.perTxMaxUsd !== null &&
-    amountUsd > wallet.perTxMaxUsd
-  ) {
-    return NextResponse.json(
-      {
-        error: "PER_TX_CAP_EXCEEDED",
-        message: `Rule amount ($${amountUsd}) exceeds this wallet's per-tx cap ($${wallet.perTxMaxUsd}). Raise the cap or lower the amount.`,
-        perTxMaxUsd: wallet.perTxMaxUsd,
-      },
-      { status: 400 },
-    );
+  //    Per-row: every recipient's amount must fit under the cap, since
+  //    each fire is its own settlement and counted against per-tx max
+  //    individually.
+  if (wallet.perTxMaxUsd !== undefined && wallet.perTxMaxUsd !== null) {
+    for (let i = 0; i < recipients.length; i++) {
+      const n = Number(recipients[i].amount);
+      if (n > wallet.perTxMaxUsd) {
+        return NextResponse.json(
+          {
+            error: "PER_TX_CAP_EXCEEDED",
+            message: `recipients[${i}] amount ($${n}) exceeds this wallet's per-tx cap ($${wallet.perTxMaxUsd}). Raise the cap or lower the amount.`,
+            perTxMaxUsd: wallet.perTxMaxUsd,
+            index: i,
+          },
+          { status: 400 },
+        );
+      }
+    }
   }
 
   // ── Create
@@ -246,8 +288,7 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
       frequency,
       chain: body.chain as AgenticChainKey,
       token: body.token as AgenticToken,
-      recipient: body.recipient,
-      amount: body.amount,
+      recipients,
       cancelWindowHours,
     });
   } catch (e) {

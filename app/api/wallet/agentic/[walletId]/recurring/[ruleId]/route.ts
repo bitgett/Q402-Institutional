@@ -38,6 +38,7 @@ function isHexAddress(s: unknown): s is string {
 }
 
 function projectRule(rule: RecurringRule) {
+  const amountPerFire = rule.recipients.reduce((acc, r) => acc + Number(r.amount), 0);
   return {
     ruleId:             rule.ruleId,
     walletId:           rule.walletId,
@@ -45,8 +46,9 @@ function projectRule(rule: RecurringRule) {
     frequency:          rule.frequency,
     chain:              rule.chain,
     token:              rule.token,
-    recipient:          rule.recipient,
-    amount:             rule.amount,
+    recipients:         rule.recipients,
+    recipientCount:     rule.recipients.length,
+    amountPerFire:      amountPerFire.toString(),
     cancelWindowHours:  rule.cancelWindowHours,
     nextRunAt:          rule.nextRunAt,
     pendingFireAt:      rule.pendingFireAt,
