@@ -27,7 +27,7 @@ const CHAINS = {
   eth:       { id: 1,      name: "Ethereum",    rpc: "https://ethereum.publicnode.com",         usdc: ["0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6],  usdt: ["0xdAC17F958D2ee523a2206206994597C13D831ec7", 6]  },
   avax:      { id: 43114,  name: "Avalanche",   rpc: "https://api.avax.network/ext/bc/C/rpc",   usdc: ["0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", 6],  usdt: ["0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", 6]  },
   xlayer:    { id: 196,    name: "X Layer",     rpc: "https://rpc.xlayer.tech",                 usdc: ["0x74b7F16337b8972027F6196A17a631aC6dE26d22", 6],  usdt: ["0x1E4a5963aBFD975d8c9021ce480b42188849D41d", 6]  },
-  stable:    { id: 988,    name: "Stable",      rpc: "https://rpc.stablecoin.network",          usdc: ["0x779ded0c9e1022225f8e0630b35a9b54be713736", 18], usdt: ["0x779ded0c9e1022225f8e0630b35a9b54be713736", 18] },
+  stable:    { id: 988,    name: "Stable",      rpc: "https://rpc.stable.xyz",                  usdc: ["0x779ded0c9e1022225f8e0630b35a9b54be713736", 18], usdt: ["0x779ded0c9e1022225f8e0630b35a9b54be713736", 18] },
   mantle:    { id: 5000,   name: "Mantle",      rpc: "https://rpc.mantle.xyz",                  usdc: ["0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", 6],  usdt: ["0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE", 6]  },
   injective: { id: 1776,   name: "Injective",   rpc: "https://sentry.evm-rpc.injective.network/", usdc: ["0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", 6], usdt: ["0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", 6] },
   monad:     { id: 143,    name: "Monad",       rpc: "https://rpc.monad.xyz",                   usdc: ["0x754704Bc059F8C67012fEd69BC8A327a5aafb603", 6],  usdt: ["0xe7cd86e13AC4309349F30B3435a9d337750fC82D", 6]  },

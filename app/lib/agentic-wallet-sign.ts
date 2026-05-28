@@ -113,7 +113,7 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     key: "stable",
     id: 988,
     name: "Stable",
-    rpc: "https://rpc.stablecoin.network",
+    rpc: "https://rpc.stable.xyz",
     impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     domainName: "Q402 Stable",
     domainVersion: "1",
