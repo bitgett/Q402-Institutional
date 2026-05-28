@@ -49,7 +49,6 @@ export default function AgentsPage() {
 
         <div className="relative max-w-6xl mx-auto">
           <Hero />
-          <Erc8004Badge />
           <PromptExamplesSection />
           <ProofRow />
           <ConsoleMockupSection />
@@ -128,79 +127,6 @@ function Hero() {
           Use from Claude · Codex · Cursor · Cline
         </Link>
       </div>
-    </motion.div>
-  );
-}
-
-// ── ERC-8004 badge — Q402 is itself a registered agent on BSC mainnet ────
-//
-// Sits between the hero and the prompt examples. We register Q402 on the
-// same on-chain identity layer (ERC-8004 / QuackAI v1) that we ask users
-// to graduate their own Agent Wallets onto. The link goes out to
-// 8004scan, where anyone can read the on-chain metadata + see that the
-// payment endpoint advertised matches what this page describes.
-
-function Erc8004Badge() {
-  const AGENT_ID = "114376";
-  const SCAN_URL = `https://8004scan.io/agents/bsc/${AGENT_ID}`;
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.45 }}
-      className="mb-20"
-    >
-      <a
-        href={SCAN_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block rounded-2xl border p-5 md:p-6 transition-colors hover:bg-white/[0.04]"
-        style={{
-          background: "rgba(226,232,240,0.02)",
-          borderColor: "rgba(74,222,128,0.22)",
-        }}
-      >
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div
-              className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-[15px] font-semibold"
-              style={{
-                background: "rgba(74,222,128,0.10)",
-                color: "#86efac",
-                border: "1px solid rgba(74,222,128,0.30)",
-              }}
-              aria-hidden
-            >
-              ◉
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-1" style={{ color: "#86efac" }}>
-                On-chain identity · ERC-8004
-              </div>
-              <div className="text-lg font-semibold leading-snug" style={{ color: "#E2E8F0" }}>
-                Q402 is itself a registered agent on BSC mainnet — agent #{AGENT_ID}
-              </div>
-              <div className="text-[13px] mt-1" style={{ color: "rgba(226,232,240,0.55)" }}>
-                The payment endpoint, MCP package, and supported chains
-                you read here are published on QuackAI&apos;s identity
-                registry. Verify on 8004scan.
-              </div>
-            </div>
-          </div>
-          <div
-            className="shrink-0 inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-md border self-start md:self-center"
-            style={{
-              borderColor: "rgba(74,222,128,0.35)",
-              color: "#86efac",
-              background: "rgba(74,222,128,0.06)",
-            }}
-          >
-            View on 8004scan
-            <span aria-hidden>↗</span>
-          </div>
-        </div>
-      </a>
     </motion.div>
   );
 }
@@ -415,6 +341,13 @@ function ProofRow() {
           </div>
         </div>
       ))}
+      {/* Lightweight capability mention — Agent Wallets can graduate onto
+          the ERC-8004 on-chain identity layer (QuackAI v1). Kept as a
+          single inline line rather than a prominent badge — this is a
+          feature surface, not a marketing claim. */}
+      <div className="col-span-2 md:col-span-4 text-[11.5px] text-center mt-1" style={{ color: "rgba(226,232,240,0.45)" }}>
+        Optional: graduate your Agent Wallet onto ERC-8004 (QuackAI v1) for an on-chain identity badge.
+      </div>
     </motion.div>
   );
 }
