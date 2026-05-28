@@ -74,6 +74,31 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
 
 
 export async function POST(req: NextRequest) {
+  try {
+    return await handleRelay(req);
+  } catch (err) {
+    // Last-resort net: an unhandled throw deeper in the relay path (especially
+    // a KV WRONGTYPE thrown by a multi-command pipeline) used to bubble all
+    // the way out of the handler, and the Vercel runtime turned that into a
+    // bare HTTP 500 with an empty body. Downstream consumers (q402-viz
+    // backend, MCP, SDK) saw `non-JSON (HTTP 500): ` and lost the actual
+    // cause. Returning a JSON shape with the error message + a trimmed
+    // stack head keeps the body parseable and tells the caller (and our
+    // logs) exactly which downstream KV call blew up, so the next failure
+    // is diagnosable in one round-trip instead of three.
+    console.error("[relay] unhandled error:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error
+      ? (err.stack ?? "").split("\n").slice(0, 6).map((s) => s.trim()).join(" | ")
+      : "";
+    return NextResponse.json(
+      { error: `relay_failed: ${message}`, stack },
+      { status: 500 },
+    );
+  }
+}
+
+async function handleRelay(req: NextRequest): Promise<NextResponse> {
   let body: {
     apiKey:       string;
     chain:        ChainKey;
