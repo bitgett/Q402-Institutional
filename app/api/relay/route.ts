@@ -14,6 +14,7 @@ import {
   seedFromLegacy,
   recordWebhookDelivery,
   isCashPaidSubscription,
+  incrStatsCounters,
   type CreditScope,
 } from "@/app/lib/db";
 import {
@@ -811,6 +812,27 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
       console.error("[relay] TX record failed (after-response):", e);
     }
   });
+
+  // Materialized public-stats counters — feed /api/stats/public so the public
+  // panel (settlements / unique payers / unique recipients / volume / per-chain)
+  // updates in real time without SCAN-ing on every render. Sandbox calls are
+  // excluded; the public view is on-chain settlements only. Runs in its own
+  // after() block so a stats-counter failure cannot cascade into the TX-record
+  // path above (and vice-versa).
+  if (!isSandbox) {
+    after(async () => {
+      try {
+        await incrStatsCounters({
+          payer:     from,
+          recipient: to,
+          chain,
+          amountUsd: Number(tokenAmount),
+        });
+      } catch (e) {
+        console.error("[relay] stats counter incr failed (after-response):", e);
+      }
+    });
+  }
 
   // Platform trial-gas burn counter — tracks how much native gas Q402 is
   // covering on behalf of trial users, broken down by chain. Pure ops metric,
