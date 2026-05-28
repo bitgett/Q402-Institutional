@@ -260,11 +260,12 @@ export function AgenticWalletRecurringSection({
           <div className="text-[12.5px] text-white/70 mb-2 font-medium">
             No schedules yet. Try one of these patterns:
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             {[
-              { Icon: CalendarIcon, title: "Weekly payouts",      copy: "Every Friday → contractor list" },
+              { Icon: ClockIcon,    title: "Hourly heartbeat",     copy: "Every N hours → service / API" },
+              { Icon: CalendarIcon, title: "Weekly payouts",       copy: "Every Friday → contractor list" },
               { Icon: RefreshIcon,  title: "Monthly subscriptions", copy: "1st of every month → vendor" },
-              { Icon: VaultIcon,    title: "Treasury sweep",      copy: "Last day → ops wallet" },
+              { Icon: VaultIcon,    title: "Treasury sweep",       copy: "Last day → ops wallet" },
             ].map(({ Icon, title, copy }) => (
               <div
                 key={title}
