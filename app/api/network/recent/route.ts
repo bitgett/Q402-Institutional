@@ -23,7 +23,14 @@ import { kv } from "@vercel/kv";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const CACHE_HEADER = "public, s-maxage=15, stale-while-revalidate=30";
+// Vercel edge cache for 30s with a 60s SWR window. Cache hit rate is
+// the load-bearing knob here: every cache miss walks every relaytx
+// key + materialises its list against the upstream KV, which is
+// already past its monthly bandwidth quota. With the viz tx-watcher
+// polling every 30s and frontend cache-bust removed, the edge cache
+// absorbs most of the load — staleness budget is ~30s, which the
+// "Live settlement feed" UX absorbs without a noticeable lag.
+const CACHE_HEADER = "public, s-maxage=30, stale-while-revalidate=60";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin":  "*",
@@ -97,8 +104,15 @@ async function loadRelayedTxRowKey(key: string): Promise<RelayedTxRow[]> {
   }
 }
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+// Default + max page sizes shrunk to keep the response payload
+// bounded for downstream consumers (viz, dashboards). Smaller default
+// also reduces Vercel function egress. KV-side cost is unchanged
+// (`lrange` reads the full list regardless of `limit`); the load
+// reduction on the upstream KV comes from the edge-cache hit rate
+// improvements above + the viz client side's drop of the
+// `?_t=Date.now()` cache-bust.
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
 /** Cursor-based SCAN page size. Mirrors the agentic-wallet-gc cron's
  *  page size — small enough to keep individual round-trips well under
  *  Upstash's 10MB request cap, large enough that ~1k relaytx keys
