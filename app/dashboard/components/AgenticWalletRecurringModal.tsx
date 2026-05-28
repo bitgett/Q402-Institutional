@@ -81,7 +81,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "scroll",    label: "Scroll",     multichainOnly: true, tokens: ["USDT", "USDC"] },
 ];
 
-type FrequencyKind = "daily" | "weekly" | "monthly" | "monthly-last";
+type FrequencyKind = "hourly" | "daily" | "weekly" | "monthly" | "monthly-last";
 type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 const WEEKDAY_LABEL: Record<Weekday, string> = {
@@ -89,7 +89,8 @@ const WEEKDAY_LABEL: Record<Weekday, string> = {
   fri: "Friday", sat: "Saturday", sun: "Sunday",
 };
 
-function buildFrequencyString(kind: FrequencyKind, weekday: Weekday, monthDay: number): string {
+function buildFrequencyString(kind: FrequencyKind, weekday: Weekday, monthDay: number, hourlyN: number): string {
+  if (kind === "hourly") return `hourly:${Math.max(1, Math.min(23, Math.floor(hourlyN)))}`;
   if (kind === "daily") return "daily";
   if (kind === "weekly") return `weekly:${weekday}`;
   if (kind === "monthly-last") return "monthly:last";
@@ -101,7 +102,13 @@ function buildFrequencyString(kind: FrequencyKind, weekday: Weekday, monthDay: n
  * exceed this — otherwise subsequent fires would silently honour only
  * `interval` hours of notice, breaking the promise on the modal.
  */
-function maxCancelWindowForKind(kind: FrequencyKind): number {
+function maxCancelWindowForKind(kind: FrequencyKind, hourlyN: number): number {
+  // Hourly:N cycles every N hours; the cancel-window must fit strictly
+  // inside that, capped at N − 0.5 with a 0.5h floor. A 1h cadence
+  // leaves 30 min of cancel runway; a 6h cadence leaves up to 5.5h.
+  // Anything ≥ N hours would push the next alert into the past on the
+  // cycle boundary.
+  if (kind === "hourly") return Math.max(0.5, hourlyN - 0.5);
   if (kind === "daily") return 24;
   if (kind === "weekly") return 24 * 7;
   return 24 * 28; // shortest possible month (February)
@@ -129,11 +136,27 @@ export function AgenticWalletRecurringModal({
   const [kind, setKind] = useState<FrequencyKind>("weekly");
   const [weekday, setWeekday] = useState<Weekday>("fri");
   const [monthDay, setMonthDay] = useState<number>(1);
+  // Hours-per-cycle for the hourly cadence (1..23). Default 1 = every
+  // hour; users can step up to less frequent intervals (every 2h, every
+  // 6h, …) without exiting the hourly bucket.
+  const [hourlyN, setHourlyN] = useState<number>(1);
   const [cancelWindowHours, setCancelWindowHours] = useState<number>(24);
 
   useEffect(() => {
     if (!chainMeta.tokens.includes(token)) setToken(chainMeta.tokens[0]);
   }, [chainMeta.tokens, token]);
+
+  // Auto-shrink the cancel window when the user picks hourly: the default
+  // 24h carried over from the weekly/monthly defaults would always exceed
+  // the per-cycle cap and leave the user stuck behind a "cancel window too
+  // long" error. Snap to the per-N max so the form is submittable out of
+  // the box and the user can still nudge it down if they want.
+  useEffect(() => {
+    if (kind === "hourly") {
+      const maxForN = Math.max(0.5, hourlyN - 0.5);
+      setCancelWindowHours((prev) => (prev > maxForN ? maxForN : prev));
+    }
+  }, [kind, hourlyN]);
 
   const [submitting, setSubmitting] = useState(false);
   useModalEscape(onClose, submitting);
@@ -161,7 +184,7 @@ export function AgenticWalletRecurringModal({
   );
 
   const chainGated = chainMeta.multichainOnly && !hasMultichainScope;
-  const cancelWindowMax = maxCancelWindowForKind(kind);
+  const cancelWindowMax = maxCancelWindowForKind(kind, hourlyN);
   const cancelWindowTooLong = cancelWindowHours > cancelWindowMax;
   const overRecipientCap = rows.length > recipientCap;
 
@@ -170,7 +193,7 @@ export function AgenticWalletRecurringModal({
     !chainGated &&
     !overRecipientCap &&
     allFilledValid &&
-    cancelWindowHours >= 24 &&
+    cancelWindowHours >= 0 &&
     !cancelWindowTooLong;
 
   function updateRow(idx: number, patch: Partial<{ to: string; amount: string }>) {
@@ -202,8 +225,13 @@ export function AgenticWalletRecurringModal({
       inFlightRef.current = false;
       return;
     }
-    if (cancelWindowHours < 24) {
-      setError("Cancel window must be at least 24 hours so you always have time to skip or cancel a pending fire.");
+    // No minimum cancel window — the rule itself can be cancelled or
+    // deleted at any time from the dashboard, so forcing a 24h alert
+    // window on top of that was redundant friction. The per-cadence
+    // upper bound (cancelWindowMax) still applies so the alert for
+    // the next fire can't land in the past on cycle boundaries.
+    if (cancelWindowHours < 0) {
+      setError("Cancel window cannot be negative.");
       inFlightRef.current = false;
       return;
     }
@@ -215,7 +243,7 @@ export function AgenticWalletRecurringModal({
 
     setSubmitting(true);
     try {
-      const frequency = buildFrequencyString(kind, weekday, monthDay);
+      const frequency = buildFrequencyString(kind, weekday, monthDay, hourlyN);
       const normRows = rows.map((r) => ({
         to: r.to.trim().toLowerCase(),
         amount: r.amount.trim(),
@@ -318,11 +346,27 @@ export function AgenticWalletRecurringModal({
         {/* Frequency */}
         <Field label="Frequency">
           <div className="flex gap-2 mb-2">
+            <KindButton active={kind === "hourly"} onClick={() => setKind("hourly")} disabled={submitting}>Hourly</KindButton>
             <KindButton active={kind === "daily"} onClick={() => setKind("daily")} disabled={submitting}>Daily</KindButton>
             <KindButton active={kind === "weekly"} onClick={() => setKind("weekly")} disabled={submitting}>Weekly</KindButton>
             <KindButton active={kind === "monthly"} onClick={() => setKind("monthly")} disabled={submitting}>Monthly</KindButton>
             <KindButton active={kind === "monthly-last"} onClick={() => setKind("monthly-last")} disabled={submitting}>Last of month</KindButton>
           </div>
+          {kind === "hourly" && (
+            <div className="flex items-center gap-2 text-sm text-white/80">
+              <span>Every</span>
+              <input
+                type="number"
+                min={1}
+                max={23}
+                value={hourlyN}
+                onChange={(e) => setHourlyN(Math.max(1, Math.min(23, Number(e.target.value) || 1)))}
+                className="w-16 bg-[#0B1626] border border-white/10 rounded-md px-2 py-1.5 text-sm text-white text-center"
+                disabled={submitting}
+              />
+              <span>{hourlyN === 1 ? "hour" : "hours"}</span>
+            </div>
+          )}
           {kind === "weekly" && (
             <ThemedSelect<Weekday>
               value={weekday}
@@ -454,16 +498,16 @@ export function AgenticWalletRecurringModal({
         <Field label="Cancel window (hours)">
           <input
             type="number"
-            min={24}
+            min={0}
             max={cancelWindowMax}
-            step={1}
+            step={0.5}
             value={cancelWindowHours}
-            onChange={(e) => setCancelWindowHours(Math.max(24, Math.min(cancelWindowMax, Number(e.target.value))))}
+            onChange={(e) => setCancelWindowHours(Math.max(0, Math.min(cancelWindowMax, Number(e.target.value))))}
             className={`w-full bg-[#0B1626] border rounded-md px-3 py-2 text-sm text-white ${cancelWindowTooLong ? "border-rose-400/50" : "border-white/10"}`}
             disabled={submitting}
           />
           <div className="mt-1 text-[11px] text-white/40">
-            How long before each fire you can still cancel or skip it. Minimum 24h; max {cancelWindowMax}h for {kind} so the cancel notice fits inside one interval.
+            Lead time before each fire during which you can still skip or cancel it. Set 0 to fire immediately with no alert window — the rule itself can still be paused or deleted at any time. Max {cancelWindowMax}h for {kind} so the alert can't outrun the cycle.
           </div>
         </Field>
 

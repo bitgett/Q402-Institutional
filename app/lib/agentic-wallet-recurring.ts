@@ -48,8 +48,9 @@ import type { AgenticChainKey, AgenticToken } from "./agentic-wallet-sign";
 
 export const RECURRING_NEXT_ACTION_ZSET = "aw:recurring:next-action";
 
-/** Minimum cancel window. Anything less wouldn't give the user time to react. */
-export const MIN_CANCEL_WINDOW_HOURS = 24;
+/** Minimum cancel window. 0 = no advance notice, fires immediately at the
+ *  next slot (still cancellable any time by deleting the rule itself). */
+export const MIN_CANCEL_WINDOW_HOURS = 0;
 /** Sanity ceiling; longer than this and the rule effectively never fires on time. */
 export const MAX_CANCEL_WINDOW_HOURS = 24 * 14;
 
@@ -89,6 +90,16 @@ function catchUpThresholdMs(rule: { cancelWindowHours: number }): number {
  * is true for every fire, not just the first.
  */
 export function maxCancelWindowForFrequency(f: FrequencyEnum): number {
+  // hourly:N fires every N hours. The cancel window must fit strictly
+  // inside that interval so the alert for fire X+1 cannot land before
+  // fire X has happened. Cap at N − 0.5h with a hard floor of 0.5h so a
+  // 1h cadence still has a 30-minute runway (anything tighter leaves no
+  // real cancel time, and exactly N hours would collapse the second
+  // alert into the past on the cycle boundary).
+  if (f.startsWith("hourly:")) {
+    const n = Number(f.slice("hourly:".length));
+    return Math.max(0.5, n - 0.5);
+  }
   if (f === "daily") return 24;
   if (f.startsWith("weekly:")) return 24 * 7;
   // monthly: shortest possible month is February at 28 days. Use that
@@ -105,6 +116,7 @@ const DAY_MS = 24 * HOUR_MS;
 export type WeekdayShort = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type FrequencyEnum =
+  | `hourly:${number}` // 1..23 — fire every N hours (anchored to creation minute)
   | "daily"
   | `weekly:${WeekdayShort}`
   | `monthly:${number}` // 1..31; if the month has no Nth day, fires on the last day
@@ -118,6 +130,10 @@ const WEEKDAY_TO_INDEX: Record<WeekdayShort, number> = {
 export function isFrequencyEnum(s: unknown): s is FrequencyEnum {
   if (typeof s !== "string") return false;
   if (s === "daily" || s === "monthly:last") return true;
+  if (s.startsWith("hourly:")) {
+    const n = Number(s.slice("hourly:".length));
+    return Number.isInteger(n) && n >= 1 && n <= 23;
+  }
   if (s.startsWith("weekly:")) {
     const day = s.slice("weekly:".length);
     return day in WEEKDAY_TO_INDEX;
@@ -380,6 +396,12 @@ export function computeNextFireAt(
 ): number {
   const from = new Date(fromMs);
 
+  if (frequency.startsWith("hourly:")) {
+    const n = Number(frequency.slice("hourly:".length));
+    // Add N hours, same UTC mm:ss.
+    return fromMs + n * HOUR_MS;
+  }
+
   if (frequency === "daily") {
     // Next day, same UTC hh:mm:ss. Add 24h, that's it.
     return fromMs + DAY_MS;
@@ -546,10 +568,13 @@ export async function createRecurringRule(
     }
   }
   const cancelWindow = input.cancelWindowHours ?? MIN_CANCEL_WINDOW_HOURS;
-  if (!Number.isInteger(cancelWindow) || cancelWindow < MIN_CANCEL_WINDOW_HOURS || cancelWindow > MAX_CANCEL_WINDOW_HOURS) {
+  // Fractional values allowed (e.g. 0.5h for hourly cadences). Lower bound
+  // is the const above; upper bound is the per-frequency ceiling checked
+  // immediately below.
+  if (!Number.isFinite(cancelWindow) || cancelWindow < MIN_CANCEL_WINDOW_HOURS || cancelWindow > MAX_CANCEL_WINDOW_HOURS) {
     throw new RecurringValidationError(
       "INVALID_CANCEL_WINDOW",
-      `cancelWindowHours must be an integer between ${MIN_CANCEL_WINDOW_HOURS} and ${MAX_CANCEL_WINDOW_HOURS}.`,
+      `cancelWindowHours must be a finite number between ${MIN_CANCEL_WINDOW_HOURS} and ${MAX_CANCEL_WINDOW_HOURS}.`,
     );
   }
   const maxForFreq = maxCancelWindowForFrequency(input.frequency);
