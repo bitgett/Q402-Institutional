@@ -548,34 +548,15 @@ export async function createRecurringRule(
   //    the rule the first call created instead of authoring a duplicate.
   //    Critical for an "automation engine" — a dropped POST response
   //    shouldn't translate to a second recurring payment getting set up.
-  const fp = createFingerprint({
-    ownerAddr: input.ownerAddr,
-    walletId: input.walletId,
-    frequency: input.frequency,
-    chain: input.chain,
-    token: input.token,
-    recipients: input.recipients,
-  });
-  const claimKey = createClaimKey(fp);
-  const claimedRuleId = await kv.set(claimKey, "pending", {
-    nx: true,
-    ex: CREATE_CLAIM_TTL_SEC,
-  });
-  if (claimedRuleId === null) {
-    // A previous call with this exact shape is in flight or already
-    // landed. Resolve the ruleId it produced and return that rule.
-    const existing = await kv.get<string>(claimKey);
-    if (existing && existing !== "pending") {
-      const cached = await getRecurringRule(input.ownerAddr, input.walletId, existing);
-      if (cached) return cached;
-    }
-    throw new RecurringValidationError(
-      "DUPLICATE_IN_FLIGHT",
-      "An identical recurring rule is being created right now. Retry in a few seconds.",
-    );
-  }
-
-  // ── Validation ───────────────────────────────────────────────────────
+  // ── Validation FIRST ─────────────────────────────────────────────────
+  // The idempotency claim used to run before validation, which had a
+  // nasty side-effect: a user submitting an invalid frequency / address
+  // / amount would burn the claim key for that fingerprint, and any
+  // retry within CREATE_CLAIM_TTL_SEC (10 min) would 409 with
+  // DUPLICATE_IN_FLIGHT — even though no rule had ever been created.
+  // The user couldn't fix the typo and resubmit until the claim
+  // expired. Validating up front means the claim is only burnt when
+  // the input would actually have produced a rule.
   if (!isFrequencyEnum(input.frequency)) {
     throw new RecurringValidationError("INVALID_FREQUENCY", `Frequency must be one of: daily, weekly:<day>, monthly:<N>, monthly:last (got "${input.frequency}").`);
   }
@@ -629,6 +610,40 @@ export async function createRecurringRule(
   }
   if (typeof input.label === "string" && input.label.length > 64) {
     throw new RecurringValidationError("INVALID_LABEL", "label must be ≤64 chars.");
+  }
+
+  // ── Idempotency claim — AFTER validation ─────────────────────────────
+  // The fingerprint reflects the canonical, validated shape so a
+  // typo-induced retry (e.g. user fixed a recipient address) gets a
+  // different fingerprint and isn't blocked by the prior failed call's
+  // claim. A dropped POST response on a VALIDATED input still produces
+  // the same fingerprint, so the duplicate-create guarantee holds for
+  // the case it was designed for.
+  const fp = createFingerprint({
+    ownerAddr: input.ownerAddr,
+    walletId: input.walletId,
+    frequency: input.frequency,
+    chain: input.chain,
+    token: input.token,
+    recipients: input.recipients,
+  });
+  const claimKey = createClaimKey(fp);
+  const claimedRuleId = await kv.set(claimKey, "pending", {
+    nx: true,
+    ex: CREATE_CLAIM_TTL_SEC,
+  });
+  if (claimedRuleId === null) {
+    // A previous call with this exact validated shape is in flight or
+    // already landed. Resolve the ruleId it produced and return that rule.
+    const existing = await kv.get<string>(claimKey);
+    if (existing && existing !== "pending") {
+      const cached = await getRecurringRule(input.ownerAddr, input.walletId, existing);
+      if (cached) return cached;
+    }
+    throw new RecurringValidationError(
+      "DUPLICATE_IN_FLIGHT",
+      "An identical recurring rule is being created right now. Retry in a few seconds.",
+    );
   }
 
   const now = Date.now();
@@ -952,14 +967,20 @@ export async function markRulePending(
  */
 export async function claimFireSlot(
   rule: RecurringRule,
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: boolean; reason?: string; alreadyFired?: boolean }> {
   // Durable marker check FIRST — if a previous tick relayed
   // successfully but its recordRuleFired write dropped (KV blip,
   // function timeout), the fire-lock would have expired 1h later and
   // a fresh tick would race in. The marker is the only thing that
   // outlives the lock and prevents a second on-chain send.
   if (await slotAlreadyFired(rule.ruleId, rule.nextRunAt)) {
-    return { ok: false, reason: "slot already fired (durable marker present)" };
+    // Surfacing alreadyFired separately from a generic refusal lets the
+    // cron route detect the "marker present but rule state didn't
+    // advance" branch and replay the bookkeeping side of recordRuleFired
+    // without touching the relay. Without this, the rule would stay
+    // stuck on a fired slot forever — every subsequent heartbeat would
+    // also hit the marker and bail out.
+    return { ok: false, alreadyFired: true, reason: "slot already fired (durable marker present)" };
   }
   const claim = await kv.set(fireLockKey(rule.ruleId, rule.nextRunAt), "in-flight", {
     nx: true,
@@ -969,6 +990,48 @@ export async function claimFireSlot(
     return { ok: false, reason: "fire-lock held — concurrent tick or post-relay retry" };
   }
   return { ok: true };
+}
+
+/**
+ * Recovery path for the (rare) case where `markSlotFired` succeeded on
+ * a previous tick but the follow-up `kv.set(ruleKey)` + `kv.zadd` did
+ * not — the on-chain TX is settled, the marker proves it, but the
+ * rule object still points at the just-fired slot and the ZSET still
+ * scores it as due. Left untouched, every subsequent heartbeat would
+ * pull the same rule, hit the marker, and bail — the user would see
+ * a rule that "never fires", even though their wallet is silently
+ * debited every cycle the cron retries.
+ *
+ * Idempotent: only advances when the in-memory rule object STILL
+ * points at the marked slot. If a parallel writer already advanced
+ * `nextRunAt`, this no-ops.
+ */
+export async function advanceAfterMissedBookkeeping(
+  rule: RecurringRule,
+  nowMs: number,
+): Promise<RecurringRule> {
+  const firedSlot = rule.nextRunAt;
+  const baseline = Math.max(nowMs, firedSlot);
+  const next: RecurringRule = {
+    ...rule,
+    lastRunAt: nowMs,
+    pendingFireAt: null,
+    totalFiredCount: rule.totalFiredCount + 1,
+    // totalSpentUsd intentionally NOT incremented: we don't know the
+    // exact amount that landed on-chain because the bookkeeping write
+    // that would have recorded it is the one that failed. The
+    // `lastError` line below tells the user to reconcile manually.
+    lastError:
+      "Auto-recovered: previous fire settled on-chain but bookkeeping write failed. " +
+      "Check the explorer for the fire at slot " + firedSlot + " and reconcile spend manually.",
+    nextRunAt: computeNextFireAt(rule.frequency, baseline),
+  };
+  await kv.set(ruleKey(rule.ownerAddr, rule.walletId, rule.ruleId), next);
+  await kv.zadd(RECURRING_NEXT_ACTION_ZSET, {
+    score: computeNextActionAt(next),
+    member: zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId),
+  });
+  return next;
 }
 
 /**
