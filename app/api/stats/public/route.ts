@@ -1,40 +1,37 @@
 /**
  * GET /api/stats/public
  *
- * Aggregate, anonymous usage stats sourced ONLY from confirmed live
- * relayed-transaction history. Public metrics consumers can render
- * these into dashboards.
+ * Reads the precomputed daily rollup at `stats:public:summary` (written
+ * by /api/cron/stats-rollup once a day from receipt:* — the durable,
+ * 1-year-TTL source of truth). Falls back to a synthesized empty
+ * summary if the key is missing so the public panel never 500s.
  *
- * Hard constraints — every line of this file is written to one of these:
+ * Why precomputed
+ *   The previous implementation SCAN-ed `relaytx:*` on every request,
+ *   then for each key fetched the full LIST. After the 2026-05-27
+ *   relaytx eviction incident, that source was gutted (12 keys
+ *   survived) so the panel showed 29 unique payers when receipt:*
+ *   actually had 779 worth of history. Switching to a precomputed
+ *   summary (a) restores the correct numbers immediately, (b) makes
+ *   the panel an O(1) GET so KV bandwidth stops being load-bearing
+ *   on every render, and (c) anchors the public view to a TTL-
+ *   protected key so future evictions on volatile namespaces don't
+ *   silently regress the metrics again.
  *
- *   - DO NOT touch subscription records. Provisioned-only wallets,
- *     email pseudos, sandbox testers, and admin grants all show up in
- *     `sub:*` but should NOT inflate user counts here. We intentionally
- *     do not import getSubscription or read `sub:*`; a source-grep test
- *     in __tests__/stats-public.test.ts pins that.
- *
- *   - DO NOT echo back tx hashes, API keys, raw wallet lists, emails,
- *     or any per-account metadata. Only aggregate counters + per-chain
- *     rollups leave this route.
- *
- *   - DO exclude sandbox txs. Sandbox apiKeys carry a `q402_test_` or
- *     `q402_sandbox_` prefix — every relay handler that records into
- *     history fills `apiKey`, so filtering on that prefix excludes
- *     anything that didn't broadcast on-chain.
- *
- * The KV scan covers `relaytx:*` keys only. The list is small in
- * practice (one key per active wallet per month); future scale can move
- * to materialized monthly counters if the scan latency becomes visible.
+ * Hard constraints
+ *   - DO NOT touch subscription records (`sub:*`) — provisioned-only
+ *     wallets, email pseudos, sandbox testers, admin grants all show
+ *     up there and should not inflate counts.
+ *   - DO NOT echo per-account data — only aggregate counters leave
+ *     this route.
+ *   - DO exclude sandbox txs (handled inside the rollup).
  */
 import { NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
-import type { RelayedTx } from "@/app/lib/db";
+import type { StatsSummary } from "@/app/api/cron/stats-rollup/route";
 
 const CACHE_HEADER = "public, s-maxage=60, stale-while-revalidate=120";
 
-// CORS — public dashboards may consume this from any origin. The
-// response carries only aggregate counts (no per-account fields), so
-// `*` is acceptable here.
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -48,147 +45,46 @@ const RESPONSE_HEADERS: Record<string, string> = {
   ...CORS_HEADERS,
 };
 
-interface ChainAgg {
-  settlements: number;
-  volumeUsd: number;
-}
+const SUMMARY_KEY = "stats:public:summary";
 
 interface PublicStats {
   totalSettlements: number;
   uniquePayers: number;
   uniqueRecipients: number;
   totalVolumeUsd: number;
-  perChain: Record<string, ChainAgg>;
+  perChain: Record<string, { settlements: number; volumeUsd: number }>;
   asOf: string;
 }
 
-const SANDBOX_PREFIXES = ["q402_test_", "q402_sandbox_"];
-
-function isSandboxRow(tx: RelayedTx): boolean {
-  if (typeof tx.apiKey !== "string") return false;
-  return SANDBOX_PREFIXES.some((prefix) => tx.apiKey.startsWith(prefix));
-}
-
-function rowAmountUsd(tx: RelayedTx): number {
-  // USDC / USDT / RLUSD all peg to USD-1, so the formatted token amount
-  // doubles as the dollar value. Token amounts are written as either
-  // a number (low-precision) or a string (preserves 18-dec precision).
-  // Number() handles both; non-finite or sub-zero values are dropped.
-  const value = typeof tx.tokenAmount === "string"
-    ? Number(tx.tokenAmount)
-    : tx.tokenAmount;
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-async function loadRelayedTxKey(key: string): Promise<RelayedTx[]> {
-  // Newer rows live in a Redis LIST (see recordRelayedTx in app/lib/db.ts).
-  // Older rows are a JSON array stored at the same key. Try LIST first;
-  // WRONGTYPE → fall back to the legacy shape so we don't drop history.
-  try {
-    const list = await kv.lrange<RelayedTx>(key, 0, -1);
-    if (list.length > 0) return list;
-  } catch {
-    /* WRONGTYPE — legacy JSON array */
-  }
-  try {
-    const arr = (await kv.get<RelayedTx[]>(key)) ?? [];
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Cursor-based SCAN page size. Same value as the network/recent route
- *  uses — small enough to keep individual round-trips under Upstash's
- *  10MB request cap regardless of namespace size. */
-const SCAN_COUNT = 200;
-const MAX_SCAN_ITERS = 10_000;
-
-async function scanRelaytxKeys(): Promise<string[]> {
-  // Cursor-based SCAN replaces `kv.keys("relaytx:*")`. The KEYS
-  // command materialises every matching key into a single Redis
-  // response — once the namespace passes a few thousand entries it
-  // exceeds Upstash's 10MB request cap and the call hard-rejects.
-  // SCAN pages the result so the request stays bounded regardless of
-  // how big the relay history grows. Same shape as the agentic-wallet-gc
-  // cron uses for its `aw:*` sweep.
-  const out: string[] = [];
-  let cursor: string | number = 0;
-  let iters = 0;
-  do {
-    const res: [string | number, string[]] = await kv.scan(cursor, {
-      match: "relaytx:*",
-      count: SCAN_COUNT,
-    });
-    cursor = res[0];
-    out.push(...res[1]);
-    iters++;
-    if (String(cursor) === "0" || iters > MAX_SCAN_ITERS) break;
-  } while (true);
-  return out;
-}
-
-async function computeStats(): Promise<PublicStats> {
-  const keys = await scanRelaytxKeys();
-
-  let totalSettlements = 0;
-  let totalVolumeUsd = 0;
-  const payers = new Set<string>();
-  const recipients = new Set<string>();
-  const perChain: Record<string, ChainAgg> = {};
-
-  for (const key of keys) {
-    const rows = await loadRelayedTxKey(key);
-    for (const tx of rows) {
-      // Defensive: skip malformed rows rather than throwing — a single
-      // corrupt history entry must not turn the whole panel into a 500.
-      // MUST run before isSandboxRow() because that helper dereferences
-      // tx.apiKey, which would itself throw on a null / non-object row.
-      if (!tx || typeof tx !== "object") continue;
-      if (isSandboxRow(tx)) continue;
-      const chain = typeof tx.chain === "string" && tx.chain.length > 0 ? tx.chain : "unknown";
-      const fromUser = typeof tx.fromUser === "string" ? tx.fromUser.toLowerCase() : "";
-      const toUser   = typeof tx.toUser   === "string" ? tx.toUser.toLowerCase()   : "";
-      const usd = rowAmountUsd(tx);
-
-      totalSettlements += 1;
-      totalVolumeUsd += usd;
-      if (fromUser) payers.add(fromUser);
-      if (toUser)   recipients.add(toUser);
-
-      const bucket = perChain[chain] ?? { settlements: 0, volumeUsd: 0 };
-      bucket.settlements += 1;
-      bucket.volumeUsd   += usd;
-      perChain[chain] = bucket;
-    }
-  }
-
-  // Round volume to 2 decimals so the response stays compact and
-  // doesn't leak floating-point dust like 1234.999999998.
-  totalVolumeUsd = Math.round(totalVolumeUsd * 100) / 100;
-  for (const k of Object.keys(perChain)) {
-    perChain[k].volumeUsd = Math.round(perChain[k].volumeUsd * 100) / 100;
-  }
-
-  return {
-    totalSettlements,
-    uniquePayers:     payers.size,
-    uniqueRecipients: recipients.size,
-    totalVolumeUsd,
-    perChain,
-    asOf: new Date().toISOString(),
-  };
-}
+const EMPTY_STATS: PublicStats = {
+  totalSettlements: 0,
+  uniquePayers: 0,
+  uniqueRecipients: 0,
+  totalVolumeUsd: 0,
+  perChain: {},
+  asOf: new Date(0).toISOString(),
+};
 
 export async function GET() {
   try {
-    const stats = await computeStats();
-    return NextResponse.json(stats, { headers: RESPONSE_HEADERS });
+    const summary = await kv.get<StatsSummary>(SUMMARY_KEY);
+    if (!summary) {
+      // First-boot path or post-incident — rollup hasn't run yet.
+      // Return an empty shape so the panel renders the schema
+      // instead of an error toast.
+      return NextResponse.json(EMPTY_STATS, { headers: RESPONSE_HEADERS });
+    }
+    const out: PublicStats = {
+      totalSettlements: summary.totalSettlements,
+      uniquePayers:     summary.uniquePayers,
+      uniqueRecipients: summary.uniqueRecipients,
+      totalVolumeUsd:   summary.totalVolumeUsd,
+      perChain:         summary.perChain,
+      asOf:             summary.computedAt,
+    };
+    return NextResponse.json(out, { headers: RESPONSE_HEADERS });
   } catch (err) {
-    // Fail soft — log server-side for diagnosis, return a generic
-    // error code with no internal detail (KV key names, stack traces,
-    // or the exception message could leak schema or env hints).
-    console.error("[stats/public] aggregation failed:", err);
+    console.error("[stats/public] read failed:", err);
     return NextResponse.json(
       { error: "stats_unavailable" },
       { status: 500, headers: { ...CORS_HEADERS, "Cache-Control": "no-store" } },
