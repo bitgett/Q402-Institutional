@@ -1012,18 +1012,29 @@ export async function advanceAfterMissedBookkeeping(
 ): Promise<RecurringRule> {
   const firedSlot = rule.nextRunAt;
   const baseline = Math.max(nowMs, firedSlot);
+  // Expected amount the rule SHOULD have sent on that slot. The marker
+  // proves a settlement happened; we don't have the on-chain receipt
+  // hash here, but for a rule whose row amounts haven't changed
+  // between the missed fire and this recovery the expected sum is the
+  // best estimate of what actually moved. This makes the dashboard's
+  // running totalSpentUsd reflect reality up to "did the user edit
+  // recipient amounts after the fire" precision — close enough for a
+  // recovery path that's only meant to unblock a stuck schedule.
+  const expectedAmountUsd = rule.recipients.reduce((acc, r) => {
+    const n = Number(r.amount);
+    return Number.isFinite(n) && n > 0 ? acc + n : acc;
+  }, 0);
   const next: RecurringRule = {
     ...rule,
     lastRunAt: nowMs,
     pendingFireAt: null,
     totalFiredCount: rule.totalFiredCount + 1,
-    // totalSpentUsd intentionally NOT incremented: we don't know the
-    // exact amount that landed on-chain because the bookkeeping write
-    // that would have recorded it is the one that failed. The
-    // `lastError` line below tells the user to reconcile manually.
+    totalSpentUsd: rule.totalSpentUsd + expectedAmountUsd,
     lastError:
       "Auto-recovered: previous fire settled on-chain but bookkeeping write failed. " +
-      "Check the explorer for the fire at slot " + firedSlot + " and reconcile spend manually.",
+      "Total spent reflects the rule's expected amount ($" + expectedAmountUsd.toFixed(2) + ") " +
+      "for slot " + firedSlot + "; verify against the explorer if you've edited recipient " +
+      "amounts since.",
     nextRunAt: computeNextFireAt(rule.frequency, baseline),
   };
   await kv.set(ruleKey(rule.ownerAddr, rule.walletId, rule.ruleId), next);
