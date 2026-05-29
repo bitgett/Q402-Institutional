@@ -47,10 +47,13 @@ import {
   createRecurringRule,
   listRecurringRules,
   applyUserStatusAction,
+  getRecurringRule,
+  listRuleFires,
   isFrequencyEnum,
   RecurringValidationError,
   type FrequencyEnum,
   type RecurringRule,
+  type RuleFire,
 } from "@/app/lib/agentic-wallet-recurring";
 import { AGENTIC_CHAINS, type AgenticChainKey } from "@/app/lib/agentic-wallet-sign";
 
@@ -68,6 +71,8 @@ interface RecurringByKeyBody {
   cancelWindowHours?: number;
   // mutate
   ruleId?:            string;
+  // fires
+  limit?:             number;
 }
 
 // Project a rule to the public shape MCP / external callers should see.
@@ -168,6 +173,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   }
 
+  // ── action=fires ─────────────────────────────────────────────────────────
+  // Per-rule fire history for the agent to answer "when did rule X last
+  // fire / how much went out last week". Reads the LIST written by the
+  // recurring cron's recordRuleFireLog hook. Cap is 50 server-side.
+  if (action === "fires") {
+    if (typeof body.ruleId !== "string" || body.ruleId.length === 0) {
+      return NextResponse.json({ error: "RULE_ID_REQUIRED" }, { status: 400 });
+    }
+    const rule = await getRecurringRule(owner, walletId, body.ruleId);
+    if (!rule) {
+      return NextResponse.json({ error: "RULE_NOT_FOUND" }, { status: 404 });
+    }
+    if (rule.ownerAddr !== owner || rule.walletId !== walletId) {
+      // Cross-wallet probe — treat as not-found so we don't leak existence.
+      return NextResponse.json({ error: "RULE_NOT_FOUND" }, { status: 404 });
+    }
+    const limitRaw = typeof body.limit === "number" ? body.limit : 50;
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0
+      ? Math.min(50, Math.floor(limitRaw))
+      : 50;
+    const fires: RuleFire[] = await listRuleFires(owner, walletId, body.ruleId, limit);
+    return NextResponse.json({
+      walletId,
+      ruleId: body.ruleId,
+      rule: projectRule(rule),
+      fires,
+      count: fires.length,
+    });
+  }
+
   // ── action=cancel | pause | resume ───────────────────────────────────────
   if (action === "cancel" || action === "pause" || action === "resume") {
     if (typeof body.ruleId !== "string" || body.ruleId.length === 0) {
@@ -259,7 +294,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {
       error: "INVALID_ACTION",
-      message: 'action must be one of: "create", "list", "cancel", "pause", "resume".',
+      message: 'action must be one of: "create", "list", "fires", "cancel", "pause", "resume".',
     },
     { status: 400 },
   );
