@@ -14,10 +14,14 @@
  * claim so the next retry starts fresh instead of being shadow-locked
  * to an empty "processing" record.
  *
- * Phase 2 scope:
+ * Scope:
  *   - Multichain only (gated by `hasMultichainScope`). BNB-only trial
  *     keys cannot batch — single-recipient /send is sufficient there.
- *   - Owner EIP-191 signature auth. API-key (MCP) is Phase 3.
+ *   - Auth modes mirror /send:
+ *       (A/B) Owner EIP-191 signature with intent-bound challenge.
+ *       (C)   apiKey only — server-mediated MCP path. The intent fp is
+ *             still computed and used for idempotency / cache; the
+ *             signature gate is replaced by an apiKey ↔ owner lookup.
  *   - Limits enforced: every row honors perTxMaxUsd; the running
  *     dailyLimitUsd budget covers the whole batch sum atomically via
  *     chargeAgainstDailyLimit + refundDailySpend on failure.
@@ -30,19 +34,20 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
+import { ethers } from "ethers";
 import { randomBytes } from "node:crypto";
 
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import {
-  getActiveAgenticWallet,
   decryptPrivateKey,
   isKeystoreReady,
   chargeAgainstDailyLimit,
   refundDailySpend,
+  resolveWallet,
 } from "@/app/lib/agentic-wallet";
-import { getSubscription, hasMultichainScope } from "@/app/lib/db";
+import { getSubscription, hasMultichainScope, getApiKeyRecord } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
@@ -71,11 +76,18 @@ interface BatchBody {
   chain?: string;
   token?: string;
   recipients?: RecipientRow[];
-  /** Lowercased Agent Wallet address to source the batch from. Required. */
+  /**
+   * Lowercased Agent Wallet address to source the batch from. Required
+   * in owner-sig mode (intent is bound to it); optional in Mode C
+   * (apiKey) where omitting falls through to the owner's default wallet.
+   */
   walletId?: string;
+  // Mode A/B — intent-bound owner signature
   ownerAddress?: string;
   nonce?: string;
   signature?: string;
+  // Mode C — server-mediated MCP path, apiKey only
+  apiKey?: string;
 }
 
 interface BatchResultRow {
@@ -143,58 +155,119 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const rows = body.recipients.map((r) => ({ to: r.to as string, amount: r.amount as string }));
 
-  if (!body.walletId || typeof body.walletId !== "string") {
-    return NextResponse.json({ error: "walletId_required" }, { status: 400 });
-  }
-  const walletId = body.walletId.toLowerCase();
-
-  // ── Auth — intent-bound challenge over the full recipient set + wallet ─
-  // walletId is now part of the intent so a signature bound to wallet A
-  // cannot drain wallet B's balance.
+  // ── Auth ───────────────────────────────────────────────────────────────
+  // Mode A/B (owner sig) requires walletId — the intent message binds to
+  // it so a signature scoped to wallet A can't drain wallet B. Mode C
+  // (apiKey) makes walletId optional; the route falls through to the
+  // owner's default wallet, mirroring /send.
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "agentic-wallet-batch", 10, 60))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
-  // Fingerprint mixes walletId so two wallets settling identical recipient
-  // sets share no cache slot.
-  const rowsHash = agenticBatchFingerprint(
-    `${(body.ownerAddress ?? "").toLowerCase()}:${walletId}`,
+
+  const isModeC = typeof body.apiKey === "string" && body.apiKey.length > 0;
+  const requestedWalletId =
+    typeof body.walletId === "string" && body.walletId.length > 0
+      ? body.walletId.toLowerCase()
+      : null;
+
+  let owner: string;
+  if (isModeC) {
+    const presented = body.apiKey!;
+    if (presented.startsWith("q402_test_")) {
+      return NextResponse.json(
+        { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet batches." },
+        { status: 401 },
+      );
+    }
+    const rec = await getApiKeyRecord(presented);
+    if (!rec || !rec.active) {
+      return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
+    }
+    if (typeof body.ownerAddress === "string" && body.ownerAddress.length > 0) {
+      if (!isHexAddress(body.ownerAddress)) {
+        return NextResponse.json({ error: "INVALID_OWNER" }, { status: 400 });
+      }
+      if (rec.address.toLowerCase() !== body.ownerAddress.toLowerCase()) {
+        return NextResponse.json(
+          { error: "OWNER_MISMATCH", message: "apiKey is not bound to the supplied ownerAddress." },
+          { status: 403 },
+        );
+      }
+    }
+    owner = rec.address.toLowerCase();
+  } else {
+    if (!requestedWalletId) {
+      return NextResponse.json({ error: "walletId_required" }, { status: 400 });
+    }
+    const intentFp = agenticBatchFingerprint(
+      `${(body.ownerAddress ?? "").toLowerCase()}:${requestedWalletId}`,
+      body.chain,
+      body.token,
+      rows,
+    );
+    const authResult = await requireIntentAuth({
+      address: body.ownerAddress ?? null,
+      challenge: body.nonce ?? null,
+      signature: body.signature ?? null,
+      action: "agentic.batch",
+      intent: {
+        walletId: requestedWalletId,
+        chain: body.chain,
+        token: body.token,
+        rows: String(rows.length),
+        fp: intentFp,
+      },
+    });
+    if (typeof authResult !== "string") {
+      return NextResponse.json(
+        { error: authResult.error, code: authResult.code },
+        { status: authResult.status },
+      );
+    }
+    owner = authResult;
+  }
+
+  // ── Pre-flight: keystore + wallet ───────────────────────────────────────
+  const ready = isKeystoreReady();
+  if (!ready.ok) {
+    console.error("[agentic-wallet/batch] keystore unavailable:", ready.reason);
+    return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
+  }
+
+  const wallet = await resolveWallet(owner, requestedWalletId);
+  if (!wallet) {
+    return NextResponse.json(
+      {
+        error: "AGENTIC_WALLET_NOT_FOUND",
+        message: requestedWalletId
+          ? `No active wallet with id ${requestedWalletId} for this owner.`
+          : "Create an Agent Wallet in your dashboard before calling /batch.",
+      },
+      { status: 404 },
+    );
+  }
+  // Re-check soft-delete defensively (resolveWallet may have returned a
+  // stale-by-time record).
+  if (wallet.deletedAt && Date.now() >= wallet.deletedAt) {
+    return NextResponse.json({ error: "AGENTIC_WALLET_ARCHIVED" }, { status: 410 });
+  }
+  const walletId = wallet.address.toLowerCase();
+
+  // ── Idempotency check. Fingerprint mixes scope (apiKey hash vs
+  // "owner-sig") so a Trial-key failure doesn't shadow-lock a Multichain
+  // retry of the same intent, and apiKey rotation produces a fresh slot.
+  // For owner-sig calls the scope is constant — all owner-sig requests
+  // for the same (wallet, chain, token, recipients) hash to one slot.
+  const scope = isModeC
+    ? `apikey_${ethers.keccak256(ethers.toUtf8Bytes(body.apiKey!)).slice(2, 18)}`
+    : "owner-sig";
+  const fp = agenticBatchFingerprint(
+    `${owner}:${walletId}:${scope}`,
     body.chain,
     body.token,
     rows,
   );
-  const authResult = await requireIntentAuth({
-    address: body.ownerAddress ?? null,
-    challenge: body.nonce ?? null,
-    signature: body.signature ?? null,
-    action: "agentic.batch",
-    intent: {
-      walletId,
-      chain: body.chain,
-      token: body.token,
-      rows: String(rows.length),
-      fp: rowsHash,
-    },
-  });
-  if (typeof authResult !== "string") {
-    return NextResponse.json(
-      { error: authResult.error, code: authResult.code },
-      { status: authResult.status },
-    );
-  }
-  const owner = authResult;
-
-  // ── Idempotency check FIRST. A retry of a previously-completed batch
-  // returns the cached record before we touch limits / subscription /
-  // the keystore — the original call already paid those costs. This
-  // also closes the "Safe to retry" double-send hole on timeout: even
-  // if the agent retries with the exact same body (after re-minting
-  // a fresh action-challenge), no second batch fires while the cache
-  // window is alive.
-  //
-  // Reuses `rowsHash` computed above so the auth's bound `fp` matches
-  // the cache lookup — single source of truth, no drift.
-  const fp = rowsHash;
   const key = batchKey(fp);
   const cached = await kv.get<BatchRecord>(key);
   if (cached) {
@@ -209,18 +282,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       { status: 200 },
     );
-  }
-
-  // ── Pre-flight: keystore + wallet + sub + limits ────────────────────────
-  const ready = isKeystoreReady();
-  if (!ready.ok) {
-    console.error("[agentic-wallet/batch] keystore unavailable:", ready.reason);
-    return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
-  }
-
-  const wallet = await getActiveAgenticWallet(owner, walletId);
-  if (!wallet) {
-    return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
 
   // Per-tx max enforced per row; the running daily total is enforced
@@ -247,14 +308,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 402 },
     );
   }
-  const apiKeyMaybe = sub?.apiKey;
-  if (!apiKeyMaybe) {
-    return NextResponse.json({ error: "NO_API_KEY" }, { status: 402 });
+  // Resolve apiKey:
+  //   Mode C presented key — must equal the owner's current live
+  //   multichain key (batch is multichain-only, so trial doesn't apply
+  //   here even on BNB).
+  //   Mode A/B (owner-sig) auto-picks sub.apiKey.
+  let apiKey: string;
+  if (isModeC) {
+    const presented = body.apiKey!;
+    if (presented !== sub?.apiKey) {
+      return NextResponse.json(
+        {
+          error: "STALE_API_KEY",
+          message:
+            "This apiKey is no longer the live multichain key (or it's a trial key; " +
+            "batch requires the paid multichain key). Rotate to the current key in your " +
+            "dashboard and retry.",
+        },
+        { status: 401 },
+      );
+    }
+    apiKey = presented;
+  } else {
+    const apiKeyMaybe = sub?.apiKey;
+    if (!apiKeyMaybe) {
+      return NextResponse.json({ error: "NO_API_KEY" }, { status: 402 });
+    }
+    apiKey = apiKeyMaybe;
   }
-  // Snapshot post-guard so the closure in `processRow` sees a
-  // narrowed `string` (TS doesn't propagate the narrow through
-  // closures of a let-binding).
-  const apiKey: string = apiKeyMaybe;
 
   const relayerKey = loadRelayerKey();
   if (!relayerKey.ok) {
@@ -392,12 +473,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Row 0 commits the delegation. Rows 1..N parallelise against the
-  // now-delegated EOA. If row 0 fails entirely the whole batch is
-  // effectively a no-op (no delegation, no settlements) — fail fast
-  // rather than fan out 20 doomed signatures.
+  // now-delegated EOA. If row 0 fails entirely we abort: the EIP-7702
+  // delegation never landed, so any subsequent row would attempt a
+  // type-4 TX against a still-vanilla EOA, producing N more
+  // deterministic failures while burning N more signing rounds + relay
+  // calls + daily-cap reservation. The pending rows are marked
+  // ABORTED_AFTER_ROW_0_FAILURE so the AI surfaces "20 didn't fire"
+  // instead of "1 failed, 19 succeeded" (which would be a lie — none
+  // succeeded). The daily-cap reservation reconciliation below refunds
+  // the unspent portion automatically.
   const firstResult = await processRow(rows[0]);
   let restResults: BatchResultRow[] = [];
-  if (rows.length > 1) {
+  const row0Aborted = !firstResult.ok;
+  if (row0Aborted) {
+    for (let i = 1; i < rows.length; i++) {
+      restResults.push({
+        to: rows[i].to,
+        amount: rows[i].amount,
+        ok: false,
+        error: "ABORTED_AFTER_ROW_0_FAILURE",
+      });
+    }
+  } else if (rows.length > 1) {
     restResults = await Promise.all(rows.slice(1).map(processRow));
   }
   const results: BatchResultRow[] = [firstResult, ...restResults];
@@ -446,6 +543,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       results,
       settled: successful.length,
       failed: results.length - successful.length,
+      aborted: row0Aborted,
       idempotent: false,
       startedAt: finalRecord.startedAt,
       finishedAt: finalRecord.finishedAt,
