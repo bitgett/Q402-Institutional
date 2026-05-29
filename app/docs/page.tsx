@@ -152,8 +152,8 @@ export default function DocsPage() {
               <span className="text-white/30 text-xs">EIP-712 + EIP-7702</span>
             </div>
             <h1 className="text-3xl font-bold mb-3">Q402 Developer Docs</h1>
-            <p className="text-white/50 text-sm leading-relaxed max-w-xl">
-              Everything you need to add gasless USDC payments to your product. One API. Any EVM chain. Zero gas for your users.
+            <p className="text-white/65 text-sm leading-relaxed max-w-xl">
+              Gasless stablecoin payments across 9 EVM chains. One API key, one signed request.
             </p>
             <div className="flex items-center gap-6 mt-6">
               <a href="#quickstart" className="inline-flex items-center gap-2 bg-yellow text-navy text-xs font-bold px-5 py-2.5 rounded-full hover:bg-yellow-hover transition-colors">
@@ -169,10 +169,9 @@ export default function DocsPage() {
 
           {/* ── OVERVIEW ── */}
           <Section id="overview" title="Overview">
-            <p className="text-white/60 text-base leading-relaxed mb-6">
-              Q402 is a <span className="text-white font-medium">managed relay layer for stablecoin payments</span> across EVM chains.
-              Your product sends USDC, USDT, or RLUSD from a user&apos;s wallet without the user ever holding a native token —
-              Q402&apos;s relayer submits the on-chain transaction and pays the gas.
+            <p className="text-white/75 text-base leading-relaxed mb-6">
+              A managed relay for USDC / USDT / RLUSD across 9 EVM chains.
+              Users hold no native token; Q402 submits the TX and pays the gas.
             </p>
 
             {/* Architecture — one picture before any code */}
@@ -200,20 +199,11 @@ export default function DocsPage() {
               </pre>
             </div>
 
-            <p className="text-white/45 text-sm leading-relaxed mb-6">
-              Three moving parts: an <span className="text-white/70">intent</span> that locks the quote before payment,
-              an <span className="text-white/70">activate</span> step that scans the on-chain transfer and issues credits,
-              and a <span className="text-white/70">relay</span> that submits gasless payments for your users.
-              Every relay can fire a signed webhook and is recorded for audit.
+            <p className="text-white/60 text-sm leading-relaxed mb-6">
+              <span className="text-white/85">intent</span> locks the quote ·{" "}
+              <span className="text-white/85">activate</span> grants credits after the on-chain transfer ·{" "}
+              <span className="text-white/85">relay</span> submits each payment. Every relay can fire an HMAC-signed webhook.
             </p>
-
-            {/* What is an API? — plain language */}
-            <div className="bg-white/[0.03] border border-white/8 rounded-xl p-5 mb-6">
-              <p className="text-xs text-white/30 uppercase tracking-widest font-semibold mb-2">What is an API?</p>
-              <p className="text-white/55 text-sm leading-relaxed">
-                An API is just a URL your server calls. Like ordering food at a restaurant — you send a request (&quot;here&apos;s a user&apos;s signed transaction&quot;), Q402&apos;s server handles the work, and sends back a result (&quot;done, txHash: 0xabc...&quot;). No blockchain expertise needed on your end.
-              </p>
-            </div>
 
             <div className="grid sm:grid-cols-3 gap-4 mb-8">
               {[
@@ -291,27 +281,27 @@ export default function DocsPage() {
 
           {/* ── QUICK START ── */}
           <Section id="quickstart" title="Quick Start">
-            <p className="text-white/55 text-sm mb-6">
-              Get your first gasless transaction running in under 5 minutes. Two API key types exist — pick the one that matches your use case.
+            <p className="text-white/65 text-sm mb-6">
+              Pick a key, load the SDK, call <code className="text-yellow text-xs">pay()</code>. Under 5 minutes.
             </p>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">0 · Trial key vs Multichain key</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">0 · Trial key vs Multichain key</h3>
             <div className="grid sm:grid-cols-2 gap-3 mb-6">
               <div className="rounded-xl border border-yellow/20 bg-yellow/[0.04] px-4 py-3">
                 <p className="text-yellow font-semibold text-sm mb-1">Trial API Key</p>
-                <p className="text-white/60 text-xs leading-relaxed">
-                  Free Trial · BNB Chain only · USDC / USDT · 2,000 TX sponsored credits · gas paid by Q402 relayer. Sign up at <a className="text-yellow hover:underline" href="/event">/event</a>.
+                <p className="text-white/70 text-xs leading-relaxed">
+                  BNB only · 2,000 sponsored TX · Q402 pays gas. <a className="text-yellow hover:underline" href="/event">/event</a>.
                 </p>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-                <p className="text-white/80 font-semibold text-sm mb-1">Multichain API Key</p>
-                <p className="text-white/60 text-xs leading-relaxed">
-                  Paid plan · 9 chains (Avalanche · BNB · Ethereum · X Layer · Stable · Mantle · Injective · Monad · Scroll) · USDC, USDT, Ethereum RLUSD · per-chain Gas Tank. Activate at <a className="text-yellow hover:underline" href="/payment">/payment</a>.
+                <p className="text-white/85 font-semibold text-sm mb-1">Multichain API Key</p>
+                <p className="text-white/70 text-xs leading-relaxed">
+                  9 chains · USDC / USDT / RLUSD (eth) · self-funded Gas Tank. <a className="text-yellow hover:underline" href="/payment">/payment</a>.
                 </p>
               </div>
             </div>
             <Callout type="tip">
-              Trial keys reject any non-BNB chain with HTTP 403 + <code className="text-orange-300">TRIAL_BNB_ONLY</code>. Use the Multichain key for Monad, Ethereum, Avalanche, and the rest.
+              Trial keys reject non-BNB with <code className="text-orange-300">TRIAL_BNB_ONLY</code>. Use Multichain for non-BNB chains.
             </Callout>
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">1 · Load the SDK</h3>
@@ -353,9 +343,9 @@ const result = await q402.pay({
 // result → { success: true, txHash: "0xabc...", tokenAmount: "50", chain: "bnb" }
 `} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">3 · Injective EVM (USDT-only)</h3>
-            <p className="text-white/55 text-sm mb-3">
-              Native USDC via Circle CCTP is announced for Q2 2026; until then, Injective uses USDT as the only payment token. The SDK gates this explicitly — passing <code className="text-orange-300">token: &quot;USDC&quot;</code> with <code className="text-orange-300">chain: &quot;injective&quot;</code> throws before any signature is requested, and the relay route enforces the same allowlist server-side.
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">3 · Injective EVM (USDT-only)</h3>
+            <p className="text-white/70 text-sm mb-3">
+              USDT only until Circle CCTP USDC (announced Q2 2026). SDK + server both reject <code className="text-orange-300">token: &quot;USDC&quot;</code> on Injective.
             </p>
             <CodeBlock lang="javascript" code={`const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
@@ -368,9 +358,9 @@ const result = await q402.pay({
   token:  "USDT",   // required — USDC not yet supported on Injective
 });`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Ethereum RLUSD (NY DFS regulated)</h3>
-            <p className="text-white/55 text-sm mb-3">
-              RLUSD (Ripple USD) is a NY DFS-regulated stablecoin issued by Standard Custody &amp; Trust, a Ripple subsidiary. It is supported on Ethereum mainnet only — Ripple has not deployed RLUSD on the XRPL EVM Sidechain yet, and XRPL native is non-EVM. Passing <code className="text-orange-300">token: &quot;RLUSD&quot;</code> with any chain other than <code className="text-orange-300">&quot;eth&quot;</code> throws in the SDK and is rejected 400 by the relay route. Decimals are <strong>18</strong> (not 6 like USDC/USDT), but the SDK handles the conversion via <code className="text-orange-300">ethers.parseUnits</code> — pass the amount as a human-readable decimal string just like any other token.
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">4 · Ethereum RLUSD (NY DFS regulated)</h3>
+            <p className="text-white/70 text-sm mb-3">
+              Ripple USD, NY DFS regulated. <strong>Ethereum mainnet only</strong> — rejects on any other chain. Decimals = 18; the SDK handles conversion, pass amount as a decimal string.
             </p>
             <CodeBlock lang="javascript" code={`const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
@@ -398,23 +388,23 @@ const result = await q402.pay({
 console.log("Paid! TX:", result.txHash);`} />
 
             <Callout type="tip">
-              The SDK handles signing <em>and</em> relay in one call — no separate backend step needed. The user never touches BNB, ETH, or AVAX. Gas is deducted from your pre-funded gas pool automatically.
+              One call signs + relays. User holds no native token. Gas comes from your pool.
             </Callout>
           </Section>
 
           {/* ── MCP for AI Clients ── */}
           {/* id retained as "claude-mcp" for backlink stability — visible title is canonical MCP. */}
           <Section id="claude-mcp" title="MCP for AI Clients">
-            <p className="text-white/55 text-sm mb-6">
-              Q402 ships as a Model Context Protocol server so Claude, Codex, Cursor, Cline, and any other MCP-compatible AI client can quote and (optionally) settle gasless USDC, USDT, and RLUSD payments directly from a chat. The package is{" "}
-              <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>{" "}
-              on npm and{" "}
-              <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a> on GitHub.
+            <p className="text-white/70 text-sm mb-6">
+              An MCP server for Claude / Codex / Cursor / Cline.{" "}
+              <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
+              {" · "}
+              <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a>.
             </p>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">1 · Install</h3>
-            <p className="text-white/55 text-sm mb-3">
-              Register the MCP server with your client. Same package, different one-liner per client — no secrets in any of these snippets.
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">1 · Install</h3>
+            <p className="text-white/70 text-sm mb-3">
+              Same package, one snippet per client. No secrets here.
             </p>
             <CodeBlock lang="bash" code={`# Claude Code / Claude Desktop
 claude mcp add q402 -- npx -y @quackai/q402-mcp
@@ -433,17 +423,18 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
   }
 }`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2 · First-time setup — ask your AI</h3>
-            <p className="text-white/55 text-sm mb-3">
-              After restarting the client, say: <strong className="text-white/85">&ldquo;Set up Q402&rdquo;</strong>. The agent calls <code className="text-yellow text-xs">q402_doctor</code>, which offers to create <code className="text-yellow text-xs">~/.q402/mcp.env</code> with placeholder values, opens it in your editor, and walks you through pasting in your real API key and wallet private key — <em>in the file, never in chat</em>. The MCP server auto-loads this single file at startup, so the same setup works for every MCP client without per-client wiring.
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">2 · First-time setup — ask your AI</h3>
+            <p className="text-white/70 text-sm mb-3">
+              Restart the client, then say <strong className="text-white/90">&ldquo;Set up Q402&rdquo;</strong>. The agent runs <code className="text-yellow text-xs">q402_doctor</code> →
+              creates + opens <code className="text-yellow text-xs">~/.q402/mcp.env</code> → walks you through pasting keys <em>into the file</em>. Auto-loaded for every client.
             </p>
             <Callout type="tip">
-              🔒 Q402 never asks you to paste your private key into chat. The MCP server signs payments LOCALLY on your machine — your key never leaves your device.
+              🔒 Keys never paste into chat. Signing is local; the key never leaves your machine.
             </Callout>
 
-            <h3 id="wallet-modes" className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">3 · Wallet modes — which signing path?</h3>
-            <p className="text-white/55 text-sm mb-3">
-              Q402 supports three signing paths. Pick one when <code className="text-yellow text-xs">q402_doctor</code> asks. You can change later by editing <code className="text-yellow text-xs">~/.q402/mcp.env</code> and restarting your client.
+            <h3 id="wallet-modes" className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">3 · Wallet modes — which signing path?</h3>
+            <p className="text-white/70 text-sm mb-3">
+              Three paths. <code className="text-yellow text-xs">q402_doctor</code> asks once; change later in <code className="text-yellow text-xs">~/.q402/mcp.env</code>.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
               <div className="rounded-xl border p-6 relative" style={{ background: "rgba(74,222,128,0.04)", borderColor: "rgba(74,222,128,0.30)" }}>
@@ -535,17 +526,19 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </table>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">4 · Sandbox vs live mode</h3>
-            <p className="text-white/55 text-sm mb-3">
-              By default <code className="text-yellow text-xs">q402_pay</code> runs in <strong>sandbox</strong> — it returns a fake transaction hash with <code className="text-yellow text-xs">success: false</code> and <code className="text-yellow text-xs">sandbox: true</code>, no funds move, no gas-tank credit is consumed. To go live you need an API key plus a signing path. Q402 supports three signing modes — pick ONE:
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">4 · Sandbox vs live mode</h3>
+            <p className="text-white/70 text-sm mb-3">
+              Default is <strong>sandbox</strong> — fake txHash, <code className="text-yellow text-xs">sandbox: true</code>, no funds move.
+              Live = API key + a signing path. Pick ONE mode:
             </p>
-            <ul className="text-white/55 text-sm mb-3 space-y-1.5 list-disc pl-5">
-              <li><strong className="text-white/70">Mode A</strong> — set <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code> to your MetaMask EOA&apos;s hex private key. Simplest, but after the first payment that EOA shows &ldquo;Smart account&rdquo; in MetaMask (EIP-7702 delegation, reversible via <code className="text-yellow text-xs">q402_clear_delegation</code>).</li>
-              <li><strong className="text-white/70">Mode B</strong> — set <code className="text-yellow text-xs">Q402_AGENTIC_PRIVATE_KEY</code> to an exported Agent Wallet PK from the dashboard. Signs locally just like Mode A, but the signer is your dedicated Agent Wallet — your MetaMask is never touched.</li>
-              <li><strong className="text-white/70">Mode C</strong> — paid Multichain key only, no private key on your machine. Q402 holds the AES-256-GCM-encrypted Agent Wallet key on the server and signs on your behalf. Optionally set <code className="text-yellow text-xs">Q402_AGENT_WALLET_ADDRESS</code> to pick among multiple wallets.</li>
+            <ul className="text-white/70 text-sm mb-3 space-y-1.5 list-disc pl-5">
+              <li><strong className="text-white/85">Mode A</strong> — <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code> = your MetaMask EOA. Shows &ldquo;Smart account&rdquo; in MetaMask after first use (reversible via <code className="text-yellow text-xs">q402_clear_delegation</code>).</li>
+              <li><strong className="text-white/85">Mode B</strong> — <code className="text-yellow text-xs">Q402_AGENTIC_PRIVATE_KEY</code> = exported Agent Wallet PK. Local signing; MetaMask untouched.</li>
+              <li><strong className="text-white/85">Mode C</strong> — paid Multichain key only. Q402 holds the AES-GCM-encrypted Agent Wallet key server-side. Optionally set <code className="text-yellow text-xs">Q402_AGENT_WALLET_ADDRESS</code> to pick a wallet.</li>
             </ul>
-            <p className="text-white/55 text-sm mb-3">
-              The env file <code className="text-yellow text-xs">q402_doctor</code> writes ships every secret line empty — paste only the row(s) for the mode you picked. The live-mode gate only flips once an API key + at least one valid signing path is available, so saving the template as-is stays in sandbox automatically. Set <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=0</code> to force sandbox even with real keys (e.g. for chained testing):
+            <p className="text-white/70 text-sm mb-3">
+              <code className="text-yellow text-xs">q402_doctor</code> writes the file with every secret line empty. Live mode only flips when an API key + a signing path are populated — saving the template as-is stays in sandbox.
+              <code className="text-yellow text-xs">Q402_ENABLE_REAL_PAYMENTS=0</code> forces sandbox even with real keys.
             </p>
             <CodeBlock lang="bash" code={`# ~/.q402/mcp.env — what q402_doctor creates on first install.
 # Paste your values on the right of \`=\`. Q402_ENABLE_REAL_PAYMENTS
@@ -574,32 +567,32 @@ Q402_ENABLE_REAL_PAYMENTS=1
 
 # Default Q402 deployment. Only change for self-hosted.
 Q402_RELAY_BASE_URL=https://q402.quackai.ai/api`} />
-            <p className="text-white/40 text-xs mb-6">
-              Anything missing → automatic sandbox fallback with a hint pointing at what to set. Two additional guards run regardless of mode: <code className="text-white/60">Q402_MAX_AMOUNT_PER_CALL</code> (default $200) caps any single call, and <code className="text-white/60">Q402_ALLOWED_RECIPIENTS</code> optionally restricts to an address allowlist.
+            <p className="text-white/55 text-xs mb-6">
+              Missing config → sandbox fallback with a hint. Two extra guards: <code className="text-white/80">Q402_MAX_AMOUNT_PER_CALL</code> (default $200) and <code className="text-white/80">Q402_ALLOWED_RECIPIENTS</code> (address allowlist).
             </p>
 
             <Callout type="tip">
-              The <code className="text-yellow text-xs">q402_pay</code> tool description tells the model to ALWAYS get explicit user confirmation of recipient + amount in chat before invoking. Combined with the sandbox default + cap + allowlist, that gives four layers of safety before any wei moves.
+              <code className="text-yellow text-xs">q402_pay</code> requires explicit in-chat confirmation. Four guards total: confirm + sandbox default + per-call cap + allowlist.
             </Callout>
           </Section>
 
           {/* ── TRUST RECEIPT ── */}
           <Section id="trust-receipt" title="Trust Receipt">
-            <p className="text-white/55 text-sm mb-6">
-              Every successful Q402 settlement produces a <strong className="text-white/80">Trust Receipt</strong> — a verifiable proof page anchored to the on-chain settlement, signed by the relayer EOA, and recoverable in any browser without trusting our UI. Receipts are how AI agents communicate provable settlement state to each other and to humans.
+            <p className="text-white/70 text-sm mb-6">
+              A verifiable proof page for every Q402 settlement — signed by the relayer EOA, recoverable in any browser.
             </p>
 
             <h3 className="text-lg font-semibold mb-3 mt-8">What&apos;s on a receipt</h3>
-            <ul className="text-white/55 text-sm space-y-2 mb-6 list-disc pl-5">
-              <li><strong className="text-white/80">Settlement facts</strong> — payer, recipient, amount, chain, EIP method (eip7702 / eip3009 etc.).</li>
-              <li><strong className="text-white/80">On-chain proof</strong> — tx hash, block number, gas sponsored by Q402, link to the relevant explorer.</li>
-              <li><strong className="text-white/80">Cryptographic signature</strong> — EIP-191 ECDSA over a canonical hash of the settlement subset, signed by the relayer wallet. Click <code className="text-yellow text-xs">Verify signature</code> on the page and recovery runs locally in your browser.</li>
-              <li><strong className="text-white/80">Live delivery trace</strong> — webhook delivery state polls in real time. Pending → delivered (200 OK) or failed (with retry count + last status code). Surfaces both delivery success AND the actual response code your endpoint returned.</li>
+            <ul className="text-white/70 text-sm space-y-2 mb-6 list-disc pl-5">
+              <li><strong className="text-white/85">Settlement facts</strong> — payer, recipient, amount, chain, EIP method.</li>
+              <li><strong className="text-white/85">On-chain proof</strong> — tx hash, block, sponsored gas, explorer link.</li>
+              <li><strong className="text-white/85">Signature</strong> — EIP-191 ECDSA over the canonical hash, recoverable locally in your browser.</li>
+              <li><strong className="text-white/85">Delivery trace</strong> — webhook state, retry count, last response code.</li>
             </ul>
 
             <h3 className="text-lg font-semibold mb-3 mt-8">Receipt URL</h3>
-            <p className="text-white/55 text-sm mb-3">
-              Every <code className="text-yellow text-xs">/api/relay</code> success response now includes <code className="text-yellow text-xs">receiptId</code> + <code className="text-yellow text-xs">receiptUrl</code>:
+            <p className="text-white/70 text-sm mb-3">
+              <code className="text-yellow text-xs">/api/relay</code> responses include <code className="text-yellow text-xs">receiptId</code> + <code className="text-yellow text-xs">receiptUrl</code>:
             </p>
             <CodeBlock lang="json" code={`{
   "success":      true,
@@ -610,13 +603,13 @@ Q402_RELAY_BASE_URL=https://q402.quackai.ai/api`} />
   "receiptId":    "rct_afa5f50bc49a65ebba3b28ab",
   "receiptUrl":   "https://q402.quackai.ai/receipt/rct_afa5f50bc49a65ebba3b28ab"
 }`} />
-            <p className="text-white/55 text-sm mb-6">
-              The same fields are mirrored in the webhook payload, so a downstream consumer can correlate the on-chain tx with its public proof URL without a second lookup.
+            <p className="text-white/70 text-sm mb-6">
+              Mirrored in the webhook payload — no second lookup needed.
             </p>
 
             <h3 className="text-lg font-semibold mb-3 mt-8">JSON endpoint</h3>
-            <p className="text-white/55 text-sm mb-3">
-              For machine consumption (e.g., another agent running a verification step), the receipt is also reachable as JSON:
+            <p className="text-white/70 text-sm mb-3">
+              Machine-readable for downstream verification:
             </p>
             <CodeBlock lang="bash" code={`curl https://q402.quackai.ai/api/receipt/rct_afa5f50bc49a65ebba3b28ab`} />
             <p className="text-white/55 text-sm mb-6">
@@ -654,73 +647,64 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
 
           {/* ── GAS POOL ── */}
           <Section id="gaspool" title="Gas Pool">
-            <p className="text-white/55 text-sm mb-6">
-              Q402 uses a gas pool model. You deposit native tokens (BNB, ETH, MNT, AVAX, INJ, OKB, MON, or USDT0 on Stable; Scroll uses ETH) into a single Q402-managed Gas Tank address that is shared across all customers — your balance is tracked off-chain, per wallet, in our ledger. Every time a user transaction is relayed, the gas fee is automatically deducted from your per-wallet balance.
+            <p className="text-white/70 text-sm mb-6">
+              Deposit native tokens into your per-wallet Gas Tank. Every relay deducts the actual gas cost.
             </p>
 
             <div className="grid sm:grid-cols-2 gap-4 mb-6">
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-yellow text-xs font-semibold mb-2">Deposit</div>
-                <p className="text-xs text-white/50 leading-relaxed">Send native tokens (BNB / ETH / MNT / AVAX / INJ / OKB / MON / USDT0 on Stable; Scroll uses ETH) to the Q402 Gas Tank address shown in your dashboard. Your balance is tracked per wallet address. Note: the Gas Tank is a separate cold wallet from the hot relayer — never send funds to the relayer address directly.</p>
+                <p className="text-xs text-white/65 leading-relaxed">Send BNB / ETH / AVAX / OKB / MNT / INJ / MON (or USDT0 on Stable) to the Gas Tank address on the dashboard. The Tank is a cold wallet, NOT the relayer — never send to the relayer directly.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-blue-400 text-xs font-semibold mb-2">Auto-deduction</div>
-                <p className="text-xs text-white/50 leading-relaxed">Each relayed transaction deducts the actual gas cost in native tokens. Balances update in real time.</p>
+                <p className="text-xs text-white/65 leading-relaxed">Per-relay native-token deduction, real-time balance.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
                 <div className="text-green-400 text-xs font-semibold mb-2">Withdraw</div>
-                <p className="text-xs text-white/50 leading-relaxed">Withdrawals are processed manually by Q402 operations. Contact business@quackai.ai to request a refund. Funds always remain yours.</p>
+                <p className="text-xs text-white/65 leading-relaxed">Manual via business@quackai.ai. Funds remain yours.</p>
               </div>
             </div>
 
             <Callout type="warn">
-              If your gas pool is empty, transactions will fail. Monitor the balance in your dashboard — and opt in to TX-credit email alerts (fire at 20 % / 10 % remaining) from the dashboard&apos;s Alerts panel. Top up via the dashboard or send native tokens directly to the Gas Tank address.
+              Empty Gas Tank → relays fail. Set 20% / 10% email alerts from the dashboard.
             </Callout>
           </Section>
 
           {/* ── EIP-7702 DELEGATION ── */}
           <Section id="eip-7702-delegation" title="EIP-7702 Delegation">
-            <p className="text-white/55 text-sm mb-5 leading-relaxed">
-              Q402 uses <strong className="text-white/80">EIP-7702 set-code delegation</strong>{" "}
-              (Pectra) so your wallet can settle gasless payments without deploying a smart
-              account per user. The delegation lives on your EOA, persists across payments
-              (so the next one is gas-efficient), and you can inspect or clear it anytime.
+            <p className="text-white/70 text-sm mb-5 leading-relaxed">
+              <strong className="text-white/90">EIP-7702 set-code delegation</strong> (Pectra) lets your EOA settle gasless
+              payments without a per-user smart-account deploy. Persists across payments, reversible anytime.
             </p>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">
               Inspect or clear
             </h3>
-            <p className="text-white/55 text-sm mb-3 leading-relaxed">
-              <strong className="text-white/85">From your AI client (MCP).</strong>{" "}
-              Once <code className="text-yellow text-xs">@quackai/q402-mcp</code> is installed in Claude
-              Desktop / Codex / Cursor / Cline, ask your AI in plain English:
+            <p className="text-white/70 text-sm mb-3 leading-relaxed">
+              <strong className="text-white/90">From your AI client (MCP)</strong> — ask in plain English:
             </p>
             <CodeBlock lang="text" code={`"Show my Q402 wallet status."
 "Clear my Q402 delegation on BNB Chain."`} />
-            <p className="text-white/55 text-sm mb-3 mt-2 leading-relaxed">
-              <code className="text-yellow text-xs">q402_wallet_status</code> reports per-chain
-              delegation state.{" "}
-              <code className="text-yellow text-xs">q402_clear_delegation</code> signs locally with
-              your <code className="text-yellow text-xs">Q402_PRIVATE_KEY</code> and Q402 sponsors
-              the on-chain TX — you pay zero gas. Clear only when you explicitly want to reset; the
-              next Q402 payment recreates the delegation automatically.
+            <p className="text-white/70 text-sm mb-3 mt-2 leading-relaxed">
+              <code className="text-yellow text-xs">q402_wallet_status</code> reads state.{" "}
+              <code className="text-yellow text-xs">q402_clear_delegation</code> signs locally;
+              Q402 sponsors the clear TX — $0 gas. The next payment recreates the delegation automatically.
             </p>
-            <p className="text-white/55 text-sm mb-3 mt-5 leading-relaxed">
-              <strong className="text-white/85">From the terminal (CLI).</strong>
+            <p className="text-white/70 text-sm mb-3 mt-5 leading-relaxed">
+              <strong className="text-white/90">From the terminal (CLI):</strong>
             </p>
             <CodeBlock lang="bash" code={`PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs --chain bnb`} />
-            <p className="text-white/45 text-xs mt-3 mb-6 leading-relaxed">
-              Open to anyone on all 9 chains. Self-paid (~$0.001 in native gas).
+            <p className="text-white/55 text-xs mt-3 mb-6 leading-relaxed">
+              All 9 chains, self-paid (~$0.001 native gas).
             </p>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">
               Why we use it
             </h3>
-            <p className="text-white/55 text-sm leading-relaxed">
-              EIP-7702 lets Q402 settle stablecoin payments gaslessly across 9 EVM chains with a
-              single primitive, without deploying a smart account contract per user. The impl
-              contract is source-verified on Sourcify and identical across chains; the delegation
-              marker on your EOA is the only on-chain trace, and it&apos;s reversible.
+            <p className="text-white/70 text-sm leading-relaxed">
+              One primitive, 9 chains, no per-user contract deploy. Impl source-verified on Sourcify, identical across chains.
+              The delegation marker is the only on-chain trace.
             </p>
 
             <details className="mt-6 group">
@@ -751,8 +735,11 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
 
           {/* ── AUTHENTICATION ── */}
           <Section id="auth" title="Authentication">
-            <p className="text-white/55 text-sm mb-5">
-              All relay requests require your API key in the <span className="font-mono text-white/70">apiKey</span> field of the request body. Connect your wallet to get a sandbox key (<span className="font-mono text-white/70">q402_test_*</span>) immediately. There are two paths to a live key (<span className="font-mono text-white/70">q402_live_*</span>): activate the Free Trial at <a className="text-yellow hover:underline" href="/event"><span className="font-mono">/event</span></a> for a BNB-only sponsored key (2,000 TX, no card), or complete an on-chain payment on <a className="text-yellow hover:underline" href="/payment"><span className="font-mono">/payment</span></a> for a Multichain key (9 chains, per-chain Gas Tank).
+            <p className="text-white/70 text-sm mb-5">
+              API key goes in the request body&apos;s <code className="text-yellow text-xs">apiKey</code> field.
+              Sandbox keys (<code className="text-yellow text-xs">q402_test_*</code>) on wallet connect.
+              Live keys (<code className="text-yellow text-xs">q402_live_*</code>) from <a className="text-yellow hover:underline" href="/event">/event</a> (Trial, BNB)
+              or <a className="text-yellow hover:underline" href="/payment">/payment</a> (Multichain, 9 chains).
             </p>
             <CodeBlock lang="json" code={`// POST /api/relay
 {
@@ -763,7 +750,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
 }`} />
             <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
               <div className="text-xs text-yellow font-mono mb-1">q402_live_*</div>
-              <div className="text-xs text-white/50">Production key. Transactions hit mainnet. <strong className="text-white/70">Keep this key private — it is tied to your gas tank.</strong></div>
+              <div className="text-xs text-white/65">Production. Mainnet TX. <strong className="text-white/85">Keep private — tied to your Gas Tank.</strong></div>
             </div>
           </Section>
 
@@ -777,7 +764,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
                 <Badge color="#4ade80">POST</Badge>
                 <span className="font-mono text-sm text-white/70">/relay</span>
               </div>
-              <p className="text-white/50 text-sm mb-4">Submit a signed EIP-712 + EIP-7702 payload. Q402 verifies the signature and relays the transaction on-chain using your gas pool.</p>
+              <p className="text-white/65 text-sm mb-4">Submit a signed EIP-712 + EIP-7702 payload. Q402 verifies and relays on-chain.</p>
               <CodeBlock lang="json" code={`// Request body
 {
   "apiKey":      "q402_live_YOUR_API_KEY",
@@ -811,7 +798,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
                 <Badge color="#627EEA">GET</Badge>
                 <span className="font-mono text-sm text-white/70">/relay/info</span>
               </div>
-              <p className="text-white/50 text-sm mb-4">Returns the relayer (facilitator) wallet address. Call this before constructing any TransferAuthorization — the facilitator field in the EIP-712 payload must match this value on all chains.</p>
+              <p className="text-white/65 text-sm mb-4">Returns the relayer (facilitator) address. The <code className="text-yellow text-xs">facilitator</code> field in your EIP-712 payload must match.</p>
               <CodeBlock lang="json" code={`// GET /api/relay/info
 { "facilitator": "0xRelayerAddress..." }`} />
             </div>
@@ -819,8 +806,8 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
 
           {/* ── CHAIN SUPPORT ── */}
           <Section id="chains" title="Chain Support">
-            <p className="text-white/55 text-sm mb-6">
-              Same API, same SDK — regardless of which chain. Switch with one parameter.
+            <p className="text-white/70 text-sm mb-6">
+              Same API, same SDK. Switch with one parameter.
             </p>
             <div className="overflow-x-auto mb-4">
               <table className="w-full text-sm border-collapse">
@@ -867,17 +854,17 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
               </table>
             </div>
             <Callout type="info">
-              Gas costs are deducted from <strong className="text-white/80">your gas pool</strong> — not from Q402&apos;s pocket, not from your users. Ethereum gas is significantly higher; consider funding a larger pool for ETH.
+              Gas comes from <strong className="text-white/85">your Gas Tank</strong>, not Q402, not your users. Ethereum costs ~$0.19/TX — size the pool accordingly.
             </Callout>
             <Callout type="warn">
-              <strong className="text-white/80">★ Stable chain:</strong> USDT0 is both the gas token <em>and</em> the payment token on Stable (Chain ID 988). Your Gas Tank must be funded with USDT0 — not a native coin. Users also send USDT0 when making payments on this chain.
+              <strong className="text-white/85">★ Stable:</strong> USDT0 is the gas token AND the payment token. Fund the Gas Tank with USDT0, not a native coin.
             </Callout>
           </Section>
 
           {/* ── EIP-712 SIGNING ── */}
           <Section id="eip712" title="EIP-712 Signing">
-            <p className="text-white/55 text-sm mb-5">
-              Q402 uses <span className="text-white font-medium">EIP-712 typed structured data signing</span> — the same standard used by Uniswap, Compound, and major DeFi protocols. The user signs a human-readable message. No gas. No blockchain interaction.
+            <p className="text-white/70 text-sm mb-5">
+              <strong className="text-white/90">EIP-712 typed structured data</strong> (same standard as Uniswap, Compound). User signs a human-readable message — no gas, no on-chain TX.
             </p>
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">Contract Addresses &amp; Domain Names</h3>
             <CodeBlock lang="typescript" code={`// Implementation contract per chain
@@ -949,17 +936,17 @@ const signature = await signer.signTypedData(domain, types, {
   deadline:    BigInt(Math.floor(Date.now() / 1000) + 600),
 });`} />
             <Callout type="info">
-              <strong className="text-white/80">EIP-7702 note:</strong> All supported chains (BNB, ETH, Avalanche, X Layer, Stable, Mantle, Injective, Monad, Scroll) use EIP-7702 Type 4 transactions. The relayer submits one transaction that delegates impl code to the user&apos;s EOA and executes the transfer atomically. X Layer additionally supports EIP-3009 as a fallback (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
+              <strong className="text-white/85">EIP-7702:</strong> All 9 chains use Type-4 TX — atomic delegate + transfer. X Layer also supports EIP-3009 (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
             </Callout>
             <Callout type="warn">
-              <strong className="text-white/80">Stable chain:</strong> USDT0 here has 18 decimals (not 6). Use <code>ethers.parseUnits(amount, 18)</code>. The gas pool must also be funded in USDT0 — there is no separate native gas coin. (Note: USDT0 on Mantle uses the same OFT address but 6 decimals, matching the other chains.)
+              <strong className="text-white/85">Stable:</strong> USDT0 here = 18 decimals. Use <code>ethers.parseUnits(amount, 18)</code>. Gas Tank also in USDT0. (Mantle USDT0 = 6 decimals.)
             </Callout>
           </Section>
 
           {/* ── ERRORS ── */}
           <Section id="errors" title="Error Responses">
-            <p className="text-white/55 text-sm mb-3">Errors return a JSON body of the form <span className="font-mono text-white/70">{`{ "error": string, "code"?: string }`}</span>. The HTTP status conveys the failure class; <span className="font-mono text-white/70">error</span> is a human-readable message and <span className="font-mono text-white/70">code</span> (when present) is a stable machine-readable tag for programmatic handling.</p>
-            <p className="text-white/40 text-xs mb-5">Most failure modes today return only <span className="font-mono text-white/60">error</span> (no <span className="font-mono text-white/60">code</span>). The codes listed below are the stable tags currently emitted by the server.</p>
+            <p className="text-white/70 text-sm mb-3">JSON body: <code className="text-white/85">{`{ "error": string, "code"?: string }`}</code>. <code>error</code> is human-readable; <code>code</code> is a stable machine-readable tag (when present).</p>
+            <p className="text-white/55 text-xs mb-5">Codes below are the currently-emitted set; most failures return only <code>error</code>.</p>
             <div className="space-y-2">
               {[
                 { code: "(no code)",              http: "400", desc: "Generic validation failure — malformed JSON, missing required field, or chain-specific shape error. The error message describes the offending field." },
@@ -999,28 +986,28 @@ const signature = await signer.signTypedData(domain, types, {
                 a: "No. Users only need USDC (or USDT) in their wallet. All gas is paid from your gas pool. The user signs a message — that's it."
               },
               {
-                q: "Who pays the gas fees?",
-                a: "You do — from your gas pool. You deposit native tokens (BNB on BNB Chain, ETH on Ethereum, etc.) to your project's gas pool address. Q402 auto-deducts the exact gas cost per transaction. To withdraw, contact business@quackai.ai — withdrawals are processed manually by Q402 operations."
+                q: "Who pays gas?",
+                a: "You — from your per-chain Gas Tank. Withdrawals are manual via business@quackai.ai."
               },
               {
                 q: "Is Q402 non-custodial?",
-                a: "Yes. Q402 never holds user funds. The EIP-712 signature authorizes exactly one transfer from A to C. Q402 only pays gas and relays — it cannot redirect or intercept USDC."
+                a: "Yes. The EIP-712 signature authorizes one transfer A→C. Q402 only pays gas and relays — it cannot redirect funds."
               },
               {
                 q: "What if a transaction fails?",
-                a: "If relay fails, the payload is discarded and no user funds are moved. Check the error code in the API response — common causes are insufficient gas tank balance or an expired deadline."
+                a: "Failed relays discard the payload — no funds move. Common causes: empty Gas Tank or expired deadline."
               },
               {
-                q: "Can I use Q402 with tokens other than USDC?",
-                a: "USDC and USDT are supported on every live chain except Injective EVM, which is USDT-only at launch — native USDC via Circle CCTP is announced for Q2 2026 and will be added in the next minor release. RLUSD (Ripple USD, NY DFS regulated, decimals 18) is supported on Ethereum mainnet only; the SDK rejects RLUSD on any other chain at call time and the relay route enforces the same allowlist server-side. Additional ERC-20 token support is on the roadmap."
+                q: "Which tokens are supported?",
+                a: "USDC + USDT on every chain except Injective (USDT only — Circle CCTP USDC Q2 2026). RLUSD on Ethereum only (18 decimals, NY DFS regulated)."
               },
               {
                 q: "How do I get an API key?",
-                a: "Connect your wallet on the dashboard — a sandbox API key (q402_test_ prefix) is provisioned for free so you can test the integration. There are two paths to a live key (q402_live_): activate the Free Trial at /event for a BNB-only sponsored key (2,000 TX over 30 days, no card), or complete an on-chain payment on /payment for a Multichain key with 9-chain support. Both keys are issued automatically after their respective activation step."
+                a: "Connect a wallet → sandbox key (q402_test_*). For a live key: /event (Trial, BNB, 2,000 TX free) or /payment (Multichain, 9 chains)."
               },
               {
-                q: "How does billing work? Can I upgrade my plan?",
-                a: "Each paid purchase grants a 30-day access window plus the transaction credits listed for that tier. Your plan tier is set by cumulative paid amount within the active window — every supported chain uses the same tier prices, so cumulative spend is summed in plain USD with no per-chain conversion. Top up within 30 days and your plan upgrades automatically when cumulative spend crosses the next tier. Plans never downgrade while the window is active; if you let the window lapse, cumulative resets."
+                q: "How does billing work?",
+                a: "Each paid purchase = 30-day window + TX credits for the tier. Top up within the window to upgrade. Plans never downgrade mid-window; cumulative resets on lapse."
               },
             ].map((item, i) => (
               <div key={i} className="mb-4 p-5 rounded-xl border border-white/8">
@@ -1033,7 +1020,7 @@ const signature = await signer.signTypedData(domain, types, {
           {/* Bottom CTA */}
           <div className="border border-yellow/15 rounded-2xl p-8 text-center" style={{ background: "rgba(245,197,24,0.04)" }}>
             <h3 className="text-xl font-bold mb-2">Ready to go gasless?</h3>
-            <p className="text-white/40 text-sm mb-6">Pick a plan, send an on-chain payment, and your live API key is issued automatically. Sandbox key available for free to test first.</p>
+            <p className="text-white/65 text-sm mb-6">Get a live API key on payment. Sandbox key is free to test first.</p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <a href="/payment" className="bg-yellow text-navy font-bold px-8 py-3 rounded-full hover:bg-yellow-hover transition-colors text-sm">
                 Get API Key →
