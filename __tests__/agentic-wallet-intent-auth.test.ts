@@ -124,7 +124,12 @@ describe("batch route uses intent auth", () => {
   it("binds action='agentic.batch' with chain/token/rows/fp intent fields", () => {
     expect(src).toMatch(/requireIntentAuth/);
     expect(src).toMatch(/action:\s*"agentic\.batch"/);
-    expect(src).toMatch(/fp:\s*rowsHash/);
+    // fp must be a computed recipient-set hash; variable name has churned
+    // (`rowsHash` → `intentFp` after Mode C apiKey path landed). Either
+    // identifier is acceptable so a future rename doesn't break this guard
+    // — what matters is that the auth's bound `fp` ties to the recipient
+    // set, not the literal identifier.
+    expect(src).toMatch(/fp:\s*(rowsHash|intentFp)/);
   });
 });
 

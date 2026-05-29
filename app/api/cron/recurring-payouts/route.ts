@@ -72,6 +72,7 @@ import {
   skipStaleSlot,
   type RecurringRule,
 } from "@/app/lib/agentic-wallet-recurring";
+import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -426,12 +427,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const denial = requireCronAuth(req);
   if (denial) return denial;
 
-  const now = Date.now();
+  const startedAt = Date.now();
+  const now = startedAt;
   let due: RecurringRule[];
   try {
     due = await pullDueRules(now, MAX_RULES_PER_TICK);
   } catch (e) {
     console.error("[cron/recurring-payouts] pullDueRules failed:", e);
+    await recordCronStatus(CRON_NAMES.RECURRING_PAYOUTS, {
+      lastStatus: "error",
+      lastError: `pull_failed: ${e instanceof Error ? e.message : String(e)}`,
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ error: "pull_failed" }, { status: 502 });
   }
 
@@ -451,6 +458,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       });
     }
   }
+
+  // Roll outcomes into a compact summary so the status row stays small
+  // and the operator sees the shape of activity at a glance.
+  const summary = outcomes.reduce<Record<string, number>>((acc, o) => {
+    acc[o.outcome] = (acc[o.outcome] ?? 0) + 1;
+    return acc;
+  }, {});
+  const durationMs = Date.now() - startedAt;
+  await recordCronStatus(CRON_NAMES.RECURRING_PAYOUTS, {
+    lastStatus: "success",
+    lastResult: { pulled: due.length, summary },
+    durationMs,
+  });
 
   return NextResponse.json({
     asOf: new Date(now).toISOString(),

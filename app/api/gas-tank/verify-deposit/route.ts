@@ -3,125 +3,12 @@ import { ethers } from "ethers";
 import { addGasDeposit, getGasBalance } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
-
-// blockWindow is sized so every chain covers ~10 minutes of recent history,
-// matching the realistic gap between a user submitting a deposit and tapping
-// "Verify". BSC and Injective values are doubled vs the smaller-chain default
-// because observed block times on those networks are ~0.75s — a 200-block
-// window would only cover ~2.5 minutes there and silently drop legitimate
-// deposits older than a couple of minutes.
-const CHAINS = [
-  { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",       blockWindow: 800, explorer: "https://bscscan.com/tx/" },
-  { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",          blockWindow: 50,  explorer: "https://etherscan.io/tx/" },
-  { key: "mantle", name: "Mantle",    token: "MNT",   rpc: "https://rpc.mantle.xyz",                   blockWindow: 500, explorer: "https://mantlescan.xyz/tx/" },
-  { key: "injective", name: "Injective", token: "INJ", rpc: "https://sentry.evm-rpc.injective.network/", blockWindow: 800, explorer: "https://blockscout.injective.network/tx/" },
-  { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",    blockWindow: 300, explorer: "https://snowtrace.io/tx/" },
-  { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                  blockWindow: 200, explorer: "https://www.oklink.com/xlayer/tx/" },
-  { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 600, explorer: "https://stablescan.xyz/tx/" },
-  { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                    blockWindow: 6000, explorer: "https://monadscan.com/tx/" },
-  { key: "scroll", name: "Scroll",    token: "ETH",   rpc: "https://rpc.scroll.io",                    blockWindow: 1200, explorer: "https://scrollscan.com/tx/" },
-];
-
-/**
- * Operator alert (Telegram) — new gas-tank deposit credited.
- *
- * Fires only after `addGasDeposit` returns true (i.e. NOT a duplicate). Same
- * await + try/catch pattern as payment/activate and grant/inquiry: missing env
- * vars, a Telegram outage, or a malformed payload here must NEVER fail the
- * deposit credit, since KV state is already authoritative at this point.
- */
-async function notifyTelegramDeposit(args: {
-  address: string;
-  chain: typeof CHAINS[number];
-  amount: number;
-  txHash: string;
-}): Promise<void> {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId   = process.env.TELEGRAM_CHAT_ID;
-  if (!botToken || !chatId) return;
-  const explorerUrl = `${args.chain.explorer}${args.txHash}`;
-  const amount      = args.amount.toFixed(args.amount >= 1 ? 4 : 6);
-  const lines = [
-    `⛽ *New Gas Tank Deposit*`,
-    ``,
-    `*From:* \`${args.address}\``,
-    `*Chain:* ${args.chain.name} (${args.chain.token})`,
-    `*Amount:* ${amount} ${args.chain.token}`,
-    `*TX:* [${args.txHash.slice(0, 10)}…${args.txHash.slice(-6)}](${explorerUrl})`,
-  ].join("\n");
-  try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        chat_id: chatId,
-        text: lines,
-        parse_mode: "Markdown",
-        disable_web_page_preview: true,
-      }),
-    });
-  } catch { /* non-critical — deposit is already credited */ }
-}
-
-async function scanNativeDeposits(
-  chain: typeof CHAINS[number],
-  fromAddress: string
-): Promise<{ txHash: string; amount: number }[]> {
-  const provider = new ethers.JsonRpcProvider(chain.rpc);
-  const current = await Promise.race([
-    provider.getBlockNumber(),
-    new Promise<never>((_, r) => setTimeout(() => r(new Error("timeout")), 5000)),
-  ]);
-  const fromBlock = current - chain.blockWindow;
-
-  const found: { txHash: string; amount: number }[] = [];
-
-  // Scan each block in range — use eth_getLogs workaround:
-  // For native transfers, we must scan block transactions directly.
-  // To keep it fast, use eth_getBlockByNumber with full tx objects in batches.
-  // We'll use a JSON-RPC batch call approach via fetch.
-  const rpcUrl = chain.rpc;
-  const batchSize = 20;
-  const blockNums: number[] = [];
-  for (let b = fromBlock; b <= current; b++) blockNums.push(b);
-
-  for (let i = 0; i < blockNums.length; i += batchSize) {
-    const batch = blockNums.slice(i, i + batchSize).map((n, j) => ({
-      jsonrpc: "2.0",
-      id: j,
-      method: "eth_getBlockByNumber",
-      params: [`0x${n.toString(16)}`, true],
-    }));
-
-    try {
-      const res = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(batch),
-        signal: AbortSignal.timeout(6000),
-      });
-      const blocks: { result: { transactions: { from: string; to: string; value: string; hash: string }[] } }[] = await res.json();
-
-      for (const block of blocks) {
-        if (!block?.result?.transactions) continue;
-        for (const tx of block.result.transactions) {
-          if (
-            tx.to?.toLowerCase() === GASTANK_ADDRESS_LC &&
-            tx.from?.toLowerCase() === fromAddress.toLowerCase() &&
-            tx.value !== "0x0"
-          ) {
-            const amount = parseFloat(ethers.formatEther(BigInt(tx.value)));
-            if (amount > 0) found.push({ txHash: tx.hash, amount });
-          }
-        }
-      }
-    } catch {
-      // RPC batch failed — skip
-    }
-  }
-
-  return found;
-}
+import {
+  DEPOSIT_CHAINS as CHAINS,
+  scanNativeDeposits,
+  notifyTelegramDeposit,
+  type DepositChain,
+} from "@/app/lib/deposit-scanner";
 
 /**
  * Direct-lookup path for deposits that fell outside the recent-block scan window.
@@ -132,7 +19,7 @@ async function scanNativeDeposits(
  * (to == GASTANK, from == address, value > 0). Same dedupe via addGasDeposit.
  */
 async function verifyByTxHash(
-  chain: typeof CHAINS[number],
+  chain: DepositChain,
   fromAddress: string,
   txHash: string
 ): Promise<{ ok: true; amount: number } | { ok: false; reason: string }> {
@@ -219,14 +106,14 @@ export async function POST(req: NextRequest) {
 
   // ── Default path: recent-block scan across all 9 chains ──────────────────
   const results = await Promise.allSettled(
-    CHAINS.map(chain => scanNativeDeposits(chain, address).then(txs => ({ chain, txs })))
+    CHAINS.map(chain => scanNativeDeposits(chain, address).then(scan => ({ chain, scan })))
   );
 
   let newDeposits = 0;
   for (const r of results) {
     if (r.status !== "fulfilled") continue;
-    const { chain, txs } = r.value;
-    for (const tx of txs) {
+    const { chain, scan } = r.value;
+    for (const tx of scan.deposits) {
       const added = await addGasDeposit(address, {
         chain: chain.key,
         token: chain.token,
