@@ -78,7 +78,7 @@ export default function DocsPage() {
     <div className="min-h-screen text-white" style={{ background: "#080E1C" }}>
       {/* Top nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(8,14,28,0.92)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        <div className="max-w-[96rem] mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="max-w-[88rem] mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-5">
             <Link href="/" className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
