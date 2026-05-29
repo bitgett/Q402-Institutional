@@ -368,7 +368,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         facilitator,
         authorizationNonce: authNonce,
       });
-      const resp = await submitToRelay(baseUrl, apiKey, signed);
+      const resp = await submitToRelay(baseUrl, apiKey, signed, {
+        source: "batch",
+        internalTrustToken: process.env.CRON_SECRET,
+      });
       const data = await resp.json().catch(() => null);
       if (resp.ok && data && typeof data === "object" && "txHash" in data) {
         return { to: row.to, amount: row.amount, ok: true, txHash: (data as { txHash: string }).txHash };

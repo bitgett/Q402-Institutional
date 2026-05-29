@@ -67,6 +67,11 @@ interface RelayedTx {
   fromUser: string; toUser: string; tokenAmount: number | string; tokenSymbol: string;
   gasCostNative: number; relayTxHash: string; relayedAt: string;
   receiptId?: string;
+  // Provenance fields populated since the source-tagging rollout. Keep
+  // the local shape in sync with app/lib/db.ts's RelayedTx so the
+  // Transactions tab's source filter can read them without `any`.
+  source?: "recurring" | "send" | "batch" | "api";
+  ruleId?: string;
 }
 interface GasDeposit { chain: string; token: string; amount: number; txHash: string; depositedAt: string; }
 
@@ -441,6 +446,23 @@ export default function DashboardPage() {
     return raw && (valid as string[]).includes(raw) ? (raw as Tab) : "overview";
   });
   const [keyCopied, setKeyCopied] = useState(false);
+  /**
+   * Transactions tab — source filter chip. Splits the scoped tx list
+   * into "All", "Recurring only", and "Manual only" (send + batch + api)
+   * so the user can pull just scheduled payouts for reconciliation or
+   * just one-shot sends for activity review. Backed by the new optional
+   * `source` field on RelayedTx (recurring/send/batch/api). Historical
+   * rows without a source stay visible under "All" and never surface
+   * in the typed filters — we don't claim provenance for rows we can't
+   * classify. Lives in URL state via ?source= so a refresh keeps the
+   * filter and the user can share a link to a specific view.
+   */
+  type TxSourceFilter = "all" | "recurring" | "manual";
+  const [txSourceFilter, setTxSourceFilter] = useState<TxSourceFilter>(() => {
+    if (typeof window === "undefined") return "all";
+    const raw = new URLSearchParams(window.location.search).get("source");
+    return raw === "recurring" || raw === "manual" ? raw : "all";
+  });
   const [depositChain, setDepositChain] = useState<{ chain: string; token: string } | null>(null);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertEmailInput, setAlertEmailInput] = useState("");
@@ -1303,9 +1325,20 @@ export default function DashboardPage() {
       showPaidScope ? subscription?.sandboxApiKey : null,
     ].filter((k): k is string => typeof k === "string" && k.length > 0),
   );
-  const scopedTxs = trialViewActive
+  const scopedTxsAllSources = trialViewActive
     ? relayedTxs.filter(tx => trialKeySet.has(tx.apiKey))
     : relayedTxs.filter(tx => paidKeySet.has(tx.apiKey));
+  // Source filter on top of the trial/multichain scope. "all" passes
+  // everything (the legacy view); "recurring" keeps only tagged
+  // recurring fires; "manual" keeps send/batch/api (everything that
+  // isn't a scheduled fire). Rows missing a source are treated as
+  // untyped legacy data — they show under "all" only.
+  const scopedTxs = scopedTxsAllSources.filter((tx) => {
+    if (txSourceFilter === "all") return true;
+    if (txSourceFilter === "recurring") return tx.source === "recurring";
+    // manual
+    return tx.source === "send" || tx.source === "batch" || tx.source === "api";
+  });
   const plan = subscription?.plan ?? "starter";
 
   // View mode — top-level toggle between Free-trial flavoring and the
@@ -2028,7 +2061,7 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <div className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
               <div className="px-6 py-4 border-b flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold">Relayed Transaction History</span>
                   {/* Scope chip — makes the trial/paid split visible so the user
                       doesn't think "where did my multichain TXs go" after
@@ -2041,8 +2074,41 @@ export default function DashboardPage() {
                   }`}>
                     {trialViewActive ? "Trial scope" : "Multichain scope"}
                   </span>
+                  {/* Source-filter pill group. Backed by RelayedTx.source. */}
+                  <div className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.02] p-0.5 ml-1">
+                    {([
+                      { key: "all" as const,       label: "All" },
+                      { key: "recurring" as const, label: "Recurring only" },
+                      { key: "manual" as const,    label: "Manual only" },
+                    ]).map(({ key, label }) => {
+                      const active = txSourceFilter === key;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            setTxSourceFilter(key);
+                            if (typeof window !== "undefined") {
+                              const params = new URLSearchParams(window.location.search);
+                              if (key === "all") params.delete("source");
+                              else params.set("source", key);
+                              const next = params.toString();
+                              window.history.replaceState(null, "", next ? `?${next}` : window.location.pathname);
+                            }
+                          }}
+                          className={`text-[10.5px] font-medium px-2 py-1 rounded transition-colors ${
+                            active
+                              ? "bg-emerald-400/15 text-emerald-200"
+                              : "text-white/55 hover:text-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <span className="text-white/25 text-xs">
+                <span className="text-white/45 text-xs">
                   {scopedTxs.length} in view · {remainingCredits.toLocaleString()} TXs left
                 </span>
               </div>
@@ -2057,12 +2123,16 @@ export default function DashboardPage() {
                   </thead>
                   <tbody>
                     {scopedTxs.length === 0 ? (
-                      <tr><td colSpan={7} className="px-6 py-12 text-center text-white/25 text-sm">
+                      <tr><td colSpan={7} className="px-6 py-12 text-center text-white/45 text-sm">
                         {relayedTxs.length === 0
                           ? "No transactions yet"
-                          : trialViewActive
-                            ? "No trial transactions yet — Multichain history lives in the Multichain view."
-                            : "No multichain transactions yet — Trial history lives in the Free Trial view."}
+                          : txSourceFilter === "recurring"
+                            ? "No recurring fires in view yet. New scheduled payouts will appear here once the cron fires them."
+                            : txSourceFilter === "manual"
+                              ? "No manual (send / batch / API) transactions in this scope yet."
+                              : trialViewActive
+                                ? "No trial transactions yet — Multichain history lives in the Multichain view."
+                                : "No multichain transactions yet — Trial history lives in the Free Trial view."}
                       </td></tr>
                     ) : [...scopedTxs].reverse().map((tx, i) => {
                       const meta = CHAIN_META[tx.chain];
@@ -2076,6 +2146,19 @@ export default function DashboardPage() {
                             <span className="flex items-center gap-1.5 text-xs text-white/60">
                               {meta && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: meta.color }} />}
                               {meta?.name ?? tx.chain}
+                              {tx.source === "recurring" && (
+                                <span
+                                  className="ml-1 inline-flex items-center gap-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-200 border border-emerald-400/25"
+                                  title={tx.ruleId ? `Recurring rule ${tx.ruleId.slice(0, 8)}…` : "Recurring fire"}
+                                >
+                                  ⟲ recurring
+                                </span>
+                              )}
+                              {tx.source === "batch" && (
+                                <span className="ml-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-white/[0.06] text-white/65 border border-white/15">
+                                  batch
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td className="px-5 py-4 font-mono text-xs text-white/35">{shortAddr(tx.fromUser)} → {shortAddr(tx.toUser)}</td>
