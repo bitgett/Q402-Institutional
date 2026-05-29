@@ -304,11 +304,14 @@ async function processOneRule(
   }
 
   // 6. At least one settled. Update the rule record + ZSET. If THIS
-  //    write fails, the lock we still hold blocks the next tick from
-  //    re-firing the same slot — the rule will look stuck-pending in
-  //    the dashboard until ops re-runs the cron or until the lock TTL
-  //    expires (1h), by which point recordRuleFired has typically
-  //    retried via the transient path. Silence over double-spend.
+  //    write fails the next tick will pull the same rule, hit the durable
+  //    fired-marker written inside recordRuleFired, and route through
+  //    advanceAfterMissedBookkeeping — which advances nextRunAt and
+  //    backfills totalFiredCount/totalSpentUsd without re-relaying.
+  //    Net effect: a write failure on a settled fire never double-sends
+  //    on-chain; worst case is one cycle's bookkeeping arrives a tick
+  //    late and the Recent Fires entry for that slot is missing (the
+  //    recovery path doesn't write to the fire log).
   const settledUsdTotal = settledRows.reduce((acc, r) => acc + Number(r.amount), 0);
   const partialFailureNote =
     failedRows.length > 0

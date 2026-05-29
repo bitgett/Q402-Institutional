@@ -19,6 +19,23 @@
  *
  * Idempotent: re-runs are no-ops once aligned.
  *
+ * Safety: pending rules (pendingFireAt set) are SKIPPED. The user has
+ * already seen "Fires at <time>" with the cancel countdown; moving the
+ * slot under them would break that promise. Wait for the pending fire
+ * to land (or be cancelled) before realigning those.
+ *
+ * Concurrency: this script rewrites rule JSON + ZSET scores while the
+ * Vercel cron may also be writing the same keys. Run during a brief
+ * maintenance window:
+ *   1. pause Render heartbeat / disable the Vercel cron
+ *   2. ./anchor-hourly-rules.mjs           (dry run)
+ *   3. ./anchor-hourly-rules.mjs --apply
+ *   4. resume cron
+ * For a single drifting rule the race window is small (~ms) and the
+ * failure mode is a stale ZSET score that self-corrects on the next
+ * fire — acceptable for a one-shot migration on a handful of rules,
+ * NOT acceptable if you're realigning hundreds at once.
+ *
  * Usage:
  *   node --env-file=.env.local scripts/anchor-hourly-rules.mjs        # dry run
  *   node --env-file=.env.local scripts/anchor-hourly-rules.mjs --apply
@@ -80,6 +97,7 @@ async function main() {
   let skipped = 0;
   let nonHourly = 0;
   let missing = 0;
+  let pendingSkipped = 0;
 
   for (const member of members) {
     scanned++;
@@ -99,6 +117,17 @@ async function main() {
     const rule = typeof ruleRaw === "string" ? JSON.parse(ruleRaw) : ruleRaw;
     if (!rule.frequency || !String(rule.frequency).startsWith("hourly:")) {
       nonHourly++;
+      continue;
+    }
+
+    // Skip rules already in the alert phase. The user has been shown
+    // "Fires at <X>" with a cancel countdown; moving the slot here
+    // would break the promise on that toast and could fire EARLIER
+    // than the displayed time. Wait for the pending fire to land or
+    // be cancelled, then re-run this migration.
+    if (rule.pendingFireAt !== null && rule.pendingFireAt !== undefined) {
+      console.log(`  · ${ruleId.slice(0, 8)}… [${rule.frequency}] pending (fire imminent) — skip`);
+      pendingSkipped++;
       continue;
     }
 
@@ -127,9 +156,19 @@ async function main() {
     });
   }
 
-  console.log(`\nDone. scanned=${scanned} aligned=${aligned} already-aligned=${scanned - aligned - skipped - nonHourly - missing} non-hourly=${nonHourly} missing=${missing} malformed=${skipped}`);
+  const alreadyAligned = scanned - aligned - skipped - nonHourly - missing - pendingSkipped;
+  console.log(
+    `\nDone. scanned=${scanned} aligned=${aligned} already-aligned=${alreadyAligned} ` +
+    `pending-skipped=${pendingSkipped} non-hourly=${nonHourly} missing=${missing} malformed=${skipped}`,
+  );
   if (!APPLY && aligned > 0) {
     console.log(`\nRe-run with --apply to commit changes.`);
+  }
+  if (pendingSkipped > 0) {
+    console.log(
+      `\n${pendingSkipped} rule(s) in pending phase were skipped. Re-run this ` +
+      `script after they land (or are cancelled) to realign them.`,
+    );
   }
 }
 
