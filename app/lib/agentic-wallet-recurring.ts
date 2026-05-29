@@ -126,7 +126,7 @@ const DAY_MS = 24 * HOUR_MS;
 export type WeekdayShort = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
 export type FrequencyEnum =
-  | `hourly:${number}` // 1..23 — fire every N hours (anchored to creation minute)
+  | `hourly:${number}` // 1..23 — fire every N hours, snapped to the next :00 UTC
   | "daily"
   | `weekly:${WeekdayShort}`
   | `monthly:${number}` // 1..31; if the month has no Nth day, fires on the last day
@@ -1055,6 +1055,28 @@ export async function advanceAfterMissedBookkeeping(
     score: computeNextActionAt(next),
     member: zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId),
   });
+  // Append a fire log entry tagged as "recovered" so Recent Fires
+  // reflects the slot even when the original recordRuleFired write
+  // failed. We don't have the per-row txHashes here (the cron tick
+  // that submitted them is gone), but we can pin the slot, expected
+  // amount, and a partialFailureNote explaining the gap. Best-effort:
+  // a KV blip here just means the log misses this slot, which is the
+  // same posture as the primary path's fire log write.
+  try {
+    await recordRuleFireLog(rule, {
+      firedAt: nowMs,
+      slot: firedSlot,
+      amountUsd: expectedAmountUsd,
+      txHashes: [],
+      settledCount: rule.recipients.length,
+      failedCount: 0,
+      partialFailureNote:
+        "recovered: original tick's bookkeeping write failed; tx hashes were not preserved. " +
+        "On-chain receipts remain in your wallet's relay history.",
+    });
+  } catch {
+    /* swallow: log gap is acceptable, rule state already correct */
+  }
   return next;
 }
 

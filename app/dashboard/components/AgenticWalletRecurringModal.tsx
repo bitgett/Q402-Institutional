@@ -353,18 +353,25 @@ export function AgenticWalletRecurringModal({
             <KindButton active={kind === "monthly-last"} onClick={() => setKind("monthly-last")} disabled={submitting}>Last of month</KindButton>
           </div>
           {kind === "hourly" && (
-            <div className="flex items-center gap-2 text-sm text-white/80">
-              <span>Every</span>
-              <input
-                type="number"
-                min={1}
-                max={23}
-                value={hourlyN}
-                onChange={(e) => setHourlyN(Math.max(1, Math.min(23, Number(e.target.value) || 1)))}
-                className="w-16 bg-[#0B1626] border border-white/10 rounded-md px-2 py-1.5 text-sm text-white text-center"
-                disabled={submitting}
-              />
-              <span>{hourlyN === 1 ? "hour" : "hours"}</span>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2 text-sm text-white/80">
+                <span>Every</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={23}
+                  value={hourlyN}
+                  onChange={(e) => setHourlyN(Math.max(1, Math.min(23, Number(e.target.value) || 1)))}
+                  className="w-16 bg-[#0B1626] border border-white/10 rounded-md px-2 py-1.5 text-sm text-white text-center"
+                  disabled={submitting}
+                />
+                <span>{hourlyN === 1 ? "hour" : "hours"}</span>
+              </div>
+              <div className="text-[10.5px] text-white/55 leading-snug">
+                Fires on the hour (xx:00 UTC). First fire lands on the next
+                top-of-hour after the cancel window — typically up to one
+                cycle later than the moment you create the rule.
+              </div>
             </div>
           )}
           {kind === "weekly" && (
