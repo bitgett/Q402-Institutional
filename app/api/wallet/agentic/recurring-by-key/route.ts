@@ -203,14 +203,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   }
 
-  // ── action=cancel | pause | resume ───────────────────────────────────────
+  // ── action=cancel | pause | resume | skip-next ───────────────────────────
   //
   // Mutations on Mode C are paid-only. A trial key sharing the same owner
   // sub could otherwise pause / cancel paid-scope rules — the rule object
   // doesn't carry a "scope at creation time" tag yet, so we lock the
   // mutating surface to the same scope that's allowed to author rules.
   // List + fires (read-only) remain open to any active live-tier key.
-  if (action === "cancel" || action === "pause" || action === "resume") {
+  //
+  // skip-next has the same shape as the others (paid-gated, ruleId
+  // required) — it advances the rule past ONE scheduled slot and rolls
+  // nextRunAt forward. applyUserStatusAction already supports it; this
+  // route just needed to whitelist the action string so the MCP's
+  // q402_recurring_skip_next tool stops getting INVALID_ACTION.
+  if (action === "cancel" || action === "pause" || action === "resume" || action === "skip-next") {
     if (typeof body.ruleId !== "string" || body.ruleId.length === 0) {
       return NextResponse.json({ error: "RULE_ID_REQUIRED" }, { status: 400 });
     }
@@ -219,7 +225,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error: "MULTICHAIN_REQUIRED",
-          message: "Pausing, resuming, and cancelling recurring rules requires the paid Multichain subscription. The dashboard accepts the same actions via owner-sig auth.",
+          message: "Pausing, resuming, skipping, and cancelling recurring rules requires the paid Multichain subscription. The dashboard accepts the same actions via owner-sig auth.",
         },
         { status: 402 },
       );
@@ -314,7 +320,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {
       error: "INVALID_ACTION",
-      message: 'action must be one of: "create", "list", "fires", "cancel", "pause", "resume".',
+      message: 'action must be one of: "create", "list", "fires", "cancel", "pause", "resume", "skip-next".',
     },
     { status: 400 },
   );
