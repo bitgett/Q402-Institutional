@@ -18,7 +18,13 @@
  * timing-safe). Same fail-closed posture as gas-alert / usage-alert /
  * recurring-payouts.
  *
- * Index choice — `sub:*` (paid subscribers ONLY):
+ * Index choice — `sub:*` (any subscription record holder):
+ *   - This is every address that has ever held a subscription record,
+ *     including currently-cancelled or lapsed ones. We don't filter on
+ *     an `active` field here because cancelled subscribers can still
+ *     have funds in flight to the Gas Tank (e.g. they cancelled, then
+ *     a delayed deposit lands a day later). Crediting that deposit is
+ *     correct behavior; scanning them is correct too.
  *   - Trial-tier users have sponsored gas; they never deposit native
  *     coin to the Gas Tank, so scanning them is pure waste.
  *   - `gasdep:*` (previously used) only contains owners with ≥1
