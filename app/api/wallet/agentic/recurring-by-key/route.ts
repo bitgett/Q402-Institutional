@@ -204,9 +204,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── action=cancel | pause | resume ───────────────────────────────────────
+  //
+  // Mutations on Mode C are paid-only. A trial key sharing the same owner
+  // sub could otherwise pause / cancel paid-scope rules — the rule object
+  // doesn't carry a "scope at creation time" tag yet, so we lock the
+  // mutating surface to the same scope that's allowed to author rules.
+  // List + fires (read-only) remain open to any active live-tier key.
   if (action === "cancel" || action === "pause" || action === "resume") {
     if (typeof body.ruleId !== "string" || body.ruleId.length === 0) {
       return NextResponse.json({ error: "RULE_ID_REQUIRED" }, { status: 400 });
+    }
+    const sub = await getSubscription(owner);
+    if (!hasMultichainScope(sub)) {
+      return NextResponse.json(
+        {
+          error: "MULTICHAIN_REQUIRED",
+          message: "Pausing, resuming, and cancelling recurring rules requires the paid Multichain subscription. The dashboard accepts the same actions via owner-sig auth.",
+        },
+        { status: 402 },
+      );
     }
     try {
       const next = await applyUserStatusAction(owner, walletId, body.ruleId, action);
@@ -225,19 +241,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── action=create ────────────────────────────────────────────────────────
   if (action === "create") {
-    // Subscription gate — multichain rules need the paid scope. BNB-only
-    // trial keys may still create rules on bnb (the most common MCP use).
+    // Subscription gate — recurring is a paid feature on every chain.
+    // BNB rules used to be allowed under a trial sub, but the cron fires
+    // them with the paid apiKey (see /api/cron/recurring-payouts step 3)
+    // so creating a BNB rule with no paid scope produced a rule that
+    // would terminal-fail on the first fire. Reject at create time
+    // instead — clearer failure mode for the user / agent.
     const sub = await getSubscription(owner);
     const chainStr = (body.chain ?? "bnb").toLowerCase();
     if (!(chainStr in AGENTIC_CHAINS)) {
       return NextResponse.json({ error: "INVALID_CHAIN", message: `Unknown chain "${chainStr}".` }, { status: 400 });
     }
     const chain = chainStr as AgenticChainKey;
-    if (chain !== "bnb" && !hasMultichainScope(sub)) {
+    if (!hasMultichainScope(sub)) {
       return NextResponse.json(
         {
           error: "MULTICHAIN_REQUIRED",
-          message: "Recurring rules on non-BNB chains require the paid Multichain subscription.",
+          message: "Recurring rules (including BNB) require the paid Multichain subscription. Trial keys may still pay manually via q402_pay.",
         },
         { status: 402 },
       );

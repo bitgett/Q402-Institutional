@@ -279,16 +279,22 @@ export function AgenticWalletRecurringSection({
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          disabled={walletArchived}
+          disabled={walletArchived || !hasMultichainScope}
           className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
             background: "rgba(74,222,128,0.15)",
             color: "#86efac",
             border: "1px solid rgba(74,222,128,0.40)",
           }}
-          title={walletArchived ? "Restore the wallet to add new schedules" : undefined}
+          title={
+            walletArchived
+              ? "Restore the wallet to add new schedules"
+              : !hasMultichainScope
+                ? "Recurring requires the paid Multichain subscription (any chain, including BNB). Upgrade your plan to enable schedules."
+                : undefined
+          }
         >
-          + New schedule
+          + New schedule {!hasMultichainScope && !walletArchived && <span className="text-[10px] opacity-70">(Paid)</span>}
         </button>
       </div>
 

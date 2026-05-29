@@ -169,25 +169,31 @@ async function processOneRule(
     }
   }
 
-  // 3. Subscription gate — non-BNB needs multichain. Terminal if
-  //    lapsed; user re-subscribes + resumes manually.
+  // 3. Subscription gate — recurring is a paid feature on every chain,
+  //    including BNB. Trial keys may MANUALLY pay via /api/relay, but
+  //    scheduled fires consume paid-tier quota / sponsorship and must
+  //    therefore use the live (paid) key. Locking it here also closes
+  //    a key-scope confusion: a paid user creating a BNB rule should
+  //    never see their fires routed through their trial key just
+  //    because trialApiKey was still present on the sub.
   const sub = await getSubscription(rule.ownerAddr);
-  if (rule.chain !== "bnb" && !hasMultichainScope(sub)) {
+  if (!hasMultichainScope(sub)) {
     await recordRuleCapExceeded(
       rule,
-      `Non-BNB recurring requires a paid multichain subscription. Re-subscribe to resume.`,
+      `Recurring requires an active paid Multichain subscription on every chain (including BNB). Re-subscribe and resume to retry.`,
       nowMs,
     );
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-subscription-lapsed" };
   }
 
-  const apiKey = rule.chain === "bnb"
-    ? (sub?.trialApiKey || sub?.apiKey)
-    : sub?.apiKey;
+  // Paid key only. We do NOT fall back to trialApiKey even on BNB —
+  // that was the pre-audit behaviour and caused paid rules to silently
+  // burn trial quota when both keys coexisted on the same owner sub.
+  const apiKey = sub?.apiKey;
   if (!apiKey) {
     await recordRuleCapExceeded(
       rule,
-      `No active apiKey on the subscription. Re-activate and resume to retry.`,
+      `No paid apiKey on the subscription. Re-activate the paid plan and resume to retry.`,
       nowMs,
     );
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-no-api-key" };
