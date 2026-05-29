@@ -109,6 +109,28 @@ export interface RelayedTx {
   relayTxHash: string;   // on-chain tx hash
   relayedAt: string;
   receiptId?: string;    // Trust Receipt id (rct_…), populated when receipt created successfully
+  /**
+   * Origin of this settlement. Drives the dashboard's "Recurring only"
+   * filter on the Transactions tab and lets external accounting tooling
+   * separate scheduled payouts from one-off sends.
+   *
+   *   - "recurring": fired by the recurring-payouts cron from a saved rule
+   *   - "send":      one-shot manual send via Agent Wallet
+   *   - "batch":     multi-recipient batch send via Agent Wallet
+   *   - "api":       direct /api/relay call from a customer integration
+   *   - undefined:   historical row pre-source-tagging. Surfaced as "All"
+   *                  but never as "Recurring only" — we don't lie about
+   *                  provenance for rows we can't classify.
+   */
+  source?: "recurring" | "send" | "batch" | "api";
+  /**
+   * Recurring-only metadata: which rule this fire was paying for. Lets
+   * the dashboard "Recurring only" filter group by rule and the
+   * accounting tooling reconcile a rule's totalSpentUsd against the
+   * sum of its tagged tx rows. Empty / undefined for non-recurring
+   * sources.
+   */
+  ruleId?: string;
 }
 
 // ── Key helpers ──────────────────────────────────────────────────────────────

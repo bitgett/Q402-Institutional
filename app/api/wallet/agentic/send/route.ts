@@ -489,7 +489,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   let relayResponse: Response;
   try {
-    relayResponse = await submitToRelay(internalBaseUrl(), apiKey, signed);
+    relayResponse = await submitToRelay(internalBaseUrl(), apiKey, signed, {
+      source: "send",
+      internalTrustToken: process.env.CRON_SECRET,
+    });
   } catch (e) {
     await refundAndRelease();
     console.error("[agentic-wallet/send] relay forward failed:", e);

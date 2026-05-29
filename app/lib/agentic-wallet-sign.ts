@@ -385,10 +385,26 @@ export async function fetchAuthNonce(
  *      USDC-only fallback that Agentic Wallet doesn't use — we always
  *      go EIP-7702 type-4 from the keystore.)
  */
+/**
+ * Optional metadata the cron path attaches when it relays on behalf of
+ * a recurring rule. The relay route IGNORES these fields unless an
+ * accompanying `X-Q402-Internal-Trust` header matches CRON_SECRET, so
+ * external customers calling /api/relay directly can't forge a
+ * "source: recurring" tag on their txes.
+ */
+export interface InternalRelayMeta {
+  source?: "recurring" | "send" | "batch" | "api";
+  ruleId?: string;
+  /** CRON_SECRET value. Caller is responsible for fetching from env;
+   *  passing it here keeps the relay-side trust check single-source. */
+  internalTrustToken?: string;
+}
+
 export async function submitToRelay(
   baseUrl: string,
   apiKey: string,
   signed: SignedPayment,
+  meta?: InternalRelayMeta,
 ): Promise<Response> {
   const nonceStr = signed.nonceUint.toString();
   const chainNoncePayload =
@@ -398,9 +414,14 @@ export async function submitToRelay(
         ? { stableNonce: nonceStr }
         : { nonce: nonceStr };
 
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (meta?.internalTrustToken) {
+    headers["X-Q402-Internal-Trust"] = meta.internalTrustToken;
+  }
+
   return await fetch(`${baseUrl}/api/relay`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       apiKey,
       chain: signed.chain,
@@ -413,6 +434,8 @@ export async function submitToRelay(
       deadline: signed.deadline.toString(),
       witnessSig: signed.witnessSig,
       authorization: signed.authorization,
+      ...(meta?.source ? { source: meta.source } : {}),
+      ...(meta?.ruleId ? { ruleId: meta.ruleId } : {}),
     }),
   });
 }

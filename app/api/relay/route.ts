@@ -16,7 +16,9 @@ import {
   isCashPaidSubscription,
   incrStatsCounters,
   type CreditScope,
+  type RelayedTx,
 } from "@/app/lib/db";
+type RelayedTxSource = NonNullable<RelayedTx["source"]>;
 import {
   createReceipt,
   updateReceiptWebhookStatus,
@@ -25,8 +27,7 @@ import {
 } from "@/app/lib/receipt";
 import { queueReceiptBackfill } from "@/app/lib/receipt-backfill";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
-import { createHash } from "crypto";
-import { createHmac, randomBytes } from "crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { validateWebhookUrl } from "@/app/lib/webhook-validator";
 import { safeWebhookFetch } from "@/app/lib/safe-fetch";
@@ -148,6 +149,40 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     apiKey, chain, token, from, to, amount, deadline,
     nonce, witnessSig, authorization, eip3009Nonce, xlayerNonce, stableNonce,
   } = body;
+
+  // ── Internal-trust gate for caller-supplied provenance fields ────────────
+  //
+  // Body fields `source` and `ruleId` let an internal caller (the recurring
+  // cron, the agentic-wallet send route, etc.) classify the resulting
+  // RelayedTx row so the dashboard's "Recurring only" Transactions filter
+  // and external accounting tooling can split scheduled payouts from
+  // one-off sends. External customers calling /api/relay directly must
+  // NOT be able to lie here (e.g. tag a one-shot send as "recurring"
+  // to dodge accounting alerts), so the trust check below only honours
+  // these fields when the X-Q402-Internal-Trust header carries a
+  // constant-time match against CRON_SECRET. Without the header — or
+  // with a mismatched value — both fields are dropped and `source` for
+  // this tx falls back to undefined (treated as "All" in the filter,
+  // never "Recurring only"). Mirrors the requireCronAuth shape used by
+  // the cron routes themselves.
+  let trustedSource: RelayedTxSource | undefined;
+  let trustedRuleId: string | undefined;
+  const internalTrust = req.headers.get("x-q402-internal-trust") ?? "";
+  const cronSecretValue = process.env.CRON_SECRET ?? "";
+  if (cronSecretValue.length > 0 && internalTrust.length === cronSecretValue.length) {
+    const a = Buffer.from(internalTrust);
+    const b = Buffer.from(cronSecretValue);
+    if (timingSafeEqual(a, b)) {
+      const rawSource = (body as { source?: unknown }).source;
+      if (rawSource === "recurring" || rawSource === "send" || rawSource === "batch" || rawSource === "api") {
+        trustedSource = rawSource;
+      }
+      const rawRuleId = (body as { ruleId?: unknown }).ruleId;
+      if (typeof rawRuleId === "string" && rawRuleId.length > 0 && rawRuleId.length <= 64) {
+        trustedRuleId = rawRuleId;
+      }
+    }
+  }
 
   // Reject legacy paymentId field — SDK must send `nonce` (uint256 string).
   if ((body as { paymentId?: unknown }).paymentId !== undefined) {
@@ -807,6 +842,8 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
         relayTxHash:  result.txHash ?? "",
         relayedAt,
         receiptId:    receiptId ?? undefined,
+        ...(trustedSource ? { source: trustedSource } : {}),
+        ...(trustedRuleId ? { ruleId: trustedRuleId } : {}),
       });
     } catch (e) {
       console.error("[relay] TX record failed (after-response):", e);

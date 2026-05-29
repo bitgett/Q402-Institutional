@@ -41,12 +41,13 @@
  * Auth: shared CRON_SECRET via Authorization header.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import type { Address, Hex } from "viem";
 
 import { requireCronAuth } from "@/app/lib/cron-auth";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
 import { getSubscription, hasMultichainScope } from "@/app/lib/db";
+import { dispatchRecurringWebhook } from "@/app/lib/recurring-webhook";
 import {
   getActiveAgenticWallet,
   decryptPrivateKey,
@@ -99,6 +100,37 @@ interface PerRuleOutcome {
   /** Multi-recipient rules: number of rows that hit a per-row error. */
   failed?: number;
   error?: string;
+}
+
+/**
+ * Dispatch a recurring webhook event for a non-fire outcome (stopped
+ * or transient error). Schedules via after() so we don't block the
+ * cron response on the customer's endpoint. Best-effort — a dispatch
+ * failure is logged but never alters rule state. Mirrors the
+ * recurring.fired path's posture so customers get one consistent
+ * delivery model across all three event types.
+ */
+function fireStateWebhook(
+  rule: RecurringRule,
+  event: "recurring.stopped" | "recurring.error",
+  errorMsg: string,
+  nowMs: number,
+): void {
+  after(
+    dispatchRecurringWebhook(rule.ownerAddr, {
+      event,
+      sandbox:    false,
+      ruleId:     rule.ruleId,
+      walletId:   rule.walletId,
+      ownerAddr:  rule.ownerAddr,
+      frequency:  rule.frequency,
+      chain:      rule.chain,
+      token:      rule.token,
+      slot:       rule.nextRunAt,
+      error:      errorMsg,
+      timestamp:  new Date(nowMs).toISOString(),
+    }).catch((e) => console.error(`[cron/recurring-payouts] webhook dispatch failed for ${rule.ruleId} (${event}):`, e)),
+  );
 }
 
 async function processOneRule(
@@ -159,11 +191,9 @@ async function processOneRule(
     for (let i = 0; i < rule.recipients.length; i++) {
       const n = Number(rule.recipients[i].amount);
       if (n > wallet.perTxMaxUsd) {
-        await recordRuleCapExceeded(
-          rule,
-          `recipients[${i}] amount $${n} now exceeds the wallet's per-tx cap $${wallet.perTxMaxUsd}.`,
-          nowMs,
-        );
+        const errMsg = `recipients[${i}] amount $${n} now exceeds the wallet's per-tx cap $${wallet.perTxMaxUsd}.`;
+        await recordRuleCapExceeded(rule, errMsg, nowMs);
+        fireStateWebhook(rule, "recurring.stopped", errMsg, nowMs);
         return { ruleKey, walletId: rule.walletId, outcome: "skipped-per-tx-exceeded" };
       }
     }
@@ -178,11 +208,9 @@ async function processOneRule(
   //    because trialApiKey was still present on the sub.
   const sub = await getSubscription(rule.ownerAddr);
   if (!hasMultichainScope(sub)) {
-    await recordRuleCapExceeded(
-      rule,
-      `Recurring requires an active paid Multichain subscription on every chain (including BNB). Re-subscribe and resume to retry.`,
-      nowMs,
-    );
+    const errMsg = `Recurring requires an active paid Multichain subscription on every chain (including BNB). Re-subscribe and resume to retry.`;
+    await recordRuleCapExceeded(rule, errMsg, nowMs);
+    fireStateWebhook(rule, "recurring.stopped", errMsg, nowMs);
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-subscription-lapsed" };
   }
 
@@ -191,11 +219,9 @@ async function processOneRule(
   // burn trial quota when both keys coexisted on the same owner sub.
   const apiKey = sub?.apiKey;
   if (!apiKey) {
-    await recordRuleCapExceeded(
-      rule,
-      `No paid apiKey on the subscription. Re-activate the paid plan and resume to retry.`,
-      nowMs,
-    );
+    const errMsg = `No paid apiKey on the subscription. Re-activate the paid plan and resume to retry.`;
+    await recordRuleCapExceeded(rule, errMsg, nowMs);
+    fireStateWebhook(rule, "recurring.stopped", errMsg, nowMs);
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-no-api-key" };
   }
 
@@ -237,6 +263,7 @@ async function processOneRule(
     // recovery is a config fix, not a re-fire race.
     await releaseFireSlot(rule);
     await recordRuleTransientError(rule, "relayer key not loaded", nowMs);
+    fireStateWebhook(rule, "recurring.error", "relayer key not loaded", nowMs);
     return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: "relay_unavailable" };
   }
 
@@ -275,7 +302,17 @@ async function processOneRule(
         amount: row.amount,
         facilitator: relayerKey.address as Address,
       });
-      const resp = await submitToRelay(internalBaseUrl(), apiKey, signed);
+      // Tag this fire as recurring so the dashboard's Transactions →
+      // "Recurring only" filter can find it and the per-rule
+      // reconciliation joins on ruleId. The CRON_SECRET trust token is
+      // what /api/relay checks before honouring the source/ruleId body
+      // fields — external customers calling /api/relay directly can't
+      // forge the tag without it.
+      const resp = await submitToRelay(internalBaseUrl(), apiKey, signed, {
+        source: "recurring",
+        ruleId: rule.ruleId,
+        internalTrustToken: process.env.CRON_SECRET,
+      });
       const respBody = (await resp.json().catch(() => null)) as { txHash?: string; error?: string } | null;
       if (!resp.ok || !respBody || typeof respBody.txHash !== "string") {
         const errMsg = respBody?.error ?? `relay HTTP ${resp.status}`;
@@ -301,6 +338,7 @@ async function processOneRule(
   if (firstFailureBeforeAnySuccess !== null && settledRows.length === 0) {
     await releaseFireSlot(rule);
     await recordRuleTransientError(rule, firstFailureBeforeAnySuccess, nowMs);
+    fireStateWebhook(rule, "recurring.error", firstFailureBeforeAnySuccess, nowMs);
     return {
       ruleKey,
       walletId: rule.walletId,
@@ -347,6 +385,32 @@ async function processOneRule(
   } catch (e) {
     console.error(`[cron/recurring-payouts] fire log write failed for ${rule.ruleId}:`, e);
   }
+
+  // Fire the customer's recurring.fired webhook (best-effort). after()
+  // keeps Vercel alive past the cron response so retries 2 + 3 (1s, 3s
+  // backoff) actually land — a raw setTimeout chain inside the
+  // serverless context can drop later attempts. A delivery failure here
+  // never blocks rule advancement or the on-chain settle.
+  after(
+    dispatchRecurringWebhook(rule.ownerAddr, {
+      event:              "recurring.fired",
+      sandbox:            false, // recurring is paid-only on every chain
+      ruleId:             rule.ruleId,
+      walletId:           rule.walletId,
+      ownerAddr:          rule.ownerAddr,
+      frequency:          rule.frequency,
+      chain:              rule.chain,
+      token:              rule.token,
+      amountUsd:          settledUsdTotal,
+      slot:               firedSlot,
+      txHashes:           settledRows.map((r) => r.txHash),
+      recipientCount:     rule.recipients.length,
+      settledCount:       settledRows.length,
+      failedCount:        failedRows.length,
+      partialFailureNote,
+      timestamp:          new Date(nowMs).toISOString(),
+    }).catch((e) => console.error(`[cron/recurring-payouts] webhook dispatch failed for ${rule.ruleId}:`, e)),
+  );
 
   return {
     ruleKey,
