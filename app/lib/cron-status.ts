@@ -81,3 +81,32 @@ export const CRON_NAMES = {
   DEPOSIT_SCAN: "deposit-scan",
 } as const;
 export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
+
+/**
+ * Per-cron cadence metadata. Single source of truth for both the cron
+ * driver (Render heartbeat interval) and the staleness watchdog (admin
+ * endpoint), so adjusting one without the other can't slip a silent
+ * "alive but reported stale" / "dead but reported fresh" mismatch.
+ *
+ * Tolerances:
+ *   - recurring: 1.25× the heartbeat interval (75min for 1h cadence).
+ *     Render restart + first-tick latency comfortably under this.
+ *   - deposit: 3× the heartbeat (15min for 5min cadence). Block-RPC
+ *     slowness on the widest chain (Monad ~30s wall) plus a missed
+ *     tick during deploy stays under the threshold.
+ */
+export interface CronMeta {
+  expectedIntervalMs: number;
+  staleAfterMs: number;
+}
+
+export const CRON_META: Record<CronName, CronMeta> = {
+  [CRON_NAMES.RECURRING_PAYOUTS]: {
+    expectedIntervalMs: 60 * 60 * 1000,
+    staleAfterMs: 75 * 60 * 1000,
+  },
+  [CRON_NAMES.DEPOSIT_SCAN]: {
+    expectedIntervalMs: 5 * 60 * 1000,
+    staleAfterMs: 15 * 60 * 1000,
+  },
+};

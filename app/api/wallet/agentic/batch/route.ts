@@ -108,6 +108,16 @@ interface BatchRecord {
   startedAt: number;
   finishedAt?: number;
   status: "processing" | "complete";
+  /**
+   * True when row 0 failed and the rest of the batch was marked
+   * ABORTED_AFTER_ROW_0_FAILURE without firing. Persisted on the
+   * cached record so an idempotent replay returns the same `aborted`
+   * field as the original response — otherwise a retry would see the
+   * field disappear, the AI's downstream branching would diverge, and
+   * "aborted=true" silently degrades to "settled=0" on the second
+   * round trip.
+   */
+  aborted?: boolean;
 }
 
 function isHexAddress(s: unknown): s is string {
@@ -276,6 +286,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         batchId: cached.batchId,
         status: cached.status,
         results: cached.results,
+        aborted: cached.aborted ?? false,
         idempotent: true,
         startedAt: cached.startedAt,
         finishedAt: cached.finishedAt,
@@ -367,6 +378,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           batchId: live.batchId,
           status: live.status,
           results: live.results,
+          aborted: live.aborted ?? false,
           idempotent: true,
           startedAt: live.startedAt,
           finishedAt: live.finishedAt,
@@ -505,6 +517,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     results,
     finishedAt: Date.now(),
     status: "complete",
+    aborted: row0Aborted,
   };
   // If we cannot write the final record, future retries will re-fire
   // (the cached "processing" record gets overwritten on retry by SET NX

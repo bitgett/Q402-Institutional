@@ -73,11 +73,16 @@ const SCAN_COUNT = 200;
  * Vercel Hobby GB-h budget comfortably under the 100 ceiling at 5-min
  * cadence. Tune via DEPOSIT_SCAN_BATCH env when the paid pool outgrows
  * the cycle time, but re-budget before bumping (owners are sequential).
+ *
+ * NaN-resistant: a malformed env value (`DEPOSIT_SCAN_BATCH=abc`,
+ * leading whitespace, etc.) would otherwise yield NaN and silently
+ * cripple the `addresses.length >= MAX_USERS_PER_RUN` break condition,
+ * letting the SCAN loop run to the cursor-wrap or MAX_SCAN_ITERS
+ * defensive cap instead of the intended per-tick budget.
  */
-const MAX_USERS_PER_RUN = parseInt(
-  process.env.DEPOSIT_SCAN_BATCH ?? "1",
-  10,
-);
+const _maxUsersRaw = parseInt(process.env.DEPOSIT_SCAN_BATCH ?? "1", 10);
+const MAX_USERS_PER_RUN =
+  Number.isFinite(_maxUsersRaw) && _maxUsersRaw > 0 ? _maxUsersRaw : 1;
 /**
  * Defensive — even a misbehaving KV server-side cursor shouldn't be
  * able to burn the function timeout on raw SCAN iterations.
