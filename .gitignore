@@ -55,6 +55,7 @@ scripts/wallets.csv
 scripts/ambassadors.csv
 scripts/subscribe-state.json
 scripts/balance-audit.json
+scripts/trial-recurring.json
 seed.txt
 # Ambassador automation scripts (separate project, not for product repo)
 scripts/derive-from-seed.mjs
