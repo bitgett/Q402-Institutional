@@ -1,12 +1,10 @@
 /**
  * feature-flags.ts
  *
- * Sprint-scoped feature flags. Build-time constants — reversibility is
- * provided by git (this file differs between `main` and
- * `feat/bnb-focus-sprint`) and Vercel can swap its production branch
- * between the two without a code revert.
+ * Build-time feature constants. Reversibility comes from git —
+ * Vercel can swap branches without a code revert.
  *
- * If you find yourself needing a runtime toggle, swap a constant for
+ * If you need a runtime toggle, swap a constant for
  * `process.env.NEXT_PUBLIC_*` *but* keep the import surface identical
  * so callers don't have to change.
  */

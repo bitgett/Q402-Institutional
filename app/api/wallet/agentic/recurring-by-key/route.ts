@@ -22,7 +22,7 @@
  *   {
  *     apiKey:      string,
  *     walletId?:   string,           // omit to use owner's default wallet
- *     action:      "create"|"list"|"cancel"|"pause"|"resume",
+ *     action:      "create"|"list"|"fires"|"cancel"|"pause"|"resume"|"skip-next",
  *     // action=create:
  *     frequency?:  string,           // FrequencyEnum: "hourly:N"|"daily"|"weekly:{day}"|"monthly:N"|"monthly:last"
  *     chain?:      AgenticChainKey,
@@ -31,8 +31,11 @@
  *     amount?:     string,           // decimal string, > 0
  *     label?:      string,
  *     cancelWindowHours?: number,    // optional, default 0
- *     // action=cancel|pause|resume:
+ *     // action=cancel|pause|resume|skip-next:
  *     ruleId?:     string,
+ *     // action=fires:
+ *     ruleId:      string,           // required
+ *     limit?:      number,           // 1..50, default 50
  *   }
  *
  * Sandbox keys rejected (same posture as send/info-by-key).
