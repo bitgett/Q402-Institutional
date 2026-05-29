@@ -242,11 +242,10 @@ export function AgenticWalletCard({
               Agent Wallet
             </div>
             <div className="text-white/80 text-sm leading-relaxed max-w-md">
-              A separate wallet your AI signs through. Your MetaMask stays
-              untouched — funds here are bounded by the caps below.
+              Your AI&apos;s wallet. MetaMask untouched. Bounded by caps below.
             </div>
             <div className="text-[11.5px] text-white/75 mt-1 leading-relaxed max-w-md">
-              Connecting from an AI agent / MCP?{" "}
+              From an AI / MCP?{" "}
               <a
                 href="/docs#wallet-modes"
                 className="text-emerald-300 hover:text-emerald-200 font-medium"

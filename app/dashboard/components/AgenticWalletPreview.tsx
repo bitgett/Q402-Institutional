@@ -56,9 +56,8 @@ function PreviewCard({ onCreate, creating }: { onCreate: () => void; creating: b
           <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-400/85 font-semibold">
             Agent Wallet · Preview
           </div>
-          <div className="text-white/65 text-sm leading-relaxed max-w-md">
-            A separate wallet your AI signs through. Your MetaMask stays
-            untouched — funds here are bounded by the caps below.
+          <div className="text-white/75 text-sm leading-relaxed max-w-md">
+            Your AI&apos;s wallet. MetaMask untouched. Bounded by caps below.
           </div>
         </div>
 
@@ -184,8 +183,7 @@ function PromptExamples() {
       </div>
 
       <div className="text-[11px] text-white/65 mt-4 leading-relaxed">
-        Caps are enforced server-side on every send. Your agent only ever spends
-        what you let it.
+        Caps enforced server-side on every send.
       </div>
     </div>
   );
