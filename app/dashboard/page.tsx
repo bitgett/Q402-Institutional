@@ -17,7 +17,7 @@ import WrongWalletHardBlock from "./WrongWalletHardBlock";
 import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
 import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
-import { BNB_FOCUS_MODE, TRIAL_DURATION_DAYS, TRIAL_CREDITS } from "../lib/feature-flags";
+import { TRIAL_DURATION_DAYS, TRIAL_CREDITS } from "../lib/feature-flags";
 
 function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
 function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
@@ -166,7 +166,7 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
 
         {phase === "main" && (
           <div className="space-y-4">
-            <p className="text-white/40 text-sm">Send <span className="text-yellow font-semibold">{token}</span> to Q402 to top up your gas tank.</p>
+            <p className="text-white/60 text-sm">Top up the Gas Tank with <span className="text-yellow font-semibold">{token}</span>.</p>
             <div className="rounded-2xl border border-yellow/20 bg-yellow/5 p-4 space-y-3">
               <div>
                 <label className="block text-[10px] text-white/30 uppercase tracking-widest mb-1">
@@ -191,17 +191,15 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
               >
                 Top up with wallet
               </button>
-              <p className="text-[10px] text-white/30 leading-relaxed">
-                We will switch to {chain}, send native {token}, wait for confirmation, and credit your Gas Tank automatically.
+              <p className="text-[10px] text-white/40 leading-relaxed">
+                Switches to {chain}, sends {token}, credits your Gas Tank on confirmation.
               </p>
             </div>
             {chainKey === "stable" ? (
               <div className="flex items-start gap-2.5 bg-green-400/5 border border-green-400/20 rounded-xl px-4 py-3 text-xs text-green-400/80">
                 <span className="mt-0.5 flex-shrink-0">ℹ</span>
                 <span>
-                  Stable chain uses <strong>USDT0</strong> as both gas token and payment token.
-                  Send USDT0 on Stable network (Chain ID 988) to this address.
-                  Do <strong>not</strong> send ETH, BNB, or AVAX.
+                  Send <strong>USDT0</strong> on <strong>Stable</strong> (chain 988). Don&apos;t send ETH / BNB / AVAX.
                 </span>
               </div>
             ) : (
@@ -1056,9 +1054,8 @@ export default function DashboardPage() {
           </div>
 
           <h1 className="text-2xl font-bold mb-1">Welcome, {emailSession.email.split("@")[0]}</h1>
-          <p className="text-white/45 text-sm mb-8">
-            Your free trial is active. 2,000 sponsored TX on BNB Chain, Q402 covers the gas.
-            Use the live key from your backend; connect a wallet only when an end user signs an EIP-712.
+          <p className="text-white/60 text-sm mb-8">
+            Free trial active — 2,000 sponsored TX on BNB Chain.
           </p>
 
           {/* Trial summary card — sponsored TX gauge + days left + chain badge */}
@@ -1176,11 +1173,9 @@ export default function DashboardPage() {
                   {emailSession.address.slice(0, 6)}…{emailSession.address.slice(-4)}
                 </span>
               </div>
-              <h2 className="text-base font-bold mb-2">Welcome back — reconnect for the full dashboard</h2>
-              <p className="text-white/45 text-sm mb-4">
-                Your wallet is already paired with this email account. Reconnect it
-                in this browser to unlock the Multichain dashboard (gas tank, paid
-                plans, transaction history across all 9 chains).
+              <h2 className="text-base font-bold mb-2">Reconnect to unlock Multichain</h2>
+              <p className="text-white/60 text-sm mb-4">
+                Wallet already paired with this email. Reconnect to use Gas Tank, paid plans, and 9-chain history.
               </p>
               <button
                 onClick={() => setShowWalletConnectFromEmail(true)}
@@ -1195,12 +1190,9 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-[10px] uppercase tracking-widest text-yellow font-bold">Skip mode — trial only</span>
               </div>
-              <h2 className="text-base font-bold mb-2">Resume claiming this account?</h2>
-              <p className="text-white/45 text-sm mb-4">
-                You deferred binding <span className="font-mono text-white/75">{address.slice(0, 6)}…{address.slice(-4)}</span> to
-                this account. Trial credits + API keys above are live — but
-                Multichain stays locked until you bind a wallet. Claim now to
-                unlock it.
+              <h2 className="text-base font-bold mb-2">Finish binding this wallet?</h2>
+              <p className="text-white/60 text-sm mb-4">
+                Trial credits are live, but Multichain stays locked until <span className="font-mono text-white/80">{address.slice(0, 6)}…{address.slice(-4)}</span> is bound to this account.
               </p>
               <button
                 onClick={() => setSkipClaimPrompt(false)}
@@ -1211,12 +1203,9 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="rounded-2xl border border-white/8 p-6 mb-6" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <h2 className="text-base font-bold mb-2">Need to test the full flow yourself?</h2>
-              <p className="text-white/45 text-sm mb-4">
-                Connect a wallet to sign EIP-712 from this browser. We&apos;ll bind it
-                to this email account so you keep one identity going forward — trial
-                credits + keys stay attached, and you&apos;ll land on the Multichain
-                dashboard on next sign-in.
+              <h2 className="text-base font-bold mb-2">Test the full flow yourself?</h2>
+              <p className="text-white/60 text-sm mb-4">
+                Connect a wallet to sign EIP-712 in this browser. We&apos;ll bind it to this account so trial credits + keys stay attached.
               </p>
               <button
                 onClick={() => setShowWalletConnectFromEmail(true)}
@@ -1709,9 +1698,8 @@ export default function DashboardPage() {
                   Free trial · BNB Chain
                 </div>
                 <h3 className="text-xl font-bold mb-2">Activate 2,000 sponsored TX</h3>
-                <p className="text-white/50 text-sm leading-relaxed">
-                  One wallet signature (no on-chain TX) and you get a live API
-                  key + 2,000 gasless transactions for {TRIAL_DURATION_DAYS} days. Q402 covers the gas.
+                <p className="text-white/65 text-sm leading-relaxed">
+                  One signature → live API key + 2,000 gasless TX for {TRIAL_DURATION_DAYS} days.
                 </p>
               </div>
               <button
@@ -1855,10 +1843,8 @@ export default function DashboardPage() {
                       </span>
                       <span className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg text-white/35">🔒</span>
                     </div>
-                    <p className="text-white/35 text-xs mt-2 leading-relaxed">
-                      Multichain keys unlock with a paid plan — full 9-chain
-                      relay (Avalanche · BNB · Ethereum · X Layer · Stable ·
-                      Mantle · Injective · Monad · Scroll).
+                    <p className="text-white/55 text-xs mt-2 leading-relaxed">
+                      Paid plan unlocks 9-chain relay (BNB · ETH · Avalanche · X Layer · Stable · Mantle · Injective · Monad · Scroll).
                     </p>
                     <Link href="/#pricing" className="mt-3 inline-flex items-center gap-1.5 text-xs text-yellow hover:text-yellow/80 transition-colors font-semibold">
                       View pricing
@@ -1878,11 +1864,11 @@ export default function DashboardPage() {
             <div className="rounded-2xl p-6 border relative overflow-hidden"
               style={{ background: "linear-gradient(135deg, #0F1929 0%, #131E30 100%)", borderColor: "rgba(245,197,24,0.15)" }}>
               <div className="absolute right-6 top-6 w-32 h-32 rounded-full blur-3xl" style={{ background: "rgba(245,197,24,0.06)" }} />
-              <div className="text-white/40 text-sm mb-1">My Gas Tank (USD est.)</div>
+              <div className="text-white/55 text-sm mb-1">My Gas Tank (USD est.)</div>
               <div className="text-4xl font-bold text-yellow mb-1">
                 {tankLoading ? <span className="text-2xl text-white/20 animate-pulse">Loading…</span> : `$${totalUserUSD.toFixed(2)}`}
               </div>
-              <div className="text-white/25 text-xs">Your deposited balance · used for gas sponsorship</div>
+              <div className="text-white/45 text-xs">Sponsors gas on relayed payments.</div>
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
@@ -1980,7 +1966,7 @@ export default function DashboardPage() {
                     <span className="ml-2 text-[10px] bg-yellow/10 text-yellow border border-yellow/20 px-2 py-0.5 rounded-full font-semibold">TEST</span>
                   </div>
                 </div>
-                <p className="text-white/35 text-xs">Prefix <span className="font-mono text-yellow/70">q402_test_</span> — no real transactions. Safe for local dev &amp; CI.</p>
+                <p className="text-white/55 text-xs">Prefix <span className="font-mono text-yellow/85">q402_test_</span>. No real TX — safe for dev / CI.</p>
                 {sandboxApiKey ? (
                   <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
                     <span className="font-mono text-xs text-white/40 truncate flex-1">{sandboxApiKey.slice(0,14)}{"•".repeat(14)}{sandboxApiKey.slice(-4)}</span>
@@ -1997,7 +1983,7 @@ export default function DashboardPage() {
                   <span className="text-sm font-semibold">Webhook</span>
                   {webhookUrl && <span className="text-[10px] bg-green-400/10 text-green-400 border border-green-400/20 px-2 py-0.5 rounded-full">Active</span>}
                 </div>
-                <p className="text-white/35 text-xs">Receive a signed POST after every relay. Header: <span className="font-mono text-white/50">X-Q402-Signature</span></p>
+                <p className="text-white/55 text-xs">Signed POST after every relay. Header <span className="font-mono text-white/75">X-Q402-Signature</span>.</p>
                 <div className="flex gap-2">
                   <input value={webhookUrlInput || webhookUrl} onChange={e => setWebhookUrlInput(e.target.value)}
                     placeholder="https://your-server.com/webhook"
@@ -2048,7 +2034,7 @@ export default function DashboardPage() {
               <div>
                 <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest mb-4">API Playground</h3>
                 <div className="rounded-2xl border p-6" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                  <p className="text-white/40 text-sm mb-5">Test a simulated transaction using your API key.</p>
+                  <p className="text-white/60 text-sm mb-5">Simulate a TX with your API key.</p>
                   <Playground apiKey={API_KEY} trialView={viewMode === "trial"} />
                 </div>
               </div>
@@ -2194,34 +2180,34 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
             <div className="space-y-1 mb-2">
               <h2 className="text-lg font-semibold">Use Q402 from your AI client</h2>
-              <p className="text-white/40 text-sm">
-                Q402 ships as a Model Context Protocol server, so Claude (Desktop / Code), OpenAI Codex CLI,
-                Cursor, Cline, and any other MCP-compatible AI client can quote and (optionally) settle gasless
-                USDC, USDT, and RLUSD payments directly from a chat. The config snippet below is pre-filled with your{" "}
-                <strong className="text-white/60">sandbox key</strong> — safe to paste anywhere. For real
-                on-chain payments, the recommended path is to ask your AI{" "}
-                <strong className="text-white/65">&ldquo;Set up Q402&rdquo;</strong> after installing — the
-                bundled <code className="text-white/60">q402_doctor</code> tool creates{" "}
-                <code className="text-white/60">~/.q402/mcp.env</code> for you and walks you through pasting
-                your live key + wallet private key in your editor (never in chat).
+              <p className="text-white/60 text-sm">
+                Paste the snippet below into Claude / Codex / Cursor / Cline. The sandbox key is pre-filled — safe to commit.
+                For real payments, install then say <strong className="text-white/85">&ldquo;Set up Q402&rdquo;</strong> to your AI.
               </p>
             </div>
             <ClaudeMcpCard sandboxApiKey={sandboxApiKey || "q402_test_••••"} />
             <div className="rounded-2xl border p-5" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-              <div className="text-[10px] uppercase tracking-widest text-white/40 mb-2 font-semibold">
-                What ships in the package
+              <div className="text-[10px] uppercase tracking-widest text-white/55 mb-3 font-semibold">
+                16 tools · sandbox by default
               </div>
-              <ul className="text-white/55 text-sm space-y-1.5 leading-relaxed">
-                <li>• <code className="text-yellow text-xs">q402_doctor</code> — first-install onboarding + ongoing health check. Creates <code className="text-white/60 text-xs">~/.q402/mcp.env</code> for you on first run and surfaces missing config, slot-mismatch warnings, and per-chain delegation state thereafter. Read-only, no auth.</li>
-                <li>• <code className="text-yellow text-xs">q402_quote</code> — {BNB_FOCUS_MODE ? "BNB-only narrowing active: shows BNB Chain + USDC/USDT." : "compare gas across all 9 chains."} Read-only, no auth.</li>
-                <li>• <code className="text-yellow text-xs">q402_balance</code> — verify your API key and report its plan tier. Read-only.</li>
-                <li>• <code className="text-yellow text-xs">q402_pay</code> — send a single-recipient gasless payment. <strong>Sandbox by default</strong>; real on-chain TX requires a live API key + a valid signing path (Mode A <code className="text-white/60">Q402_PRIVATE_KEY</code> · Mode B <code className="text-white/60">Q402_AGENTIC_PRIVATE_KEY</code> · or Mode C server-managed Agent Wallet, no PK needed) + <code className="text-white/60">Q402_ENABLE_REAL_PAYMENTS=1</code>.</li>
-                <li>• <code className="text-yellow text-xs">q402_batch_pay</code> — one signed batch to up to 20 recipients on a single chain × token (trial keys: 5). Same auto-routing as <code className="text-yellow text-xs">q402_pay</code>; 6+ recipient BNB batches return <code className="text-yellow text-xs">status=&quot;ambiguous&quot;</code> so the agent can ask the user to pick: 5 free, all paid, or split. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</li>
-                <li>• <code className="text-yellow text-xs">q402_receipt</code> — fetch + locally verify a Trust Receipt by <code className="text-white/60 text-xs">rct_…</code> id. Read-only.</li>
-                <li>• <code className="text-yellow text-xs">q402_wallet_status</code> — per-chain EIP-7702 delegation state for the EOA derived from <code className="text-white/60">Q402_PRIVATE_KEY</code>. Read-only.</li>
-                <li>• <code className="text-yellow text-xs">q402_agentic_info</code> — introspect your server-managed Agent Wallets (addresses, per-wallet caps, daily-spend used, ERC-8004 agent id). Auth: API key. Drives Mode C (no PK on the client). Read-only.</li>
-                <li>• <code className="text-yellow text-xs">q402_clear_delegation</code> — reset the EIP-7702 delegation on a single chain. Q402 sponsors the on-chain TX, so you pay $0 gas to clear.</li>
-              </ul>
+              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-white/70 text-[12.5px] leading-relaxed">
+                <div><code className="text-yellow text-xs">q402_doctor</code> — install + health check</div>
+                <div><code className="text-yellow text-xs">q402_quote</code> — compare gas across chains</div>
+                <div><code className="text-yellow text-xs">q402_balance</code> — verify key + quota</div>
+                <div><code className="text-yellow text-xs">q402_pay</code> — single send</div>
+                <div><code className="text-yellow text-xs">q402_batch_pay</code> — up to 20 recipients</div>
+                <div><code className="text-yellow text-xs">q402_receipt</code> — fetch Trust Receipt</div>
+                <div><code className="text-yellow text-xs">q402_wallet_status</code> — EIP-7702 delegation</div>
+                <div><code className="text-yellow text-xs">q402_agentic_info</code> — Agent Wallet info</div>
+                <div><code className="text-yellow text-xs">q402_clear_delegation</code> — reset delegation</div>
+                <div><code className="text-yellow text-xs">q402_recurring_list</code> — list rules</div>
+                <div><code className="text-yellow text-xs">q402_recurring_create</code> — author a rule</div>
+                <div><code className="text-yellow text-xs">q402_recurring_fires</code> — fire history</div>
+                <div><code className="text-yellow text-xs">q402_recurring_pause</code> — pause a rule</div>
+                <div><code className="text-yellow text-xs">q402_recurring_resume</code> — resume a rule</div>
+                <div><code className="text-yellow text-xs">q402_recurring_skip_next</code> — skip next fire</div>
+                <div><code className="text-yellow text-xs">q402_recurring_cancel</code> — stop a rule</div>
+              </div>
               <div className="text-[11px] text-white/30 mt-4 pt-3 border-t border-white/8">
                 Full reference in{" "}
                 <a className="text-yellow hover:underline" href="/docs#claude-mcp">/docs → MCP for AI Clients</a>
@@ -2282,15 +2268,13 @@ export default function DashboardPage() {
               </div>
             </div>
             <h2 className="text-2xl font-bold mb-2">Usage notifications</h2>
-            <p className="text-white/45 text-sm mb-5">
-              We&apos;ll email you when your sponsored TX balance drops to 20%
-              and then 10% — so you can top up before relay stalls.
+            <p className="text-white/65 text-sm mb-5">
+              Get an email at 20% and 10% TX remaining.
             </p>
 
             {!address && (
               <p className="text-red-400 text-xs mb-4">
-                Connect a wallet to configure email alerts (the endpoint
-                requires a wallet signature).
+                Connect a wallet first — email alerts require a signed config.
               </p>
             )}
 
