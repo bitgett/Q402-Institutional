@@ -15,9 +15,9 @@
 
 ## Why
 
-On every EVM chain, users need to hold a native gas token (BNB, ETH, AVAX, OKB, MNT, INJ, USDT0, MON) just to move USDC/USDT. A user holding $100 of USDC on BNB Chain cannot transfer anything without first acquiring BNB — that's where Web3 onboarding collapses. Q402 removes that step entirely: the sender signs an EIP-712 authorization off-chain, Q402's relayer submits the on-chain transaction and pays the gas, and the recipient receives 100% of the stablecoin.
-
-The same primitive serves AI agents. Managing gas across multiple chains for many autonomous agents is operationally painful; one Q402 account covers all of them through a single API key.
+Users need a native gas token (BNB, ETH, AVAX, …) just to move stablecoins.
+Q402 removes that step: user signs off-chain, relayer submits + pays gas,
+recipient gets 100%. Same primitive serves AI agents — one API key, every chain.
 
 ---
 
@@ -30,7 +30,8 @@ User signs EIP-712 off-chain
       → recipient receives 100%, sender pays $0
 ```
 
-All nine chains share the same witness type, the same signing rule (`verifyingContract = user EOA`), and the same on-wire body shape. The chain-specific parts are the deployed implementation contract and the EIP-712 domain name.
+All 9 chains share the witness type, the signing rule (`verifyingContract = user EOA`),
+and the on-wire body. Chain-specific: impl contract + EIP-712 domain name.
 
 ---
 
@@ -48,7 +49,7 @@ All nine chains share the same witness type, the same signing rule (`verifyingCo
 | Monad | 143 | USDC, USDT (USDT0) | live |
 | Scroll | 534352 | USDC, USDT | live |
 
-RLUSD (Ripple USD, NY DFS regulated, 18 decimals) is Ethereum-only by issuer design. Native USDC on Injective EVM is announced for Q2 2026 via Circle CCTP and will be added when it ships.
+RLUSD is Ethereum-only (issuer constraint, 18 decimals). Injective native USDC ships Q2 2026 (Circle CCTP).
 
 ---
 
@@ -56,11 +57,12 @@ RLUSD (Ripple USD, NY DFS regulated, 18 decimals) is Ethereum-only by issuer des
 
 ### 1. End user — the dashboard
 
-Sign up at [q402.quackai.ai](https://q402.quackai.ai) with Google, email, or a wallet. The dashboard surfaces your live + sandbox API keys, transaction history, gas-tank balances, and (during the BNB-focus event) the free-trial credit gauge.
+Sign up at [q402.quackai.ai](https://q402.quackai.ai) with Google, email, or a wallet.
+Live + sandbox keys, TX history, Gas Tank balances, trial credit gauge.
 
 ### 2. Web developer — the browser SDK
 
-Drop the public SDK in any page that already has `window.ethereum`:
+Drop the SDK in any page with `window.ethereum`:
 
 ```html
 <script src="https://q402.quackai.ai/q402-sdk.js"></script>
@@ -70,7 +72,7 @@ Drop the public SDK in any page that already has `window.ethereum`:
 </script>
 ```
 
-The SDK handles the EIP-712 signature, the EIP-7702 authorization, and the POST to `/api/relay`. The user signs once in their wallet; the recipient receives the full amount.
+The SDK handles EIP-712 + EIP-7702 + relay POST. User signs once.
 
 ### 3. AI agent — the MCP server
 
@@ -87,25 +89,48 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
 # into ~/.cursor/mcp.json (Cursor) or Cline → Settings → MCP Servers → Edit JSON.
 ```
 
-Then ask your AI: **"Set up Q402"**. The agent calls `q402_doctor`, which creates `~/.q402/mcp.env` with placeholders and walks you through pasting in your real API key + wallet private key — in your editor, **never in chat**.
+Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
+`~/.q402/mcp.env` → walks you through pasting keys in your editor, **never in chat**.
 
-The MCP server auto-loads `~/.q402/mcp.env` at startup, so the same secrets file works for every MCP client without per-client wiring. Auto-routes by chain: `chain="bnb"` + `Q402_TRIAL_API_KEY` set → Trial (free 2k TX sponsored, same rule for `q402_pay` and `q402_batch_pay` up to 5 recipients); anything else → Multichain. 6+ recipient BNB batches return `status="ambiguous"` so the agent asks the user to pick `keyScope="trial"` (first 5), `"multichain"` (all paid), or two calls.
+Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything else → Multichain.
+6+ BNB batches return `status="ambiguous"` so the agent asks the user how to split.
 
-The agent gets nine tools: `q402_doctor` (first-install + health check), `q402_quote` (compare gas across all 9 chains), `q402_balance` (verify key + remaining credits), `q402_pay` (single-recipient gasless transfer), `q402_batch_pay` (multi-recipient batch call — one EIP-712 witness + one EIP-7702 authorization per recipient, all signed locally, up to 20 recipients on a single chain × token), `q402_receipt` (fetch + cryptographically verify a Trust Receipt), `q402_wallet_status` (per-chain EIP-7702 delegation state), `q402_agentic_info` (introspect your server-managed Agent Wallets — addresses, per-wallet caps, daily-spend used, ERC-8004 agent id), and `q402_clear_delegation` (reset delegation on a chain, Q402-sponsored gas). Sandbox mode is the default — `q402_pay` returns a test response until a live API key + a valid signing path are configured.
+**16 tools** (all sandbox by default; live needs an API key + a signing path):
+
+| Tool | Auth | What it does |
+|---|---|---|
+| `q402_doctor` | none | First-install onboarding + health check |
+| `q402_quote` | none | Compare gas across 9 chains |
+| `q402_balance` | api key | Verify key + remaining quota |
+| `q402_pay` | live mode | Single-recipient gasless transfer |
+| `q402_batch_pay` | live mode | Up to 20 recipients per call (trial: 5) |
+| `q402_receipt` | none | Fetch + verify a Trust Receipt |
+| `q402_wallet_status` | private key | Per-chain EIP-7702 state |
+| `q402_clear_delegation` | private key | Reset delegation; Q402-sponsored gas |
+| `q402_agentic_info` | api key | Agent Wallet info (caps, ERC-8004) |
+| `q402_recurring_list` | api key | List scheduled rules |
+| `q402_recurring_create` | api key | Author a rule (paid Multichain only) |
+| `q402_recurring_fires` | api key | Last 50 fires per rule |
+| `q402_recurring_pause` | api key | Pause a rule (reversible) |
+| `q402_recurring_resume` | api key | Resume a paused / stopped rule |
+| `q402_recurring_skip_next` | api key | Skip only the next fire |
+| `q402_recurring_cancel` | api key | Permanently stop a rule |
 
 ---
 
 ## Free trial event
 
-Any developer can sign up at [/event](https://q402.quackai.ai/event) and immediately receive:
+Sign up at [/event](https://q402.quackai.ai/event):
 
-- 2,000 sponsored transactions on BNB Chain
-- Both a live (`q402_live_*`) and a sandbox (`q402_test_*`) API key
-- 30-day window from the moment of signup
+- 2,000 sponsored TX on BNB Chain
+- Live (`q402_live_*`) + sandbox (`q402_test_*`) keys
+- 30-day window
 
-Trial credits are real settlements — the relayer's hot wallet pays the gas, the recipient receives the full amount, and the trial counter atomically decrements on every transfer. Trial credentials live in their own key slot (`trialApiKey` / `trialSandboxApiKey`) so they keep working until the trial window or credits are exhausted; upgrading on [/payment](https://q402.quackai.ai/payment) provisions a separate paid key (`apiKey` / `sandboxApiKey`) drawn against a self-funded Gas Tank.
+Trial credits are real settlements — gas from the relayer wallet, recipient gets the full amount.
+Trial credentials live in their own key slot (`trialApiKey`); upgrading on [/payment](https://q402.quackai.ai/payment)
+provisions a separate paid key with self-funded Gas Tank.
 
-The trial is BNB-Chain-only by server-side policy (`TRIAL_BNB_ONLY` gate). Paid keys see the full 9-chain matrix.
+Trial = BNB-only (server-side `TRIAL_BNB_ONLY` gate). Paid = all 9 chains.
 
 ---
 
@@ -146,10 +171,10 @@ The trial is BNB-Chain-only by server-side policy (`TRIAL_BNB_ONLY` gate). Paid 
 
 ## Authentication model
 
-- **API key** identifies the caller; rate-limited per key and per IP. Live keys (`q402_live_*`) and sandbox keys (`q402_test_*`) live side-by-side on every account — sandbox returns mock results without touching the chain.
-- **EIP-712 witness** (`TransferAuthorization`) proves the user authorized this specific transfer (owner / facilitator / token / recipient / amount / nonce / deadline).
-- **EIP-7702 authorization** delegates the user's EOA to execute the Q402 implementation contract for this one tx. Signed with `wallet.authorize(...)` (ethers v6.16+) which produces the protocol-correct `keccak256(0x05 || rlp([chainId, address, nonce]))` signature.
-- **Wallet binding** (optional, for email users) links a wallet to an email account 1:1 via a signed challenge. See the bind-once contract documented in `app/api/auth/wallet-bind/route.ts`.
+- **API key** — identifies the caller, rate-limited per key + IP. Live (`q402_live_*`) and sandbox (`q402_test_*`) coexist on every account.
+- **EIP-712 witness** (`TransferAuthorization`) — proves the user authorized this exact transfer (owner / facilitator / token / recipient / amount / nonce / deadline).
+- **EIP-7702 authorization** — delegates the user's EOA to the Q402 impl contract for one TX. Signed via `wallet.authorize(...)` (ethers v6.16+).
+- **Wallet binding** (optional) — links a wallet to an email account 1:1 via signed challenge. See `app/api/auth/wallet-bind/route.ts`.
 
 ---
 
@@ -204,7 +229,7 @@ Required env vars (the rest are optional / Vercel-managed):
 | `RESEND_API_KEY`, `RESEND_FROM_ADDRESS` | Email magic-link sender |
 | `CRON_SECRET` | Shared header that authorizes Vercel cron POSTs |
 
-`.env.example` carries the complete list with comments. Never commit `.env.local` / `.env.preview` — `.gitignore` excludes the broad `.env*` glob.
+Full list with comments in `.env.example`. `.gitignore` blocks the `.env*` glob — never commit secrets.
 
 ---
 
@@ -217,25 +242,24 @@ npx next build --webpack
 npm audit --omit=dev
 ```
 
-Test files cover relay route ordering, EIP-7702 signing shape, trial-vs-paid key scope isolation, gas-deposit dedup invariants, identity-model state machine, and several drift guards (`contracts.manifest.json` ↔ relayer, MCP package ↔ landing SDK).
+Coverage: relay ordering, EIP-7702 signing, trial/paid scope isolation, gas-deposit dedup, identity state machine, and drift guards (`contracts.manifest.json` ↔ relayer, MCP package ↔ landing SDK).
 
 ---
 
 ## Wallet delegation (EIP-7702)
 
-Q402 uses EIP-7702 delegation so your wallet can settle gasless payments without deploying a smart account per user. The delegation lives on your EOA, persists across payments (so the next one is gas-efficient), and you can inspect or clear it anytime.
+EIP-7702 lets your EOA settle gasless payments without a per-user smart-account deploy.
+Persists across payments, reversible anytime.
 
-Two ways to manage:
-
-- **From your AI client (MCP)**: ask Claude / Codex / Cursor / Cline `"Show my Q402 wallet status"` or `"Clear my Q402 delegation on BNB Chain"`. Tools: `q402_wallet_status`, `q402_clear_delegation`. Local signing with `Q402_PRIVATE_KEY`, Q402 sponsors the on-chain TX.
-- **From the terminal (CLI)**:
+- **MCP**: ask `"Show my Q402 wallet status"` or `"Clear my Q402 delegation on BNB Chain"`. Local signing; Q402 sponsors the clear TX.
+- **CLI**:
 
   ```bash
   PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs \
     --chain <bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll>
   ```
 
-Clear only when you explicitly want to reset the delegation — your next Q402 payment recreates it automatically. Full guide: [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation).
+Clearing is optional — the next payment recreates the delegation. Full guide: [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation).
 
 ---
 
