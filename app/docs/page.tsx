@@ -78,7 +78,7 @@ export default function DocsPage() {
     <div className="min-h-screen text-white" style={{ background: "#080E1C" }}>
       {/* Top nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md" style={{ background: "rgba(8,14,28,0.92)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-        <div className="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="w-full px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-5">
             <Link href="/" className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
@@ -466,67 +466,46 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 16 total</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-widest text-white/35" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <tr className="text-left text-[11px] uppercase tracking-widest text-white/55" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <th className="px-4 py-3 font-semibold">Tool</th>
                     <th className="px-4 py-3 font-semibold">Auth</th>
                     <th className="px-4 py-3 font-semibold">Purpose</th>
                   </tr>
                 </thead>
-                <tbody className="text-white/65">
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_doctor</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
-                    <td className="px-4 py-3">First-install onboarding + ongoing health check. Detects what env vars are missing, offers to create <code className="text-white/60 text-xs">~/.q402/mcp.env</code> on first run, and on a configured wallet verifies per-scope quota, EIP-7702 delegation per chain, relay reachability, and surfaces slot-mismatch warnings. Call this BEFORE <code className="text-yellow text-xs">q402_pay</code> on a fresh install.</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_quote</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
-                    <td className="px-4 py-3">Compare gas cost + supported tokens across chains. Read-only.</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_balance</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">api key</td>
-                    <td className="px-4 py-3">Verify the configured API key(s) and report each one&apos;s plan tier. When both <code className="text-white/60 text-xs">Q402_TRIAL_API_KEY</code> and <code className="text-white/60 text-xs">Q402_MULTICHAIN_API_KEY</code> are set, returns Trial + Multichain summaries in one read.</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_pay</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
-                    <td className="px-4 py-3">Send a gasless USDC, USDT, or RLUSD payment to a single recipient. <strong>Sandbox by default</strong> — see below.</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_batch_pay</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">api key + signer + flag</td>
-                    <td className="px-4 py-3">Send one signed batch to up to 20 recipients on a single chain × token (trial keys: 5 max). Auto-routing follows the same rule as <code className="text-yellow text-xs">q402_pay</code> (BNB + Trial key set → Trial; else Multichain). 6+ recipient BNB batches with a Trial key return <code className="text-yellow text-xs">status=&quot;ambiguous&quot;</code> so the agent can ask the user to pick: trim to 5 (free), all-paid Multichain, or split into two calls. Supported chains: avax, bnb, eth, mantle, injective, monad, scroll. Same sandbox gating as <code className="text-yellow text-xs">q402_pay</code>.</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_receipt</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">no auth</td>
-                    <td className="px-4 py-3">Fetch + locally verify a Trust Receipt by <code className="text-white/60 text-xs">rct_</code>… id. Recovers the relayer ECDSA signature client-side.</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_wallet_status</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">private key</td>
-                    <td className="px-4 py-3">Per-chain EIP-7702 delegation status for the EOA derived from <code className="text-white/60 text-xs">Q402_PRIVATE_KEY</code>. Read-only — no signing, no on-chain action.</td>
-                  </tr>
-                  <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_agentic_info</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">api key</td>
-                    <td className="px-4 py-3">Introspect your server-managed Agent Wallets: addresses, per-wallet caps, daily-spend used, ERC-8004 agent id, sub-balances per chain. Drives Mode C (server-managed Agent Wallet) — no private key needed on the client. Read-only.</td>
-                  </tr>
-                  <tr>
-                    <td className="px-4 py-3"><code className="text-yellow text-xs">q402_clear_delegation</code></td>
-                    <td className="px-4 py-3 text-white/40 text-xs">private key</td>
-                    <td className="px-4 py-3">Clear the EIP-7702 delegation on a single chain. Local signing; Q402 sponsors the on-chain TX so the user pays $0 gas.</td>
-                  </tr>
+                <tbody className="text-white/75">
+                  {([
+                    { name: "q402_doctor",              auth: "none",        purpose: "First-install onboarding + ongoing health check (quota, EIP-7702 state, relay reachability)." },
+                    { name: "q402_quote",               auth: "none",        purpose: "Compare gas + supported tokens across 9 chains." },
+                    { name: "q402_balance",             auth: "api key",     purpose: "Verify key + remaining quota. Returns Trial + Multichain in one read when both keys set." },
+                    { name: "q402_pay",                 auth: "live mode",   purpose: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
+                    { name: "q402_batch_pay",           auth: "live mode",   purpose: "Up to 20 recipients per call (trial: 5). 6+ BNB batches with Trial → status=\"ambiguous\" so the agent asks how to split." },
+                    { name: "q402_receipt",             auth: "none",        purpose: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery against the relayer EOA)." },
+                    { name: "q402_wallet_status",       auth: "private key", purpose: "Per-chain EIP-7702 delegation state for the EOA derived from Q402_PRIVATE_KEY. Read-only." },
+                    { name: "q402_clear_delegation",    auth: "private key", purpose: "Clear EIP-7702 delegation on a single chain. Q402-sponsored gas." },
+                    { name: "q402_agentic_info",        auth: "api key",     purpose: "Agent Wallet info (addresses, caps, daily-spend used, ERC-8004 id). Drives Mode C." },
+                    { name: "q402_recurring_list",      auth: "api key",     purpose: "List scheduled rules." },
+                    { name: "q402_recurring_create",    auth: "api key",     purpose: "Author a rule. Paid Multichain on EVERY chain (BNB included)." },
+                    { name: "q402_recurring_fires",     auth: "api key",     purpose: "Last 50 fires per rule (timestamp + txHashes + amount)." },
+                    { name: "q402_recurring_pause",     auth: "api key",     purpose: "Pause a rule. Reversible." },
+                    { name: "q402_recurring_resume",    auth: "api key",     purpose: "Resume a paused / stopped rule." },
+                    { name: "q402_recurring_skip_next", auth: "api key",     purpose: "Skip ONLY the next scheduled fire. Cadence preserved." },
+                    { name: "q402_recurring_cancel",    auth: "api key",     purpose: "Permanently stop a rule." },
+                  ]).map((t, i, arr) => (
+                    <tr key={t.name} style={{ borderBottom: i === arr.length - 1 ? undefined : "1px solid rgba(255,255,255,0.04)" }}>
+                      <td className="px-4 py-3"><code className="text-yellow text-xs">{t.name}</code></td>
+                      <td className="px-4 py-3 text-white/55 text-xs whitespace-nowrap">{t.auth}</td>
+                      <td className="px-4 py-3">{t.purpose}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">4 · Sandbox vs live mode</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">5 · Sandbox vs live mode</h3>
             <p className="text-white/70 text-sm mb-3">
               Default is <strong>sandbox</strong> — fake txHash, <code className="text-yellow text-xs">sandbox: true</code>, no funds move.
               Live = API key + a signing path. Pick ONE mode:
