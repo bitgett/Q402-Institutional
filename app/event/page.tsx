@@ -1,17 +1,15 @@
 "use client";
 
 /**
- * /event — dedicated free-trial signup page (BNB-focus growth sprint).
+ * /event — dedicated free-trial signup page.
  *
- * Lives outside the main landing intentionally — the main `/` keeps the
- * full multichain product narrative untouched, and all the sprint
- * marketing (Google OAuth, email magic-link, wallet signup, free-trial
- * activation, BNB-focus framing) is concentrated here. KOLs / marketing
- * channels link to /event; the main landing stays clean.
+ * Lives outside the main landing so the marketing surface for the
+ * Free Trial (Google OAuth, email magic-link, wallet signup, BNB
+ * trial framing) is concentrated here. Inbound campaigns link to
+ * /event; the main `/` stays product-narrative-only.
  *
- * When `EVENT_MODE` is false (post-sprint state), this page renders a
- * small "event ended" placeholder instead of returning a 404 — old links
- * keep working.
+ * When `EVENT_MODE` is false, this page renders a small "event ended"
+ * placeholder instead of returning a 404 — old links keep working.
  */
 
 import { useEffect, useState } from "react";
@@ -61,10 +59,8 @@ export default function EventPage() {
         <main className="min-h-screen flex items-center justify-center px-6 pt-20" style={{ background: "linear-gradient(160deg, #06060C 0%, #0A0E1C 100%)" }}>
           <div className="max-w-md text-center">
             <h1 className="text-3xl font-bold mb-3">Event ended</h1>
-            <p className="text-white/45 text-sm mb-6">
-              The BNB-focus free-trial sprint has wrapped. The full multichain
-              Q402 product is back to its usual home on the main landing —
-              9 chains, USDC / USDT / RLUSD, gasless as always.
+            <p className="text-white/65 text-sm mb-6">
+              The Free Trial event has wrapped. The full Q402 product is on the main landing — 9 chains, USDC / USDT / RLUSD, gasless.
             </p>
             <Link
               href="/"

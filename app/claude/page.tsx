@@ -12,10 +12,9 @@ import { MCP_VERSION } from "@/app/lib/version";
  * Registry, prior tweets all link here), but the page itself is MCP-
  * canonical: Claude / Codex / Cursor / Cline are first-class equals.
  *
- * Three sections total — hero (with 4-client tabbed install), live
- * `q402_quote` simulation, eight-tool compact list. Trust Receipt,
- * Safety guards, and CTA all moved to /docs to keep the page from
- * duplicating documentation that already lives there.
+ * Three sections — hero (4-client tabbed install), live
+ * `q402_quote` simulation, 16-tool compact list. Trust Receipt,
+ * safety guards, and CTA live on /docs to avoid duplication.
  *
  * Wider container (`max-w-[88rem]`) than the rest of the site — the
  * live-quote table's 5 columns + the tabbed install snippet both want
