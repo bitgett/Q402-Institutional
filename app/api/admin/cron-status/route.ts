@@ -32,27 +32,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 
-import { getCronStatus, CRON_NAMES, type CronStatusRecord } from "@/app/lib/cron-status";
+import {
+  getCronStatus,
+  CRON_NAMES,
+  CRON_META,
+  type CronName,
+  type CronStatusRecord,
+} from "@/app/lib/cron-status";
 
 export const runtime = "nodejs";
 
-interface CronMeta {
-  name: string;
-  expectedIntervalMs: number;
-  staleAfterMs: number;
-}
-
-const TRACKED: CronMeta[] = [
-  {
-    name: CRON_NAMES.RECURRING_PAYOUTS,
-    expectedIntervalMs: 60 * 60 * 1000, // 1h Render heartbeat
-    staleAfterMs: 75 * 60 * 1000, // 1.25× tolerance
-  },
-  {
-    name: CRON_NAMES.DEPOSIT_SCAN,
-    expectedIntervalMs: 5 * 60 * 1000, // 5min Render heartbeat
-    staleAfterMs: 15 * 60 * 1000, // 3× tolerance — block-RPC slowness
-  },
+/** Tracked cron list — derived from CRON_NAMES so adding a new cron
+ *  in the lib auto-extends this endpoint. CRON_META supplies the
+ *  expectedIntervalMs + staleAfterMs from the single source of truth. */
+const TRACKED: CronName[] = [
+  CRON_NAMES.RECURRING_PAYOUTS,
+  CRON_NAMES.DEPOSIT_SCAN,
 ];
 
 function checkAdminAuth(req: NextRequest): NextResponse | null {
@@ -62,11 +57,18 @@ function checkAdminAuth(req: NextRequest): NextResponse | null {
     // No env = endpoint disabled. Fail-closed.
     return NextResponse.json({ error: "admin_disabled" }, { status: 503 });
   }
-  if (presented.length !== adminSecret.length) {
+  // Compare on byte length — timingSafeEqual throws on length mismatch,
+  // and `.length` on a String is char count, which silently diverges
+  // from byteLength for non-ASCII admin secrets (BMP chars are 2-3
+  // bytes in UTF-8). ADMIN_SECRET would typically be ASCII, but failing
+  // closed on the byte view costs nothing and removes a latent mismatch.
+  const presentedBytes = Buffer.from(presented, "utf8");
+  const expectedBytes  = Buffer.from(adminSecret, "utf8");
+  if (presentedBytes.length !== expectedBytes.length) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    if (!timingSafeEqual(Buffer.from(presented), Buffer.from(adminSecret))) {
+    if (!timingSafeEqual(presentedBytes, expectedBytes)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
   } catch {
@@ -81,11 +83,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const now = Date.now();
   const rows = await Promise.all(
-    TRACKED.map(async (meta) => {
-      const rec: CronStatusRecord | null = await getCronStatus(meta.name);
+    TRACKED.map(async (name) => {
+      const meta = CRON_META[name];
+      const rec: CronStatusRecord | null = await getCronStatus(name);
       if (!rec) {
         return {
-          name: meta.name,
+          name,
           lastFiredAt: null,
           ageMs: null,
           lastStatus: null,
@@ -100,7 +103,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
       const ageMs = now - rec.lastFiredAt;
       return {
-        name: meta.name,
+        name,
         lastFiredAt: rec.lastFiredAt,
         ageMs,
         lastStatus: rec.lastStatus,
