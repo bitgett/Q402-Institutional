@@ -101,11 +101,8 @@ function Hero() {
         Give your AI a wallet
         <span style={{ color: "#86efac" }}> it can actually use.</span>
       </h1>
-      <p className="text-base md:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(226,232,240,0.65)" }}>
-        A dedicated wallet your AI signs through — without ever touching
-        your MetaMask. Set per-tx and per-day spend caps, send across
-        nine EVM chains, and keep the option to walk away with the keys
-        whenever you want.
+      <p className="text-base md:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(226,232,240,0.75)" }}>
+        A wallet your AI signs through. Your MetaMask is untouched. Per-tx and per-day caps, 9 EVM chains, keys exportable anytime.
       </p>
       <div className="flex flex-wrap justify-center gap-3 mt-7">
         <Link
@@ -173,9 +170,8 @@ function PromptExamplesSection() {
         <div className="text-2xl md:text-3xl font-semibold tracking-tight mb-2">
           Plain English. Real settlement.
         </div>
-        <div className="text-sm" style={{ color: "rgba(226,232,240,0.55)" }}>
-          Works inside Claude, Codex CLI, Cursor, and Cline — same MCP tool,
-          same Agent Wallet underneath.
+        <div className="text-sm" style={{ color: "rgba(226,232,240,0.65)" }}>
+          Claude · Codex · Cursor · Cline — one MCP tool, one Agent Wallet.
         </div>
       </motion.div>
 
@@ -359,19 +355,19 @@ function FlowSection() {
     {
       n: "01",
       title: "Install Q402 MCP",
-      body: "One package across every MCP-capable client. Same surface in Claude, Codex CLI, Cursor, and Cline.",
+      body: "One package, every MCP client. Same surface in Claude, Codex, Cursor, Cline.",
       code: INSTALL_CMD,
     },
     {
       n: "02",
       title: "Mint the wallet",
-      body: "One signature from your dashboard. Q402 generates a dedicated wallet for your agent, ties it to your account, and lets you export the key anytime.",
+      body: "One signature on the dashboard. Key exportable anytime.",
       code: 'POST /api/wallet/agentic\n  → { address: "0xD2…ff64", createdAt: 1717... }',
     },
     {
       n: "03",
       title: "Let the agent run",
-      body: "Your agent calls one tool and Q402 handles the rest. Server signs, relayer pays gas, every transfer comes back with a verifiable Trust Receipt.",
+      body: "One tool call. Server signs, relayer pays gas, every transfer returns a Trust Receipt.",
       code: 'agent.pay({\n  chain: "bnb",\n  token: "USDC",\n  to:   "0x9c…2f4a",\n  amount: "3.24"\n})',
     },
   ];
