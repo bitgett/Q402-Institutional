@@ -218,6 +218,42 @@ describe("computeNextFireAt", () => {
     expect(d.getUTCMonth()).toBe(5); // June
     expect(d.getUTCDate()).toBe(30); // June has 30 days
   });
+
+  // hourly:N is heartbeat-aligned: every fire snaps to the next top-of-
+  // hour. These tests guard against re-introducing the drift the Render
+  // setInterval heartbeat couldn't pick up promptly.
+  it("hourly:1 from a top-of-hour stays on the hour", () => {
+    const from = Date.UTC(2026, 4, 28, 12, 0, 0);
+    expect(computeNextFireAt("hourly:1", from)).toBe(Date.UTC(2026, 4, 28, 13, 0, 0));
+  });
+
+  it("hourly:1 from a misaligned slot ceils to the NEXT :00", () => {
+    // Rule fired at 10:22 (from cancelWindow=0 immediate-fire creation).
+    // Without anchoring, next would be 11:22. With anchoring, it's 12:00
+    // — sacrificing 38min of this one cycle for permanent :00 alignment.
+    const from = Date.UTC(2026, 4, 28, 10, 22, 0);
+    expect(computeNextFireAt("hourly:1", from)).toBe(Date.UTC(2026, 4, 28, 12, 0, 0));
+  });
+
+  it("hourly:1 swallows sub-minute heartbeat jitter (12:00:00.300 → 13:00)", () => {
+    // recordRuleFired uses Math.max(nowMs, rule.nextRunAt) as the
+    // baseline; when the heartbeat fires a few hundred ms past :00 the
+    // baseline is 12:00:00.300 and a pure ceil would skip 13:00 entirely
+    // and land on 14:00. The 60s jitter pad keeps it at 13:00.
+    const from = Date.UTC(2026, 4, 28, 12, 0, 0) + 300;
+    expect(computeNextFireAt("hourly:1", from)).toBe(Date.UTC(2026, 4, 28, 13, 0, 0));
+  });
+
+  it("hourly:6 from a top-of-hour stays on the hour", () => {
+    const from = Date.UTC(2026, 4, 28, 6, 0, 0);
+    expect(computeNextFireAt("hourly:6", from)).toBe(Date.UTC(2026, 4, 28, 12, 0, 0));
+  });
+
+  it("hourly:6 from a misaligned slot ceils 6h forward then to :00", () => {
+    const from = Date.UTC(2026, 4, 28, 10, 22, 0);
+    // 10:22 + 6h = 16:22 → ceil(16:22) = 17:00
+    expect(computeNextFireAt("hourly:6", from)).toBe(Date.UTC(2026, 4, 28, 17, 0, 0));
+  });
 });
 
 // ── computeFirstFireAt — 24h cancel-window guarantee ──────────────────────

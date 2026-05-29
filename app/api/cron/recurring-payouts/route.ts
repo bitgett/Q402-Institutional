@@ -60,6 +60,7 @@ import {
   pullDueRules,
   markRulePending,
   recordRuleFired,
+  recordRuleFireLog,
   recordRuleCapExceeded,
   recordRuleTransientError,
   claimFireSlot,
@@ -315,7 +316,28 @@ async function processOneRule(
           .map((f) => `[${f.index}] ${f.reason}`)
           .join("; ")}`
       : null;
+  // Capture the slot that just settled BEFORE recordRuleFired advances
+  // nextRunAt — the fire log entry pins this fire to the schedule slot
+  // it was paying for (not to the new slot the rule rolls forward to).
+  const firedSlot = rule.nextRunAt;
   await recordRuleFired(rule, settledUsdTotal, nowMs, partialFailureNote);
+  // Append to the per-rule fire log. Best-effort: a KV blip here loses
+  // ONE log entry but leaves bookkeeping (rule state, ZSET, marker) on
+  // chain-of-truth correct. The dashboard's "Recent fires" panel
+  // tolerates gaps.
+  try {
+    await recordRuleFireLog(rule, {
+      firedAt: nowMs,
+      slot: firedSlot,
+      amountUsd: settledUsdTotal,
+      txHashes: settledRows.map((r) => r.txHash),
+      settledCount: settledRows.length,
+      failedCount: failedRows.length,
+      partialFailureNote,
+    });
+  } catch (e) {
+    console.error(`[cron/recurring-payouts] fire log write failed for ${rule.ruleId}:`, e);
+  }
 
   return {
     ruleKey,

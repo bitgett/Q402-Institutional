@@ -46,3 +46,19 @@ data/
 # Standalone MCP server package — published separately to npm + github.com/bitgett/q402-mcp
 mcp-server/
 .pr-body.md
+
+# Ambassador wallet automation (local-only, never push)
+# Contains live BIP39 seed-derived private keys + master wallet PK + apiKeys.
+scripts/.seed.env
+scripts/.master.env
+scripts/wallets.csv
+scripts/ambassadors.csv
+scripts/subscribe-state.json
+scripts/balance-audit.json
+seed.txt
+# Ambassador automation scripts (separate project, not for product repo)
+scripts/derive-from-seed.mjs
+scripts/audit-balances.mjs
+scripts/subscribe-daemon.mjs
+scripts/enrich-row.mjs
+scripts/check-master.mjs

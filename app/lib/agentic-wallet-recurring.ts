@@ -441,8 +441,21 @@ export function computeNextFireAt(
 
   if (frequency.startsWith("hourly:")) {
     const n = Number(frequency.slice("hourly:".length));
-    // Add N hours, same UTC mm:ss.
-    return fromMs + n * HOUR_MS;
+    // Anchor to the top of the hour. Render heartbeats run at xx:00, so
+    // a rule whose nextRunAt sits at xx:22 only gets pulled at the NEXT
+    // xx:00 → ~38min drift per cycle. Ceiling to :00 collapses each
+    // rule onto a heartbeat-aligned slot; once aligned, this is a no-op
+    // (already-on-the-hour stays on-the-hour).
+    //
+    // Jitter tolerance: if `fromMs` lands a few ms past :00 (heartbeat
+    // wakes at xx:00:00.300 because of Node event-loop latency), pure
+    // ceil would push the next fire forward by an extra full hour. A
+    // 60s pre-shift swallows this jitter without making rules fire
+    // earlier than promised — anything within 60s of a top-of-hour
+    // snaps to that hour rather than the one after.
+    const HEARTBEAT_JITTER_MS = 60 * 1000;
+    const raw = fromMs + n * HOUR_MS;
+    return Math.ceil((raw - HEARTBEAT_JITTER_MS) / HOUR_MS) * HOUR_MS;
   }
 
   if (frequency === "daily") {
@@ -1101,6 +1114,81 @@ export async function recordRuleFired(
     member: zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId),
   });
   return next;
+}
+
+// ── Fire log ─────────────────────────────────────────────────────────────
+//
+// Per-rule append-only log of past fires. Drives the "Recent fires" panel
+// inside each recurring-rule row on the dashboard. Stored separately from
+// the rule object so a long-running rule's history doesn't bloat the rule
+// JSON (which is fetched on every recurring list render).
+//
+// LIST + LPUSH so newest is index 0; LTRIM caps at FIRE_LOG_CAP entries.
+// Older fires fall off — the on-chain receipt + the relayed-tx history
+// remain the authoritative long-term record, this log is just a quick
+// per-rule view so the user doesn't have to cross-reference the Transactions
+// tab to answer "when did rule X last fire and which txes settled."
+
+export interface RuleFire {
+  /** Wall-clock time the fire was recorded (Date.now in the cron tick). */
+  firedAt: number;
+  /** The slot the fire was paying for — the rule.nextRunAt value at
+   *  the time of fire, BEFORE recordRuleFired advanced it. Useful to
+   *  detect drift between scheduled-fire-time and actual-fire-time. */
+  slot: number;
+  /** Sum of all settled recipient amounts for this fire, in USD-equivalent
+   *  units (matches the amount the rule was created with). */
+  amountUsd: number;
+  /** On-chain transaction hashes in the order recipients settled.
+   *  Length matches `settledCount`. */
+  txHashes: string[];
+  /** Number of recipient rows that landed on-chain. May be < the rule's
+   *  total recipient count on partial-failure fires. */
+  settledCount: number;
+  /** Number of recipient rows that failed AFTER at least one settled
+   *  (i.e. partial-failure fires). All-rows-failed is recorded as
+   *  transient-error and NOT logged here, since the rule does not advance. */
+  failedCount: number;
+  /** Human-readable note when this fire had partial failures. Matches
+   *  the `lastError` field on the rule after this fire. Null on a
+   *  fully-clean fire. */
+  partialFailureNote: string | null;
+}
+
+const FIRE_LOG_CAP = 50;
+
+function fireLogKey(owner: string, walletId: string, ruleId: string): string {
+  return `aw:recurring:firelog:${lower(owner)}:${lower(walletId)}:${ruleId}`;
+}
+
+/**
+ * Append a fire entry. Newest at index 0 (LPUSH), oldest truncated past
+ * FIRE_LOG_CAP (LTRIM). Idempotent at the rule-level via the fired-marker
+ * gate upstream — by the time the cron route gets here, claimFireSlot has
+ * already refused any second tick for this slot.
+ */
+export async function recordRuleFireLog(
+  rule: RecurringRule,
+  fire: RuleFire,
+): Promise<void> {
+  const key = fireLogKey(rule.ownerAddr, rule.walletId, rule.ruleId);
+  await kv.lpush(key, fire);
+  await kv.ltrim(key, 0, FIRE_LOG_CAP - 1);
+}
+
+/**
+ * Read the last N fires for a rule, newest first. Returns [] if the rule
+ * has never fired (no key written yet).
+ */
+export async function listRuleFires(
+  ownerAddr: string,
+  walletId: string,
+  ruleId: string,
+  limit = FIRE_LOG_CAP,
+): Promise<RuleFire[]> {
+  const stop = Math.min(limit, FIRE_LOG_CAP) - 1;
+  const raw = await kv.lrange<RuleFire>(fireLogKey(ownerAddr, walletId, ruleId), 0, stop);
+  return Array.isArray(raw) ? raw : [];
 }
 
 /**

@@ -63,8 +63,8 @@ function PreviewCard({ onCreate, creating }: { onCreate: () => void; creating: b
         </div>
 
         <div
-          className="rounded-full border px-3 py-1.5 text-[11px] font-mono text-white/45 shrink-0"
-          style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+          className="rounded-full border px-3 py-1.5 text-[11px] font-mono text-white/70 shrink-0"
+          style={{ borderColor: "rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.035)" }}
         >
           Not created yet
         </div>
@@ -92,7 +92,7 @@ function PreviewCard({ onCreate, creating }: { onCreate: () => void; creating: b
         >
           {creating ? "Creating…" : "Create Agent Wallet →"}
         </button>
-        <div className="text-[11.5px] text-white/45 leading-relaxed">
+        <div className="text-[11.5px] text-white/70 leading-relaxed">
           One signature from your MetaMask. Free to create.
           BNB Chain is included on the trial; other chains need a multichain key.
         </div>
@@ -103,12 +103,12 @@ function PreviewCard({ onCreate, creating }: { onCreate: () => void; creating: b
         className="relative mt-5 pt-4 border-t flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px]"
         style={{ borderColor: "rgba(255,255,255,0.06)" }}
       >
-        <span className="text-white/30">⇡ Send</span>
-        <span className="text-white/30">⇣ Receive</span>
-        <span className="text-white/30">⇉ Batch send</span>
-        <span className="text-white/30">↩ Withdraw</span>
-        <span className="text-white/30">⚙ Spending limits</span>
-        <span className="ml-auto text-white/25 text-[10.5px] uppercase tracking-[0.18em]">
+        <span className="text-white/55">⇡ Send</span>
+        <span className="text-white/55">⇣ Receive</span>
+        <span className="text-white/55">⇉ Batch send</span>
+        <span className="text-white/55">↩ Withdraw</span>
+        <span className="text-white/55">⚙ Spending limits</span>
+        <span className="ml-auto text-white/50 text-[10.5px] uppercase tracking-[0.18em]">
           available after activation
         </span>
       </div>
@@ -136,16 +136,16 @@ function PreviewStatTile({
         borderColor: hero ? "rgba(74,222,128,0.22)" : "rgba(255,255,255,0.06)",
       }}
     >
-      <div className="text-[10px] text-white/45 uppercase tracking-widest font-medium mb-1">
+      <div className="text-[10px] text-white/65 uppercase tracking-widest font-medium mb-1">
         {label}
       </div>
       <div
         className={`text-white tracking-tight ${hero ? "text-2xl font-semibold" : "text-base font-medium"}`}
-        style={{ opacity: 0.78 }}
+        style={{ opacity: 0.88 }}
       >
         {value}
       </div>
-      <div className="text-[11px] text-white/35 mt-0.5">{sub}</div>
+      <div className="text-[11px] text-white/55 mt-0.5">{sub}</div>
     </div>
   );
 }
@@ -183,7 +183,7 @@ function PromptExamples() {
         ))}
       </div>
 
-      <div className="text-[11px] text-white/40 mt-4 leading-relaxed">
+      <div className="text-[11px] text-white/65 mt-4 leading-relaxed">
         Caps are enforced server-side on every send. Your agent only ever spends
         what you let it.
       </div>
@@ -236,7 +236,7 @@ function HowItWorks() {
             </div>
             <div className="min-w-0">
               <div className="text-[13px] text-white/90 font-medium leading-snug">{s.title}</div>
-              <div className="text-[11.5px] text-white/55 leading-relaxed mt-0.5">{s.body}</div>
+              <div className="text-[11.5px] text-white/75 leading-relaxed mt-0.5">{s.body}</div>
             </div>
           </div>
         ))}
@@ -266,12 +266,12 @@ function InstallSnippet() {
       className="rounded-xl border px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"
       style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
     >
-      <span className="text-white/55">Already have an AI client?</span>
-      <code className="font-mono text-white/80 text-[13px]">{cmd}</code>
+      <span className="text-white/80">Already have an AI client?</span>
+      <code className="font-mono text-white/95 text-[13px]">{cmd}</code>
       <button
         type="button"
         onClick={copy}
-        className="text-[12px] text-white/50 hover:text-emerald-300 transition-colors"
+        className="text-[12px] text-white/70 hover:text-emerald-300 transition-colors"
       >
         {copied ? "copied ✓" : "copy"}
       </button>
