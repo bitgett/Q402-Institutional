@@ -43,6 +43,56 @@ interface RuleView {
   cancelledAt: number | null;
 }
 
+interface RuleFire {
+  firedAt: number;
+  slot: number;
+  amountUsd: number;
+  txHashes: string[];
+  settledCount: number;
+  failedCount: number;
+  partialFailureNote: string | null;
+}
+
+// Per-chain explorer base for tx links. Mirrors CHAIN_META in
+// AgenticWalletSendModal — kept in sync manually; the table is short
+// and the duplication is preferable to threading a shared module just
+// for two callsites. Unknown chains fall through to BscScan since 95%+
+// of recurring rules are BNB.
+const TX_EXPLORER: Record<string, { base: string; label: string }> = {
+  bnb:       { base: "https://bscscan.com/tx/",                  label: "BscScan" },
+  eth:       { base: "https://etherscan.io/tx/",                 label: "Etherscan" },
+  avax:      { base: "https://snowtrace.io/tx/",                 label: "Snowtrace" },
+  xlayer:    { base: "https://www.oklink.com/xlayer/tx/",        label: "OKLink" },
+  stable:    { base: "https://stablescan.xyz/tx/",               label: "StableScan" },
+  mantle:    { base: "https://explorer.mantle.xyz/tx/",          label: "Mantle Explorer" },
+  injective: { base: "https://blockscout.injective.network/tx/", label: "Blockscout" },
+  monad:     { base: "https://monadscan.com/tx/",                label: "MonadScan" },
+  scroll:    { base: "https://scrollscan.com/tx/",               label: "ScrollScan" },
+};
+
+function explorerFor(chain: string) {
+  return TX_EXPLORER[chain] ?? TX_EXPLORER.bnb;
+}
+
+function shortHash(h: string): string {
+  if (h.length < 14) return h;
+  return `${h.slice(0, 8)}…${h.slice(-6)}`;
+}
+
+function formatFiredAt(ms: number): string {
+  const d = new Date(ms);
+  const diffMs = Date.now() - ms;
+  const mins = Math.floor(diffMs / 60_000);
+  const hours = Math.floor(diffMs / 3_600_000);
+  const days = Math.floor(diffMs / 86_400_000);
+  let rel = "";
+  if (days >= 2) rel = `${days}d ago`;
+  else if (hours >= 1) rel = `${hours}h ago`;
+  else if (mins >= 1) rel = `${mins}m ago`;
+  else rel = "just now";
+  return `${rel} · ${d.toUTCString().slice(5, 22)} UTC`;
+}
+
 interface Props {
   walletId: string;
   ownerAddress: string;
@@ -222,7 +272,7 @@ export function AgenticWalletRecurringSection({
               Recurring payments
             </div>
           </div>
-          <div className="text-[11.5px] text-white/55 leading-snug">
+          <div className="text-[11.5px] text-white/75 leading-snug">
             Schedule weekly payouts, monthly subscriptions, or treasury sweeps. Your AI fires each one with a cancel window first.
           </div>
         </div>
@@ -243,11 +293,11 @@ export function AgenticWalletRecurringSection({
       </div>
 
       {loading && (
-        <div className="text-[12px] text-white/40 py-3 text-center">Loading schedules…</div>
+        <div className="text-[12px] text-white/60 py-3 text-center">Loading schedules…</div>
       )}
 
       {!loading && error && (
-        <div className="rounded-md border border-rose-400/30 bg-rose-400/[0.05] p-3 text-[12px] text-rose-200/85">
+        <div className="rounded-md border border-rose-400/40 bg-rose-400/[0.08] p-3 text-[12px] text-rose-100">
           {error}
         </div>
       )}
@@ -255,9 +305,9 @@ export function AgenticWalletRecurringSection({
       {!loading && !error && visibleRules.length === 0 && (
         <div
           className="rounded-lg border border-dashed p-4 mt-1"
-          style={{ borderColor: "rgba(74,222,128,0.18)" }}
+          style={{ borderColor: "rgba(74,222,128,0.28)" }}
         >
-          <div className="text-[12.5px] text-white/70 mb-2 font-medium">
+          <div className="text-[12.5px] text-white/85 mb-2 font-medium">
             No schedules yet. Try one of these patterns:
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -271,15 +321,15 @@ export function AgenticWalletRecurringSection({
                 key={title}
                 className="rounded-md border p-2.5"
                 style={{
-                  background: "rgba(255,255,255,0.015)",
-                  borderColor: "rgba(255,255,255,0.06)",
+                  background: "rgba(255,255,255,0.025)",
+                  borderColor: "rgba(255,255,255,0.10)",
                 }}
               >
-                <div className="text-[12px] text-white/85 font-medium mb-0.5 flex items-center gap-1.5">
-                  <Icon className="w-3.5 h-3.5 text-emerald-300/85 shrink-0" />
+                <div className="text-[12px] text-white/95 font-medium mb-0.5 flex items-center gap-1.5">
+                  <Icon className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
                   {title}
                 </div>
-                <div className="text-[10.5px] text-white/45 leading-snug">
+                <div className="text-[10.5px] text-white/65 leading-snug">
                   {copy}
                 </div>
               </div>
@@ -289,7 +339,7 @@ export function AgenticWalletRecurringSection({
       )}
 
       {!loading && actionError && (
-        <div className="rounded-md border border-rose-400/30 bg-rose-400/[0.05] p-2 mb-2 text-[12px] text-rose-200/85">
+        <div className="rounded-md border border-rose-400/40 bg-rose-400/[0.08] p-2 mb-2 text-[12px] text-rose-100">
           {actionError}
         </div>
       )}
@@ -300,6 +350,8 @@ export function AgenticWalletRecurringSection({
           rule={rule}
           actionBusy={actionBusy}
           walletArchived={walletArchived}
+          ownerAddress={ownerAddress}
+          signMessage={signMessage}
           onAction={(action) => runAction(rule, action)}
         />
       ))}
@@ -326,19 +378,23 @@ function RuleRow({
   rule,
   actionBusy,
   walletArchived,
+  ownerAddress,
+  signMessage,
   onAction,
 }: {
   rule: RuleView;
   actionBusy: string | null;
   walletArchived: boolean;
+  ownerAddress: string;
+  signMessage: (message: string) => Promise<string | null>;
   onAction: (action: "pause" | "resume" | "skip-next" | "cancel") => void;
 }) {
   const busy = (action: string) => actionBusy === `${rule.ruleId}:${action}`;
   const anyBusy = actionBusy !== null && actionBusy.startsWith(`${rule.ruleId}:`);
   const pending = rule.pendingFireAt !== null && rule.status === "active";
   const ringClass = pending
-    ? "border-amber-400/40 bg-amber-400/[0.04]"
-    : "border-white/10 bg-white/[0.02]";
+    ? "border-amber-400/40 bg-amber-400/[0.05]"
+    : "border-white/12 bg-white/[0.025]";
 
   const recipientCount = rule.recipientCount ?? rule.recipients.length;
   const single = recipientCount === 1;
@@ -346,6 +402,52 @@ function RuleRow({
     ? `${rule.amountPerFire} ${rule.token} → ${formatRecipient(rule.recipients[0]?.to ?? "")}`
     : `${rule.amountPerFire} ${rule.token} → ${recipientCount} recipients`;
   const [expanded, setExpanded] = useState(false);
+
+  // ── Fire log state ──────────────────────────────────────────────────
+  // Lazy-fetched on first expand. Cached in component state so a re-open
+  // doesn't re-roundtrip. The cron writes new entries server-side so the
+  // user can manually refresh; we don't poll.
+  const [firesOpen, setFiresOpen] = useState(false);
+  const [fires, setFires] = useState<RuleFire[] | null>(null);
+  const [firesLoading, setFiresLoading] = useState(false);
+  const [firesError, setFiresError] = useState<string | null>(null);
+  const explorer = explorerFor(rule.chain);
+
+  async function loadFires() {
+    setFiresLoading(true);
+    setFiresError(null);
+    try {
+      const { getAuthCreds } = await import("@/app/lib/auth-client");
+      const creds = await getAuthCreds(ownerAddress, signMessage);
+      if (!creds) {
+        setFiresError("Sign the wallet challenge to view fire history.");
+        return;
+      }
+      const url = new URL(
+        `/api/wallet/agentic/${rule.walletId}/recurring/${rule.ruleId}/fires`,
+        window.location.origin,
+      );
+      url.searchParams.set("address", ownerAddress);
+      url.searchParams.set("nonce", creds.nonce);
+      url.searchParams.set("sig", creds.signature);
+      const res = await fetch(url.toString());
+      const data = (await res.json().catch(() => null)) as { fires?: RuleFire[]; error?: string } | null;
+      if (!res.ok) {
+        setFiresError(data?.error ?? `Failed to load fire history (${res.status}).`);
+        return;
+      }
+      setFires(Array.isArray(data?.fires) ? data.fires : []);
+    } catch (e) {
+      setFiresError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFiresLoading(false);
+    }
+  }
+
+  async function toggleFires() {
+    if (!firesOpen && fires === null) await loadFires();
+    setFiresOpen((v) => !v);
+  }
 
   return (
     <div className={`mb-2 rounded-md border ${ringClass} p-3`}>
@@ -356,31 +458,31 @@ function RuleRow({
               {rule.label ?? summaryText}
             </div>
             {pending && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-amber-400/15 text-amber-200">
+              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-amber-400/20 text-amber-100">
                 pending
               </span>
             )}
             {rule.status === "paused" && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-white/10 text-white/60">
+              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-white/12 text-white/75">
                 paused
               </span>
             )}
             {rule.status === "paused-by-archive" && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-white/10 text-white/60">
+              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-white/12 text-white/75">
                 paused · archive
               </span>
             )}
             {rule.status === "fired-cap-exceeded" && (
-              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-rose-400/15 text-rose-200">
+              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase tracking-wider font-semibold bg-rose-400/20 text-rose-100">
                 stopped
               </span>
             )}
           </div>
 
-          <div className="mt-1 text-[11px] text-white/55">
+          <div className="mt-1 text-[11.5px] text-white/70">
             {formatFrequency(rule.frequency)} · {rule.amountPerFire} {rule.token} on {rule.chain.toUpperCase()}
             {single ? (
-              <> → <code className="font-mono text-white/65">{formatRecipient(rule.recipients[0]?.to ?? "")}</code></>
+              <> → <code className="font-mono text-white/80">{formatRecipient(rule.recipients[0]?.to ?? "")}</code></>
             ) : (
               <>
                 {" "}·{" "}
@@ -398,37 +500,120 @@ function RuleRow({
           {!single && expanded && (
             <div
               className="mt-2 rounded-md border p-2 space-y-1"
-              style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
+              style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.10)" }}
             >
               {rule.recipients.map((r, i) => (
                 <div key={`${r.to}-${i}`} className="flex items-center justify-between text-[10.5px] font-mono">
-                  <span className="text-white/65">{r.to}</span>
+                  <span className="text-white/80">{r.to}</span>
                   <span className="text-emerald-300">{r.amount} {rule.token}</span>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="mt-1 text-[11px] text-white/45">
+          <div className="mt-1 text-[11.5px] text-white/65">
             {formatNextRun(rule)}
             {rule.totalFiredCount > 0 && (
-              <> · {rule.totalFiredCount} fired · ${rule.totalSpentUsd.toFixed(2)} total</>
+              <>
+                {" "}·{" "}
+                <button
+                  type="button"
+                  onClick={toggleFires}
+                  className="text-emerald-300 hover:text-emerald-200 transition-colors"
+                  title="Show last 50 fires for this rule"
+                >
+                  {rule.totalFiredCount} fired {firesOpen ? "▾" : "▸"}
+                </button>
+                {" "}· ${rule.totalSpentUsd.toFixed(2)} total
+              </>
             )}
           </div>
 
           {rule.lastError && (
-            <div className="mt-1 text-[11px] text-rose-300/75">
+            <div className="mt-1 text-[11.5px] text-rose-200/95">
               Last attempt: {rule.lastError}
+            </div>
+          )}
+
+          {firesOpen && (
+            <div
+              className="mt-2 rounded-md border p-2.5 space-y-1.5"
+              style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(74,222,128,0.18)" }}
+            >
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="text-[10.5px] uppercase tracking-[0.18em] text-emerald-300 font-semibold">
+                  Recent fires
+                </div>
+                <button
+                  type="button"
+                  onClick={loadFires}
+                  disabled={firesLoading}
+                  className="text-[10.5px] text-white/65 hover:text-white transition-colors disabled:opacity-40"
+                >
+                  {firesLoading ? "Loading…" : "Refresh"}
+                </button>
+              </div>
+              {firesError && (
+                <div className="text-[11px] text-rose-200/95">{firesError}</div>
+              )}
+              {!firesError && !firesLoading && (fires?.length ?? 0) === 0 && (
+                <div className="text-[11px] text-white/60">
+                  No fires recorded yet. (Older fires beyond the 50-entry window are not listed; on-chain history remains intact.)
+                </div>
+              )}
+              {!firesError && fires && fires.length > 0 && (
+                <div className="space-y-1">
+                  {fires.map((f, i) => {
+                    const partial = f.failedCount > 0;
+                    return (
+                      <div
+                        key={`${f.firedAt}-${i}`}
+                        className="flex items-center justify-between gap-3 rounded px-2 py-1.5"
+                        style={{
+                          background: partial ? "rgba(244,63,94,0.05)" : "rgba(255,255,255,0.02)",
+                          border: partial ? "1px solid rgba(244,63,94,0.18)" : "1px solid rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] text-white/85">
+                            ${f.amountUsd.toFixed(2)} {rule.token}
+                            {partial && (
+                              <span className="ml-1.5 text-[10px] text-rose-200/90 uppercase tracking-wider">
+                                {f.settledCount}/{f.settledCount + f.failedCount} settled
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10.5px] text-white/55 mt-0.5">{formatFiredAt(f.firedAt)}</div>
+                        </div>
+                        <div className="flex flex-col items-end gap-0.5 shrink-0">
+                          {f.txHashes.map((h, j) => (
+                            <a
+                              key={`${h}-${j}`}
+                              href={`${explorer.base}${h}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-[10.5px] text-emerald-300 hover:text-emerald-200 transition-colors"
+                              title={`Open on ${explorer.label}`}
+                            >
+                              {shortHash(h)} ↗
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        <div className="flex flex-col items-end gap-1 shrink-0 text-[11px]">
+        <div className="flex flex-col items-end gap-1 shrink-0 text-[11.5px]">
           {rule.status === "active" && pending && (
             <button
               onClick={() => onAction("skip-next")}
               disabled={anyBusy || walletArchived}
-              className="text-amber-300 hover:text-amber-200 transition-colors disabled:opacity-40"
+              className="text-amber-200 hover:text-amber-100 transition-colors disabled:opacity-40"
             >
               {busy("skip-next") ? "…" : "Skip this run"}
             </button>
@@ -437,7 +622,7 @@ function RuleRow({
             <button
               onClick={() => onAction("pause")}
               disabled={anyBusy || walletArchived}
-              className="text-white/55 hover:text-white transition-colors disabled:opacity-40"
+              className="text-white/75 hover:text-white transition-colors disabled:opacity-40"
             >
               {busy("pause") ? "…" : "Pause"}
             </button>
@@ -461,7 +646,7 @@ function RuleRow({
           <button
             onClick={() => onAction("cancel")}
             disabled={anyBusy || walletArchived}
-            className="text-rose-300/75 hover:text-rose-200 transition-colors disabled:opacity-40"
+            className="text-rose-300 hover:text-rose-200 transition-colors disabled:opacity-40"
           >
             {busy("cancel") ? "…" : "Cancel"}
           </button>

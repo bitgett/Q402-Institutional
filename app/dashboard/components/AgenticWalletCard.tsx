@@ -241,15 +241,15 @@ export function AgenticWalletCard({
             <div className="text-[10px] uppercase tracking-[0.22em] text-emerald-400/85 font-semibold">
               Agent Wallet
             </div>
-            <div className="text-white/65 text-sm leading-relaxed max-w-md">
+            <div className="text-white/80 text-sm leading-relaxed max-w-md">
               A separate wallet your AI signs through. Your MetaMask stays
               untouched — funds here are bounded by the caps below.
             </div>
-            <div className="text-[11.5px] text-white/55 mt-1 leading-relaxed max-w-md">
+            <div className="text-[11.5px] text-white/75 mt-1 leading-relaxed max-w-md">
               Connecting from an AI agent / MCP?{" "}
               <a
                 href="/docs#wallet-modes"
-                className="text-emerald-300/85 hover:text-emerald-300 font-medium"
+                className="text-emerald-300 hover:text-emerald-200 font-medium"
               >
                 Pick a wallet mode (A / B / C) →
               </a>
@@ -264,12 +264,12 @@ export function AgenticWalletCard({
           <button
             type="button"
             onClick={copyAddress}
-            className="rounded-full border px-3 py-1.5 flex items-center gap-2 text-[11px] font-mono text-white/65 hover:text-emerald-300 transition-colors shrink-0"
-            style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}
+            className="rounded-full border px-3 py-1.5 flex items-center gap-2 text-[11px] font-mono text-white/85 hover:text-emerald-300 transition-colors shrink-0"
+            style={{ borderColor: "rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.035)" }}
             title="Copy address"
           >
             <span>{shortAddr(wallet.address)}</span>
-            <span className="text-white/30">{copied ? "✓" : "⎘"}</span>
+            <span className="text-white/55">{copied ? "✓" : "⎘"}</span>
           </button>
         </div>
 
@@ -286,7 +286,7 @@ export function AgenticWalletCard({
                 onClick={() => { void fetchBalance(true); }}
                 disabled={balanceLoading}
                 title="Refresh balance"
-                className="text-[10px] text-white/35 hover:text-emerald-300 transition-colors disabled:opacity-40"
+                className="text-[10px] text-white/60 hover:text-emerald-300 transition-colors disabled:opacity-40"
               >
                 {balanceLoading ? "…" : "↻"}
               </button>
@@ -354,7 +354,7 @@ export function AgenticWalletCard({
             type="button"
             disabled={archived}
             onClick={() => setWithdrawOpen(true)}
-            className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+            className="text-white/75 hover:text-emerald-300 transition-colors disabled:opacity-40"
           >
             ↩ Withdraw to your wallet
           </button>
@@ -362,7 +362,7 @@ export function AgenticWalletCard({
             type="button"
             disabled={archived}
             onClick={() => setLimitsOpen(true)}
-            className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+            className="text-white/75 hover:text-emerald-300 transition-colors disabled:opacity-40"
           >
             ⚙ Spending limits
           </button>
@@ -381,7 +381,7 @@ export function AgenticWalletCard({
               type="button"
               disabled={archived}
               onClick={() => setAgentOpen(true)}
-              className="text-white/55 hover:text-emerald-300 transition-colors disabled:opacity-40"
+              className="text-white/80 hover:text-emerald-300 transition-colors disabled:opacity-40"
             >
               ◉ Register on 8004scan
             </button>
@@ -548,11 +548,11 @@ function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: Balan
       style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
     >
       <div className="flex items-center justify-between mb-2">
-        <div className="text-[10px] uppercase tracking-widest text-white/45 font-medium">
+        <div className="text-[10px] uppercase tracking-widest text-white/65 font-medium">
           Balance by chain · 9 chains
         </div>
         {balance && (
-          <div className="text-[10px] text-white/35">
+          <div className="text-[10px] text-white/55">
             USDC + USDT
           </div>
         )}
@@ -590,10 +590,10 @@ function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: Balan
               ) : (
                 <div className="w-5 h-5 rounded-full bg-white/10" aria-hidden />
               )}
-              <div className={`text-[10px] font-medium leading-none truncate w-full text-center ${hasFunds ? "text-white/85" : "text-white/45"}`}>
+              <div className={`text-[10px] font-medium leading-none truncate w-full text-center ${hasFunds ? "text-white/95" : "text-white/65"}`}>
                 {CHAIN_LABEL[chain] ?? chain}
               </div>
-              <div className={`text-[10.5px] font-mono leading-none ${hasFunds ? "text-emerald-300" : "text-white/30"}`}>
+              <div className={`text-[10.5px] font-mono leading-none ${hasFunds ? "text-emerald-300" : "text-white/50"}`}>
                 {slice?.error
                   ? <span className="text-amber-300/70">RPC</span>
                   : total < 0.01 && total > 0
@@ -709,7 +709,7 @@ function StatTile({
       }}
     >
       <div className="flex items-center justify-between mb-1">
-        <div className="text-[10px] text-white/45 uppercase tracking-widest font-medium">
+        <div className="text-[10px] text-white/65 uppercase tracking-widest font-medium">
           {label}
         </div>
         {action}
@@ -717,7 +717,7 @@ function StatTile({
       <div className={`text-white tracking-tight ${hero ? "text-2xl font-semibold" : "text-base font-medium"}`}>
         {value}
       </div>
-      <div className="text-[11px] text-white/35 mt-0.5">{sub}</div>
+      <div className="text-[11px] text-white/55 mt-0.5">{sub}</div>
     </div>
   );
 }

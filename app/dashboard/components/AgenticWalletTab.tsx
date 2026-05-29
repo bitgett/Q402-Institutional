@@ -166,7 +166,7 @@ export function AgenticWalletTab({ address, signMessage }: Props) {
 
   // ── Loading + empty states ─────────────────────────────────────────────
   if (wallets === undefined) {
-    return <div className="text-white/40 text-sm">Loading…</div>;
+    return <div className="text-white/65 text-sm">Loading…</div>;
   }
 
   // No wallets yet — marketing preview + first-create CTA.
@@ -310,8 +310,8 @@ function WalletSelector({
                 isActive
                   ? "bg-emerald-400/15 text-emerald-200 border-emerald-400/40"
                   : archived
-                    ? "bg-white/[0.015] text-white/30 border-white/[0.06] hover:text-white/55"
-                    : "bg-white/[0.015] text-white/65 border-white/[0.08] hover:text-white"
+                    ? "bg-white/[0.025] text-white/55 border-white/[0.10] hover:text-white/80"
+                    : "bg-white/[0.025] text-white/85 border-white/[0.12] hover:text-white"
               }`}
               title={`${w.address}${archived ? " (archived)" : ""}`}
             >
@@ -327,13 +327,13 @@ function WalletSelector({
           type="button"
           onClick={onCreate}
           disabled={creating || capReached}
-          className="shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium border border-dashed border-white/15 text-white/50 hover:text-emerald-300 hover:border-emerald-400/40 disabled:opacity-30 disabled:cursor-not-allowed"
+          className="shrink-0 px-3 py-1.5 rounded-md text-[12px] font-medium border border-dashed border-white/25 text-white/75 hover:text-emerald-300 hover:border-emerald-400/40 disabled:opacity-30 disabled:cursor-not-allowed"
           title={capReached ? capCopy : "Create a new Agent Wallet"}
         >
           {creating ? "Creating…" : "+ New wallet"}
         </button>
       </div>
-      <div className="text-[10.5px] text-white/35 px-0.5">
+      <div className="text-[10.5px] text-white/60 px-0.5">
         {capCopy}
       </div>
     </div>
@@ -361,18 +361,18 @@ function InstallSnippet() {
       className="rounded-xl border px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm"
       style={{ background: "rgba(255,255,255,0.015)", borderColor: "rgba(255,255,255,0.06)" }}
     >
-      <span className="text-white/55">Connect this wallet to an AI client:</span>
-      <code className="font-mono text-white/80 text-[13px]">{cmd}</code>
+      <span className="text-white/80">Connect this wallet to an AI client:</span>
+      <code className="font-mono text-white/95 text-[13px]">{cmd}</code>
       <button
         type="button"
         onClick={copy}
-        className="text-[12px] text-white/50 hover:text-emerald-300 transition-colors"
+        className="text-[12px] text-white/70 hover:text-emerald-300 transition-colors"
       >
         {copied ? "copied ✓" : "copy"}
       </button>
       <a
         href="/docs#claude-mcp"
-        className="ml-auto text-[12px] text-emerald-400/85 hover:text-emerald-300"
+        className="ml-auto text-[12px] text-emerald-300 hover:text-emerald-200"
       >
         Quickstart →
       </a>

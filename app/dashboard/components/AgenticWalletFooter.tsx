@@ -93,7 +93,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
       className="rounded-2xl border p-5 space-y-4"
       style={{ background: "rgba(255,255,255,0.012)", borderColor: "rgba(255,255,255,0.06)" }}
     >
-        <div className="text-[10px] uppercase tracking-[0.22em] text-white/45 font-semibold">
+        <div className="text-[10px] uppercase tracking-[0.22em] text-white/70 font-semibold">
           Wallet Identities
         </div>
 
@@ -110,7 +110,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
               <div className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: "#7dd3fc" }}>
                 Owner EOA
               </div>
-              <span className="text-[10px] text-white/35">you sign with this</span>
+              <span className="text-[10px] text-white/60">you sign with this</span>
             </div>
             <div className="font-mono text-[13px] text-white/90 break-all leading-relaxed mb-2">
               {ownerAddress}
@@ -132,7 +132,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
                 href={`https://bscscan.com/address/${ownerAddress}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] text-white/45 hover:text-white transition-colors"
+                className="text-[11px] text-white/70 hover:text-white transition-colors"
               >
                 BscScan ↗
               </a>
@@ -151,7 +151,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
               <div className="text-[10px] uppercase tracking-widest font-semibold text-emerald-300">
                 Agent Wallet
               </div>
-              <span className="text-[10px] text-white/35">your AI spends with this</span>
+              <span className="text-[10px] text-white/60">your AI spends with this</span>
             </div>
             <div className="font-mono text-[13px] text-white/90 break-all leading-relaxed mb-2">
               {walletAddress}
@@ -168,7 +168,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
                 href={`https://bscscan.com/address/${walletAddress}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] text-white/45 hover:text-white transition-colors"
+                className="text-[11px] text-white/70 hover:text-white transition-colors"
               >
                 BscScan ↗
               </a>
@@ -198,7 +198,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
         )}
 
       {delegationStatus && delegatedChains.length === 0 && (
-        <div className="text-[11px] text-white/35">
+        <div className="text-[11px] text-white/60">
           ✓ Owner EOA is not EIP-7702-delegated on any supported chain.
         </div>
       )}
