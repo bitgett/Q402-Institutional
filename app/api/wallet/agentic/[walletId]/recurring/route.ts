@@ -35,7 +35,6 @@ import {
   recipientsCanonicalHash,
   RecurringValidationError,
   MIN_CANCEL_WINDOW_HOURS,
-  MAX_RECIPIENTS_TRIAL,
   MAX_RECIPIENTS_PAID,
   type FrequencyEnum,
   type RecurringRule,
@@ -229,34 +228,21 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
 
-  // ── Subscription gate. Non-BNB recurring AND multi-recipient batches
-  //    above the trial cap both require a paid Multichain subscription.
-  //    Block at create so the user sees a friendly modal error instead
-  //    of the cron silently freezing the rule weeks later.
+  // ── Subscription gate. Recurring is a paid feature on EVERY chain,
+  //    including BNB — the cron fires with the paid apiKey (see
+  //    /api/cron/recurring-payouts step 3) so a BNB rule on a trial-only
+  //    sub would terminal-fail at the first fire. Reject at create time
+  //    to surface the friendly modal error instead of the cron freezing
+  //    the rule weeks later.
   const sub = await getSubscription(owner);
   const isPaid = hasMultichainScope(sub);
-  if (body.chain !== "bnb" && !isPaid) {
+  if (!isPaid) {
     return NextResponse.json(
       {
         error: "SUBSCRIPTION_REQUIRED",
         message:
-          "Recurring on " +
-          String(body.chain).toUpperCase() +
-          " requires the paid Multichain subscription. " +
-          "Stay on BNB Chain (free) or upgrade your plan.",
-      },
-      { status: 402 },
-    );
-  }
-  if (!isPaid && recipients.length > MAX_RECIPIENTS_TRIAL) {
-    return NextResponse.json(
-      {
-        error: "RECIPIENT_CAP_TRIAL",
-        message:
-          `Trial subscriptions can include up to ${MAX_RECIPIENTS_TRIAL} recipients per ` +
-          `recurring rule. You sent ${recipients.length}. Upgrade to Multichain for up ` +
-          `to ${MAX_RECIPIENTS_PAID}, or trim the list.`,
-        maxAllowed: MAX_RECIPIENTS_TRIAL,
+          "Recurring (including BNB) requires the paid Multichain subscription. " +
+          "Trial keys can still pay manually from the dashboard. Upgrade your plan to schedule rules.",
       },
       { status: 402 },
     );
