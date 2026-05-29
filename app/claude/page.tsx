@@ -124,14 +124,22 @@ const CLIENTS: ClientInstall[] = [
 // Compact row layout (NOT the previous card grid) — the cards burned a lot
 // of vertical space + duplicated content from /docs#claude-mcp.
 const TOOLS: Array<{ name: string; auth: string; note: string }> = [
-  { name: "q402_doctor",           auth: "no auth",     note: "First-install onboarding + ongoing health check. Call this when the user says \"set up Q402\" or \"is Q402 working\"." },
-  { name: "q402_quote",            auth: "no auth",     note: "Compare gas + supported tokens across 9 chains. Read-only — works without any setup." },
-  { name: "q402_balance",          auth: "api key",     note: "Verify the configured API key(s) and report each one's plan tier + remaining quota credits." },
-  { name: "q402_pay",              auth: "live mode",   note: "Send a gasless USDC, USDT, or RLUSD payment to a single recipient. Sandbox by default." },
-  { name: "q402_batch_pay",        auth: "live mode",   note: "Up to 20 recipients in one signed batch on a single chain × token (trial keys: 5)." },
-  { name: "q402_receipt",          auth: "no auth",     note: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery against the relayer EOA)." },
-  { name: "q402_wallet_status",    auth: "private key", note: "Per-chain EIP-7702 delegation status for the EOA derived from Q402_PRIVATE_KEY. Read-only." },
-  { name: "q402_clear_delegation", auth: "private key", note: "Clear the EIP-7702 delegation on a single chain. Local signing; Q402 sponsors the on-chain TX." },
+  { name: "q402_doctor",              auth: "no auth",     note: "Install + ongoing health check. Call on \"set up Q402\"." },
+  { name: "q402_quote",               auth: "no auth",     note: "Compare gas across 9 chains. Read-only." },
+  { name: "q402_balance",             auth: "api key",     note: "Verify key + remaining quota." },
+  { name: "q402_pay",                 auth: "live mode",   note: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
+  { name: "q402_batch_pay",           auth: "live mode",   note: "Up to 20 recipients in one signed batch (trial: 5)." },
+  { name: "q402_receipt",             auth: "no auth",     note: "Fetch + locally verify a Trust Receipt." },
+  { name: "q402_wallet_status",       auth: "private key", note: "Per-chain EIP-7702 delegation state. Read-only." },
+  { name: "q402_clear_delegation",    auth: "private key", note: "Clear EIP-7702 delegation on a chain. Q402-sponsored gas." },
+  { name: "q402_agentic_info",        auth: "api key",     note: "Agent Wallet info (addresses, caps, ERC-8004 id). Read-only." },
+  { name: "q402_recurring_list",      auth: "api key",     note: "List recurring rules." },
+  { name: "q402_recurring_create",    auth: "api key",     note: "Author a recurring rule (paid Multichain only)." },
+  { name: "q402_recurring_fires",     auth: "api key",     note: "Last 50 fires for one rule (timestamps + txHashes)." },
+  { name: "q402_recurring_pause",     auth: "api key",     note: "Pause a rule. Reversible." },
+  { name: "q402_recurring_resume",    auth: "api key",     note: "Resume a paused / stopped rule." },
+  { name: "q402_recurring_skip_next", auth: "api key",     note: "Skip ONLY the next fire. Cadence preserved." },
+  { name: "q402_recurring_cancel",    auth: "api key",     note: "Permanently stop a rule." },
 ];
 
 function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
@@ -280,11 +288,9 @@ export default function ClaudePage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.18 }}
-            className="text-base md:text-lg text-white/55 mt-6 max-w-3xl leading-relaxed"
+            className="text-base md:text-lg text-white/70 mt-6 max-w-3xl leading-relaxed"
           >
-            Q402 makes 9 EVM chains feel like one rail — gasless, instant, from any
-            MCP client. One install, ask your agent to set it up, send your first
-            stablecoin payment.
+            9 EVM chains, gasless stablecoin payments, any MCP client. One install. Ask your AI to set it up.
           </motion.p>
 
           {/* ── Install — 4-client tabs ──────────────────────────────────── */}
@@ -376,12 +382,10 @@ export default function ClaudePage() {
                         <span className="inline-block transition-transform group-open:rotate-90 text-white/35">▸</span>
                         Already have <code className="text-white/55 text-[11px]">{current.configPath}</code> with other MCP servers?
                       </summary>
-                      <div className="mt-2 text-[11px] text-white/55 leading-relaxed pl-4">
-                        Don&apos;t replace the file — that&apos;d clobber your other servers. Open
-                        it and add this entry <strong className="text-white/75">inside</strong> the
-                        existing <code className="text-white/60 text-[11px]">mcpServers</code> object:
+                      <div className="mt-2 text-[11px] text-white/70 leading-relaxed pl-4">
+                        Paste this <strong className="text-white/90">inside</strong> the existing <code className="text-white/85 text-[11px]">mcpServers</code> object (don&apos;t replace the file):
                         <div className="mt-2 flex items-center gap-2">
-                          <pre className="flex-1 text-[11px] text-white/75 whitespace-pre overflow-x-auto leading-relaxed">{current.innerSnippet}</pre>
+                          <pre className="flex-1 text-[11px] text-white/85 whitespace-pre overflow-x-auto leading-relaxed">{current.innerSnippet}</pre>
                           <CopyButton value={current.innerSnippet} label="Copy entry" />
                         </div>
                       </div>
@@ -393,18 +397,17 @@ export default function ClaudePage() {
                         <span className="inline-block transition-transform group-open:rotate-90 text-white/35">▸</span>
                         Don&apos;t have <code className="text-white/55 text-[11px]">{current.configPath}</code> yet? Create it.
                       </summary>
-                      <div className="mt-2 text-[11px] text-white/55 leading-relaxed pl-4 space-y-2">
-                        <div>The file lives in a hidden dot-directory. Quickest way to create + open it:</div>
+                      <div className="mt-2 text-[11px] text-white/70 leading-relaxed pl-4 space-y-2">
                         <div>
-                          <div className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-1">macOS / Linux</div>
-                          <pre className="text-[11px] text-white/75 whitespace-pre overflow-x-auto bg-white/[0.02] rounded px-2 py-1.5">{`mkdir -p ~/.cursor && code ~/.cursor/mcp.json`}</pre>
+                          <div className="text-[10px] uppercase tracking-widest text-white/55 font-semibold mb-1">macOS / Linux</div>
+                          <pre className="text-[11px] text-white/85 whitespace-pre overflow-x-auto bg-white/[0.02] rounded px-2 py-1.5">{`mkdir -p ~/.cursor && code ~/.cursor/mcp.json`}</pre>
                         </div>
                         <div>
-                          <div className="text-[10px] uppercase tracking-widest text-white/35 font-semibold mb-1">Windows (PowerShell)</div>
-                          <pre className="text-[11px] text-white/75 whitespace-pre overflow-x-auto bg-white/[0.02] rounded px-2 py-1.5">{`New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cursor" | Out-Null; code "$env:USERPROFILE\\.cursor\\mcp.json"`}</pre>
+                          <div className="text-[10px] uppercase tracking-widest text-white/55 font-semibold mb-1">Windows (PowerShell)</div>
+                          <pre className="text-[11px] text-white/85 whitespace-pre overflow-x-auto bg-white/[0.02] rounded px-2 py-1.5">{`New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cursor" | Out-Null; code "$env:USERPROFILE\\.cursor\\mcp.json"`}</pre>
                         </div>
-                        <div className="text-white/40">
-                          Paste the JSON snippet above, save, and reload the window. (Replace <code className="text-white/55 text-[11px]">.cursor</code> with the relevant client&apos;s path if you&apos;re on Cline — Cline edits its config from inside VS Code, no shell needed.)
+                        <div className="text-white/55">
+                          Paste the snippet, save, reload. Cline edits config from inside VS Code — no shell.
                         </div>
                       </div>
                     </details>
@@ -421,14 +424,11 @@ export default function ClaudePage() {
               style={{ background: "rgba(74,222,128,0.05)", border: "1px solid rgba(74,222,128,0.20)" }}
             >
               <span className="text-green-400/90 text-xs font-bold mt-0.5">→</span>
-              <p className="text-white/70 text-sm leading-relaxed">
-                After restarting, ask your agent:{" "}
-                <span className="text-white font-semibold">&ldquo;Set up Q402&rdquo;</span>.
-                <br />
-                It calls <code className="text-yellow text-xs">q402_doctor</code>, which creates
-                {" "}<code className="text-yellow text-xs">~/.q402/mcp.env</code> with placeholders
-                and walks you through pasting your API key + wallet private key — in your editor,
-                never in chat.
+              <p className="text-white/80 text-sm leading-relaxed">
+                Restart, ask:{" "}
+                <span className="text-white font-semibold">&ldquo;Set up Q402&rdquo;</span>.{" "}
+                It runs <code className="text-yellow text-xs">q402_doctor</code> → creates{" "}
+                <code className="text-yellow text-xs">~/.q402/mcp.env</code> → walks you through pasting keys in your editor, never in chat.
               </p>
             </div>
           </motion.div>
@@ -445,11 +445,9 @@ export default function ClaudePage() {
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">
               Do I need a private key?
             </h2>
-            <p className="text-white/65 text-sm md:text-base max-w-2xl leading-relaxed">
-              Depends which mode. Two modes sign locally with a private key; one
-              lets Q402&apos;s server sign for you. Most users want{" "}
-              <span className="text-emerald-300 font-semibold">Mode C</span> — no PK,
-              just an API key.
+            <p className="text-white/75 text-sm md:text-base max-w-2xl leading-relaxed">
+              Two modes use a local PK; one lets Q402 sign server-side. Most users want{" "}
+              <span className="text-emerald-300 font-semibold">Mode C</span> — no PK, just an API key.
             </p>
           </div>
 
@@ -471,9 +469,8 @@ export default function ClaudePage() {
               <div className="text-white font-semibold text-base mb-2">
                 Server signs for you
               </div>
-              <div className="text-[12.5px] text-white/65 leading-relaxed mb-3">
-                Q402 holds an encrypted Agent Wallet for you. <span className="text-emerald-300 font-medium">No private key in your env.</span>{" "}
-                No MetaMask popup. No Smart-account marker. Best for AI agents + most users.
+              <div className="text-[12.5px] text-white/75 leading-relaxed mb-3">
+                <span className="text-emerald-300 font-medium">No PK in env.</span> No MetaMask popup. Best for AI agents.
               </div>
               <div className="text-[10.5px] text-white/45 leading-relaxed">
                 Set in <code className="text-yellow text-[10px]">~/.q402/mcp.env</code>:
@@ -497,8 +494,8 @@ export default function ClaudePage() {
               <div className="text-white font-semibold text-base mb-2">
                 Local Agent Wallet PK
               </div>
-              <div className="text-[12.5px] text-white/65 leading-relaxed mb-3">
-                Same Agent Wallet as Mode C, but YOU hold the private key. Export it from the dashboard once, paste into the env. MCP signs locally — key never leaves your machine. Your MetaMask is never touched.
+              <div className="text-[12.5px] text-white/75 leading-relaxed mb-3">
+                Mode C&apos;s wallet, your private key. Export once from the dashboard. Local signing; MetaMask untouched.
               </div>
               <div className="text-[10.5px] text-white/45 leading-relaxed">
                 Set in <code className="text-yellow text-[10px]">~/.q402/mcp.env</code>:
@@ -523,8 +520,8 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
               <div className="text-white font-semibold text-base mb-2">
                 Your MetaMask EOA signs
               </div>
-              <div className="text-[12.5px] text-white/65 leading-relaxed mb-3">
-                Your existing EOA signs directly. EIP-7702 delegates it to Q402 for the call — the wallet shows a &quot;Smart account&quot; marker after first use (normal + reversible). Best for power users who want their MetaMask address to be the on-chain payer. <span className="text-amber-200/80">Use a fresh wallet.</span>
+              <div className="text-[12.5px] text-white/75 leading-relaxed mb-3">
+                Your MetaMask EOA signs directly via EIP-7702 (shows &quot;Smart account&quot;, reversible). <span className="text-amber-200">Use a fresh wallet.</span>
               </div>
               <div className="text-[10.5px] text-white/45 leading-relaxed">
                 Set in <code className="text-yellow text-[10px]">~/.q402/mcp.env</code>:
@@ -536,9 +533,9 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
             </div>
           </div>
 
-          <div className="mt-6 text-[11px] text-white/45 leading-relaxed max-w-2xl">
-            You can change later by editing <code className="text-yellow">~/.q402/mcp.env</code> and restarting your MCP client.{" "}
-            <code className="text-yellow">q402_doctor</code> on first install also asks the question and walks you through whichever mode you pick.
+          <div className="mt-6 text-[11px] text-white/60 leading-relaxed max-w-2xl">
+            Change later by editing <code className="text-yellow">~/.q402/mcp.env</code>.{" "}
+            <code className="text-yellow">q402_doctor</code> asks on first install.
           </div>
         </div>
       </section>
@@ -554,9 +551,8 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
               <h2 className="text-2xl md:text-4xl font-bold">
                 The exact tool your agent calls.
               </h2>
-              <p className="text-white/50 text-sm mt-2 max-w-xl">
-                Change the amount or token filter — the table re-ranks every chain by gas the
-                same way the MCP server returns to the agent in real time.
+              <p className="text-white/65 text-sm mt-2 max-w-xl">
+                Change the amount or token. The table re-ranks chains by gas, same as the MCP server returns to the agent.
               </p>
             </div>
           </div>
@@ -682,18 +678,17 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
         </div>
       </section>
 
-      {/* ── TOOLS — flat 8-row list ─────────────────────────────────────── */}
+      {/* ── TOOLS — flat row list ─────────────────────────────────────── */}
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-bold mb-2">
-            nine tools · one package
+          <div className="text-[10px] uppercase tracking-[0.22em] text-white/55 font-bold mb-2">
+            sixteen tools · one package
           </div>
           <h2 className="text-2xl md:text-4xl font-bold mb-2">
             Only what an agent should reach for.
           </h2>
-          <p className="text-white/50 text-sm max-w-xl mb-10">
-            No hidden admin endpoints, no key-rotation paths, nothing in the agent surface
-            that can move funds outside the explicit confirm-and-sign flow.
+          <p className="text-white/65 text-sm max-w-xl mb-10">
+            No hidden admin endpoints. Nothing moves funds outside the confirm-and-sign flow.
           </p>
 
           <ul className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
