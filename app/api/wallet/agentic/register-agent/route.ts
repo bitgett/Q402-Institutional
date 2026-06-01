@@ -29,7 +29,29 @@ import {
   encodeRegister,
   type Erc8004Network,
 } from "@/app/lib/erc8004";
-import { getAppOrigin } from "@/app/lib/app-origin";
+/**
+ * NB: this route intentionally does NOT call `getAppOrigin(req)`. That
+ * helper prioritises the `APP_ORIGIN` / `NEXT_PUBLIC_BASE_URL` env vars
+ * (canonical, e.g. q402.quackai.ai), which DIVERGES from the client's
+ * `window.location.origin` when the user is hitting a preview deploy
+ * like q402-institutional.vercel.app. Divergence breaks the
+ * metadata-hash intent binding: client hashes with preview origin,
+ * server rebuilds with canonical, hashes mismatch, 400. We derive the
+ * origin from the inbound request host instead so both sides always
+ * agree on the same string. The metadata itself is keyed by content
+ * hash on shared KV, so it remains reachable from either domain.
+ */
+function originFromRequest(req: NextRequest): string {
+  const host = req.headers.get("host");
+  const proto =
+    req.headers.get("x-forwarded-proto") ??
+    (req.url.startsWith("https") ? "https" : "http");
+  if (!host) {
+    // Defensive fallback — every real Vercel/edge request carries host.
+    return "https://q402.quackai.ai";
+  }
+  return `${proto}://${host}`.replace(/:443$|:80$/, "");
+}
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -46,22 +68,34 @@ interface PrepareBody {
   /**
    * Client-computed keccak256 of the canonical metadata JSON. Bound
    * into the intent challenge so a malicious or buggy client can't
-   * sign with `name="legit"` and then mutate `description`/`imageUrl`
-   * in the body — the rebuild here MUST hash to the same value or
-   * the request is rejected.
+   * sign with one set of fields and submit another — the rebuild here
+   * MUST hash to the same value or the request is rejected.
    *
    * Compute on the client with `hashAgentMetadata(buildQ402AgentMetadata(
    *   { name, description, imageUrl, walletAddress, relayBaseUrl, mcpPackage }))`.
-   * The `relayBaseUrl` must match `window.location.origin` (matches
-   * the server's `getAppOrigin(req)` whenever APP_ORIGIN env is unset
-   * — on prod the env is set, and the client sees the canonical URL,
-   * so they converge).
+   * Convergence: client uses `window.location.origin` for relayBaseUrl
+   * + imageUrl; server uses `originFromRequest(req)` (deliberately host-
+   *  derived, NOT env-derived) so both always see the same string.
    */
   metadataHash?: string;
 }
 
 const ALLOWED_NETWORKS: Erc8004Network[] = ["bsc"];
 const MAX_IMAGE_URL = 300;
+
+/**
+ * Server-side brand lock for Q402 agents on 8004scan. Keeping this here
+ * (NOT just in the dashboard modal) means the policy still holds for
+ * direct API calls that bypass the UI — anyone hitting the prepare
+ * endpoint with a custom `name` or stripping the prefix gets rejected
+ * with a clear, deterministic error.
+ *
+ * The required prefix must be a literal prefix of the submitted
+ * description; an empty tagline collapses to exactly `DESC_PREFIX`.
+ */
+const REQUIRED_AGENT_NAME = "Q402 Agent (by Quack AI)";
+const REQUIRED_DESC_PREFIX = "Gasless stablecoin payment agent on BNB Chain.";
+const MAX_TAGLINE = 120;
 
 function isMetadataHash(s: unknown): s is string {
   return typeof s === "string" && /^0x[0-9a-fA-F]{64}$/.test(s);
@@ -104,12 +138,41 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "NAME_REQUIRED" }, { status: 400 });
   }
   const name = body.name.trim();
-  if (name.length > 80) {
-    return NextResponse.json({ error: "NAME_TOO_LONG", limit: 80 }, { status: 400 });
+  // Brand lock — name must be the exact Q402 fleet identity, identical
+  // for every user, so every Q402 agent reads as part of one fleet on
+  // 8004scan instead of a one-off vanity mint.
+  if (name !== REQUIRED_AGENT_NAME) {
+    return NextResponse.json(
+      {
+        error: "NAME_NOT_ALLOWED",
+        message: `Agent name must be exactly "${REQUIRED_AGENT_NAME}".`,
+        required: REQUIRED_AGENT_NAME,
+      },
+      { status: 400 },
+    );
   }
   const description = body.description?.trim() ?? "";
-  if (description.length > 500) {
-    return NextResponse.json({ error: "DESCRIPTION_TOO_LONG", limit: 500 }, { status: 400 });
+  // Description = fixed Q402 prefix + an optional one-line tagline.
+  // Allowed shapes: exactly the prefix, or `${prefix} ${tagline}` where
+  // tagline is non-empty and ≤ MAX_TAGLINE chars.
+  if (description !== REQUIRED_DESC_PREFIX) {
+    if (!description.startsWith(REQUIRED_DESC_PREFIX + " ")) {
+      return NextResponse.json(
+        {
+          error: "DESCRIPTION_PREFIX_REQUIRED",
+          message: `Description must start with "${REQUIRED_DESC_PREFIX}". A one-line tagline may follow, separated by a single space.`,
+          required: REQUIRED_DESC_PREFIX,
+        },
+        { status: 400 },
+      );
+    }
+    const tagline = description.slice(REQUIRED_DESC_PREFIX.length + 1);
+    if (tagline.length === 0 || tagline.length > MAX_TAGLINE) {
+      return NextResponse.json(
+        { error: "TAGLINE_LENGTH", message: `Tagline must be 1..${MAX_TAGLINE} chars.`, limit: MAX_TAGLINE },
+        { status: 400 },
+      );
+    }
   }
   // Image URL validation — content lands in a publicly-served metadata
   // document with CORS *, so we reject anything that isn't https://.
@@ -168,7 +231,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // they signed against, not at a canonical URL that lacks the metadata.
   // The client must use `window.location.origin` for its own hash
   // computation so the two converge.
-  const appOrigin = getAppOrigin(req);
+  const appOrigin = originFromRequest(req);
   const metadata = buildQ402AgentMetadata({
     name,
     description: description.length > 0 ? description : undefined,
