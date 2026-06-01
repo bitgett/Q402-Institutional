@@ -338,11 +338,11 @@ function ProofRow() {
         </div>
       ))}
       {/* Lightweight capability mention — Agent Wallets can graduate onto
-          the ERC-8004 on-chain identity layer (QuackAI v1). Kept as a
-          single inline line rather than a prominent badge — this is a
-          feature surface, not a marketing claim. */}
+          the ERC-8004 on-chain identity layer. Kept as a single inline
+          line rather than a prominent badge — this is a feature surface,
+          not a marketing claim. */}
       <div className="col-span-2 md:col-span-4 text-[11.5px] text-center mt-1" style={{ color: "rgba(226,232,240,0.45)" }}>
-        Optional: graduate your Agent Wallet onto ERC-8004 (QuackAI v1) for an on-chain identity badge.
+        Optional: graduate your Agent Wallet onto ERC-8004 for an on-chain identity badge.
       </div>
     </motion.div>
   );
