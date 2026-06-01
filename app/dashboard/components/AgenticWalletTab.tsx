@@ -26,6 +26,17 @@ import { AgenticWalletPreview } from "./AgenticWalletPreview";
 import { AgenticWalletFooter } from "./AgenticWalletFooter";
 import { AgenticWalletDangerZone } from "./AgenticWalletDangerZone";
 
+/** Reputation view mirrored from app/lib/erc8004-reputation.ts so the
+ *  Tab → Card prop chain stays strongly typed without importing
+ *  server-side helpers into the client bundle. */
+export interface ReputationView {
+  agentId: string;
+  total: { feedbackCount: number; summaryValue: string; valueDecimals: number };
+  fromQ402: { feedbackCount: number; summaryValue: string; valueDecimals: number };
+  scan8004Url: string;
+  lastChecked: number;
+}
+
 export interface AgenticWalletPublic {
   ownerAddr: string;
   address: string;
@@ -37,6 +48,10 @@ export interface AgenticWalletPublic {
   perTxMaxUsd: number | null;
   erc8004AgentId: string | null;
   label: string | null;
+  /** Populated by the backend only when the wallet is ERC-8004
+   *  graduated. Null when the RPC read failed; absent when the wallet
+   *  isn't graduated. */
+  reputation?: ReputationView | null;
 }
 
 interface Props {

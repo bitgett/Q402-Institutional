@@ -273,17 +273,19 @@ export async function fireWeeklyFeedback(
 /**
  * Read a per-agent summary the way 8004scan does — surfaces the
  * aggregate `count`, `summaryValue`, `summaryValueDecimals` so we can
- * verify our weekly fires are actually landing on-chain. Used by the
- * smoke test + ops dashboards, not the hot path.
+ * verify our weekly fires are actually landing on-chain.
  *
  * Pass an empty `clientAddresses` array to aggregate across ALL
  * feedback sources; pass `[relayerAddress]` to scope to Q402's own
- * writes only.
+ * writes only. The `tag1` / `tag2` defaults match our weekly cadence
+ * but can be overridden to "" / "" for a fully unscoped read.
  */
 export async function readSummary(
   agentId: bigint,
   clients: Address[],
   network: Erc8004Network = "bsc",
+  tag1: string = REPUTATION_TAG_WEEKLY,
+  tag2: string = "bsc",
 ): Promise<{ count: bigint; value: bigint; decimals: number }> {
   const cfg = REPUTATION_NETWORKS[network];
   const reader = readClient(network);
@@ -291,9 +293,106 @@ export async function readSummary(
     address: cfg.registry,
     abi: REPUTATION_ABI,
     functionName: "getSummary",
-    args: [agentId, clients, REPUTATION_TAG_WEEKLY, "bsc"],
+    args: [agentId, clients, tag1, tag2],
   })) as [bigint, bigint, number];
   return { count: result[0], value: result[1], decimals: result[2] };
+}
+
+/**
+ * Public-facing reputation snapshot. Two views surfaced side-by-side:
+ *
+ *   - `total`    — aggregate across ALL feedback sources + tags.
+ *                  What an outside observer sees when they land on
+ *                  8004scan and look at the agent's overall score.
+ *   - `fromQ402` — scoped to Q402's relayer address + the
+ *                  `q402-weekly` tag. Tells the agent owner how many
+ *                  weekly heartbeats Q402's cron has fired on their
+ *                  behalf so far.
+ *
+ * Numbers come back JSON-safe (strings + `number` for decimals) so
+ * the same shape can flow through the dashboard + MCP responses
+ * without bigint serialisation headaches.
+ */
+export interface ReputationSummaryView {
+  agentId: string;
+  total: { feedbackCount: number; summaryValue: string; valueDecimals: number };
+  fromQ402: { feedbackCount: number; summaryValue: string; valueDecimals: number };
+  scan8004Url: string;
+  lastChecked: number;
+}
+
+/** TTL for the cached reputation summary. Reputation only ticks once
+ *  a week (cron) + occasional manual fires, so a 5-minute cache is
+ *  generous + keeps dashboard / MCP polls cheap. */
+const REPUTATION_CACHE_TTL_SEC = 5 * 60;
+const reputationCacheKey = (agentId: string) => `aw:rep-cache:${agentId}`;
+
+/**
+ * Cached two-view reputation read. Used by `GET /api/wallet/agentic`
+ * and `POST /api/wallet/agentic/info-by-key` (MCP path).
+ *
+ * Returns null when the RPC reads fail outright — the dashboard /
+ * MCP responses then just omit the `reputation` field rather than
+ * surface a misleading "0 feedback" when the chain was actually
+ * unreachable.
+ */
+export async function readReputationSummary(
+  agentIdStr: string,
+  relayerAddress: Address,
+  network: Erc8004Network = "bsc",
+): Promise<ReputationSummaryView | null> {
+  if (!/^\d+$/.test(agentIdStr)) return null;
+
+  // ── Cache hit ─────────────────────────────────────────────────────
+  try {
+    const { kv } = await import("@vercel/kv");
+    const cached = await kv.get<ReputationSummaryView>(reputationCacheKey(agentIdStr));
+    if (cached && Date.now() - cached.lastChecked < REPUTATION_CACHE_TTL_SEC * 1000) {
+      return cached;
+    }
+  } catch {
+    /* cache failure is non-fatal — fall through to live read */
+  }
+
+  // ── Live read (2 RPC calls in parallel) ───────────────────────────
+  let total: { count: bigint; value: bigint; decimals: number };
+  let fromQ402: { count: bigint; value: bigint; decimals: number };
+  try {
+    const agentId = BigInt(agentIdStr);
+    [total, fromQ402] = await Promise.all([
+      readSummary(agentId, [], network, "", ""),
+      readSummary(agentId, [relayerAddress], network, REPUTATION_TAG_WEEKLY, "bsc"),
+    ]);
+  } catch (e) {
+    console.error("[readReputationSummary] RPC read failed for agent " + agentIdStr + ":", e);
+    return null;
+  }
+
+  const view: ReputationSummaryView = {
+    agentId: agentIdStr,
+    total: {
+      feedbackCount: Number(total.count),
+      summaryValue: total.value.toString(),
+      valueDecimals: total.decimals,
+    },
+    fromQ402: {
+      feedbackCount: Number(fromQ402.count),
+      summaryValue: fromQ402.value.toString(),
+      valueDecimals: fromQ402.decimals,
+    },
+    scan8004Url: `https://8004scan.io/agents/bsc/${agentIdStr}`,
+    lastChecked: Date.now(),
+  };
+
+  // ── Cache the view ────────────────────────────────────────────────
+  try {
+    const { kv } = await import("@vercel/kv");
+    await kv.set(reputationCacheKey(agentIdStr), view, { ex: REPUTATION_CACHE_TTL_SEC });
+  } catch {
+    /* non-fatal */
+  }
+
+  return view;
 }
 
 /**

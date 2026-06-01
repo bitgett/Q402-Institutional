@@ -36,11 +36,28 @@ import {
   TRIAL_WALLET_CAP,
   type AgenticWalletRecord,
 } from "@/app/lib/agentic-wallet";
+import { readReputationSummary } from "@/app/lib/erc8004-reputation";
+import { RELAYER_ADDRESS } from "@/app/lib/wallets";
 
 export const runtime = "nodejs";
 
+interface PublicProjection {
+  ownerAddr: string;
+  address: string;
+  walletId: string;
+  createdAt: number;
+  deletedAt: number | null;
+  dailyLimitUsd: number | null;
+  perTxMaxUsd: number | null;
+  erc8004AgentId: string | null;
+  label: string | null;
+  /** Populated after projection when the wallet is ERC-8004 graduated.
+   *  Null when the on-chain RPC fails — UI then just hides the row. */
+  reputation?: import("@/app/lib/erc8004-reputation").ReputationSummaryView | null;
+}
+
 /** Project only fields safe to surface to the client. */
-function projectPublic(record: AgenticWalletRecord) {
+function projectPublic(record: AgenticWalletRecord): PublicProjection {
   return {
     ownerAddr: record.ownerAddr,
     address: record.address,
@@ -134,16 +151,41 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const walletId = req.nextUrl.searchParams.get("walletId");
   if (walletId) {
     const record = await getAgenticWallet(auth, walletId);
+    // Inject ERC-8004 reputation for graduated wallets so the dashboard
+    // card can render it inline with the agent badge. The 5-min cache
+    // inside `readReputationSummary` keeps the RPC bill bounded.
+    const projected = record ? projectPublic(record) : null;
+    if (projected && record?.erc8004AgentId) {
+      projected.reputation = await readReputationSummary(
+        record.erc8004AgentId,
+        RELAYER_ADDRESS as `0x${string}`,
+      );
+    }
     return NextResponse.json({
-      wallet: record ? projectPublic(record) : null,
+      wallet: projected,
       hasMultichainScope: multichain,
       cap,
     });
   }
 
   const records = await listAgenticWallets(auth);
+  const projected = records.map(projectPublic);
+  // Parallel reputation fetches for any graduated wallets in the list.
+  // Non-graduated wallets cost zero RPC; graduated wallets share the
+  // same 5-min KV cache as the single-wallet path.
+  await Promise.all(
+    projected.map(async (w, i) => {
+      const rec = records[i];
+      if (rec?.erc8004AgentId) {
+        w.reputation = await readReputationSummary(
+          rec.erc8004AgentId,
+          RELAYER_ADDRESS as `0x${string}`,
+        );
+      }
+    }),
+  );
   return NextResponse.json({
-    wallets: records.map(projectPublic),
+    wallets: projected,
     hasMultichainScope: multichain,
     cap,
     max: MAX_WALLETS_PER_OWNER,
