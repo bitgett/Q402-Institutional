@@ -2,18 +2,11 @@
  * GET /api/wallet/agentic/agent-metadata/[hash]
  *
  * Content-addressed Agent Wallet metadata server. The URL fragment is
- * the keccak256 hex of the canonical JSON body — same idea as IPFS CIDs
- * but anchored to a single domain we control. Trade-off: when q402.
- * quackai.ai goes down the metadata is unreachable, but the agent NFT
- * itself remains valid on-chain and the user can re-pin to a different
- * URI via `setAgentURI`.
- *
- * Why this exists: ERC-8004's `register(agentURI)` takes any URI scheme
- * (`ipfs://`, `https://`, `data:`, `ar://`, …). The Pinata integration
- * we had before added an external dependency that 503'd silently when
- * a `PINATA_JWT` env var was missing. Self-hosting on Q402 zeros that
- * external dep out — the only thing the registration flow needs is KV
- * (which we already require for every agentic-wallet path).
+ * the keccak256 hex of the canonical JSON body — a stable, immutable
+ * pointer that survives re-fetches and lets indexers cache forever.
+ * Trade-off: when q402.quackai.ai goes down the metadata is
+ * unreachable, but the agent NFT itself remains valid on-chain and
+ * the owner can repoint to a different URI via `setAgentURI`.
  *
  * Wire format:
  *   - KV key:   `aw:agent-md:{hash}` (lowercase, no 0x prefix)

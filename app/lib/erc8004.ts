@@ -266,10 +266,10 @@ export async function readAgent(
 }
 
 /**
- * Canonical ERC-8004 agent registration metadata shape (the IPFS JSON
- * that `tokenURI` resolves to). Q402 contributes a `services[]` entry
- * pointing at our relay endpoint so other ERC-8004-aware tools can
- * discover that this agent settles through Q402.
+ * Canonical ERC-8004 agent registration metadata shape (the JSON
+ * document `tokenURI` resolves to). Q402 contributes a `services[]`
+ * entry pointing at our relay endpoint so other ERC-8004-aware tools
+ * can discover that this agent settles through Q402.
  */
 export interface AgentMetadata {
   type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1";
@@ -295,7 +295,7 @@ export interface AgentMetadata {
 }
 
 /** Helper used by the register-agent route to assemble Q402-flavoured
- *  metadata before pinning to IPFS. */
+ *  metadata before storing it. */
 export function buildQ402AgentMetadata(opts: {
   name: string;
   description?: string;
