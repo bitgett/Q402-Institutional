@@ -21,7 +21,6 @@ import { kv } from "@vercel/kv";
 
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
-import { getAppOrigin } from "@/app/lib/app-origin";
 import {
   getActiveAgenticWallet,
   setErc8004AgentId,
@@ -32,6 +31,19 @@ import {
   scanUrl,
   type Erc8004Network,
 } from "@/app/lib/erc8004";
+import {
+  REQUIRED_AGENT_NAME,
+  REQUIRED_DESC_PREFIX,
+  validateDescription,
+} from "@/app/lib/agent-brand";
+
+/**
+ * Path suffix every self-hosted Q402 metadata URI ends with. Used by
+ * the self-hosted detection below — checking the path (not just the
+ * host) means we still classify correctly even when prepare ran on a
+ * different deploy origin than confirm.
+ */
+const SELF_HOSTED_METADATA_PATH = "/api/wallet/agentic/agent-metadata/";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -190,42 +202,53 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // ── walletId ↔ agentURI cross-check ───────────────────────────────────
+  // ── walletId ↔ agentURI cross-check + brand-lock defence-in-depth ────
   // The same owner may have multiple Agent Wallets (max 10). An owner
   // could mint NFT-X against wallet A's metadata, then call confirm
   // with walletId=B + the same txHash, attaching X's agentId to B's
   // record — B would then advertise A's payment endpoint to anyone
-  // resolving the public agent. Block by fetching the on-chain
-  // agentURI's metadata and verifying its q402 service walletAddress
-  // matches the wallet whose record we're about to stamp.
+  // resolving the public agent. Additionally an owner could craft
+  // calldata locally that points at a non-Q402-branded metadata URI
+  // (e.g. their own hosted JSON with a custom name) and submit the
+  // mint that way. Block both by fetching the on-chain agentURI's
+  // metadata + verifying (a) the q402 service walletAddress matches
+  // THIS walletId, and (b) the brand-lock invariants (name + desc
+  // prefix) still hold post-mint.
   //
-  // Posture is asymmetric by URI kind:
-  //
-  //   - Self-hosted URIs (our own `${APP_ORIGIN}/api/wallet/agentic/
-  //     agent-metadata/{hash}`): we control the route, the metadata
-  //     is content-addressed in our KV. A fetch failure here is a
-  //     real signal (KV down, hash typo, replay against a stale
-  //     hash) — fail closed.
-  //   - Third-party URIs: user could have minted with metadata they
-  //     host themselves (ipfs://, an arbitrary https). Fetch failure
-  //     is plausibly transient — keep the old non-fatal behaviour.
-  const appOriginPrefix = `${getAppOrigin(req).replace(/\/$/, "")}/api/wallet/agentic/agent-metadata/`;
-  const isSelfHosted = parsed.agentURI.startsWith(appOriginPrefix);
+  // Self-hosted detection is PATH-based, not host-based. Prepare may
+  // have run on a different deploy origin (canonical vs preview) than
+  // confirm; we still need to recognise our own URIs across both.
+  let parsedUri: URL | null = null;
+  try {
+    parsedUri = new URL(parsed.agentURI);
+  } catch {
+    parsedUri = null;
+  }
+  const isSelfHosted =
+    parsedUri !== null && parsedUri.pathname.startsWith(SELF_HOSTED_METADATA_PATH);
+
+  interface FetchedMetadata {
+    name?: string;
+    description?: string;
+    services?: Array<{ name?: string; walletAddress?: string }>;
+  }
 
   let metadataWalletAddr: string | null = null;
+  let metadataName: string | null = null;
+  let metadataDescription: string | null = null;
   let metadataFetchOk = false;
   let metadataServiceFound = false;
   try {
     const metaRes = await fetch(parsed.agentURI, { method: "GET" });
     if (metaRes.ok) {
       metadataFetchOk = true;
-      const meta = (await metaRes.json()) as {
-        services?: Array<{ name?: string; walletAddress?: string }>;
-      };
+      const meta = (await metaRes.json()) as FetchedMetadata;
       const q402Svc = meta.services?.find((s) => s?.name === "q402");
       if (q402Svc) metadataServiceFound = true;
       metadataWalletAddr =
         typeof q402Svc?.walletAddress === "string" ? q402Svc.walletAddress.toLowerCase() : null;
+      metadataName = typeof meta.name === "string" ? meta.name : null;
+      metadataDescription = typeof meta.description === "string" ? meta.description : null;
     }
   } catch (e) {
     console.error("[register-agent/confirm] metadata fetch for cross-check failed:", e);
@@ -265,6 +288,45 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       { status: 409 },
     );
+  }
+
+  // ── Brand-lock defence-in-depth ──────────────────────────────────────
+  // We re-verify the brand invariants from the on-chain agentURI's
+  // metadata (not from the request body) so that even a caller who
+  // hand-crafted the mint calldata to point at a custom-named metadata
+  // file can't graduate that mint into Q402's wallet record. Only
+  // applied when we successfully fetched the metadata — without the
+  // fetch we have nothing to check. For self-hosted URIs the fetch is
+  // already required by the gate above; for third-party URIs we skip
+  // brand-lock since the fetch may have legitimately failed.
+  if (metadataFetchOk) {
+    if (metadataName !== REQUIRED_AGENT_NAME) {
+      return NextResponse.json(
+        {
+          error: "BRAND_NAME_MISMATCH",
+          message: `The on-chain agent metadata's name must be exactly "${REQUIRED_AGENT_NAME}".`,
+          required: REQUIRED_AGENT_NAME,
+          actual: metadataName,
+          agentId: parsed.agentId.toString(),
+        },
+        { status: 409 },
+      );
+    }
+    const descToCheck = metadataDescription?.trim() ?? "";
+    if (validateDescription(descToCheck) !== null) {
+      return NextResponse.json(
+        {
+          error: "BRAND_DESCRIPTION_MISMATCH",
+          message:
+            `The on-chain agent metadata's description must start with "${REQUIRED_DESC_PREFIX}" ` +
+            "(optionally followed by a one-line tagline).",
+          required: REQUIRED_DESC_PREFIX,
+          actual: metadataDescription,
+          agentId: parsed.agentId.toString(),
+        },
+        { status: 409 },
+      );
+    }
   }
 
   // Atomically claim the txHash so a concurrent retry can't re-parse +
