@@ -74,8 +74,17 @@ export function AgenticWalletAgentModal({
   onRegistered,
 }: Props) {
   const [stage, setStage] = useState<Stage>("form");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  // Name is brand-locked — every Q402 ambassador / user mints with the
+  // same identity so the agent reads as part of the Q402 fleet on
+  // 8004scan, not a one-off. Distinguishability comes from the
+  // per-agent tagline below, plus the Agent Wallet endpoint declared
+  // in the metadata.
+  const AGENT_NAME = "Q402 Agent (by Quack AI)";
+  // Description is a fixed Q402 prefix + an optional user-supplied
+  // one-line tagline. The prefix anchors what every Q402 agent IS;
+  // the tagline tells the audience what THIS one does.
+  const DESC_PREFIX = "Gasless stablecoin payment agent on BNB Chain.";
+  const [tagline, setTagline] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [errorKind, setErrorKind] = useState<ErrorKind>("generic");
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -110,16 +119,18 @@ export function AgenticWalletAgentModal({
     setStage("error");
   }
 
-  const valid = name.trim().length > 0 && name.trim().length <= 80;
+  // Name is brand-locked + tagline is optional → submit is always valid
+  // structurally. Server-side intent-auth + the metadata hash still gate
+  // anything the client could misreport.
+  const valid = true;
+  const trimmedTagline = tagline.trim().slice(0, 120);
+  const finalDescription = trimmedTagline
+    ? `${DESC_PREFIX} ${trimmedTagline}`
+    : DESC_PREFIX;
 
   async function start() {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
-    if (!valid) {
-      inFlightRef.current = false;
-      setError("Agent name is required (1–80 chars).");
-      return;
-    }
     setError(null);
     setStage("preparing");
     try {
@@ -132,14 +143,13 @@ export function AgenticWalletAgentModal({
       //     `window.location.origin` which matches `getAppOrigin(req)`
       //     server-side (req-derived) and the canonical APP_ORIGIN env
       //     when set.
-      const trimmedName = name.trim();
-      const trimmedDesc = description.trim();
       const previewMetadata = buildQ402AgentMetadata({
-        name: trimmedName,
-        description: trimmedDesc.length > 0 ? trimmedDesc : undefined,
+        name: AGENT_NAME,
+        description: finalDescription,
         walletAddress,
         relayBaseUrl: window.location.origin,
         mcpPackage: "@quackai/q402-mcp",
+        imageUrl: `${window.location.origin}/icon.svg`,
       });
       const metadataHash = hashAgentMetadata(previewMetadata).toLowerCase();
       const prepAuth = await getActionAuth(
@@ -160,8 +170,8 @@ export function AgenticWalletAgentModal({
           walletId,
           nonce: prepAuth.challenge,
           signature: prepAuth.signature,
-          name: trimmedName,
-          description: trimmedDesc || undefined,
+          name: AGENT_NAME,
+          description: finalDescription,
           network: "bsc",
           metadataHash,
         }),
@@ -428,30 +438,50 @@ export function AgenticWalletAgentModal({
           <>
             <div>
               <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Agent name</div>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Bookkeeper for QuackAI vendors"
-                maxLength={80}
-                className="w-full rounded-md border px-3 py-2 text-sm text-white placeholder-white/25"
+              <div
+                className="w-full rounded-md border px-3 py-2 text-sm text-white/85 font-medium"
                 style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
-              />
-              <div className="text-[10px] text-white/35 mt-1">{name.length}/80</div>
+              >
+                {AGENT_NAME}
+              </div>
+              <div className="text-[10px] text-white/35 mt-1">
+                Brand-locked — same identity for every Q402 agent on 8004scan.
+              </div>
             </div>
 
             <div>
-              <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Description (optional)</div>
+              <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Description</div>
+              <div
+                className="w-full rounded-md border px-3 py-2 text-[12.5px] text-white/65 leading-relaxed"
+                style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
+              >
+                {DESC_PREFIX}
+              </div>
               <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="What this agent does, who it pays, what it spends on."
-                maxLength={500}
-                rows={3}
-                className="w-full rounded-md border px-3 py-2 text-sm text-white placeholder-white/25 resize-none"
+                value={tagline}
+                onChange={(e) => setTagline(e.target.value)}
+                placeholder="Add a line about THIS agent (e.g. payroll, NFT collector, AI research). Optional."
+                maxLength={120}
+                rows={2}
+                className="w-full rounded-md border px-3 py-2 text-sm text-white placeholder-white/25 resize-none mt-2"
                 style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
               />
-              <div className="text-[10px] text-white/35 mt-1">{description.length}/500</div>
+              <div className="text-[10px] text-white/35 mt-1">{tagline.length}/120 (optional one-liner)</div>
+            </div>
+
+            {/* Preview — what 8004scan will index after the mint settles. */}
+            <div
+              className="rounded-md border px-3 py-2.5 text-[11px] leading-relaxed space-y-1.5"
+              style={{ background: "rgba(74,222,128,0.04)", borderColor: "rgba(74,222,128,0.18)" }}
+            >
+              <div className="text-[9.5px] uppercase tracking-widest text-emerald-400/85 font-semibold">
+                Preview on 8004scan
+              </div>
+              <div className="text-white/90 font-semibold">{AGENT_NAME}</div>
+              <div className="text-white/55">{finalDescription}</div>
+              <div className="text-white/45 text-[10.5px]">
+                Services: Q402 relay · MCP <span className="font-mono text-white/60">@quackai/q402-mcp</span>
+              </div>
             </div>
 
             <div
