@@ -89,16 +89,27 @@ function rowAmountUsd(tx: RelayedTxRow): number {
   return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0;
 }
 
+/**
+ * Per-month tail cap on the per-owner list. The network/recent surface
+ * only ever returns DEFAULT_LIMIT/MAX_LIMIT rows globally, and reads
+ * across many owner-month keys — pulling the FULL list per key for a
+ * power user (33k+ entries on the heaviest viz-backend hub) burns
+ * unbounded KV egress + tripped Upstash's 10 MB request alert on
+ * 2026-06-02. The tail bound below is generous enough that the global
+ * ranking step still has plenty of candidates.
+ */
+const PER_KEY_TAIL = 200;
 async function loadRelayedTxRowKey(key: string): Promise<RelayedTxRow[]> {
   try {
-    const list = await kv.lrange<RelayedTxRow>(key, 0, -1);
+    const list = await kv.lrange<RelayedTxRow>(key, -PER_KEY_TAIL, -1);
     if (list.length > 0) return list;
   } catch {
     /* WRONGTYPE — legacy JSON array */
   }
   try {
     const arr = (await kv.get<RelayedTxRow[]>(key)) ?? [];
-    return Array.isArray(arr) ? arr : [];
+    if (!Array.isArray(arr)) return [];
+    return arr.length > PER_KEY_TAIL ? arr.slice(-PER_KEY_TAIL) : arr;
   } catch {
     return [];
   }

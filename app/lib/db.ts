@@ -579,7 +579,7 @@ async function emitGasDriftAlert(
 export async function getRelayedTxs(
   address: string,
   months?: string[],   // e.g. ["2026-04", "2026-03"]
-  limitPerMonth: number = 10_000,
+  limitPerMonth: number = 1_000,
 ): Promise<RelayedTx[]> {
   const targets = months ?? [ym(), ym(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))];
   const unique = [...new Set(targets)];
@@ -639,10 +639,18 @@ function recentMonths(count: number): string[] {
  *
  * The hash total (`gasused:{addr}`) is kept as an atomic write-through cache for
  * live relays, but early preview builds accidentally wrote sandbox gas there.
- * Recomputing from relay history repairs that drift for dashboard balances.
+ * The history-sum was originally a permanent re-sum to repair that drift —
+ * but for power users (viz-backend's heavy hub had 33k+ TX/month on
+ * 2026-06-02) the unbounded `lrange(0, -1)` exploded into multi-MB reads on
+ * every `getGasBalance` call (which is called per relay). Upstash 10MB
+ * request alerts caught it. The cap below keeps reconciliation usable for
+ * normal users while bounding the request size for heavy ones — beyond the
+ * cap we trust the atomic hash cache (which has been correct since the
+ * sandbox-gas-leak bug was fixed long ago).
  */
+const GAS_RECONCILE_LIMIT_PER_MONTH = 1_000;
 async function getBillableGasUsedTotals(address: string): Promise<Record<string, number>> {
-  const txs = await getRelayedTxs(address, recentMonths(12), Number.POSITIVE_INFINITY);
+  const txs = await getRelayedTxs(address, recentMonths(12), GAS_RECONCILE_LIMIT_PER_MONTH);
   if (txs.length === 0) return getGasUsedTotals(address);
 
   const totals: Record<string, number> = {};
@@ -684,11 +692,15 @@ export async function recordRelayedTx(address: string, tx: RelayedTx) {
   const month = ym(new Date(tx.relayedAt));
   const key   = relayTxMonthKey(address, month);
 
-  // Per-month list cap — sized to the largest tier's credit grant so a paying
-  // Enterprise customer (500K credits / 30-day window) never silently loses
-  // history. Billing/quota uses an independent atomic counter (decrementCredit),
-  // so this cap is purely the on-disk display history bound.
-  const MAX_TX_HISTORY = TIER_CREDITS[TIER_CREDITS.length - 1];
+  // Per-month list cap — bounded so any lrange(0, -1) on this key stays
+  // well under Upstash's 10 MB request limit even for the heaviest user.
+  // Previous cap (TIER_CREDITS[-1] = 500_000) allowed a single key to
+  // reach ~250 MB which broke `getBillableGasUsedTotals` for power users
+  // on 2026-06-02. The dashboard /api/transactions surface only ever
+  // renders the most recent few hundred per month anyway, and billing
+  // uses the independent atomic credit counter, so the new cap is a
+  // pure display-history bound.
+  const MAX_TX_HISTORY = 5_000;
   try {
     const len = await kv.rpush(key, tx);
     if (len > MAX_TX_HISTORY) kv.ltrim(key, -MAX_TX_HISTORY, -1).catch(() => {});
