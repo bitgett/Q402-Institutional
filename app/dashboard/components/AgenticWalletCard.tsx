@@ -367,13 +367,29 @@ export function AgenticWalletCard({
           </button>
           {wallet.erc8004AgentId ? (
             <a
-              href={agentScanUrl(wallet.erc8004AgentId)}
+              href={wallet.reputation?.scan8004Url ?? agentScanUrl(wallet.erc8004AgentId)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-emerald-300/85 hover:text-emerald-200 transition-colors"
               title="View on 8004scan"
             >
-              ◉ Agent #{wallet.erc8004AgentId.split(":")[1]} ↗
+              ◉ Agent #{wallet.erc8004AgentId.split(":")[1]}
+              {wallet.reputation && wallet.reputation.total.feedbackCount > 0 ? (
+                <>
+                  {" · "}
+                  <span className="text-white/55">
+                    {wallet.reputation.total.feedbackCount} feedback
+                  </span>
+                  {wallet.reputation.fromQ402.feedbackCount > 0 ? (
+                    <span className="text-white/45">
+                      {" ("}
+                      {wallet.reputation.fromQ402.feedbackCount}{" "}
+                      Q402-weekly{")"}
+                    </span>
+                  ) : null}
+                </>
+              ) : null}
+              {" ↗"}
             </a>
           ) : (
             <button

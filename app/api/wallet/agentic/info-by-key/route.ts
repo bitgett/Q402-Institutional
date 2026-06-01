@@ -26,6 +26,8 @@ import {
   fetchAgenticBalances,
   type AgenticBalances,
 } from "@/app/lib/agentic-wallet-balance";
+import { readReputationSummary } from "@/app/lib/erc8004-reputation";
+import { RELAYER_ADDRESS } from "@/app/lib/wallets";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -153,5 +155,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ wallet: publicWallet, balance });
+  // ERC-8004 reputation surface — only fetched for graduated wallets.
+  // Cached 5 min inside readReputationSummary so MCP polls + dashboard
+  // tabs share one RPC pair.
+  const reputation =
+    wallet.erc8004AgentId
+      ? await readReputationSummary(wallet.erc8004AgentId, RELAYER_ADDRESS as `0x${string}`)
+      : null;
+
+  return NextResponse.json({ wallet: publicWallet, balance, reputation });
 }
