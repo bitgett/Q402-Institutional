@@ -304,6 +304,7 @@ export function buildQ402AgentMetadata(opts: {
   mcpPackage?: string;
   imageUrl?: string;
 }): AgentMetadata {
+  const baseOrigin = opts.relayBaseUrl.replace(/\/$/, "");
   return {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: opts.name,
@@ -312,12 +313,19 @@ export function buildQ402AgentMetadata(opts: {
     services: [
       {
         name: "q402",
-        endpoint: `${opts.relayBaseUrl.replace(/\/$/, "")}/api/relay/info`,
+        endpoint: `${baseOrigin}/api/relay/info`,
         version: "1.3.1",
         walletAddress: getAddress(opts.walletAddress),
       },
+      // MCP service endpoint is an HTTPS discovery route — NOT `npm://`.
+      // 8004scan's HTTP-only crawler can't health-check the npm scheme
+      // and previously flagged the service "Unhealthy" with no recourse.
+      // The new endpoint returns JSON describing the package + install
+      // command + tool list; the npm registry URL is in the response
+      // body. Drift-guarded — keep the path in sync with the actual
+      // route at app/api/mcp/info/route.ts.
       ...(opts.mcpPackage
-        ? [{ name: "MCP" as const, endpoint: `npm://${opts.mcpPackage}` }]
+        ? [{ name: "MCP" as const, endpoint: `${baseOrigin}/api/mcp/info` }]
         : []),
     ],
     // Q402 settles via EIP-7702 + EIP-712 TransferAuthorization, not
