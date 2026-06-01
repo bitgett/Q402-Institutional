@@ -106,17 +106,35 @@ interface Props {
  * is reachable today via ALLOWED_NETWORKS — the fallback covers any
  * future expansion without breaking the link.
  */
+/**
+ * Extract the numeric agentId portion of an `erc8004AgentId` tag.
+ *
+ * Tag shape today is `{network}:{agentId}` (e.g. `"bsc:124025"`) but
+ * legacy or partial inputs ("12345", malformed) should not produce
+ * "Agent #undefined" in the UI. Mirrors `parseAgentIdTag` in
+ * app/lib/erc8004-reputation.ts — kept local + thin because the
+ * server-side helper imports server-only modules.
+ */
+function agentIdFromTag(tag: string | null | undefined): string | null {
+  if (typeof tag !== "string" || tag.length === 0) return null;
+  const candidate = tag.includes(":") ? tag.split(":").pop() ?? "" : tag;
+  return /^\d+$/.test(candidate) ? candidate : null;
+}
+
 function agentScanUrl(tag: string): string {
-  const [network, id] = tag.split(":");
+  const [maybeNetwork] = tag.split(":");
   const slug =
-    network === "bsc-testnet" ? "bsc-testnet"
-    : network === "eth" ? "ethereum"
-    : network === "base" ? "base"
-    : network === "polygon" ? "polygon"
-    : network === "arbitrum" ? "arbitrum"
-    : network === "celo" ? "celo"
+    maybeNetwork === "bsc-testnet" ? "bsc-testnet"
+    : maybeNetwork === "eth" ? "ethereum"
+    : maybeNetwork === "base" ? "base"
+    : maybeNetwork === "polygon" ? "polygon"
+    : maybeNetwork === "arbitrum" ? "arbitrum"
+    : maybeNetwork === "celo" ? "celo"
     : "bsc";
-  return `https://8004scan.io/agents/${slug}/${id}`;
+  const id = agentIdFromTag(tag);
+  // If the tag failed to parse, fall back to the raw tag (link will 404
+  // on 8004scan but that's the safe outcome — no silent corruption).
+  return `https://8004scan.io/agents/${slug}/${id ?? tag}`;
 }
 
 function shortAddr(addr: string) {
@@ -306,7 +324,7 @@ export function AgenticWalletCard({
             value="Q402 server"
             sub={
               wallet.erc8004AgentId
-                ? `ERC-8004 · agent #${wallet.erc8004AgentId.split(":")[1]}`
+                ? `ERC-8004 · agent #${(agentIdFromTag(wallet.erc8004AgentId) ?? "?")}`
                 : "encrypted key in keystore"
             }
           />
@@ -373,7 +391,7 @@ export function AgenticWalletCard({
               className="text-emerald-300/85 hover:text-emerald-200 transition-colors"
               title="View on 8004scan"
             >
-              ◉ Agent #{wallet.erc8004AgentId.split(":")[1]}
+              ◉ Agent #{(agentIdFromTag(wallet.erc8004AgentId) ?? "?")}
               {wallet.reputation && wallet.reputation.total.feedbackCount > 0 ? (
                 <>
                   {" · "}

@@ -4,9 +4,9 @@
  *
  * Used by `/api/wallet/agentic/register-agent` (writer) and
  * `/api/wallet/agentic/agent-metadata/[hash]` (reader) so the key
- * format and hashing convention live in exactly one place. We do not
- * pin to IPFS; the canonical JSON is stored verbatim in KV and served
- * from Q402's own domain.
+ * format and hashing convention live in exactly one place. The
+ * canonical JSON is stored verbatim in KV and served from Q402's own
+ * domain — self-hosted, content-addressed by keccak hash.
  *
  * Hash format: keccak256 of the canonical JSON byte sequence,
  * `0x`-prefixed lowercase hex. Same shape as an EVM tx hash so the

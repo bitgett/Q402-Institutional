@@ -139,7 +139,10 @@ const METADATA = {
     "for Claude, Codex CLI, Cursor, or Cline.",
   services: [
     { name: "q402",  endpoint: `${APP_ORIGIN}/api/relay/info`, version: "1.3.1", walletAddress: FACILITATOR },
-    { name: "MCP",   endpoint: "npm://@quackai/q402-mcp" },
+    // MCP service uses the HTTPS discovery endpoint so 8004scan can
+    // health-check it. Kept in sync with the runtime metadata builder
+    // at app/lib/erc8004.ts.
+    { name: "MCP",   endpoint: `${APP_ORIGIN}/api/mcp/info` },
     { name: "web",   endpoint: APP_ORIGIN },
   ],
   x402Support: false,

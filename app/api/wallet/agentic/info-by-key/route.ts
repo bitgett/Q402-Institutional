@@ -113,8 +113,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const active = all.filter(
       (w) => !w.deletedAt || Date.now() < w.deletedAt,
     );
+    // Parallel reputation fetch for any graduated wallets in the list.
+    // Cache TTL inside readReputationSummary keeps repeat polls (the
+    // common case for MCP discovery) on the KV hot path. Each result
+    // is attached inline so the MCP client sees the same shape as the
+    // single-wallet response.
+    const wallets = await Promise.all(
+      active.map(async (w) => {
+        const projected = project(w);
+        if (w.erc8004AgentId) {
+          const reputation = await readReputationSummary(
+            w.erc8004AgentId,
+            RELAYER_ADDRESS as `0x${string}`,
+          );
+          return { ...projected, reputation };
+        }
+        return projected;
+      }),
+    );
     return NextResponse.json({
-      wallets: active.map(project),
+      wallets,
       count: active.length,
     });
   }
