@@ -48,6 +48,7 @@ export const runtime = "nodejs";
 const TRACKED: CronName[] = [
   CRON_NAMES.RECURRING_PAYOUTS,
   CRON_NAMES.DEPOSIT_SCAN,
+  CRON_NAMES.REPUTATION_WEEKLY,
 ];
 
 function checkAdminAuth(req: NextRequest): NextResponse | null {
