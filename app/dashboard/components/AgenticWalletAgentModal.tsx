@@ -4,20 +4,17 @@
  * AgenticWalletAgentModal — ERC-8004 agent registration ("graduate").
  *
  * Three-step flow:
- *   1. Name + description form → POST /register-agent (prepare)
- *      • Server publishes Q402-flavoured agent metadata at a stable
- *        self-hosted HTTPS URL (content-addressed by keccak hash) and
- *        returns the calldata to mint the agent NFT. Not IPFS — we
- *        used to pin to Pinata but the dependency was rip'd in
- *        commit 46e8ae7 to remove the silent 503 failure mode.
- *   2. User signs the register tx through their MetaMask
+ *   1. Brand-locked name + optional tagline → POST /register-agent
+ *      • Server publishes Q402 agent metadata at a stable self-hosted
+ *        HTTPS URL (content-addressed by keccak hash) and returns the
+ *        calldata to mint the agent NFT.
+ *   2. User signs the register tx through their wallet
  *      (the NFT mints to msg.sender, gas ~$0.05 on BSC)
  *   3. After receipt → POST /register-agent/confirm
  *      • Server parses the Registered event, persists agentId on the
  *        Agent Wallet record, returns the 8004scan URL
  *
- * Network: BSC mainnet only for v1. The dashboard signals which
- * IdentityRegistry address + chainId to switch to.
+ * Network: BSC mainnet only for v1.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -143,13 +140,18 @@ export function AgenticWalletAgentModal({
       //     `window.location.origin` which matches `getAppOrigin(req)`
       //     server-side (req-derived) and the canonical APP_ORIGIN env
       //     when set.
+      // imageUrl must travel in BOTH the client-side hash computation AND
+      // the request body — server rebuilds metadata strictly from body
+      // fields, so anything we feed buildQ402AgentMetadata() here must
+      // also land in the JSON below or the rebuilt hash diverges.
+      const imageUrl = `${window.location.origin}/icon.svg`;
       const previewMetadata = buildQ402AgentMetadata({
         name: AGENT_NAME,
         description: finalDescription,
         walletAddress,
         relayBaseUrl: window.location.origin,
         mcpPackage: "@quackai/q402-mcp",
-        imageUrl: `${window.location.origin}/icon.svg`,
+        imageUrl,
       });
       const metadataHash = hashAgentMetadata(previewMetadata).toLowerCase();
       const prepAuth = await getActionAuth(
@@ -172,6 +174,7 @@ export function AgenticWalletAgentModal({
           signature: prepAuth.signature,
           name: AGENT_NAME,
           description: finalDescription,
+          imageUrl,
           network: "bsc",
           metadataHash,
         }),
