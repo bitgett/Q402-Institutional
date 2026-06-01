@@ -18,6 +18,7 @@ import {
   buildWeeklyFeedbackHash,
   currentIsoWeek,
   encodeGiveFeedback,
+  parseAgentIdTag,
 } from "@/app/lib/erc8004-reputation";
 
 describe("REPUTATION_ABI drift guard", () => {
@@ -157,6 +158,31 @@ describe("encodeGiveFeedback", () => {
   });
 });
 
+describe("parseAgentIdTag", () => {
+  it("parses the canonical `{network}:{agentId}` tag", () => {
+    expect(parseAgentIdTag("bsc:124025")).toBe(124025n);
+    expect(parseAgentIdTag("eth:1")).toBe(1n);
+  });
+
+  it("parses the legacy bare-numeric form", () => {
+    expect(parseAgentIdTag("124025")).toBe(124025n);
+  });
+
+  it("returns null for non-numeric or malformed input", () => {
+    expect(parseAgentIdTag("bsc:abc")).toBeNull();
+    expect(parseAgentIdTag("bsc:")).toBeNull();
+    expect(parseAgentIdTag("")).toBeNull();
+    expect(parseAgentIdTag(null)).toBeNull();
+    expect(parseAgentIdTag(undefined)).toBeNull();
+    expect(parseAgentIdTag("not-a-tag")).toBeNull();
+  });
+
+  it("never throws on caller-controlled tag (no BigInt explosion)", () => {
+    // The bug this helper exists to prevent: `BigInt("bsc:12345")` throws.
+    expect(() => parseAgentIdTag("bsc:12345")).not.toThrow();
+  });
+});
+
 describe("reputation-weekly route — shape guards", () => {
   const src = readFileSync(
     resolve(__dirname, "..", "app", "api", "cron", "reputation-weekly", "route.ts"),
@@ -179,6 +205,19 @@ describe("reputation-weekly route — shape guards", () => {
     // Look for kv.set(ledgerKey, ledger) inside the fire loop.
     expect(src).toMatch(/await kv\.set\(ledgerKey, ledger\)/);
   });
+
+  it("parses the stored erc8004AgentId tag before BigInt-ing", () => {
+    expect(src).toMatch(/parseAgentIdTag/);
+  });
+
+  it("clamps REPUTATION_TOP_N env to a sane band", () => {
+    expect(src).toMatch(/resolveTopN/);
+    expect(src).toMatch(/TOP_N_MAX/);
+  });
+
+  it("publishes outcome to cron-status so admin dashboard surfaces it", () => {
+    expect(src).toMatch(/recordCronStatus\(CRON_NAMES\.REPUTATION_WEEKLY/);
+  });
 });
 
 describe("reputation-smoke route — shape guards", () => {
@@ -187,8 +226,16 @@ describe("reputation-smoke route — shape guards", () => {
     "utf8",
   );
 
-  it("requires cron auth (operator-only)", () => {
-    expect(src).toMatch(/requireCronAuth/);
+  it("requires ADMIN_SECRET (NOT the shared CRON_SECRET)", () => {
+    // CRON_SECRET is shared with the Render heartbeat driver. Smoke
+    // fires real BSC tx against an operator-supplied agentId — must
+    // use the narrower ADMIN_SECRET surface instead.
+    expect(src).toMatch(/ADMIN_SECRET/);
+    expect(src).not.toMatch(/requireCronAuth/);
+  });
+
+  it("uses constant-time comparison for the admin key", () => {
+    expect(src).toMatch(/timingSafeEqual/);
   });
 
   it("validates agentId is a positive integer", () => {
@@ -197,5 +244,12 @@ describe("reputation-smoke route — shape guards", () => {
 
   it("clamps activeDays to 0..7", () => {
     expect(src).toMatch(/activeDays.*0.*7/);
+  });
+
+  it("rejects fires for agentIds not owned by a Q402 wallet", () => {
+    // The misuse fence: ADMIN_SECRET leak should not let the holder
+    // publish opinions about non-Q402 agents.
+    expect(src).toMatch(/AGENT_NOT_OWNED/);
+    expect(src).toMatch(/agentIdExistsInKv/);
   });
 });

@@ -108,7 +108,7 @@ export const ERC8004_NETWORKS: Record<Erc8004Network, NetworkConfig> = {
 /** Verified-impl ABI fragments. Source: bscscan.com/address/0x7274…99c02. */
 export const ERC8004_ABI = [
   // register() — three overloads. We use the agentURI-only variant; the
-  // metadata is folded into the IPFS JSON itself per ERC-8004 v1.
+  // metadata travels in the document the URI resolves to (per ERC-8004 v1).
   {
     type: "function",
     name: "register",

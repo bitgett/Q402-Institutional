@@ -182,7 +182,7 @@ describe("seedFromLegacy — safety net routing", () => {
   });
 
   it("falls back to subscription mirror when no legacy quota exists (orphan-mirror)", async () => {
-    // Edge case the reviewer caught: an account has `trialQuotaBonus` /
+    // Edge case: an account has `trialQuotaBonus` /
     // `paidQuotaBonus` set on the subscription (the cached display values)
     // but no `quota:{addr}` legacy key (evicted, cleaned up, never seeded).
     // Without the mirror fallback, mutation paths (`decrementScopedCredit`,

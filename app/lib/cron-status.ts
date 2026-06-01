@@ -79,6 +79,7 @@ export async function getCronStatus(name: string): Promise<CronStatusRecord | nu
 export const CRON_NAMES = {
   RECURRING_PAYOUTS: "recurring-payouts",
   DEPOSIT_SCAN: "deposit-scan",
+  REPUTATION_WEEKLY: "reputation-weekly",
 } as const;
 export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
 
@@ -108,5 +109,12 @@ export const CRON_META: Record<CronName, CronMeta> = {
   [CRON_NAMES.DEPOSIT_SCAN]: {
     expectedIntervalMs: 5 * 60 * 1000,
     staleAfterMs: 15 * 60 * 1000,
+  },
+  // Weekly cadence — fires every Sunday 00:00 UTC. Stale window is 8d
+  // so a single missed Sunday (e.g. Vercel cron blip) trips the alert
+  // and a normal deploy doesn't.
+  [CRON_NAMES.REPUTATION_WEEKLY]: {
+    expectedIntervalMs: 7 * 24 * 60 * 60 * 1000,
+    staleAfterMs: 8 * 24 * 60 * 60 * 1000,
   },
 };

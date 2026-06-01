@@ -1,7 +1,7 @@
 /**
  * owners.test.ts — paywall-bypass list parser + lookup.
  *
- * Locks in three regressions a reviewer flagged after the OPSEC pass that
+ * Locks in three regressions identified after the OPSEC pass that
  * moved the owner list out of tracked source:
  *
  *  1. The list must NEVER reach the client bundle. We can't directly assert

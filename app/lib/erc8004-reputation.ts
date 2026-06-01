@@ -153,6 +153,32 @@ export function buildWeeklyFeedbackHash(agentId: bigint, isoWeek: string): Hex {
 }
 
 /**
+ * Parse the wallet record's `erc8004AgentId` tag (stored as
+ * `{network}:{agentId}` — see `setErc8004AgentId` in agentic-wallet.ts)
+ * back into a `bigint` for use as the `uint256 agentId` arg to
+ * `giveFeedback`. Returns `null` for unparseable input so the caller
+ * (cron / smoke) can skip rather than throw on a bogus stored tag.
+ *
+ * Without this helper the cron blindly does `BigInt(record.erc8004AgentId)`,
+ * which throws on the `"bsc:12345"` shape that's actually persisted — i.e.
+ * every graduated agent gets marked as `failed` in the ledger and zero
+ * feedback writes go out. Discovered by external audit before the first
+ * automatic Sunday cron tick.
+ */
+export function parseAgentIdTag(tag: string | null | undefined): bigint | null {
+  if (typeof tag !== "string" || tag.length === 0) return null;
+  // Accept both the legacy raw-numeric form ("12345") and the
+  // network-qualified form ("bsc:12345"). Anything else → null.
+  const candidate = tag.includes(":") ? tag.split(":").pop() ?? "" : tag;
+  if (!/^\d+$/.test(candidate)) return null;
+  try {
+    return BigInt(candidate);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Inputs for a single weekly feedback write. All fields are intentional
  * — we don't accept callsite-chosen tag1/feedbackURI so a misuse can't
  * leak unsigned strings into our on-chain reputation tag namespace.
@@ -247,10 +273,16 @@ export function reputationWalletClient(network: Erc8004Network = "bsc"): WalletC
 }
 
 /**
- * Fire a single `giveFeedback` and return the tx hash. The relayer
- * pays BSC gas (~$0.07-0.10 per call). Reverts bubble up so the
- * caller (the weekly cron) can decide whether to retry, skip, or
- * mark the agent as deferred.
+ * Fire a single `giveFeedback` and return ONLY after the BSC receipt
+ * confirms `status === "success"`. The relayer pays BSC gas
+ * (~$0.07-0.10 per call). Reverts / dropped txs throw so the caller
+ * (the weekly cron) treats them as failed instead of silently caching
+ * a dead tx hash as "fired".
+ *
+ * Wait window: 60s — BSC blocks are ~3s and one giveFeedback is a
+ * single block tx, so this is generous. The cron's per-tx budget
+ * (~2-3s nominal, 60s on a sluggish RPC) stays well inside the
+ * 300s maxDuration of the route handler.
  */
 export async function fireWeeklyFeedback(
   input: WeeklyFeedbackInput,
@@ -261,13 +293,29 @@ export async function fireWeeklyFeedback(
   const account = wallet.account;
   if (!account) throw new Error("wallet client has no account");
   const data = encodeGiveFeedback(input);
-  return wallet.sendTransaction({
+  const txHash = await wallet.sendTransaction({
     account,
     chain: null,
     to: cfg.registry,
     data,
     value: 0n,
   });
+  // Confirm the tx actually mined + didn't revert before reporting
+  // success. Without this, a tx hash whose underlying call later
+  // reverted would still land in the ledger as `fired`, masking
+  // failures and burning the same agent's weekly slot for nothing.
+  const reader = readClient(network);
+  const receipt = await reader.waitForTransactionReceipt({
+    hash: txHash,
+    timeout: 60_000,
+    confirmations: 1,
+  });
+  if (receipt.status !== "success") {
+    throw new Error(
+      `giveFeedback reverted (tx ${txHash}, status=${receipt.status})`,
+    );
+  }
+  return txHash;
 }
 
 /**
