@@ -385,11 +385,18 @@ const reputationCacheKey = (agentId: string) => `aw:rep-cache:${agentId}`;
  * unreachable.
  */
 export async function readReputationSummary(
-  agentIdStr: string,
+  agentIdOrTag: string,
   relayerAddress: Address,
   network: Erc8004Network = "bsc",
 ): Promise<ReputationSummaryView | null> {
-  if (!/^\d+$/.test(agentIdStr)) return null;
+  // Accept both the canonical `{network}:{agentId}` tag (what wallet
+  // records store) and the bare numeric form. Before this, callers
+  // passing `record.erc8004AgentId` (always tag-shaped) silently got
+  // `null` back → dashboard + MCP showed no reputation even for
+  // graduated wallets.
+  const agentId = parseAgentIdTag(agentIdOrTag);
+  if (agentId === null) return null;
+  const agentIdStr = agentId.toString();
 
   // ── Cache hit ─────────────────────────────────────────────────────
   try {
@@ -406,7 +413,6 @@ export async function readReputationSummary(
   let total: { count: bigint; value: bigint; decimals: number };
   let fromQ402: { count: bigint; value: bigint; decimals: number };
   try {
-    const agentId = BigInt(agentIdStr);
     [total, fromQ402] = await Promise.all([
       readSummary(agentId, [], network, "", ""),
       readSummary(agentId, [relayerAddress], network, REPUTATION_TAG_WEEKLY, "bsc"),

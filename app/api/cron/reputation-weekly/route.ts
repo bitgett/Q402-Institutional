@@ -56,9 +56,34 @@ const SCAN_COUNT = 200;
  */
 const MAX_SCAN_ITERS = 200;
 
-/** Per-week ledger key — single source of truth for "did we fire?". */
+/** Per-week ledger key — aggregate view ("how did this run go?"). */
 function weekLedgerKey(isoWeek: string): string {
   return `aw:rep-week:${isoWeek}`;
+}
+
+/**
+ * Per-agent SET NX claim key. Prevents double-fire when a tx confirms
+ * on-chain but the function dies before persisting the ledger entry:
+ * the next cron tick sees the claim and skips the agent. Claim TTL is
+ * 8 days so it auto-expires after this ISO week completes (idempotency
+ * window > the week itself by ~1 day).
+ *
+ * Per-agent granularity (not the aggregate ledger) is intentional —
+ * the aggregate is updated in batches after each successful fire, so
+ * a crash mid-batch could leak through without per-agent NX gating.
+ */
+function weekClaimKey(isoWeek: string, agentTag: string): string {
+  return `aw:rep-week:${isoWeek}:claim:${agentTag.toLowerCase()}`;
+}
+const CLAIM_TTL_SEC = 8 * 24 * 60 * 60;
+
+interface AgentClaim {
+  agentTag: string;
+  isoWeek: string;
+  state: "pending" | "confirmed" | "failed";
+  claimedAt: number;
+  txHash?: string;
+  reason?: string;
 }
 
 interface WeekLedger {
@@ -158,147 +183,215 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const isoWeek = currentIsoWeek();
   const ledgerKey = weekLedgerKey(isoWeek);
+  const runStartedAt = Date.now();
 
-  // ── Idempotency — early exit if this week is already done ──────────────
-  const existing = await kv.get<WeekLedger>(ledgerKey);
-  if (existing && existing.endedAt) {
-    return NextResponse.json({
+  // Anything thrown below this line lands in the catch and gets
+  // recorded as a `lastStatus: error` cron-status entry — operators
+  // see WHY the run failed in /api/admin/cron-status instead of just
+  // a stale timestamp.
+  try {
+    // ── Idempotency — early exit if this week is already done ──────────
+    const existing = await kv.get<WeekLedger>(ledgerKey);
+    if (existing && existing.endedAt) {
+      const result = {
+        ok: true,
+        isoWeek,
+        reused: true,
+        fired: existing.fired.length,
+        failed: existing.failed.length,
+        ranAt: existing.endedAt,
+      };
+      await recordCronStatus(CRON_NAMES.REPUTATION_WEEKLY, {
+        lastStatus: "success",
+        lastResult: result,
+        durationMs: Date.now() - runStartedAt,
+      });
+      return NextResponse.json(result);
+    }
+
+    // ── Initialise (or resume) ledger ─────────────────────────────────
+    const ledger: WeekLedger = existing ?? {
+      isoWeek,
+      startedAt: Date.now(),
+      fired: [],
+      failed: [],
+      skipped: 0,
+    };
+
+    // ── Scan all wallet records, collect graduated agents ────────────
+    const candidates: CandidateAgent[] = [];
+    let cursor: string | number = 0;
+    let scanIters = 0;
+    do {
+      let page: string[];
+      try {
+        const res: [string | number, string[]] = await kv.scan(cursor, {
+          match: "aw:*",
+          count: SCAN_COUNT,
+        });
+        cursor = res[0];
+        page = res[1];
+      } catch (e) {
+        const reason = e instanceof Error ? e.message : String(e);
+        throw new Error(`kv_scan_failed: ${reason}`);
+      }
+      scanIters++;
+
+      for (const key of page) {
+        const cls = classifyRecordKey(key);
+        if (!cls) continue;
+        const record = await kv.get<AgenticWalletRecord>(key);
+        if (!record) continue;
+        if (record.deletedAt) continue;
+        if (!record.erc8004AgentId) continue;
+        // Stored tag is `{network}:{agentId}` (e.g. "bsc:124025").
+        // Convert to numeric BEFORE pushing as a candidate — naive
+        // `BigInt(tag)` throws and every agent silently lands in the
+        // failed bucket. Skip + bump skipped if the tag is malformed.
+        const agentIdNumeric = parseAgentIdTag(record.erc8004AgentId);
+        if (agentIdNumeric === null) {
+          ledger.skipped += 1;
+          continue;
+        }
+
+        const { activeDays, spendUsd } = await loadWeekActivity(
+          cls.owner,
+          cls.isLegacy ? record.address : cls.walletId,
+        );
+        if (activeDays === 0) {
+          ledger.skipped += 1;
+          continue;
+        }
+        candidates.push({
+          agentTag: record.erc8004AgentId,
+          agentId: agentIdNumeric,
+          walletAddr: record.address,
+          ownerAddr: cls.owner,
+          activeDays,
+          spendUsd,
+        });
+      }
+    } while (cursor !== "0" && cursor !== 0 && scanIters < MAX_SCAN_ITERS);
+
+    // ── Rank + slice top N ───────────────────────────────────────────
+    candidates.sort((a, b) => {
+      if (a.activeDays !== b.activeDays) return b.activeDays - a.activeDays;
+      return b.spendUsd - a.spendUsd;
+    });
+    const top = candidates.slice(0, TOP_N);
+
+    // ── Fire sequentially ────────────────────────────────────────────
+    // Sequential (not parallel) so the relayer nonce stays sane + a
+    // single RPC failure doesn't cascade across the batch. ~2s per
+    // write × 100 ≈ 200s, within the 300s maxDuration.
+    //
+    // Each agent is gated by a per-agent SET NX claim. The claim is
+    // set to `pending` BEFORE the tx — so even if the function dies
+    // between tx-confirmed and ledger-write, the next cron tick sees
+    // the claim and skips the agent (no double-fire). After tx
+    // confirmation the claim flips to `confirmed`; on tx failure it's
+    // deleted so the next run can retry.
+    const relayEndpoint = "https://q402.quackai.ai/api/relay/info";
+
+    for (const c of top) {
+      const claimKey = weekClaimKey(isoWeek, c.agentTag);
+      const pending: AgentClaim = {
+        agentTag: c.agentTag,
+        isoWeek,
+        state: "pending",
+        claimedAt: Date.now(),
+      };
+      let claimed: unknown;
+      try {
+        claimed = await kv.set(claimKey, pending, { nx: true, ex: CLAIM_TTL_SEC });
+      } catch (e) {
+        // KV blip — skip this agent for this tick. The next run will
+        // retry naturally; no on-chain side-effect from a KV failure.
+        console.error(`[reputation-weekly] claim set failed for ${c.agentTag}:`, e);
+        continue;
+      }
+      if (!claimed) {
+        // Already pending / confirmed for this week. Treat as skipped
+        // here (the existing claim's terminal state is the source of
+        // truth — confirmed = success this week, pending = leave alone
+        // until next run).
+        continue;
+      }
+
+      try {
+        const txHash = await fireWeeklyFeedback({
+          agentId: c.agentId,
+          settlements7d: c.activeDays,
+          isoWeek,
+          endpoint: relayEndpoint,
+          feedbackURI: "",
+        });
+        // tx confirmed (fireWeeklyFeedback waits for receipt).
+        const confirmed: AgentClaim = { ...pending, state: "confirmed", txHash };
+        await kv.set(claimKey, confirmed, { ex: CLAIM_TTL_SEC });
+        ledger.fired.push({
+          agentId: c.agentTag,
+          walletAddr: c.walletAddr,
+          activeDays: c.activeDays,
+          txHash,
+        });
+        await kv.set(ledgerKey, ledger);
+      } catch (e) {
+        const reason =
+          e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200);
+        console.error(
+          `[reputation-weekly] giveFeedback failed for agent ${c.agentTag}:`,
+          e,
+        );
+        // Release the claim so a later run (this week or next) can
+        // retry — the on-chain tx either reverted or never landed, so
+        // the agent never got their reputation tick.
+        try {
+          await kv.del(claimKey);
+        } catch {
+          /* best-effort */
+        }
+        ledger.failed.push({
+          agentId: c.agentTag,
+          walletAddr: c.walletAddr,
+          reason,
+        });
+        await kv.set(ledgerKey, ledger);
+      }
+    }
+
+    ledger.endedAt = Date.now();
+    await kv.set(ledgerKey, ledger);
+
+    const result = {
       ok: true,
       isoWeek,
-      reused: true,
-      fired: existing.fired.length,
-      failed: existing.failed.length,
-      ranAt: existing.endedAt,
+      candidates: candidates.length,
+      fired: ledger.fired.length,
+      failed: ledger.failed.length,
+      skipped: ledger.skipped,
+    };
+    await recordCronStatus(CRON_NAMES.REPUTATION_WEEKLY, {
+      lastStatus: "success",
+      lastResult: result,
+      durationMs: Date.now() - runStartedAt,
     });
+
+    return NextResponse.json(result);
+  } catch (e) {
+    // Single error path — every early return above either succeeded
+    // (recorded above) or rethrew here. Record the failure so the
+    // admin cron-status dashboard shows the operator WHAT broke.
+    const reason = e instanceof Error ? e.message : String(e);
+    console.error("[reputation-weekly] run aborted:", e);
+    await recordCronStatus(CRON_NAMES.REPUTATION_WEEKLY, {
+      lastStatus: "error",
+      lastError: reason.slice(0, 500),
+      durationMs: Date.now() - runStartedAt,
+    });
+    return NextResponse.json(
+      { error: "reputation_weekly_failed", message: reason.slice(0, 200) },
+      { status: 502 },
+    );
   }
-
-  // ── Initialise (or resume) ledger ──────────────────────────────────────
-  const ledger: WeekLedger = existing ?? {
-    isoWeek,
-    startedAt: Date.now(),
-    fired: [],
-    failed: [],
-    skipped: 0,
-  };
-
-  // ── Scan all wallet records, collect graduated agents ─────────────────
-  const candidates: CandidateAgent[] = [];
-  let cursor: string | number = 0;
-  let scanIters = 0;
-  do {
-    let page: string[];
-    try {
-      const res: [string | number, string[]] = await kv.scan(cursor, {
-        match: "aw:*",
-        count: SCAN_COUNT,
-      });
-      cursor = res[0];
-      page = res[1];
-    } catch (e) {
-      console.error("[reputation-weekly] kv.scan failed:", e);
-      return NextResponse.json({ error: "kv_scan_failed" }, { status: 502 });
-    }
-    scanIters++;
-
-    for (const key of page) {
-      const cls = classifyRecordKey(key);
-      if (!cls) continue;
-      const record = await kv.get<AgenticWalletRecord>(key);
-      if (!record) continue;
-      if (record.deletedAt) continue;
-      if (!record.erc8004AgentId) continue;
-      // Stored tag is `{network}:{agentId}` (e.g. "bsc:124025"). Cron
-      // must convert to numeric BEFORE pushing as a candidate — naive
-      // `BigInt(tag)` throws and every agent silently lands in the
-      // failed bucket. Skip + bump skipped if the tag is malformed.
-      const agentIdNumeric = parseAgentIdTag(record.erc8004AgentId);
-      if (agentIdNumeric === null) {
-        ledger.skipped += 1;
-        continue;
-      }
-
-      const { activeDays, spendUsd } = await loadWeekActivity(cls.owner, cls.isLegacy ? record.address : cls.walletId);
-      if (activeDays === 0) {
-        ledger.skipped += 1;
-        continue;
-      }
-      candidates.push({
-        agentTag: record.erc8004AgentId,
-        agentId: agentIdNumeric,
-        walletAddr: record.address,
-        ownerAddr: cls.owner,
-        activeDays,
-        spendUsd,
-      });
-    }
-  } while (cursor !== "0" && cursor !== 0 && scanIters < MAX_SCAN_ITERS);
-
-  // ── Rank + slice top N ─────────────────────────────────────────────────
-  candidates.sort((a, b) => {
-    if (a.activeDays !== b.activeDays) return b.activeDays - a.activeDays;
-    return b.spendUsd - a.spendUsd;
-  });
-  const top = candidates.slice(0, TOP_N);
-
-  // ── Filter out agents already fired this week (mid-run resume) ────────
-  const alreadyFired = new Set(ledger.fired.map((f) => f.agentId));
-  const alreadyFailed = new Set(ledger.failed.map((f) => f.agentId));
-  const toFire = top.filter((c) => !alreadyFired.has(c.agentTag) && !alreadyFailed.has(c.agentTag));
-
-  // ── Fire sequentially ─────────────────────────────────────────────────
-  // Sequential (not parallel) so the relayer nonce stays sane + a single
-  // RPC failure doesn't cascade across the batch. ~2s per write × 100
-  // ≈ 200s, within the 300s maxDuration.
-  const relayEndpoint = "https://q402.quackai.ai/api/relay/info";
-
-  for (const c of toFire) {
-    try {
-      const txHash = await fireWeeklyFeedback({
-        agentId: c.agentId,
-        settlements7d: c.activeDays,
-        isoWeek,
-        endpoint: relayEndpoint,
-        feedbackURI: "",
-      });
-      ledger.fired.push({
-        agentId: c.agentTag,
-        walletAddr: c.walletAddr,
-        activeDays: c.activeDays,
-        txHash,
-      });
-      // Persist after every successful write so a mid-run crash doesn't
-      // lose progress.
-      await kv.set(ledgerKey, ledger);
-    } catch (e) {
-      const reason = e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200);
-      console.error(`[reputation-weekly] giveFeedback failed for agent ${c.agentTag}:`, e);
-      ledger.failed.push({
-        agentId: c.agentTag,
-        walletAddr: c.walletAddr,
-        reason,
-      });
-      await kv.set(ledgerKey, ledger);
-    }
-  }
-
-  ledger.endedAt = Date.now();
-  await kv.set(ledgerKey, ledger);
-
-  const result = {
-    ok: true,
-    isoWeek,
-    candidates: candidates.length,
-    fired: ledger.fired.length,
-    failed: ledger.failed.length,
-    skipped: ledger.skipped,
-  };
-  // Surface this run on the admin cron-status dashboard. Best-effort —
-  // recordCronStatus swallows its own errors.
-  await recordCronStatus(CRON_NAMES.REPUTATION_WEEKLY, {
-    lastStatus: "success",
-    lastResult: result,
-    durationMs: Date.now() - ledger.startedAt,
-  });
-
-  return NextResponse.json(result);
 }
