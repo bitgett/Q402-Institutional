@@ -53,11 +53,18 @@ function requireAdminAuth(req: NextRequest): NextResponse | null {
     );
   }
   const presented = req.headers.get("x-q402-admin-key") ?? "";
-  if (presented.length !== adminSecret.length) {
+  // Compare on UTF-8 byte length (matches /api/admin/cron-status). Plain
+  // `String.length` is UTF-16 code-unit count which diverges from
+  // `Buffer.byteLength` for any non-ASCII admin secret (BMP chars are
+  // 2-3 bytes each in UTF-8). Aligning here keeps the auth surfaces
+  // behaving identically.
+  const presentedBytes = Buffer.from(presented, "utf8");
+  const expectedBytes = Buffer.from(adminSecret, "utf8");
+  if (presentedBytes.length !== expectedBytes.length) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
-    if (!timingSafeEqual(Buffer.from(presented), Buffer.from(adminSecret))) {
+    if (!timingSafeEqual(presentedBytes, expectedBytes)) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
   } catch {

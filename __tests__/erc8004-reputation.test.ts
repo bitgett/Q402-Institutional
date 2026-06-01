@@ -183,6 +183,38 @@ describe("parseAgentIdTag", () => {
   });
 });
 
+describe("readReputationSummary tag handling — drift guard", () => {
+  // We can't run readReputationSummary in unit tests (it hits BSC RPC
+  // + Vercel KV), but we can pin the call-site shape that determines
+  // whether the dashboard/MCP ever see reputation for graduated
+  // wallets. The bug this guards against: callers pass
+  // `record.erc8004AgentId` which is `{network}:{agentId}` shaped,
+  // but the function used to do `/^\d+$/.test(...)` and return null,
+  // so reputation was silently empty in production UIs.
+  const src = readFileSync(
+    resolve(__dirname, "..", "app", "lib", "erc8004-reputation.ts"),
+    "utf8",
+  );
+
+  it("accepts the {network}:{agentId} tag via parseAgentIdTag", () => {
+    // The function body should call parseAgentIdTag to normalise its
+    // input, not raw /^\d+$/ which would reject "bsc:124025".
+    const fnIdx = src.indexOf("export async function readReputationSummary");
+    const closingIdx = src.indexOf("\nexport ", fnIdx + 1);
+    const body = src.slice(fnIdx, closingIdx > -1 ? closingIdx : undefined);
+    expect(body).toMatch(/parseAgentIdTag/);
+  });
+
+  it("does NOT gate readReputationSummary on /^\\d+$/ regex", () => {
+    // Negative — if this assertion ever fires, the tag-rejecting bug
+    // has regressed.
+    const fnIdx = src.indexOf("export async function readReputationSummary");
+    const closingIdx = src.indexOf("\nexport ", fnIdx + 1);
+    const body = src.slice(fnIdx, closingIdx > -1 ? closingIdx : undefined);
+    expect(body).not.toMatch(/\/\^\\d\+\$\/\.test\(agentIdStr\)/);
+  });
+});
+
 describe("reputation-weekly route — shape guards", () => {
   const src = readFileSync(
     resolve(__dirname, "..", "app", "api", "cron", "reputation-weekly", "route.ts"),
@@ -217,6 +249,24 @@ describe("reputation-weekly route — shape guards", () => {
 
   it("publishes outcome to cron-status so admin dashboard surfaces it", () => {
     expect(src).toMatch(/recordCronStatus\(CRON_NAMES\.REPUTATION_WEEKLY/);
+  });
+
+  it("records cron-status `error` on aborted runs (not just success)", () => {
+    // The whole GET body lives in a try/catch — error path also feeds
+    // recordCronStatus so operators see WHY the run died, not just a
+    // stale timestamp.
+    expect(src).toMatch(/lastStatus:\s*"error"/);
+  });
+
+  it("pre-claims each agent via SET NX before firing the on-chain tx", () => {
+    // Without per-agent claim, a tx that confirms on-chain but whose
+    // post-fire ledger write dies would let the next run re-fire.
+    expect(src).toMatch(/weekClaimKey/);
+    expect(src).toMatch(/nx:\s*true/);
+  });
+
+  it("releases the claim on tx failure so a retry can happen later", () => {
+    expect(src).toMatch(/kv\.del\(claimKey\)/);
   });
 });
 
