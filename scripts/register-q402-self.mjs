@@ -10,12 +10,10 @@
  * assigned `agentId` and the 8004scan URL so the public landing can
  * advertise "Q402 is ERC-8004 agent #N."
  *
- * Trade-off: this puts an external dependency on Vercel KV (which Q402
- * already requires) instead of IPFS pinning. Aligned with how live
- * users' dashboards register — both paths now share the
- * `agent-metadata-store` helper + the self-hosted `agentURI` URL
- * shape, so resolvers fetch from `q402.quackai.ai`, not from any
- * third-party gateway.
+ * Storage: Vercel KV (which Q402 already requires for the rest of the
+ * stack). Aligned with how live users' dashboards register — both paths
+ * share the `agent-metadata-store` helper + the self-hosted `agentURI`
+ * URL shape, so resolvers fetch from `q402.quackai.ai`.
  *
  * Usage (PowerShell — simplest path):
  *
@@ -155,7 +153,11 @@ const METADATA = {
     "for Claude, Codex CLI, Cursor, or Cline.",
   services: [
     { name: "q402",  endpoint: `${APP_ORIGIN}/api/relay/info`, version: "1.3.1", walletAddress: FACILITATOR },
-    { name: "MCP",   endpoint: "npm://@quackai/q402-mcp" },
+    // MCP service uses the HTTPS discovery endpoint so 8004scan's
+    // HTTP-only crawler can health-check it. The npm package URL is
+    // exposed inside the response body. Kept in sync with the runtime
+    // metadata builder at app/lib/erc8004.ts.
+    { name: "MCP",   endpoint: `${APP_ORIGIN}/api/mcp/info` },
     { name: "web",   endpoint: APP_ORIGIN },
   ],
   x402Support: false,

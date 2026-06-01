@@ -12,8 +12,7 @@
  *       Looks up the stored JSON, returns it with public CORS +
  *       long-cache headers.
  *
- * Together they replace the prior Pinata pinning flow, so we keep
- * three invariants under guard: (a) the writer's URL prefix matches
+ * Three invariants under guard: (a) the writer's URL prefix matches
  * the reader's path, (b) the hash format the writer emits is exactly
  * the format the reader accepts, (c) the reader is CORS-enabled +
  * content-typed JSON.

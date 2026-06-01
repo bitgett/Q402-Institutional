@@ -49,6 +49,35 @@ describe("/api/mcp/info — discovery surface drift guard", () => {
   });
 });
 
+describe("operator scripts — MCP service drift guard", () => {
+  // The runtime metadata builder is HTTPS-correct (see test above) but
+  // the operator-only register/update scripts hardcode their own
+  // metadata payload. If either drifts back to `npm://`, an operator
+  // running the script unaware of the rollback would undo the work in
+  // commit 04a07fb (Unhealthy on 8004scan again). Pin both files.
+  const registerSrc = readFileSync(
+    resolve(__dirname, "..", "scripts", "register-q402-self.mjs"),
+    "utf8",
+  );
+  const updateSrc = readFileSync(
+    resolve(__dirname, "..", "scripts", "update-q402-agent.mjs"),
+    "utf8",
+  );
+
+  it("register-q402-self.mjs does NOT declare MCP endpoint as npm://", () => {
+    expect(registerSrc).not.toMatch(/name:\s*"MCP"[\s\S]{0,80}npm:\/\//);
+  });
+
+  it("update-q402-agent.mjs does NOT declare MCP endpoint as npm://", () => {
+    expect(updateSrc).not.toMatch(/name:\s*"MCP"[\s\S]{0,80}npm:\/\//);
+  });
+
+  it("both scripts point the MCP service at the HTTPS discovery endpoint", () => {
+    expect(registerSrc).toMatch(/name:\s*"MCP"[\s\S]{0,120}\/api\/mcp\/info/);
+    expect(updateSrc).toMatch(/name:\s*"MCP"[\s\S]{0,120}\/api\/mcp\/info/);
+  });
+});
+
 describe("buildQ402AgentMetadata MCP service endpoint", () => {
   it("declares an HTTPS endpoint (NOT npm://) for the MCP service", () => {
     const meta = buildQ402AgentMetadata({
