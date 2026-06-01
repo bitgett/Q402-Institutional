@@ -116,6 +116,19 @@ const dailySpendKey = (owner: string, walletId: string, dateUtc: string) =>
 function usdToCents(amountUsd: number): number {
   return Math.round(amountUsd * 100);
 }
+/**
+ * Charge-side cents conversion — same rounding as `usdToCents` BUT
+ * floors any positive amount at 1 cent. Without the floor a
+ * sub-half-cent send ($0.004 etc.) rounds to 0 and `incrBy(0)` leaves
+ * the daily-spend ledger untouched, letting an automation loop
+ * approach the cap from below with $0-counted dust. The limit side
+ * (which still uses `usdToCents`) keeps full precision — only the
+ * outgoing-charge side gets the minimum-1-cent guard.
+ */
+function chargeUsdToCents(amountUsd: number): number {
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return 0;
+  return Math.max(1, Math.round(amountUsd * 100));
+}
 function centsToUsd(cents: number): number {
   return cents / 100;
 }
@@ -681,7 +694,9 @@ export async function chargeAgainstDailyLimit(
     return { allowed: true, total: 0 };
   }
   const key = dailySpendKey(ownerAddr, walletId, todayUtc());
-  const amountCents = usdToCents(amountUsd);
+  // chargeUsdToCents — NOT usdToCents — so sub-cent sends still
+  // consume at least 1 cent of the daily budget. See helper docstring.
+  const amountCents = chargeUsdToCents(amountUsd);
   const limitCents =
     typeof limitUsd === "number" && Number.isFinite(limitUsd) && limitUsd > 0
       ? usdToCents(limitUsd)
@@ -722,7 +737,8 @@ export async function refundDailySpend(
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
   const key = dailySpendKey(ownerAddr, walletId, todayUtc());
   try {
-    await kv.incrby(key, -usdToCents(amountUsd));
+    // Symmetric with the charge side — see `chargeUsdToCents` docstring.
+    await kv.incrby(key, -chargeUsdToCents(amountUsd));
   } catch {
     /* best-effort — next day's TTL flushes the key anyway. */
   }
@@ -740,7 +756,9 @@ export async function recordDailySpend(
   if (!Number.isFinite(amountUsd) || amountUsd <= 0) return;
   const key = dailySpendKey(ownerAddr, walletId, todayUtc());
   try {
-    await kv.incrby(key, usdToCents(amountUsd));
+    // chargeUsdToCents (not usdToCents) so the same minimum-1-cent
+    // floor applies to the legacy recorder too.
+    await kv.incrby(key, chargeUsdToCents(amountUsd));
     await kv.expire(key, DAILY_SPEND_TTL_SEC);
   } catch {
     /* best-effort — the TX already settled. */

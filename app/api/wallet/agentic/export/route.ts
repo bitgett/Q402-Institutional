@@ -12,10 +12,11 @@
  *   2. The caller's lowercased address must own the walletId.
  *   3. The wallet must not be soft-deleted. Archived wallets cannot
  *      export; restore first.
- *   4. Every successful export is appended to the per-wallet audit log.
- *      A KV failure on the audit log fires an ops alert
- *      (recordExportEvent rethrows on KV error so the export never
- *      slips past the audit trail; see agentic-wallet.ts).
+ *   4. Every successful export MUST land in the per-wallet audit log
+ *      BEFORE the key bytes leave the server. recordExportEvent
+ *      rethrows on KV failure; we catch and 503 the response so the
+ *      key is never revealed without an audit row persisting. A user
+ *      retrying once KV recovers gets a clean export.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -97,19 +98,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "decrypt_failed" }, { status: 500 });
   }
 
-  // Audit log — recordExportEvent rethrows on KV failure. Catch here so
-  // the export still succeeds for the user, but fire a critical ops
-  // alert because the key was revealed without an audit row landing.
-  await recordExportEvent(owner, body.walletId, { ip }).catch((e) => {
-    console.error("[agentic-wallet/export] audit log failed:", e);
+  // Audit log MUST land before we hand the key to the client.
+  // recordExportEvent rethrows on KV failure; refuse the export with
+  // 503 so the operation is atomic (audit row landed ⇔ key revealed).
+  // A KV outage temporarily blocks exports — acceptable cost for the
+  // invariant "no key reveal without an audit row".
+  try {
+    await recordExportEvent(owner, body.walletId, { ip });
+  } catch (e) {
+    console.error("[agentic-wallet/export] audit log failed — refusing export:", e);
     void sendOpsAlert(
-      `Agentic Wallet EXPORT audit log failed for owner ${owner} ` +
-        `(walletId ${body.walletId}, ip ${ip}). ` +
-        `Key was still revealed to the client; KV write did not persist. ` +
-        `Investigate KV health.`,
+      `Agentic Wallet EXPORT refused (fail-closed) for owner ${owner} ` +
+        `(walletId ${body.walletId}, ip ${ip}). Audit log write failed; ` +
+        `key was NOT revealed. Investigate KV health, then retry the export.`,
       "critical",
     );
-  });
+    return NextResponse.json(
+      {
+        error: "AUDIT_LOG_UNAVAILABLE",
+        message:
+          "Could not persist the export audit row. The key was not revealed. " +
+          "Please retry in a few seconds; if the failure persists, contact ops.",
+      },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json(
     {

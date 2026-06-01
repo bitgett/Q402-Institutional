@@ -38,14 +38,14 @@ function buildSignedPayment(overrides: Partial<SignedPayment> = {}): SignedPayme
     amountRaw: ethers.parseUnits("1.5", 18),
     nonceUint: 12345678901234567890n,
     deadline: 1_900_000_000n,
-    witnessSig: "0xabcd" + "00".repeat(63),
+    witnessSig: ("0xabcd" + "00".repeat(63)) as `0x${string}`,
     authorization: {
       chainId: 56,
-      address: "0x1111111111111111111111111111111111111111",
+      address: "0x1111111111111111111111111111111111111111" as `0x${string}`,
       nonce: 0,
       yParity: 0,
-      r: "0x" + "00".repeat(32),
-      s: "0x" + "00".repeat(32),
+      r: ("0x" + "00".repeat(32)) as `0x${string}`,
+      s: ("0x" + "00".repeat(32)) as `0x${string}`,
     },
   };
   return { ...base, ...overrides };
