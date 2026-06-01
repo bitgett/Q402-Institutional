@@ -23,6 +23,12 @@ import { ensureWalletChain, getActiveProvider } from "@/app/lib/wallet";
 import type { WalletChainKey } from "@/app/lib/wallet";
 import { buildQ402AgentMetadata } from "@/app/lib/erc8004";
 import { hashAgentMetadata } from "@/app/lib/agent-metadata-store";
+import {
+  REQUIRED_AGENT_NAME,
+  REQUIRED_DESC_PREFIX,
+  MAX_TAGLINE,
+  brandIconUrl,
+} from "@/app/lib/agent-brand";
 import { useModalEscape } from "./useModalEscape";
 
 interface Props {
@@ -71,16 +77,8 @@ export function AgenticWalletAgentModal({
   onRegistered,
 }: Props) {
   const [stage, setStage] = useState<Stage>("form");
-  // Name is brand-locked — every Q402 ambassador / user mints with the
-  // same identity so the agent reads as part of the Q402 fleet on
-  // 8004scan, not a one-off. Distinguishability comes from the
-  // per-agent tagline below, plus the Agent Wallet endpoint declared
-  // in the metadata.
-  const AGENT_NAME = "Q402 Agent (by Quack AI)";
-  // Description is a fixed Q402 prefix + an optional user-supplied
-  // one-line tagline. The prefix anchors what every Q402 agent IS;
-  // the tagline tells the audience what THIS one does.
-  const DESC_PREFIX = "Gasless stablecoin payment agent on BNB Chain.";
+  // Name + description prefix are imported from agent-brand.ts so the
+  // dashboard, prepare route, and confirm route can never drift apart.
   const [tagline, setTagline] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [errorKind, setErrorKind] = useState<ErrorKind>("generic");
@@ -120,10 +118,10 @@ export function AgenticWalletAgentModal({
   // structurally. Server-side intent-auth + the metadata hash still gate
   // anything the client could misreport.
   const valid = true;
-  const trimmedTagline = tagline.trim().slice(0, 120);
+  const trimmedTagline = tagline.trim().slice(0, MAX_TAGLINE);
   const finalDescription = trimmedTagline
-    ? `${DESC_PREFIX} ${trimmedTagline}`
-    : DESC_PREFIX;
+    ? `${REQUIRED_DESC_PREFIX} ${trimmedTagline}`
+    : REQUIRED_DESC_PREFIX;
 
   async function start() {
     if (inFlightRef.current) return;
@@ -144,9 +142,11 @@ export function AgenticWalletAgentModal({
       // the request body — server rebuilds metadata strictly from body
       // fields, so anything we feed buildQ402AgentMetadata() here must
       // also land in the JSON below or the rebuilt hash diverges.
-      const imageUrl = `${window.location.origin}/icon.svg`;
+      // `brandIconUrl` keeps the canonical path in sync with the server's
+      // brand-lock check.
+      const imageUrl = brandIconUrl(window.location.origin);
       const previewMetadata = buildQ402AgentMetadata({
-        name: AGENT_NAME,
+        name: REQUIRED_AGENT_NAME,
         description: finalDescription,
         walletAddress,
         relayBaseUrl: window.location.origin,
@@ -172,7 +172,7 @@ export function AgenticWalletAgentModal({
           walletId,
           nonce: prepAuth.challenge,
           signature: prepAuth.signature,
-          name: AGENT_NAME,
+          name: REQUIRED_AGENT_NAME,
           description: finalDescription,
           imageUrl,
           network: "bsc",
@@ -445,7 +445,7 @@ export function AgenticWalletAgentModal({
                 className="w-full rounded-md border px-3 py-2 text-sm text-white/85 font-medium"
                 style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
               >
-                {AGENT_NAME}
+                {REQUIRED_AGENT_NAME}
               </div>
               <div className="text-[10px] text-white/35 mt-1">
                 Brand-locked — same identity for every Q402 agent on 8004scan.
@@ -458,18 +458,18 @@ export function AgenticWalletAgentModal({
                 className="w-full rounded-md border px-3 py-2 text-[12.5px] text-white/65 leading-relaxed"
                 style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
               >
-                {DESC_PREFIX}
+                {REQUIRED_DESC_PREFIX}
               </div>
               <textarea
                 value={tagline}
                 onChange={(e) => setTagline(e.target.value)}
                 placeholder="Add a line about THIS agent (e.g. payroll, NFT collector, AI research). Optional."
-                maxLength={120}
+                maxLength={MAX_TAGLINE}
                 rows={2}
                 className="w-full rounded-md border px-3 py-2 text-sm text-white placeholder-white/25 resize-none mt-2"
                 style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
               />
-              <div className="text-[10px] text-white/35 mt-1">{tagline.length}/120 (optional one-liner)</div>
+              <div className="text-[10px] text-white/35 mt-1">{tagline.length}/{MAX_TAGLINE} (optional one-liner)</div>
             </div>
 
             {/* Preview — what 8004scan will index after the mint settles. */}
@@ -480,7 +480,7 @@ export function AgenticWalletAgentModal({
               <div className="text-[9.5px] uppercase tracking-widest text-emerald-400/85 font-semibold">
                 Preview on 8004scan
               </div>
-              <div className="text-white/90 font-semibold">{AGENT_NAME}</div>
+              <div className="text-white/90 font-semibold">{REQUIRED_AGENT_NAME}</div>
               <div className="text-white/55">{finalDescription}</div>
               <div className="text-white/45 text-[10.5px]">
                 Services: Q402 relay · MCP <span className="font-mono text-white/60">@quackai/q402-mcp</span>
