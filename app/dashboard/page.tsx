@@ -289,14 +289,21 @@ const LINK_TOKEN: Record<"eth" | "avax" | "arbitrum", { address: string; explore
   arbitrum: { address: "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4", explorer: "https://arbiscan.io",      label: "Arbitrum" },
 };
 
+type LinkChain = "eth" | "avax" | "arbitrum";
+
 function LinkDepositModal({
-  chain,
+  initialChain,
+  balances,
   onClose,
 }: {
-  chain: "eth" | "avax" | "arbitrum";
+  initialChain: LinkChain;
+  balances: Record<LinkChain, number>;
   onClose: () => void;
 }) {
+  const [chain, setChain] = useState<LinkChain>(initialChain);
   const cfg = LINK_TOKEN[chain];
+  const bal = balances[chain] ?? 0;
+  const balUsd = bal * 12;
   const [copiedField, setCopiedField] = useState<"deposit" | "token" | null>(null);
   async function copy(value: string, field: "deposit" | "token") {
     try {
@@ -305,6 +312,15 @@ function LinkDepositModal({
       setTimeout(() => setCopiedField(null), 1500);
     } catch { /* clipboard not available */ }
   }
+
+  // Per-chain icon — re-uses the same /<chain>.png assets the gas-tank
+  // grid uses so logos stay consistent across the dashboard.
+  const CHAIN_ICON: Record<LinkChain, string> = {
+    eth:      "/eth.png",
+    avax:     "/avax.png",
+    arbitrum: "/arbitrum.png",
+  };
+
   return createPortal(
     <div
       className="fixed inset-0 z-[80] flex items-center justify-center p-4"
@@ -317,13 +333,71 @@ function LinkDepositModal({
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-base">Deposit LINK · {cfg.label}</h3>
+          <h3 className="font-bold text-base">LINK Gas Tank · CCIP</h3>
           <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
         </div>
 
-        <p className="text-white/60 text-xs leading-relaxed mb-4">
-          Send LINK on <strong>{cfg.label}</strong> to the Q402 facilitator address below.
-          The deposit-scan cron credits your LINK Gas Tank within ~5 minutes.
+        {/* Chain picker — 3 pills, each shows per-chain balance. Active
+            pill flips to brand-yellow so the user always sees which
+            chain the deposit info below is scoped to. */}
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          {(["eth", "avax", "arbitrum"] as const).map((k) => {
+            const active = k === chain;
+            const cb = balances[k] ?? 0;
+            return (
+              <button
+                key={k}
+                onClick={() => setChain(k)}
+                className="rounded-xl border px-2 py-2.5 transition-all text-left"
+                style={active
+                  ? {
+                      background: "rgba(245,197,24,0.10)",
+                      borderColor: "rgba(245,197,24,0.45)",
+                    }
+                  : {
+                      background: "rgba(255,255,255,0.02)",
+                      borderColor: "rgba(255,255,255,0.07)",
+                    }
+                }
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={CHAIN_ICON[k]} alt={k} className="w-4 h-4 rounded-full" />
+                  <span className={`text-[11px] font-semibold ${active ? "text-yellow" : "text-white/65"}`}>
+                    {LINK_TOKEN[k].label}
+                  </span>
+                </div>
+                <div className={`text-sm font-mono ${active ? "text-white" : "text-white/55"}`}>
+                  {cb.toFixed(4)}
+                </div>
+                <div className="text-[10px] text-white/35">
+                  {cb > 0 ? `≈ $${(cb * 12).toFixed(2)}` : "$0.00"}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Active-chain balance summary */}
+        <div
+          className="rounded-xl border px-3 py-2.5 mb-3"
+          style={{
+            background: "rgba(245,197,24,0.05)",
+            borderColor: "rgba(245,197,24,0.18)",
+          }}
+        >
+          <div className="text-[10px] uppercase tracking-widest text-yellow/85 font-semibold mb-1">
+            {cfg.label} · balance
+          </div>
+          <div className="text-base font-bold text-white">
+            {bal.toFixed(4)} <span className="text-xs font-normal text-white/40">LINK</span>
+            <span className="text-xs text-white/40 ml-2">≈ ${balUsd.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <p className="text-white/60 text-xs leading-relaxed mb-3">
+          Send LINK on <strong>{cfg.label}</strong> to the Q402 facilitator below. The deposit-scan
+          cron credits your LINK Gas Tank within ~5 minutes.
         </p>
 
         {/* Deposit address */}
@@ -1669,7 +1743,8 @@ export default function DashboardPage() {
 
       {linkDepositChain && (
         <LinkDepositModal
-          chain={linkDepositChain}
+          initialChain={linkDepositChain}
+          balances={linkBalances}
           onClose={() => setLinkDepositChain(null)}
         />
       )}
@@ -2044,79 +2119,73 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
-            </div>
 
-            {/* ── LINK Gas Tank (CCIP bridge fees) ──────────────────────── */}
-            <div
-              className="rounded-2xl border p-5"
-              style={{ background: "#0F1929", borderColor: "rgba(245,197,24,0.15)" }}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <div>
-                  <span className="font-semibold">LINK Gas Tank · Chainlink CCIP</span>
-                  <span className="ml-2 text-[10px] uppercase tracking-widest text-yellow/85 font-semibold">Bridge fees</span>
-                </div>
-                <span className="text-[10px] text-white/35">eth · avax · arbitrum only</span>
-              </div>
-              <p className="text-white/45 text-xs mb-4">
-                Funds the Chainlink CCIP fee when you bridge USDC. Q402 markup = 0; you pay only the actual CCIP cost.
-                LINK is ~10% cheaper than native — keeping a small LINK balance here keeps bridge UX one-tap.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {(["eth", "avax", "arbitrum"] as const).map((k) => {
-                  const meta = CHAIN_META[k];
-                  const amt = linkBalances[k] ?? 0;
-                  const hasBalance = amt > 0;
-                  // LINK is denominated in 18-dec with rough $12/LINK; matches
-                  // the BridgeModal quote display so the two surfaces don't
-                  // disagree on what the user "has".
-                  const usd = amt * 12;
-                  return (
+              {/* LINK Gas Tank — Chainlink CCIP bridge fees. Sits in the
+                  same grid as native gas so the visual hierarchy is one
+                  consistent grid (not two stacked sections). Aggregates
+                  balance across eth/avax/arbitrum into a single tile; the
+                  Deposit modal lets the user pick a chain + see per-chain
+                  balance + deposit address. */}
+              {(() => {
+                const totalLink =
+                  (linkBalances.eth ?? 0) +
+                  (linkBalances.avax ?? 0) +
+                  (linkBalances.arbitrum ?? 0);
+                const hasLink = totalLink > 0;
+                const linkUsd = totalLink * 12; // rough $12/LINK, matches BridgeModal
+                return (
+                  <div
+                    key="link-bridge"
+                    className="rounded-2xl p-5 border flex flex-col gap-0 relative overflow-hidden"
+                    style={{
+                      background: "linear-gradient(145deg, #0F1929 0%, #0B1220 100%)",
+                      borderColor: hasLink ? "rgba(245,197,24,0.2)" : "rgba(255,255,255,0.07)",
+                    }}
+                  >
                     <div
-                      key={`link-${k}`}
-                      className="rounded-2xl p-4 border relative overflow-hidden"
-                      style={{
-                        background: "linear-gradient(145deg, #0F1929 0%, #0B1220 100%)",
-                        borderColor: hasBalance ? "rgba(245,197,24,0.25)" : "rgba(255,255,255,0.07)",
-                      }}
-                    >
-                      <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl" style={{ background: meta?.color ?? "#888", opacity: 0.5 }} />
-                      <div className="flex items-center gap-2.5 mb-3">
-                        <div className="w-7 h-7 rounded-full overflow-hidden ring-1 ring-white/10">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={meta?.img ?? "/eth.png"} alt={meta?.name ?? k} className="w-full h-full object-cover" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-[13px] font-semibold leading-tight truncate">{meta?.name ?? k}</div>
-                          <div className="text-white/35 text-[10px]">LINK</div>
-                        </div>
-                      </div>
-                      <div className="text-xl font-bold tracking-tight leading-none">
-                        {amt.toFixed(4)}
-                        <span className="text-xs font-normal text-white/35 ml-1">LINK</span>
-                      </div>
-                      <div className="text-white/30 text-[11px] mt-1 mb-3">
-                        {usd >= 0.01 ? `≈ $${usd.toFixed(2)}` : "≈ $0.00"}
-                      </div>
-                      <button
-                        onClick={() => setLinkDepositChain(k)}
-                        className="w-full text-xs font-bold py-2 rounded-xl transition-all"
-                        style={hasBalance
-                          ? { background: "rgba(245,197,24,0.12)", color: "#F5C518", border: "1px solid rgba(245,197,24,0.25)" }
-                          : { background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }
-                        }
+                      className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
+                      style={{ background: "#375BD2", opacity: 0.55 }}
+                    />
+                    <div className="flex items-center gap-2.5 mb-4">
+                      <div
+                        className="w-8 h-8 rounded-full flex-shrink-0 ring-1 ring-white/10 flex items-center justify-center"
+                        style={{ background: "#375BD2" }}
                       >
-                        {hasBalance ? "Manage LINK" : "+ Deposit LINK"}
-                      </button>
+                        <span className="text-white text-[11px] font-black tracking-tight">L</span>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold leading-tight truncate">LINK</div>
+                        <div className="text-white/35 text-[11px]">CCIP bridge fees</div>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-              {linkDeposits.length > 0 && (
-                <div className="mt-3 pt-3 border-t text-[11px] text-white/45" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-                  Recent LINK credits: {linkDeposits.slice(-3).reverse().map(d => `${d.amount.toFixed(2)} on ${d.chain}`).join(" · ")}
-                </div>
-              )}
+                    <div className="text-2xl font-bold tracking-tight leading-none">
+                      {totalLink.toFixed(4)}
+                      <span className="text-sm font-normal text-white/35 ml-1">LINK</span>
+                    </div>
+                    <div className="text-white/30 text-xs mt-1 mb-3">
+                      {linkUsd >= 0.01 ? `$${linkUsd.toFixed(2)}` : "$0.00"}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px] text-white/30 mb-3">
+                      <span className="w-1.5 h-1.5 rounded-full bg-yellow/60 flex-shrink-0" />
+                      <span>
+                        {linkDeposits.length > 0
+                          ? `Last: ${linkDeposits[linkDeposits.length - 1].amount.toFixed(2)} on ${linkDeposits[linkDeposits.length - 1].chain}`
+                          : "eth · avax · arbitrum"}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setLinkDepositChain("eth")}
+                      className="mt-auto w-full text-xs font-bold py-2 rounded-xl transition-all"
+                      style={hasLink
+                        ? { background: "rgba(245,197,24,0.12)", color: "#F5C518", border: "1px solid rgba(245,197,24,0.25)" }
+                        : { background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }
+                      }
+                    >
+                      {hasLink ? "Manage LINK" : "+ Deposit"}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Real deposit history */}
