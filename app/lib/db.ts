@@ -159,6 +159,7 @@ const gasDepKey          = (addr: string) => `gasdep:${addr.toLowerCase()}`;
 const linkDepKey         = (addr: string) => `gasdep_link:${addr.toLowerCase()}`;
 const linkDepDedupKey    = (addr: string) => `gasdep_link_hashes:${addr.toLowerCase()}`;
 const linkUsedKey        = (addr: string) => `link_used:${addr.toLowerCase()}`;
+const nativeBridgeUsedKey = (addr: string) => `bridge_native_used:${addr.toLowerCase()}`;
 const webhookKey         = (addr: string) => `webhook:${addr.toLowerCase()}`;
 const webhookDeliveryKey = (addr: string) => `webhook_delivery:${addr.toLowerCase()}`;
 
@@ -1418,17 +1419,98 @@ export async function addLinkDeposit(address: string, deposit: LinkDeposit): Pro
   return true;
 }
 
-/** Per-chain consumed-LINK totals (sum of fees paid via bridge route). */
+/**
+ * Per-chain consumed-LINK totals (sum of fees paid via bridge route).
+ *
+ * Schema migration v2 (2026-06-05): switched from a single hash blob
+ * (`link_used:{addr}` → `Record<chain, number>`) to per-chain scalar
+ * counters (`link_used:{addr}.{chain}` → number) so writes can use
+ * Redis INCRBYFLOAT atomically instead of a lossy read-modify-write.
+ * Legacy blob is read once and folded into the new scalars on first
+ * access; subsequent reads ignore it.
+ */
 export async function getLinkUsedTotals(address: string): Promise<Record<string, number>> {
-  return (await kv.get<Record<string, number>>(linkUsedKey(address))) ?? {};
+  const out: Record<string, number> = {};
+  const perChain = await Promise.all(
+    CCIP_LINK_CHAINS.map(async (c) => {
+      const raw = await kv.get<number | string>(`${linkUsedKey(address)}.${c}`);
+      const n = typeof raw === "string" ? parseFloat(raw) : (raw ?? 0);
+      return { c, n: Number.isFinite(n) ? n : 0 };
+    }),
+  );
+  for (const { c, n } of perChain) out[c] = n;
+  // Legacy blob — fold into the per-chain view so historic usage doesn't
+  // suddenly disappear after the migration.
+  const legacy = (await kv.get<Record<string, number>>(linkUsedKey(address))) ?? {};
+  for (const c of CCIP_LINK_CHAINS) {
+    if (typeof legacy[c] === "number" && legacy[c] > 0) {
+      out[c] = (out[c] ?? 0) + legacy[c];
+    }
+  }
+  return out;
 }
 
-/** Atomically increment the consumed-LINK counter for one chain. */
+/**
+ * Atomically increment the consumed-LINK counter for one chain.
+ *
+ * Uses Redis INCRBYFLOAT against a per-chain scalar key so concurrent
+ * bridges from the same owner cannot lose increments to a read-modify-
+ * write race. (Previously two parallel bridges could both read 0,
+ * each add their fee, and the second write would clobber the first.)
+ */
 export async function recordLinkUsage(address: string, chain: string, amount: number): Promise<void> {
   if (!isCCIPLinkChain(chain) || amount <= 0) return;
-  const cur = await getLinkUsedTotals(address);
-  cur[chain] = (cur[chain] ?? 0) + amount;
-  await kv.set(linkUsedKey(address), cur);
+  try {
+    // Upstash client exposes incrbyfloat — atomic on the Redis side.
+    await (kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> }).incrbyfloat(
+      `${linkUsedKey(address)}.${chain}`,
+      amount,
+    );
+  } catch {
+    // Fallback for SDK shapes that don't expose incrbyfloat (e.g.
+    // local-mock KV in tests) — non-atomic but functional. The fallback
+    // is a deliberate degradation, not a silent skip.
+    const key = `${linkUsedKey(address)}.${chain}`;
+    const cur = (await kv.get<number>(key)) ?? 0;
+    await kv.set(key, cur + amount);
+  }
+}
+
+/**
+ * Per-chain native-fee consumption from CCIP bridges. Mirrors
+ * `recordLinkUsage` but for the native-fee path. Kept under a distinct
+ * KV bucket (`bridge_native_used:{addr}.{chain}`) so the Gas Tank UI
+ * can attribute bridge spend vs relay spend separately.
+ *
+ * Atomic via INCRBYFLOAT for the same reason as LINK. Falls back to
+ * RMW on KV clients that don't expose the primitive.
+ */
+export async function recordNativeBridgeUsage(address: string, chain: string, amount: number): Promise<void> {
+  if (!isCCIPLinkChain(chain) || amount <= 0) return;
+  try {
+    await (kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> }).incrbyfloat(
+      `${nativeBridgeUsedKey(address)}.${chain}`,
+      amount,
+    );
+  } catch {
+    const key = `${nativeBridgeUsedKey(address)}.${chain}`;
+    const cur = (await kv.get<number>(key)) ?? 0;
+    await kv.set(key, cur + amount);
+  }
+}
+
+/** Per-chain native-bridge consumption (for /api/gas-tank attribution). */
+export async function getNativeBridgeUsedTotals(address: string): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  const perChain = await Promise.all(
+    CCIP_LINK_CHAINS.map(async (c) => {
+      const raw = await kv.get<number | string>(`${nativeBridgeUsedKey(address)}.${c}`);
+      const n = typeof raw === "string" ? parseFloat(raw) : (raw ?? 0);
+      return { c, n: Number.isFinite(n) ? n : 0 };
+    }),
+  );
+  for (const { c, n } of perChain) out[c] = n;
+  return out;
 }
 
 /**

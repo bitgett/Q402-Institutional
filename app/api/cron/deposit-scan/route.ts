@@ -59,13 +59,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 
-import { addGasDeposit } from "@/app/lib/db";
+import { addGasDeposit, addLinkDeposit } from "@/app/lib/db";
 import { requireCronAuth } from "@/app/lib/cron-auth";
 import {
   DEPOSIT_CHAINS,
+  LINK_DEPOSIT_CHAINS,
   scanNativeDeposits,
+  scanLinkDeposits,
   notifyTelegramDeposit,
 } from "@/app/lib/deposit-scanner";
+import { GASTANK_ADDRESS } from "@/app/lib/wallets";
 import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
 
 export const runtime = "nodejs";
@@ -160,6 +163,48 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // turn one cycle later.
   await kv.set(CURSOR_KEY, String(cursor));
 
+  // ── LINK deposit sweep (CCIP bridge Gas Tank) ──────────────────────────
+  // One getLogs per CCIP chain reveals every LINK transfer to the
+  // facilitator — credit each sender to their LINK Gas Tank slot
+  // regardless of whether they appear in this tick's `addresses` slice.
+  // This is decoupled from the per-owner native scan because (a) LINK
+  // deposits are low-volume so the per-tick cost is bounded, and (b)
+  // crediting only when the owner happens to land in the cursor window
+  // would create a long-tail "I sent LINK but the dashboard still says
+  // 0" support pattern.
+  let linkDepositsCredited = 0;
+  const linkFailedChains: string[] = [];
+  const linkResults = await Promise.allSettled(
+    LINK_DEPOSIT_CHAINS.map((chain) =>
+      scanLinkDeposits(chain, GASTANK_ADDRESS).then((scan) => ({ chain, scan })),
+    ),
+  );
+  for (let i = 0; i < linkResults.length; i++) {
+    const r = linkResults[i];
+    if (r.status !== "fulfilled") {
+      linkFailedChains.push(LINK_DEPOSIT_CHAINS[i].key);
+      continue;
+    }
+    const { chain, scan } = r.value;
+    if (scan.rpcCallFailed) {
+      linkFailedChains.push(chain.key);
+      continue;
+    }
+    for (const m of scan.matches) {
+      // Skip zero-value transfers — defensive against tokens whose
+      // transferFrom emits a Transfer with zero amount as a side
+      // effect (none of the CCIP LINK tokens do today, but free).
+      if (m.amount <= 0) continue;
+      const added = await addLinkDeposit(m.fromAddress.toLowerCase(), {
+        chain: chain.key,
+        amount: m.amount,
+        txHash: m.txHash,
+        depositedAt: new Date().toISOString(),
+      });
+      if (added) linkDepositsCredited++;
+    }
+  }
+
   // Process owners sequentially (per-owner wall time is bounded by the
   // slowest chain, ~30s on Monad). Per-chain RPC failures stay isolated
   // to that chain via Promise.allSettled.
@@ -219,6 +264,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     lastResult: {
       addressesScanned: addresses.length,
       newDeposits,
+      linkDepositsCredited,
+      linkFailedChains: linkFailedChains.length,
       wrapped,
       partialChainCount: perOwner.reduce((s, o) => s + o.partialChains.length, 0),
       failedChainCount: perOwner.reduce((s, o) => s + o.failedChains.length, 0),
@@ -230,6 +277,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     scannedKeys,
     scanIterations: scanIters,
     newDeposits,
+    linkDepositsCredited,
+    linkFailedChains,
     cursor: String(cursor),
     wrapped,
     perOwner: perOwner.slice(0, 50),

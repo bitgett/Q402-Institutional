@@ -119,7 +119,7 @@ const CLIENTS: ClientInstall[] = [
   },
 ];
 
-// ── 8-tool flat list ────────────────────────────────────────────────────────
+// ── tool flat list ──────────────────────────────────────────────────────────
 // Compact row layout (NOT the previous card grid) — the cards burned a lot
 // of vertical space + duplicated content from /docs#claude-mcp.
 const TOOLS: Array<{ name: string; auth: string; note: string }> = [
@@ -139,6 +139,10 @@ const TOOLS: Array<{ name: string; auth: string; note: string }> = [
   { name: "q402_recurring_resume",    auth: "api key",     note: "Resume a paused / stopped rule." },
   { name: "q402_recurring_skip_next", auth: "api key",     note: "Skip ONLY the next fire. Cadence preserved." },
   { name: "q402_recurring_cancel",    auth: "api key",     note: "Permanently stop a rule." },
+  { name: "q402_bridge_quote",        auth: "no auth",     note: "Quote CCIP fee for a USDC bridge on eth/avax/arbitrum." },
+  { name: "q402_bridge_send",         auth: "sandbox",     note: "Plan a CCIP USDC bridge. Live execution from the dashboard." },
+  { name: "q402_bridge_history",      auth: "owner sig",   note: "List recent CCIP bridges. Owner-sig auth via dashboard." },
+  { name: "q402_bridge_gas_tank",     auth: "owner sig",   note: "LINK + native Gas Tank bucket per CCIP chain." },
 ];
 
 function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
@@ -681,7 +685,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
           <div className="text-[10px] uppercase tracking-[0.22em] text-white/55 font-bold mb-2">
-            sixteen tools · one package
+            twenty tools · one package
           </div>
           <h2 className="text-2xl md:text-4xl font-bold mb-2">
             Only what an agent should reach for.

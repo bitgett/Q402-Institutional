@@ -158,6 +158,14 @@ export function AgenticWalletBridgeModal({
   const [confirmTxHash, setConfirmTxHash] = useState<string | null>(null);
 
   const inFlightRef = useRef(false);
+  // Mirror of confirmStatus that the polling loop reads. Without this,
+  // the poll() closure captures the value of confirmStatus at effect
+  // mount time (always "pending" because we set it right before
+  // setResult) and re-schedules itself for all 30 ticks even after the
+  // bridge settles. The ref is updated by an effect on every render so
+  // the next setTimeout iteration sees the freshest value.
+  const confirmStatusRef = useRef(confirmStatus);
+  useEffect(() => { confirmStatusRef.current = confirmStatus; }, [confirmStatus]);
   useModalEscape(onClose, submitting);
 
   // Auto-pick a compatible destination if the user flips src to a chain
@@ -303,7 +311,8 @@ export function AgenticWalletBridgeModal({
         /* swallow — retry on next tick */
       }
       if (cancelled) return;
-      if (polls < maxPolls && confirmStatus !== "delivered" && confirmStatus !== "failed") {
+      const liveStatus = confirmStatusRef.current;
+      if (polls < maxPolls && liveStatus !== "delivered" && liveStatus !== "failed") {
         setTimeout(poll, 12_000);
       }
     }
@@ -375,6 +384,11 @@ export function AgenticWalletBridgeModal({
               actual CCIP fee out of your Gas Tank{" "}
               <span className="text-yellow-200">{feeToken === "LINK" ? "LINK" : srcMeta.native}</span>{" "}
               bucket on {srcMeta.label}.
+              <div className="mt-1.5 pt-1.5 border-t border-yellow-300/15 text-white/60">
+                Heads up: the bridge tx itself is signed by your Agent Wallet, so it needs a
+                small amount of {srcMeta.native} on {srcMeta.label} to cover source-chain gas
+                (~$0.05–$0.50). This is separate from the CCIP fee debited above.
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

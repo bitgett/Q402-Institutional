@@ -2191,7 +2191,7 @@ export default function DashboardPage() {
             <ClaudeMcpCard sandboxApiKey={sandboxApiKey || "q402_test_••••"} />
             <div className="rounded-2xl border p-5" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
               <div className="text-[10px] uppercase tracking-widest text-white/55 mb-3 font-semibold">
-                16 tools · sandbox by default
+                20 tools · sandbox by default
               </div>
               <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-white/70 text-[12.5px] leading-relaxed">
                 <div><code className="text-yellow text-xs">q402_doctor</code> — install + health check</div>
@@ -2210,6 +2210,10 @@ export default function DashboardPage() {
                 <div><code className="text-yellow text-xs">q402_recurring_resume</code> — resume a rule</div>
                 <div><code className="text-yellow text-xs">q402_recurring_skip_next</code> — skip next fire</div>
                 <div><code className="text-yellow text-xs">q402_recurring_cancel</code> — stop a rule</div>
+                <div><code className="text-yellow text-xs">q402_bridge_quote</code> — CCIP fee quote</div>
+                <div><code className="text-yellow text-xs">q402_bridge_send</code> — CCIP bridge (sandbox)</div>
+                <div><code className="text-yellow text-xs">q402_bridge_history</code> — recent bridges</div>
+                <div><code className="text-yellow text-xs">q402_bridge_gas_tank</code> — LINK + native bucket</div>
               </div>
               <div className="text-[11px] text-white/30 mt-4 pt-3 border-t border-white/8">
                 Full reference in{" "}

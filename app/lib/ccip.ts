@@ -12,7 +12,7 @@
  * the ccip-config.test.ts drift guard pins them in sync.
  */
 
-import { JsonRpcProvider, Wallet, Contract, type ContractRunner, type AddressLike, ZeroAddress, AbiCoder, parseUnits } from "ethers";
+import { JsonRpcProvider, Wallet, Contract, type ContractRunner, ZeroAddress, AbiCoder } from "ethers";
 import manifest from "../../contracts.manifest.json";
 import { CHAIN_CONFIG, getPrimaryRpc, type ChainKey } from "./relayer";
 
@@ -290,6 +290,7 @@ export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResu
     blockNumber: receipt.blockNumber,
     feeRaw,
     feeToken:    p.feeToken,
+    approveTxHash,
   };
 }
 

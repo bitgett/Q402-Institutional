@@ -99,7 +99,7 @@ function fail(label, detail) {
   // ── 3. /api/ccip/quote — reject invalid lane (self) ─────────────────────
   console.log("\n" + colors.bold("[3/3]") + " POST /api/ccip/quote (arb → arb, should reject)");
   {
-    const { ok, status, data } = await getJson("/api/ccip/quote", {
+    const { status } = await getJson("/api/ccip/quote", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ src: "arbitrum", dst: "arbitrum", amount: TEST_AMOUNT, destReceiver: TEST_DEST }),
