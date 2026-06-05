@@ -55,6 +55,7 @@ import {
   hasMultichainScope,
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
+import { loadRelayerKey } from "@/app/lib/relayer-key";
 
 export const runtime = "nodejs";
 // 60s — first bridge runs approve.wait() + bridge.wait() back-to-back. ETH
@@ -90,6 +91,10 @@ interface BridgeHistoryRecord {
   feeWhole:     number;
   initiatedAt:  number;
   approveTxHash?: string;
+  // Set iff the route auto-funded source-chain gas to the Agent Wallet
+  // from the relayer hot wallet (Gas Tank is debited by `agentFundEth`).
+  agentFundTxHash?: string;
+  agentFundEth?:   number;
 }
 
 /**
@@ -389,15 +394,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // ── Pre-flight: Agent Wallet on-chain gas (source chain) ────────────
+    // ── Auto-fund Agent Wallet source-chain gas from the Gas Tank ──────
+    //
     // The bridge tx is sent by the Agent Wallet itself (signed with its
-    // server-held private key) and pays its own source-chain gas — this
-    // is distinct from the Gas Tank LINK/native bucket above, which only
-    // funds the CCIP fee. Without this check a fresh-from-zero Agent
-    // Wallet (the common case) would sign + submit, the tx would land
-    // on-chain with "insufficient funds for intrinsic transaction cost",
-    // the user would burn one challenge for nothing, and the modal would
-    // surface a confusing revert detail.
+    // server-held private key) and pays its own source-chain gas. That
+    // would normally force the user to deposit native directly to the
+    // Agent Wallet address — defeating the Mode C promise that the user
+    // only ever has to fund the Gas Tank.
+    //
+    // Instead: pre-flight the Agent Wallet's native balance, top it up
+    // from the RELAYER hot wallet to (gas-ceiling × 1.2) when short, and
+    // debit the user's Gas Tank ETH bucket for the funded amount via
+    // recordNativeBridgeUsage. From the user's POV the bridge "just
+    // works" off the Gas Tank; the relayer is reimbursed on the next
+    // sweep that reconciles bucket-to-hot-wallet.
+    //
+    // Failure modes:
+    //   - User's Gas Tank doesn't cover (CCIP fee + fund delta) → 402,
+    //     friendly "top up Gas Tank" copy
+    //   - Relayer doesn't have ETH to fund → 503 RELAYER_LOW (FIX 26
+    //     pre-flight should catch it before we ever land here, but the
+    //     fund tx attempt below would also surface it)
+    //   - Fund tx submitted but didn't confirm in time → executeBridge
+    //     below catches "insufficient funds…" and reports it cleanly
+    let agentFundEth = 0;
+    let agentFundTxHash: string | undefined;
     try {
       const probeProvider = getCCIPProvider(src);
       const [agentEth, feeData] = await Promise.all([
@@ -406,31 +427,92 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       ]);
       const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
       // executeBridge caps the bridge call at 300k gas + the optional
-      // approve tx at ~50k. 400k is the comfortable ceiling so a marginal
-      // wallet doesn't ping-pong between "OK" and "short" on borderline
-      // gas-price ticks.
-      const minRequired = maxFeePerGas * 400_000n;
-      if (agentEth < minRequired) {
-        const requiredEth = Number(minRequired) / 1e18;
-        const availableEth = Number(agentEth) / 1e18;
-        const body: Record<string, unknown> = {
-          error:       "AGENT_WALLET_GAS_LOW",
-          chain:       src,
-          address:     destReceiver,
-          requiredEth,
-          availableEth,
-          message:
-            `Your Agent Wallet on ${src} needs ~${requiredEth.toFixed(5)} native ` +
-            `to cover the source-chain bridge tx. Send native directly to ` +
-            `${destReceiver} (the Agent Wallet address) and retry.`,
-        };
-        await finaliseClaim("failed", 402, body);
-        return NextResponse.json(body, { status: 402 });
+      // approve tx at ~50k. 400k × maxFeePerGas is the comfortable
+      // ceiling so a marginal wallet doesn't ping-pong between "OK"
+      // and "short" on borderline gas-price ticks.
+      const gasCeilingWei = maxFeePerGas * 400_000n;
+      if (agentEth < gasCeilingWei) {
+        // 20% buffer over the bare delta so a single bridge doesn't
+        // exhaust the funded amount and force another top-up on the
+        // next bridge.
+        const fundDeltaWei = ((gasCeilingWei - agentEth) * 12n) / 10n;
+        const fundDeltaEth = Number(fundDeltaWei) / 1e18;
+
+        // Gate on user's Gas Tank ETH bucket. CCIP fee for native-token
+        // bridges also pulls from the same bucket below; we must cover
+        // both together OR fail closed.
+        const gasBal = await getGasBalance(owner);
+        const tankAvailEth = gasBal[src] ?? 0;
+        const ccipFeeInTank = feeToken === "native" ? feeWhole : 0;
+        const totalNeed = fundDeltaEth + ccipFeeInTank;
+        if (tankAvailEth < totalNeed) {
+          const body: Record<string, unknown> = {
+            error:       "INSUFFICIENT_NATIVE_BALANCE",
+            chain:       src,
+            requiredEth: totalNeed,
+            availableEth: tankAvailEth,
+            message:
+              `Your Gas Tank native on ${src} is short ${(totalNeed - tankAvailEth).toFixed(5)} ` +
+              `to cover the bridge (source-chain gas${ccipFeeInTank > 0 ? " + CCIP fee" : ""}). ` +
+              `Top up the Gas Tank and retry — Q402 funds the Agent Wallet automatically from there.`,
+          };
+          await finaliseClaim("failed", 402, body);
+          return NextResponse.json(body, { status: 402 });
+        }
+
+        // Fund the Agent Wallet from the relayer hot wallet. Best-effort
+        // wait for confirmation: if we time out, executeBridge will
+        // either succeed (the tx may have mined just after our wait) or
+        // fail with "insufficient funds" which the catch below promotes
+        // to a friendly error.
+        const relayerKey = loadRelayerKey();
+        if (!relayerKey.ok) {
+          const body: Record<string, unknown> = {
+            error:   "RELAYER_LOW",
+            message: `Q402 relay infrastructure on ${src} is refilling. Try again in a few minutes.`,
+          };
+          await finaliseClaim("failed", 503, body);
+          return NextResponse.json(body, { status: 503 });
+        }
+        const relayerWallet = new ethers.Wallet(relayerKey.privateKey, probeProvider);
+        const fundTx = await relayerWallet.sendTransaction({
+          to:    destReceiver,
+          value: fundDeltaWei,
+        });
+        const fundReceipt = await fundTx.wait();
+        if (!fundReceipt) {
+          // Tx submitted but couldn't fetch receipt — abort defensively
+          // so we don't double-fund on retry. ops alert + 503.
+          void sendOpsAlert(
+            `<b>⚠ CCIP auto-fund tx submitted but receipt null</b>\n\n` +
+            `Owner: <code>${owner}</code>\n` +
+            `Chain: ${src}\n` +
+            `Agent Wallet: <code>${destReceiver}</code>\n` +
+            `Fund txHash: <code>${fundTx.hash}</code>\n` +
+            `Amount: ${fundDeltaEth.toFixed(5)} native`,
+            "warn",
+          ).catch(() => { /* best-effort */ });
+          const body: Record<string, unknown> = {
+            error:   "AGENT_WALLET_AUTOFUND_PENDING",
+            message: "Agent Wallet auto-fund tx is pending on chain. Try again in ~30s.",
+          };
+          await finaliseClaim("failed", 503, body);
+          return NextResponse.json(body, { status: 503, headers: { "Retry-After": "30" } });
+        }
+        agentFundEth = fundDeltaEth;
+        agentFundTxHash = fundTx.hash;
       }
-    } catch {
-      // RPC blip on the probe — let executeBridge proceed and surface
-      // whatever error the actual tx returns. The probe is a UX guard,
-      // not a security gate.
+    } catch (e) {
+      // RPC blip on the probe / fund — let executeBridge proceed and
+      // surface whatever error the actual tx returns. We don't 503 here
+      // because the probe is a UX guard, not a security gate, and the
+      // executeBridge catch below has a friendlyBridgeError pattern for
+      // the same "insufficient funds" string anyway.
+      console.error("[ccip/send] auto-fund probe threw, falling through to executeBridge", {
+        owner,
+        src,
+        err: e instanceof Error ? e.message : String(e),
+      });
     }
 
     // ── Execute bridge ──────────────────────────────────────────────────
@@ -482,11 +564,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     //      track the message — the receipt is more important than the
     //      bookkeeping.
     const actualFeeWhole = Number(result.feeRaw) / 1e18;
+    // For LINK-fee bridges we only debit the LINK bucket for the fee +
+    // the native bucket for any auto-fund top-up. For native-fee bridges
+    // we debit the native bucket once for (CCIP fee + auto-fund). Both
+    // counters are atomic per-chain (INCRBYFLOAT) so the per-(owner,src)
+    // lock above is enough to keep this consistent.
+    const nativeDebitEth =
+      (feeToken === "native" ? actualFeeWhole : 0) + agentFundEth;
     try {
       if (feeToken === "LINK") {
         await recordLinkUsage(owner, src, actualFeeWhole);
-      } else {
-        await recordNativeBridgeUsage(owner, src, actualFeeWhole);
+      }
+      if (nativeDebitEth > 0) {
+        await recordNativeBridgeUsage(owner, src, nativeDebitEth);
       }
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
@@ -495,6 +585,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         src,
         feeToken,
         actualFeeWhole,
+        agentFundEth,
         messageId: result.messageId,
         err,
       });
@@ -505,6 +596,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         `Owner: <code>${owner}</code>\n` +
         `Chain: ${src} · feeToken: ${feeToken}\n` +
         `Fee owed: ${actualFeeWhole} ${feeToken === "LINK" ? "LINK" : "native"}\n` +
+        (agentFundEth > 0 ? `Auto-fund owed: ${agentFundEth.toFixed(5)} native\n` : "") +
         `messageId: <code>${result.messageId}</code>\n` +
         `Error: ${err.slice(0, 200)}`,
         "error",
@@ -525,6 +617,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       feeWhole:     actualFeeWhole,
       initiatedAt:  Date.now(),
       ...(result.approveTxHash ? { approveTxHash: result.approveTxHash } : {}),
+      ...(agentFundTxHash ? { agentFundTxHash, agentFundEth } : {}),
     };
     try {
       await Promise.all([
@@ -564,6 +657,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // we auto-submitted approve(MAX) before the bridge. One-time per wallet
       // per chain — subsequent bridges skip this leg.
       approveTxHash:  result.approveTxHash,
+      // Present iff Q402 auto-funded the Agent Wallet's source-chain gas
+      // from the user's Gas Tank ETH bucket. Surfaced so the dashboard can
+      // attribute the Gas Tank delta and link the on-chain top-up tx.
+      ...(agentFundTxHash ? { agentFundTxHash, agentFundEth } : {}),
       sendId,
     };
     // finaliseClaim is best-effort — the on-chain tx already succeeded,

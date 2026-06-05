@@ -95,6 +95,11 @@ interface SendResponse {
   address?:       string;
   requiredEth?:   number;
   availableEth?:  number;
+  // Auto-fund (Gas Tank → Agent Wallet) companion fields. Present iff the
+  // route had to top up the Agent Wallet's source-chain gas before the
+  // bridge call.
+  agentFundTxHash?: string;
+  agentFundEth?:    number;
 }
 
 interface ConfirmResponse {
@@ -396,9 +401,9 @@ export function AgenticWalletBridgeModal({
                 className="mt-1.5 pt-1.5 border-t text-white/60"
                 style={{ borderColor: "rgba(245,197,24,0.15)" }}
               >
-                Heads up: the bridge tx itself is signed by your Agent Wallet, so it needs a
-                small amount of {srcMeta.native} on {srcMeta.label} to cover source-chain gas
-                (~$0.05–$0.50). This is separate from the CCIP fee debited above.
+                Q402 auto-funds source-chain bridge gas (~$0.05–$0.50 {srcMeta.native}) from
+                your Gas Tank {srcMeta.native} bucket — you never have to touch the Agent
+                Wallet directly. The Gas Tank deposit covers everything.
               </div>
             </div>
 
@@ -665,6 +670,18 @@ function BridgeResult({
         )}
       </div>
 
+      {result.agentFundTxHash && (
+        <ResultRow
+          label="Gas Tank → Agent Wallet (auto-fund)"
+          href={`${srcMeta.explorer}/tx/${result.agentFundTxHash}`}
+          value={shortHash(result.agentFundTxHash)}
+          hint={
+            typeof result.agentFundEth === "number"
+              ? `${result.agentFundEth.toFixed(5)} ${srcMeta.native} debited from your Gas Tank to cover source-chain bridge gas.`
+              : "Source-chain gas debited from your Gas Tank to cover the bridge tx."
+          }
+        />
+      )}
       {result.approveTxHash && (
         <ResultRow
           label="USDC approve"
@@ -755,11 +772,22 @@ function friendlyBridgeError(status: number, body: SendResponse): string {
     return "Couldn't reach the CCIP router to quote the fee. Wait a moment and retry.";
   }
   if (code === "AGENT_WALLET_GAS_LOW") {
-    const addr = body.address ? `${body.address.slice(0, 8)}…${body.address.slice(-6)}` : "your Agent Wallet";
-    const need = typeof body.requiredEth === "number" ? body.requiredEth.toFixed(5) : "~0.0008";
+    // Safety-net path. Normally the route auto-funds the Agent Wallet
+    // from the user's Gas Tank ETH bucket, so the user never has to
+    // manage the Agent Wallet's gas directly. This message only fires
+    // if the auto-fund probe blipped on the RPC and the actual bridge
+    // tx then reverted — instructions intentionally point at the Gas
+    // Tank, NOT at the Agent Wallet address, because that's the
+    // canonical UX.
     return (
-      `Your Agent Wallet (${addr}) needs ~${need} ${body.chain === "avax" ? "AVAX" : "ETH"} on ${body.chain ?? "the source chain"} ` +
-      `to cover bridge-tx gas. Send native directly to the Agent Wallet address and retry.`
+      "Q402 couldn't auto-fund the Agent Wallet's source-chain gas this attempt. " +
+      "Make sure your Gas Tank native bucket has a small buffer on the source chain and retry."
+    );
+  }
+  if (code === "AGENT_WALLET_AUTOFUND_PENDING") {
+    return (
+      "Q402 just topped up the Agent Wallet's source-chain gas — the funding tx is still confirming. " +
+      "Retry in ~30 seconds and the bridge will go through."
     );
   }
   if (code === "CCIP_BRIDGE_FAILED") {
