@@ -53,6 +53,9 @@ import {
   recordNativeBridgeUsage,
   getSubscription,
   hasMultichainScope,
+  getPendingFund,
+  setPendingFund,
+  clearPendingFund,
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
@@ -436,6 +439,75 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const FUND_TX_WAIT_MS = 25_000;
     try {
       const probeProvider = getCCIPProvider(src);
+
+      // ── Reconcile a pending fund tx from a previous attempt ────────
+      // If the previous attempt's `fundTx.wait()` timed out, the KV row
+      // here carries the txHash + planned debit. Before doing anything
+      // else, fetch the receipt:
+      //   - mined success → debit (gasUsed × effectiveGasPrice + value),
+      //     delete the row, set agentFundEth/agentFundTxHash so this
+      //     attempt's history record carries the funding tx, and fall
+      //     through to the Agent Wallet balance probe (may still need a
+      //     small top-up if gas spiked since)
+      //   - mined reverted → delete the row, no debit owed; fall through
+      //   - receipt absent → tx still pending; return AUTOFUND_PENDING
+      //     and let the user retry in 30s
+      const pending = await getPendingFund(owner, src);
+      if (pending) {
+        const reconciledReceipt = await probeProvider
+          .getTransactionReceipt(pending.txHash)
+          .catch(() => null);
+        if (!reconciledReceipt) {
+          const body: Record<string, unknown> = {
+            error:    "AGENT_WALLET_AUTOFUND_PENDING",
+            fundTx:   pending.txHash,
+            message:
+              "Your previous auto-fund tx is still mining. Retry in ~30s — " +
+              "Q402 will reconcile and complete the bridge from the existing tx.",
+          };
+          await finaliseClaim("failed", 503, body);
+          return NextResponse.json(body, { status: 503, headers: { "Retry-After": "30" } });
+        }
+        if (reconciledReceipt.status === 1) {
+          const recGasUsed   = reconciledReceipt.gasUsed ?? 0n;
+          const recGasPrice  = reconciledReceipt.gasPrice ?? 0n;
+          const recGasWei    = recGasUsed * recGasPrice;
+          const recFundWei   = BigInt(pending.fundDeltaWei);
+          const recDebitEth  = Number(recFundWei + recGasWei) / 1e18;
+          try {
+            await recordNativeBridgeUsage(owner, src, recDebitEth);
+            await clearPendingFund(owner, src);
+            agentFundEth     = recDebitEth;
+            agentFundTxHash  = pending.txHash;
+          } catch (recErr) {
+            const err = recErr instanceof Error ? recErr.message : String(recErr);
+            void sendOpsAlert(
+              `<b>🚨 CCIP pending-fund reconciliation debit FAILED</b>\n\n` +
+              `Owner: <code>${owner}</code>\n` +
+              `Chain: ${src}\n` +
+              `Pending fund tx: <code>${pending.txHash}</code>\n` +
+              `Debit attempted: ${recDebitEth.toFixed(6)} native\n` +
+              `Error: ${err.slice(0, 200)}\n\n` +
+              `KV row stays — cron will retry. Manual debit also OK from ` +
+              `bridge_native_used:${owner.toLowerCase()}.${src}.`,
+              "error",
+            ).catch(() => { /* best-effort */ });
+            const body: Record<string, unknown> = {
+              error:  "AUTOFUND_DEBIT_FAILED",
+              detail: err.slice(0, 200),
+              message:
+                "Your previous auto-fund tx confirmed but Q402's ledger couldn't record the debit. " +
+                "Ops has been paged; your retry won't be charged twice. Try again in a moment.",
+            };
+            await finaliseClaim("failed", 500, body);
+            return NextResponse.json(body, { status: 500 });
+          }
+        } else {
+          // Reverted — clear and continue. We owe nothing for a reverted tx.
+          await clearPendingFund(owner, src);
+        }
+      }
+
       const [agentEth, feeData] = await Promise.all([
         probeProvider.getBalance(destReceiver),
         probeProvider.getFeeData(),
@@ -519,6 +591,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           gasLimit: FUND_GAS_LIMIT,
         });
 
+        // Write the pending KV record IMMEDIATELY after broadcast (and
+        // BEFORE wait) so an upstream timeout / Vercel kill still leaves
+        // a reconciliation breadcrumb. The inline reconciliation block
+        // above + the cron in /api/cron/ccip-pending-fund-reconcile
+        // both key off this; without it, the only path to debit a slow
+        // fund tx would be the user retrying with the same intent
+        // fingerprint within the idempotency window.
+        await setPendingFund({
+          txHash:       fundTx.hash,
+          fundDeltaWei: fundDeltaWei.toString(),
+          submittedAt:  Date.now(),
+          intentFp:     fp,
+          ownerLc:      owner,
+          chain:        src,
+        }).catch((e) => {
+          // KV write failure here is NOT fatal — the wait+debit path
+          // below still tries to close the loop. Worst case the row is
+          // missing and the only reconciliation path is the cron via
+          // its own owner-scan. Log loudly so ops can notice patterns.
+          console.error("[ccip/send] setPendingFund failed", {
+            owner,
+            src,
+            txHash: fundTx.hash,
+            err: e instanceof Error ? e.message : String(e),
+          });
+        });
+
         // ── Wait with timeout ──────────────────────────────────────
         let fundReceipt: Awaited<ReturnType<typeof fundTx.wait>>;
         try {
@@ -529,18 +628,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             ),
           ]);
         } catch (waitErr) {
+          // Leave the pending KV row in place. The next retry hits the
+          // reconciliation block at the top of this try, which fetches
+          // the receipt + debits + clears. Cron is the backstop if the
+          // user never retries.
           const timedOut = waitErr instanceof Error && waitErr.message === "FUND_WAIT_TIMEOUT";
           void sendOpsAlert(
-            `<b>⚠ CCIP auto-fund wait ${timedOut ? "timed out" : "errored"}</b>\n\n` +
+            `<b>⚠ CCIP auto-fund wait ${timedOut ? "timed out" : "errored"} — pending KV row retained for reconciliation</b>\n\n` +
             `Owner: <code>${owner}</code>\n` +
             `Chain: ${src}\n` +
             `Agent Wallet: <code>${destReceiver}</code>\n` +
             `Fund txHash: <code>${fundTx.hash}</code>\n` +
             `Amount: ${fundDeltaEth.toFixed(5)} native\n` +
             `Error: ${waitErr instanceof Error ? waitErr.message : String(waitErr)}\n\n` +
-            `If the tx eventually mines, the next bridge attempt will see the Agent Wallet ` +
-            `already funded and skip auto-fund — but the relayer's outlay won't be billed ` +
-            `unless the user retries with the SAME intent fingerprint (idempotency cache).`,
+            `Reconciliation will fire on the user's next bridge attempt OR the next ` +
+            `cron tick — relayer ETH is no longer at risk of leaking.`,
             "warn",
           ).catch(() => { /* best-effort */ });
           const body: Record<string, unknown> = {
@@ -548,17 +650,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             fundTx:   fundTx.hash,
             message:
               timedOut
-                ? "Auto-fund tx is mining. Retry in ~30s — Q402 will see the Agent Wallet funded and complete the bridge."
-                : "Auto-fund tx submitted but receipt couldn't be fetched. Retry in ~30s.",
+                ? "Auto-fund tx is mining. Retry in ~30s — Q402 will reconcile from the existing tx and complete the bridge."
+                : "Auto-fund tx submitted but receipt couldn't be fetched. Retry in ~30s — Q402 will reconcile from the existing tx.",
           };
           await finaliseClaim("failed", 503, body);
           return NextResponse.json(body, { status: 503, headers: { "Retry-After": "30" } });
         }
 
         if (!fundReceipt) {
-          // wait() returned null (no receipt) — defensive abort.
+          // wait() returned null (no receipt) — defensive abort. Leave
+          // the pending KV row for reconciliation.
           void sendOpsAlert(
-            `<b>⚠ CCIP auto-fund tx submitted but receipt null</b>\n\n` +
+            `<b>⚠ CCIP auto-fund tx submitted but receipt null — pending KV row retained</b>\n\n` +
             `Owner: <code>${owner}</code>\n` +
             `Chain: ${src}\n` +
             `Fund txHash: <code>${fundTx.hash}</code>\n` +
@@ -568,7 +671,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           const body: Record<string, unknown> = {
             error:   "AGENT_WALLET_AUTOFUND_PENDING",
             fundTx:  fundTx.hash,
-            message: "Auto-fund tx is pending on chain. Try again in ~30s.",
+            message: "Auto-fund tx is pending on chain. Try again in ~30s — Q402 will reconcile from the existing tx.",
           };
           await finaliseClaim("failed", 503, body);
           return NextResponse.json(body, { status: 503, headers: { "Retry-After": "30" } });
@@ -576,7 +679,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
         // ── If the funding tx reverted (almost impossible for a bare
         //    native transfer but guard anyway), there's nothing to debit.
+        //    Clear the pending row so the retry doesn't think it owes us.
         if (fundReceipt.status !== 1) {
+          await clearPendingFund(owner, src).catch(() => { /* TTL will sweep */ });
           void sendOpsAlert(
             `<b>⚠ CCIP auto-fund tx mined but reverted</b>\n\n` +
             `Owner: <code>${owner}</code>\n` +
@@ -606,27 +711,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const debitEth            = fundDeltaEth + actualFundGasEth;
         try {
           await recordNativeBridgeUsage(owner, src, debitEth);
+          // Debit landed — pending row no longer needed.
+          await clearPendingFund(owner, src).catch(() => { /* TTL will sweep */ });
         } catch (debitErr) {
           const err = debitErr instanceof Error ? debitErr.message : String(debitErr);
-          // CRITICAL — relayer ETH is gone, debit failed. Telegram-page
-          // ops with full detail so it can be reconciled by hand.
+          // Leave the pending row in place so the cron / next retry
+          // tries the debit again. Page ops with the full delta so they
+          // can choose to reconcile manually instead of waiting.
           void sendOpsAlert(
-            `<b>🚨 CCIP auto-fund debit FAILED (relayer ETH leaked)</b>\n\n` +
+            `<b>🚨 CCIP auto-fund debit FAILED (pending KV row retained for retry)</b>\n\n` +
             `Owner: <code>${owner}</code>\n` +
             `Chain: ${src}\n` +
             `Agent Wallet: <code>${destReceiver}</code>\n` +
             `Fund txHash: <code>${fundTx.hash}</code>\n` +
             `Amount: ${fundDeltaEth.toFixed(6)} + ${actualFundGasEth.toFixed(6)} gas\n` +
             `Debit error: ${err.slice(0, 200)}\n\n` +
-            `Manually debit ${debitEth.toFixed(6)} from bridge_native_used:${owner.toLowerCase()}.${src}.`,
+            `Cron will retry the debit. Manual fix: INCRBYFLOAT ${debitEth.toFixed(6)} ` +
+            `on bridge_native_used:${owner.toLowerCase()}.${src} + DEL ` +
+            `ccip_pending_fund:${owner.toLowerCase()}:${src}.`,
             "error",
           ).catch(() => { /* best-effort */ });
           const body: Record<string, unknown> = {
             error:  "AUTOFUND_DEBIT_FAILED",
             detail: err.slice(0, 200),
             message:
-              "Auto-fund succeeded on chain but our ledger failed to record the debit. " +
-              "Q402 ops has been paged — your retry won't double-charge.",
+              "Your auto-fund went through on chain, but Q402's ledger hiccuped recording it. " +
+              "Ops has been paged and Q402 will reconcile automatically — retry in a minute and you " +
+              "won't be charged twice.",
           };
           await finaliseClaim("failed", 500, body);
           return NextResponse.json(body, { status: 500 });
