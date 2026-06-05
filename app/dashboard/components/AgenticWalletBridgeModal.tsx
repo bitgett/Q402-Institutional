@@ -91,10 +91,11 @@ interface SendResponse {
   required?:      number;
   available?:     number;
   chain?:         string;
-  // AGENT_WALLET_GAS_LOW companion fields
-  address?:       string;
-  requiredEth?:   number;
-  availableEth?:  number;
+  // AGENT_WALLET_GAS_LOW / AGENT_WALLET_DELEGATED companion fields
+  address?:        string;
+  requiredEth?:    number;
+  availableEth?:   number;
+  delegateTarget?: string;
   // Auto-fund (Gas Tank → Agent Wallet) companion fields. Present iff the
   // route had to top up the Agent Wallet's source-chain gas before the
   // bridge call.
@@ -770,6 +771,14 @@ function friendlyBridgeError(status: number, body: SendResponse): string {
   }
   if (code === "CCIP_QUOTE_FAILED") {
     return "Couldn't reach the CCIP router to quote the fee. Wait a moment and retry.";
+  }
+  if (code === "AGENT_WALLET_DELEGATED") {
+    return (
+      "Your Agent Wallet is EIP-7702 delegated to the Q402 payment contract, which doesn't accept " +
+      "native transfers. Clear the delegation first (Agent Wallet tab → Clear delegation, or " +
+      "`q402_clear_delegation` from any MCP client) and retry the bridge. Heads-up: the next Q402 " +
+      "send re-delegates the wallet, so bridge before /send when you can."
+    );
   }
   if (code === "AGENT_WALLET_GAS_LOW") {
     // Safety-net path. Normally the route auto-funds the Agent Wallet
