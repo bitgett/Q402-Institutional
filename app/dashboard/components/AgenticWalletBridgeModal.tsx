@@ -164,6 +164,11 @@ export function AgenticWalletBridgeModal({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracks the discrete server error code (NOT the rendered message) so
+  // the modal can attach inline recovery affordances — currently the
+  // "Clear delegation & retry" button for AGENT_WALLET_DELEGATED.
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [clearing, setClearing] = useState<"idle" | "signing" | "broadcasting" | "ok" | "failed">("idle");
   const [result, setResult] = useState<SendResponse | null>(null);
   const [confirmStatus, setConfirmStatus] = useState<ConfirmResponse["status"]>(undefined);
   const [confirmTxHash, setConfirmTxHash] = useState<string | null>(null);
@@ -278,15 +283,86 @@ export function AgenticWalletBridgeModal({
       const data = (await res.json().catch(() => ({}))) as SendResponse;
       if (!res.ok || !data.success) {
         setError(friendlyBridgeError(res.status, data));
+        setErrorCode(typeof data.error === "string" ? data.error : null);
         return;
       }
       setResult(data);
       setConfirmStatus("pending");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setErrorCode(null);
     } finally {
       setSubmitting(false);
       inFlightRef.current = false;
+    }
+  }
+
+  /**
+   * Handle the "Clear delegation & retry" path when the bridge route
+   * returns 409 AGENT_WALLET_DELEGATED. We:
+   *   1. Mint a fresh action challenge for `agentic.clear_delegation`
+   *      bound to (walletId, chain=src) so the server-side route knows
+   *      exactly which Agent Wallet on which chain to act on.
+   *   2. POST it to /api/wallet/agentic/clear-delegation. The server
+   *      decrypts the Agent Wallet PK, signs the EIP-7702 auth with
+   *      address=0x0, and broadcasts a type-4 tx via the relayer.
+   *   3. On success, auto-re-fire submit() — the inline reconciliation
+   *      block in /api/ccip/send picks up the now-undelegated wallet
+   *      and the bridge runs through end-to-end.
+   * On failure we surface the underlying detail so the user can either
+   * retry the clear or fall back to the dashboard's wallet-status flow.
+   */
+  async function handleClearDelegation() {
+    if (clearing === "signing" || clearing === "broadcasting") return;
+    setError(null);
+    setErrorCode(null);
+    setClearing("signing");
+    try {
+      const intent: Record<string, string> = {
+        walletId,
+        chain: src,
+      };
+      const auth = await getActionAuth(ownerAddress, "agentic.clear_delegation", intent, signMessage);
+      if (!auth) {
+        setError("Couldn't get the clear-delegation challenge signed. Try again.");
+        setClearing("failed");
+        return;
+      }
+      setClearing("broadcasting");
+      const res = await fetch("/api/wallet/agentic/clear-delegation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address:   ownerAddress,
+          nonce:     auth.challenge,
+          signature: auth.signature,
+          walletId,
+          chain: src,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        alreadyCleared?: boolean;
+        txHash?: string;
+        error?: string;
+        detail?: string;
+        message?: string;
+      };
+      if (!res.ok || (!data.success && !data.alreadyCleared)) {
+        setError(data.message ?? data.detail ?? data.error ?? `Clear failed (HTTP ${res.status}).`);
+        setClearing("failed");
+        return;
+      }
+      setClearing("ok");
+      // Wait one block-ish so the post-clear bytecode (0x) is visible
+      // to the bridge route's eth_getCode probe on the next attempt.
+      // Without this the immediate auto-retry can race the chain and
+      // see the still-delegated bytecode → false AGENT_WALLET_DELEGATED.
+      await new Promise(r => setTimeout(r, 4_000));
+      await submit();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setClearing("failed");
     }
   }
 
@@ -541,14 +617,35 @@ export function AgenticWalletBridgeModal({
 
             {error && (
               <div
-                className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed"
+                className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed space-y-2"
                 style={{
                   background: "rgba(248,113,113,0.06)",
                   borderColor: "rgba(248,113,113,0.22)",
                   color: "#fecaca",
                 }}
               >
-                {error}
+                <div>{error}</div>
+                {errorCode === "AGENT_WALLET_DELEGATED" && clearing !== "ok" && (
+                  <button
+                    type="button"
+                    onClick={handleClearDelegation}
+                    disabled={clearing === "signing" || clearing === "broadcasting"}
+                    className="w-full px-3 py-2 rounded-md text-[12px] font-semibold bg-yellow text-navy hover:bg-yellow-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {clearing === "signing"      ? "Waiting for wallet signature…"
+                      : clearing === "broadcasting" ? "Clearing delegation on chain (≈25s)…"
+                      : clearing === "failed"       ? "Clear delegation & retry bridge"
+                      : "Clear delegation & retry bridge (sponsored, ≈25s)"}
+                  </button>
+                )}
+                {errorCode === "AGENT_WALLET_DELEGATED" && (
+                  <div className="text-[10.5px] text-white/55 leading-relaxed">
+                    One tap clears the EIP-7702 delegation on your Agent Wallet
+                    (Q402 sponsors the gas), then re-fires this bridge automatically.
+                    A future Q402 send will re-delegate the wallet — so bridge first
+                    if you have both to do.
+                  </div>
+                )}
               </div>
             )}
 

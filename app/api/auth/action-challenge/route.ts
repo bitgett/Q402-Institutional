@@ -60,6 +60,13 @@ const ALLOWED_ACTIONS = new Set([
   // returns null, and the user sees "Sign the bridge challenge…" with
   // no wallet popup.
   "ccip.bridge",
+  // Agent Wallet EIP-7702 delegation clear — intent is { walletId, chain }.
+  // Lets the bridge modal recover when the Agent Wallet is delegated to
+  // an impl with no receive(), without forcing the user out to a
+  // separate UI / MCP tool. Server holds the Agent Wallet PK so the user
+  // never sees the type-4 tx details; this challenge just authorises the
+  // server to act on their behalf.
+  "agentic.clear_delegation",
 ]);
 
 function isAddress(s: unknown): s is string {
