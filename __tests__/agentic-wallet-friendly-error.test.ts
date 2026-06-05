@@ -46,6 +46,13 @@ describe("friendlyError", () => {
     expect(fe.headline).toBe("some_backend_specific_error");
   });
 
+  it("maps RELAYER_LOW to a clear infrastructure-refilling message", () => {
+    const fe = friendlyError(503, { error: "RELAYER_LOW" });
+    expect(fe.headline).toMatch(/refilling/);
+    expect(fe.headline).toMatch(/quota and Gas Tank are untouched/);
+    expect(fe.next).toBeUndefined();
+  });
+
   it("maps DAILY_LIMIT_EXCEEDED and echoes the cap", () => {
     const fe = friendlyError(403, { error: "DAILY_LIMIT_EXCEEDED", limit: 500 });
     expect(fe.headline).toMatch(/\$500/);

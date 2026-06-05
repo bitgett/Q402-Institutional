@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGasBalance, getGasDeposits } from "@/app/lib/db";
+import { getGasBalance, getGasDeposits, getLinkBalance, getLinkDeposits } from "@/app/lib/db";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
@@ -35,10 +35,16 @@ export async function GET(req: NextRequest) {
   }
   const addr = authResult;
 
-  const [balances, deposits] = await Promise.all([
+  const [balances, deposits, linkBalances, linkDeposits] = await Promise.all([
     getGasBalance(addr),
     getGasDeposits(addr),
+    // LINK Gas Tank — strictly eth/avax/arbitrum (the 3-chain CCIP
+    // triangle). Returned as a separate top-level field so the dashboard
+    // can render the bridge-Gas-Tank section without polluting the
+    // native-gas tile grid.
+    getLinkBalance(addr),
+    getLinkDeposits(addr),
   ]);
 
-  return NextResponse.json({ balances, deposits });
+  return NextResponse.json({ balances, deposits, linkBalances, linkDeposits });
 }

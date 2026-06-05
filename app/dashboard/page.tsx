@@ -275,6 +275,107 @@ function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
   );
 }
 
+// ── LINK Deposit Modal (Chainlink CCIP bridge Gas Tank) ──────────────────
+//
+// Different from DepositModal above: LINK is an ERC-20, not a native coin,
+// so the in-app "Top up with wallet" shortcut (sendNativeTransfer) doesn't
+// apply. We surface the deposit address + canonical LINK token contract
+// per chain and let the user copy + send from their own wallet. The
+// `/api/cron/deposit-scan` LINK sweep picks the credit up automatically
+// within ~5 minutes — no manual verify step needed.
+const LINK_TOKEN: Record<"eth" | "avax" | "arbitrum", { address: string; explorer: string; label: string }> = {
+  eth:      { address: "0x514910771AF9Ca656af840dff83E8264EcF986CA", explorer: "https://etherscan.io",     label: "Ethereum" },
+  avax:     { address: "0x5947BB275c521040051D82396192181b413227A3", explorer: "https://snowtrace.io",     label: "Avalanche" },
+  arbitrum: { address: "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4", explorer: "https://arbiscan.io",      label: "Arbitrum" },
+};
+
+function LinkDepositModal({
+  chain,
+  onClose,
+}: {
+  chain: "eth" | "avax" | "arbitrum";
+  onClose: () => void;
+}) {
+  const cfg = LINK_TOKEN[chain];
+  const [copiedField, setCopiedField] = useState<"deposit" | "token" | null>(null);
+  async function copy(value: string, field: "deposit" | "token") {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 1500);
+    } catch { /* clipboard not available */ }
+  }
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
+      style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(10px)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border p-6 shadow-2xl shadow-black"
+        style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-base">Deposit LINK · {cfg.label}</h3>
+          <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        <p className="text-white/60 text-xs leading-relaxed mb-4">
+          Send LINK on <strong>{cfg.label}</strong> to the Q402 facilitator address below.
+          The deposit-scan cron credits your LINK Gas Tank within ~5 minutes.
+        </p>
+
+        {/* Deposit address */}
+        <div className="rounded-xl border border-yellow/20 bg-yellow/5 p-3 mb-3">
+          <div className="text-[10px] uppercase tracking-widest text-yellow/85 font-semibold mb-1">
+            Send LINK to
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-[11px] font-mono text-white/85 break-all">{GASTANK_ADDRESS}</code>
+            <button
+              onClick={() => copy(GASTANK_ADDRESS, "deposit")}
+              className="text-[10px] px-2 py-1 rounded-md bg-yellow/10 text-yellow border border-yellow/25 hover:bg-yellow/20 transition-colors"
+            >
+              {copiedField === "deposit" ? "✓" : "Copy"}
+            </button>
+          </div>
+        </div>
+
+        {/* LINK token address */}
+        <div className="rounded-xl border border-white/8 bg-white/2 p-3 mb-3">
+          <div className="text-[10px] uppercase tracking-widest text-white/55 font-semibold mb-1">
+            LINK token on {cfg.label}
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-[11px] font-mono text-white/75 break-all">{cfg.address}</code>
+            <button
+              onClick={() => copy(cfg.address, "token")}
+              className="text-[10px] px-2 py-1 rounded-md bg-white/5 text-white/70 border border-white/15 hover:bg-white/10 transition-colors"
+            >
+              {copiedField === "token" ? "✓" : "Copy"}
+            </button>
+          </div>
+          <a
+            href={`${cfg.explorer}/address/${cfg.address}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-yellow/85 hover:text-yellow underline underline-offset-2 mt-1 inline-block"
+          >
+            View on {cfg.explorer.replace(/^https?:\/\//, "")} ↗
+          </a>
+        </div>
+
+        <div className="rounded-xl bg-yellow/5 border border-yellow/15 px-3 py-2.5 text-[11px] text-yellow/85 leading-relaxed">
+          ⚠ Send LINK <strong>only on {cfg.label}</strong>. LINK sent on a different chain (or a non-LINK ERC-20)
+          will not be credited and is not recoverable.
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── Bar Chart ─────────────────────────────────────────────────────────────────
 function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
   const max = Math.max(...data) || 1;
@@ -485,6 +586,13 @@ export default function DashboardPage() {
   const [thisMonthCount, setThisMonthCount] = useState(0); // for chart only
   const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
   const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0, mantle: 0, injective: 0, monad: 0, scroll: 0 });
+  // LINK Gas Tank (CCIP bridge fees) — strictly eth/avax/arbitrum.
+  // Separate state from userGasBalance because the bucket lives at a
+  // distinct KV namespace (gasdep_link:* / link_used:*) and only the
+  // 3-chain CCIP triangle accepts deposits.
+  const [linkBalances, setLinkBalances] = useState<Record<"eth" | "avax" | "arbitrum", number>>({ eth: 0, avax: 0, arbitrum: 0 });
+  const [linkDeposits, setLinkDeposits] = useState<Array<{ chain: string; amount: number; txHash: string; depositedAt: string }>>([]);
+  const [linkDepositChain, setLinkDepositChain] = useState<"eth" | "avax" | "arbitrum" | null>(null);
   const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
   const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
   const [tankLoading, setTankLoading] = useState(false);
@@ -742,6 +850,8 @@ export default function DashboardPage() {
       }
       if (data.balances) setUserGasBalance(data.balances);
       if (data.deposits) setGasDeposits(data.deposits);
+      if (data.linkBalances) setLinkBalances(data.linkBalances);
+      if (data.linkDeposits) setLinkDeposits(data.linkDeposits);
     } catch { /* ignore */ }
   }, [signMessage]);
 
@@ -1557,6 +1667,13 @@ export default function DashboardPage() {
           onDepositVerified={balances => { setUserGasBalance(balances); setDepositChain(null); }} />
       )}
 
+      {linkDepositChain && (
+        <LinkDepositModal
+          chain={linkDepositChain}
+          onClose={() => setLinkDepositChain(null)}
+        />
+      )}
+
       {/* Compact top bar — sidebar carries logo + sections, so we only need
           a slim wallet/auth strip here. Hidden on md+ since the sidebar
           already shows identity; visible on mobile as a fallback. */}
@@ -1927,6 +2044,79 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
+            </div>
+
+            {/* ── LINK Gas Tank (CCIP bridge fees) ──────────────────────── */}
+            <div
+              className="rounded-2xl border p-5"
+              style={{ background: "#0F1929", borderColor: "rgba(245,197,24,0.15)" }}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <span className="font-semibold">LINK Gas Tank · Chainlink CCIP</span>
+                  <span className="ml-2 text-[10px] uppercase tracking-widest text-yellow/85 font-semibold">Bridge fees</span>
+                </div>
+                <span className="text-[10px] text-white/35">eth · avax · arbitrum only</span>
+              </div>
+              <p className="text-white/45 text-xs mb-4">
+                Funds the Chainlink CCIP fee when you bridge USDC. Q402 markup = 0; you pay only the actual CCIP cost.
+                LINK is ~10% cheaper than native — keeping a small LINK balance here keeps bridge UX one-tap.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {(["eth", "avax", "arbitrum"] as const).map((k) => {
+                  const meta = CHAIN_META[k];
+                  const amt = linkBalances[k] ?? 0;
+                  const hasBalance = amt > 0;
+                  // LINK is denominated in 18-dec with rough $12/LINK; matches
+                  // the BridgeModal quote display so the two surfaces don't
+                  // disagree on what the user "has".
+                  const usd = amt * 12;
+                  return (
+                    <div
+                      key={`link-${k}`}
+                      className="rounded-2xl p-4 border relative overflow-hidden"
+                      style={{
+                        background: "linear-gradient(145deg, #0F1929 0%, #0B1220 100%)",
+                        borderColor: hasBalance ? "rgba(245,197,24,0.25)" : "rgba(255,255,255,0.07)",
+                      }}
+                    >
+                      <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl" style={{ background: meta?.color ?? "#888", opacity: 0.5 }} />
+                      <div className="flex items-center gap-2.5 mb-3">
+                        <div className="w-7 h-7 rounded-full overflow-hidden ring-1 ring-white/10">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={meta?.img ?? "/eth.png"} alt={meta?.name ?? k} className="w-full h-full object-cover" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[13px] font-semibold leading-tight truncate">{meta?.name ?? k}</div>
+                          <div className="text-white/35 text-[10px]">LINK</div>
+                        </div>
+                      </div>
+                      <div className="text-xl font-bold tracking-tight leading-none">
+                        {amt.toFixed(4)}
+                        <span className="text-xs font-normal text-white/35 ml-1">LINK</span>
+                      </div>
+                      <div className="text-white/30 text-[11px] mt-1 mb-3">
+                        {usd >= 0.01 ? `≈ $${usd.toFixed(2)}` : "≈ $0.00"}
+                      </div>
+                      <button
+                        onClick={() => setLinkDepositChain(k)}
+                        className="w-full text-xs font-bold py-2 rounded-xl transition-all"
+                        style={hasBalance
+                          ? { background: "rgba(245,197,24,0.12)", color: "#F5C518", border: "1px solid rgba(245,197,24,0.25)" }
+                          : { background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }
+                        }
+                      >
+                        {hasBalance ? "Manage LINK" : "+ Deposit LINK"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              {linkDeposits.length > 0 && (
+                <div className="mt-3 pt-3 border-t text-[11px] text-white/45" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                  Recent LINK credits: {linkDeposits.slice(-3).reverse().map(d => `${d.amount.toFixed(2)} on ${d.chain}`).join(" · ")}
+                </div>
+              )}
             </div>
 
             {/* Real deposit history */}
