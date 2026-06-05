@@ -528,14 +528,26 @@ export async function addGasDeposit(address: string, deposit: GasDeposit): Promi
 }
 
 export async function getGasBalance(address: string): Promise<Record<string, number>> {
-  const [deposits, usedTotals] = await Promise.all([
+  const [deposits, usedTotals, nativeBridgeUsedTotals] = await Promise.all([
     getGasDeposits(address),
     getBillableGasUsedTotals(address),
+    // CCIP native-fee bridges debit a distinct counter
+    // (bridge_native_used:{addr}.{chain}) so the Gas Tank UI can
+    // attribute relay vs bridge spend separately. Both must be
+    // subtracted here — without this, native-fee bridges would land
+    // on-chain, write the bridge counter, but the dashboard /
+    // /api/relay gas-tank check would never see the debit. The fix
+    // for FIX 3 (native fee debit) only completed half the loop;
+    // this closes the read side.
+    getNativeBridgeUsedTotals(address),
   ]);
-  const totals: Record<string, number> = { bnb: 0, eth: 0, mantle: 0, injective: 0, avax: 0, xlayer: 0, stable: 0, monad: 0, scroll: 0 };
+  const totals: Record<string, number> = { bnb: 0, eth: 0, mantle: 0, injective: 0, avax: 0, xlayer: 0, stable: 0, monad: 0, scroll: 0, arbitrum: 0 };
   for (const d of deposits) totals[d.chain] = (totals[d.chain] ?? 0) + d.amount;
   for (const chain of Object.keys(usedTotals)) {
     totals[chain] = (totals[chain] ?? 0) - usedTotals[chain];
+  }
+  for (const chain of Object.keys(nativeBridgeUsedTotals)) {
+    totals[chain] = (totals[chain] ?? 0) - nativeBridgeUsedTotals[chain];
   }
   // Detect pre-clamp negative drift before we hide it from the user UI.
   // A negative pre-clamp value means a settlement debited gas against a

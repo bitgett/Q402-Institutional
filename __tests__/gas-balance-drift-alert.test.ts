@@ -51,6 +51,20 @@ describe("getGasBalance — negative drift alert", () => {
     expect(dbSrc).toMatch(/sendOpsAlert/);
   });
 
+  it("subtracts CCIP native-fee bridge usage from the balance (FIX 32 regression guard)", () => {
+    // Previously the route at /api/ccip/send wrote
+    // recordNativeBridgeUsage on a native-fee bridge, but the read
+    // side never subtracted it — bridges landed on-chain without ever
+    // debiting the user's Gas Tank. Both sides must stay wired.
+    const fn = dbSrc.match(/export async function getGasBalance[\s\S]+?\n\}/);
+    expect(fn).toBeTruthy();
+    const body = fn![0];
+    expect(body).toMatch(/getNativeBridgeUsedTotals/);
+    // The subtraction must apply against totals[chain] (same shape
+    // as the relay-gas subtraction above it).
+    expect(body).toMatch(/nativeBridgeUsedTotals[\s\S]*?totals\[chain\]\s*=\s*\(totals\[chain\]\s*\?\?\s*0\)\s*-\s*nativeBridgeUsedTotals\[chain\]/);
+  });
+
   it("dedups alerts per (address, chains-set) with 1h TTL", () => {
     expect(dbSrc).toMatch(/gas_drift_alert:\$\{address\}:\$\{drifting\.map/);
     expect(dbSrc).toMatch(/ex:\s*3600/);
