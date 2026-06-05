@@ -217,21 +217,47 @@ export interface BridgeSendResult {
   feeToken:    FeeTokenKind;
 }
 
+// Minimal ERC-20 ABI for allowance + approve (used by lazy-approval path).
+const ERC20_ABI = [
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+];
+
 /**
- * Submit ccipSend through Q402CCIPSender. Caller (Agentic Wallet) must have
- * already approved Q402CCIPSender for `amount` USDC on the source chain.
- * Approval is server-managed (see app/api/ccip/send route).
+ * Submit ccipSend through Q402CCIPSender. Auto-handles the one-time USDC
+ * approval — if the Agentic Wallet's allowance to Sender is < amount, this
+ * submits an approve(MAX_UINT) TX first (gas paid by the Agentic Wallet,
+ * which is expected to be pre-funded with a small native amount on each
+ * CCIP chain).
  *
  * IMPORTANT: server-side function. Never call from the client — needs
  * the Agentic Wallet private key.
  */
-export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResult> {
+export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResult & { approveTxHash?: string }> {
   const provider = getCCIPProvider(p.src);
   const wallet = new Wallet(p.agenticWalletKey, provider);
   const sender = new Contract(CCIP_CONFIG[p.src].sender, SENDER_ABI, wallet);
+  const senderAddr = CCIP_CONFIG[p.src].sender;
 
   const feeTokenEnum = p.feeToken === "LINK" ? FEE_TOKEN_LINK : FEE_TOKEN_NATIVE;
   const dstSelector = CCIP_CONFIG[p.dst].chainSelector;
+
+  // ── Lazy approve — first-bridge-per-chain bootstrap ─────────────────────
+  // Sender.bridge() does USDC.transferFrom(msg.sender, address(this), amount),
+  // so the Agentic Wallet must have allowed Sender to pull USDC. Check the
+  // current allowance and approve(MAX_UINT) if insufficient. Idempotent: a
+  // single MAX approval covers every future bridge from this wallet on this
+  // chain, so this only ever runs on the very first attempt.
+  const usdcAddr = CHAIN_CONFIG[p.src as ChainKey].usdc.address;
+  const usdc = new Contract(usdcAddr, ERC20_ABI, wallet);
+  const allowance = (await usdc.allowance(wallet.address, senderAddr)) as bigint;
+  let approveTxHash: string | undefined;
+  if (allowance < p.amount) {
+    const approveTx = await usdc.approve(senderAddr, 2n ** 256n - 1n);
+    const approveReceipt = await approveTx.wait();
+    if (!approveReceipt) throw new Error("CCIP bridge: approve tx mined but receipt null");
+    approveTxHash = approveTx.hash;
+  }
 
   const tx = await sender.bridge(
     dstSelector,
