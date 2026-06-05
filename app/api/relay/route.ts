@@ -527,6 +527,46 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     relayerAddress = key.address as Address;
   }
 
+  // ── 6b. Relayer EOA on-chain balance pre-flight (live only) ──────────────
+  // The relayer hot wallet pays the actual settlement gas. If it's dipped
+  // below the gas of one tx the relay would still attempt → revert with a
+  // viem-level "insufficient funds for transfer" → masked by the generic
+  // "Relay failed. Check your signature and parameters." (400) at the
+  // bottom of this route, which is misleading: the caller's signature is
+  // fine, the relayer is just out of native. Surface this distinctly so
+  // (a) the dashboard can show a clear "infrastructure refilling" banner,
+  // (b) ops alerting can fire on the 503, and (c) the user's quota isn't
+  // wasted on a guaranteed-revert attempt.
+  if (!isSandbox) {
+    try {
+      const probeProvider = new (await import("ethers")).JsonRpcProvider(chainCfg.rpc);
+      const [balanceWei, feeData] = await Promise.all([
+        probeProvider.getBalance(relayerAddress),
+        probeProvider.getFeeData(),
+      ]);
+      const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+      // settlePayment caps gas at 300k for the type-4 path. Add 20%
+      // headroom so a marginal-balance relayer doesn't ping-pong between
+      // "ready" and "low" between back-to-back relays.
+      const minRequired = maxFeePerGas * 360_000n;
+      if (balanceWei < minRequired) {
+        return NextResponse.json(
+          {
+            error: "RELAYER_LOW",
+            message:
+              `Q402 relay infrastructure on ${chain} is refilling. Try again in a few minutes — ` +
+              `your quota and Gas Tank balance are untouched.`,
+          },
+          { status: 503 },
+        );
+      }
+    } catch {
+      // RPC unreachable on this chain — let the settlement attempt
+      // surface the failure with its own (more specific) error. We
+      // don't want to harden the route against transient RPC blips.
+    }
+  }
+
   // ── 7b. nonce (uint256) for avax/bnb/eth/mantle/injective/monad/scroll/arbitrum transferWithAuthorization ─────────
   // Parsed up front in section 2b so a malformed value can't escape past the
   // credit reservation in section 7c.

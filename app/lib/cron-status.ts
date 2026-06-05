@@ -80,6 +80,7 @@ export const CRON_NAMES = {
   RECURRING_PAYOUTS: "recurring-payouts",
   DEPOSIT_SCAN: "deposit-scan",
   REPUTATION_WEEKLY: "reputation-weekly",
+  RELAYER_BALANCE: "relayer-balance",
 } as const;
 export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
 
@@ -116,5 +117,13 @@ export const CRON_META: Record<CronName, CronMeta> = {
   [CRON_NAMES.REPUTATION_WEEKLY]: {
     expectedIntervalMs: 7 * 24 * 60 * 60 * 1000,
     staleAfterMs: 8 * 24 * 60 * 60 * 1000,
+  },
+  // Relayer EOA balance probe — same 5min Render heartbeat as the
+  // deposit scan. Stale window kept tight (15 min) so a missed tick
+  // surfaces in the cron-status watchdog quickly: a stuck probe means
+  // we lose visibility into whether the hot wallet is about to dip.
+  [CRON_NAMES.RELAYER_BALANCE]: {
+    expectedIntervalMs: 5 * 60 * 1000,
+    staleAfterMs: 15 * 60 * 1000,
   },
 };

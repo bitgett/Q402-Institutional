@@ -96,6 +96,12 @@ export function friendlyError(status: number, body: BackendError): FriendlyError
   if (code === "AMOUNT_PRECISION_TOO_HIGH") {
     return { headline: "Amount has more decimals than the token supports. Round it off and retry." };
   }
+  if (code === "RELAYER_LOW") {
+    return {
+      headline:
+        "Q402 relay is refilling on this chain. Try again in a few minutes — your quota and Gas Tank are untouched.",
+    };
+  }
   if (code === "relay_forward_failed") {
     return { headline: "Couldn't reach the relayer. Try again in a moment — your balance is safe." };
   }
