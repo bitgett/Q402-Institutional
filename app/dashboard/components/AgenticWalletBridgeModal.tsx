@@ -168,7 +168,13 @@ export function AgenticWalletBridgeModal({
   // the modal can attach inline recovery affordances — currently the
   // "Clear delegation & retry" button for AGENT_WALLET_DELEGATED.
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [clearing, setClearing] = useState<"idle" | "signing" | "broadcasting" | "ok" | "failed">("idle");
+  const [clearing, setClearing] = useState<"idle" | "signing" | "broadcasting" | "propagating" | "ok" | "failed">("idle");
+  // Live elapsed-seconds counter while the clear tx is mining. Drives
+  // the countdown text on the recovery button so the user has something
+  // to watch instead of a static label — Ethereum block time + propagation
+  // means a 25–35s wait is the norm, and a frozen UI for that long reads
+  // as "the app hung."
+  const [clearElapsedSec, setClearElapsedSec] = useState(0);
   const [result, setResult] = useState<SendResponse | null>(null);
   const [confirmStatus, setConfirmStatus] = useState<ConfirmResponse["status"]>(undefined);
   const [confirmTxHash, setConfirmTxHash] = useState<string | null>(null);
@@ -329,37 +335,53 @@ export function AgenticWalletBridgeModal({
         return;
       }
       setClearing("broadcasting");
-      const res = await fetch("/api/wallet/agentic/clear-delegation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address:   ownerAddress,
-          nonce:     auth.challenge,
-          signature: auth.signature,
-          walletId,
-          chain: src,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        success?: boolean;
-        alreadyCleared?: boolean;
-        txHash?: string;
-        error?: string;
-        detail?: string;
-        message?: string;
-      };
-      if (!res.ok || (!data.success && !data.alreadyCleared)) {
-        setError(data.message ?? data.detail ?? data.error ?? `Clear failed (HTTP ${res.status}).`);
-        setClearing("failed");
-        return;
+      setClearElapsedSec(0);
+      // Drive the visible elapsed counter while the tx is mining. The
+      // interval is cleared in `finally` so an exception path doesn't
+      // leak a ticking timer onto the page.
+      const tickStart = Date.now();
+      const tickInterval = setInterval(() => {
+        setClearElapsedSec(Math.floor((Date.now() - tickStart) / 1000));
+      }, 250);
+      try {
+        const res = await fetch("/api/wallet/agentic/clear-delegation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            address:   ownerAddress,
+            nonce:     auth.challenge,
+            signature: auth.signature,
+            walletId,
+            chain: src,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          success?: boolean;
+          alreadyCleared?: boolean;
+          txHash?: string;
+          error?: string;
+          detail?: string;
+          message?: string;
+        };
+        if (!res.ok || (!data.success && !data.alreadyCleared)) {
+          setError(data.message ?? data.detail ?? data.error ?? `Clear failed (HTTP ${res.status}).`);
+          setClearing("failed");
+          return;
+        }
+        // Propagation wait — the post-clear bytecode (0x) needs a moment
+        // to reach the RPC node the bridge route will probe. Drop into
+        // the "propagating" phase so the button text reflects what
+        // we're actually waiting on (visible countdown 4 → 0).
+        setClearing("propagating");
+        for (let s = 4; s > 0; s--) {
+          setClearElapsedSec(s);
+          await new Promise(r => setTimeout(r, 1_000));
+        }
+        setClearing("ok");
+        await submit();
+      } finally {
+        clearInterval(tickInterval);
       }
-      setClearing("ok");
-      // Wait one block-ish so the post-clear bytecode (0x) is visible
-      // to the bridge route's eth_getCode probe on the next attempt.
-      // Without this the immediate auto-retry can race the chain and
-      // see the still-delegated bytecode → false AGENT_WALLET_DELEGATED.
-      await new Promise(r => setTimeout(r, 4_000));
-      await submit();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setClearing("failed");
@@ -629,13 +651,18 @@ export function AgenticWalletBridgeModal({
                   <button
                     type="button"
                     onClick={handleClearDelegation}
-                    disabled={clearing === "signing" || clearing === "broadcasting"}
-                    className="w-full px-3 py-2 rounded-md text-[12px] font-semibold bg-yellow text-navy hover:bg-yellow-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    disabled={clearing === "signing" || clearing === "broadcasting" || clearing === "propagating"}
+                    className="w-full px-3 py-2 rounded-md text-[12px] font-semibold bg-yellow text-navy hover:bg-yellow-hover disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
                   >
-                    {clearing === "signing"      ? "Waiting for wallet signature…"
-                      : clearing === "broadcasting" ? "Clearing delegation on chain (≈25s)…"
-                      : clearing === "failed"       ? "Clear delegation & retry bridge"
-                      : "Clear delegation & retry bridge (sponsored, ≈25s)"}
+                    {clearing === "signing"
+                      ? "Waiting for wallet signature…"
+                      : clearing === "broadcasting"
+                        ? `Clearing delegation on chain · ${clearElapsedSec}s elapsed (≈25–35s typical)`
+                        : clearing === "propagating"
+                          ? `Propagation buffer · ${clearElapsedSec}s left, then bridge fires`
+                          : clearing === "failed"
+                            ? "Clear delegation & retry bridge"
+                            : "Clear delegation & retry bridge (sponsored, ≈25s)"}
                   </button>
                 )}
                 {errorCode === "AGENT_WALLET_DELEGATED" && (
