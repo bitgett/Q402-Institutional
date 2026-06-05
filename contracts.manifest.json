@@ -239,7 +239,7 @@
         "chainSelector": "5009297550715157269",
         "router": "0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D",
         "linkToken": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
-        "sender": "0x0289C29bc37CdBC3711F73be17936c5c15D6468d",
+        "sender": "0x0289C29Bc37CDBc3711f73be17936c5C15d6468d",
         "supportedDestinations": ["avax", "arbitrum"],
         "explorer": "https://etherscan.io",
         "ccipExplorer": "https://ccip.chain.link"
