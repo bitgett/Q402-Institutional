@@ -90,9 +90,27 @@ export interface WebhookDelivery {
 }
 
 export interface GasDeposit {
-  chain: string;       // "bnb" | "eth" | "avax" | "xlayer" | "stable" | "mantle" | "injective" | "monad" | "scroll"
+  chain: string;       // "bnb" | "eth" | "avax" | "xlayer" | "stable" | "mantle" | "injective" | "monad" | "scroll" | "arbitrum"
   token: string;       // "BNB" | "ETH" | "AVAX" | "OKB" | "USDT0" | "MNT" | "INJ" | "MON"
   amount: number;      // native token amount
+  txHash: string;
+  depositedAt: string;
+}
+
+/**
+ * LinkDeposit — LINK token deposits for the CCIP bridge fee Gas Tank.
+ * Distinct from GasDeposit (native gas) by KV namespace (`gasdep_link:`),
+ * but identical shape so ledger math + dedup logic mirrors the existing
+ * native flow.
+ *
+ * Scoped to the 3 CCIP chains: eth / avax / arbitrum. The bridge route
+ * rejects LINK deposits for any other chain at the API boundary; this
+ * type is intentionally permissive (chain: string) so the KV layer
+ * stays generic.
+ */
+export interface LinkDeposit {
+  chain: string;       // "eth" | "avax" | "arbitrum"  (enforced at API layer)
+  amount: number;      // LINK amount (18-decimal, stored as fractional number)
   txHash: string;
   depositedAt: string;
 }
@@ -138,6 +156,9 @@ export interface RelayedTx {
 const subKey             = (addr: string) => `sub:${addr.toLowerCase()}`;
 const apiKeyRecKey       = (key: string)  => `apikey:${key}`;
 const gasDepKey          = (addr: string) => `gasdep:${addr.toLowerCase()}`;
+const linkDepKey         = (addr: string) => `gasdep_link:${addr.toLowerCase()}`;
+const linkDepDedupKey    = (addr: string) => `gasdep_link_hashes:${addr.toLowerCase()}`;
+const linkUsedKey        = (addr: string) => `link_used:${addr.toLowerCase()}`;
 const webhookKey         = (addr: string) => `webhook:${addr.toLowerCase()}`;
 const webhookDeliveryKey = (addr: string) => `webhook_delivery:${addr.toLowerCase()}`;
 
@@ -1336,4 +1357,100 @@ export async function recordTrialAlertSent(address: string, daysTier: number): P
   const prev = cur.lastDaysAlerted ?? Number.POSITIVE_INFINITY;
   if (daysTier >= prev) return;
   await kv.set(trialAlertKey(address), { lastDaysAlerted: daysTier });
+}
+
+// ── LINK Gas Tank (CCIP bridge fees) ────────────────────────────────────────
+// Parallel to the native GasDeposit flow above. Scoped to the 3 CCIP chains
+// (eth/avax/arbitrum); other chains are rejected at the API layer. Same
+// deposit-list + dedup-set + used-counter pattern; same drift-detection on
+// pre-clamp negative balance.
+//
+// KV keys (per address):
+//   gasdep_link:{addr}        → LinkDeposit[]    (RPUSH list, oldest→newest)
+//   gasdep_link_hashes:{addr} → SET of txHash    (dedup)
+//   link_used:{addr}          → Record<chain, number>  (sum of consumed LINK)
+
+const CCIP_LINK_CHAINS = ["eth", "avax", "arbitrum"] as const;
+type CCIPLinkChain = typeof CCIP_LINK_CHAINS[number];
+
+function isCCIPLinkChain(s: string): s is CCIPLinkChain {
+  return s === "eth" || s === "avax" || s === "arbitrum";
+}
+
+export async function getLinkDeposits(address: string): Promise<LinkDeposit[]> {
+  try {
+    const list = await kv.lrange<LinkDeposit>(linkDepKey(address), 0, -1);
+    if (Array.isArray(list)) return list;
+  } catch { /* legacy fallback */ }
+  return (await kv.get<LinkDeposit[]>(linkDepKey(address))) ?? [];
+}
+
+/**
+ * Add a LINK deposit. Mirrors addGasDeposit: dedup via SET, fallback to
+ * list scan if SADD reports already-present, defence-in-depth duplicate
+ * check before RPUSH. Rejects chains not in {eth, avax, arbitrum}.
+ */
+export async function addLinkDeposit(address: string, deposit: LinkDeposit): Promise<boolean> {
+  if (!isCCIPLinkChain(deposit.chain)) {
+    // Strict — LINK is meaningless on chains without a CCIP USDC pool. A
+    // misrouted deposit here would be unrecoverable spend (user thinks
+    // they have bridge credit, server has no path to consume it).
+    return false;
+  }
+  if (deposit.txHash) {
+    try {
+      const added = await kv.sadd(linkDepDedupKey(address), deposit.txHash);
+      if (added === 0) {
+        const existing = await getLinkDeposits(address);
+        if (existing.some(d => d.txHash === deposit.txHash)) return false;
+        await kv.rpush(linkDepKey(address), deposit);
+        return true;
+      }
+      const existing = await getLinkDeposits(address);
+      if (existing.some(d => d.txHash === deposit.txHash)) return false;
+      await kv.rpush(linkDepKey(address), deposit);
+      return true;
+    } catch { /* fall through */ }
+  }
+  const existing = await getLinkDeposits(address);
+  if (existing.some(d => d.txHash === deposit.txHash)) return false;
+  await kv.set(linkDepKey(address), [...existing, deposit]);
+  return true;
+}
+
+/** Per-chain consumed-LINK totals (sum of fees paid via bridge route). */
+export async function getLinkUsedTotals(address: string): Promise<Record<string, number>> {
+  return (await kv.get<Record<string, number>>(linkUsedKey(address))) ?? {};
+}
+
+/** Atomically increment the consumed-LINK counter for one chain. */
+export async function recordLinkUsage(address: string, chain: string, amount: number): Promise<void> {
+  if (!isCCIPLinkChain(chain) || amount <= 0) return;
+  const cur = await getLinkUsedTotals(address);
+  cur[chain] = (cur[chain] ?? 0) + amount;
+  await kv.set(linkUsedKey(address), cur);
+}
+
+/**
+ * Net LINK balance per chain (eth/avax/arbitrum). Pre-clamp negative
+ * values are clamped to 0 in the response but flagged to the same ops
+ * drift channel the native Gas Tank uses (via the existing
+ * emitGasDriftAlert path — invoked indirectly when an API route sees
+ * imbalance and chooses to escalate). For LINK we keep it simple: clamp
+ * silently in MVP, add ops alerting in v2 if drift is observed.
+ */
+export async function getLinkBalance(address: string): Promise<Record<CCIPLinkChain, number>> {
+  const [deposits, usedTotals] = await Promise.all([
+    getLinkDeposits(address),
+    getLinkUsedTotals(address),
+  ]);
+  const totals: Record<CCIPLinkChain, number> = { eth: 0, avax: 0, arbitrum: 0 };
+  for (const d of deposits) {
+    if (isCCIPLinkChain(d.chain)) totals[d.chain] += d.amount;
+  }
+  for (const c of CCIP_LINK_CHAINS) {
+    totals[c] -= usedTotals[c] ?? 0;
+    if (totals[c] < 0) totals[c] = 0;
+  }
+  return totals;
 }

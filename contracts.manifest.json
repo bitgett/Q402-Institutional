@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts.manifest.schema.json",
-  "version": "1.9.0",
-  "updatedAt": "2026-06-04",
+  "version": "1.10.0",
+  "updatedAt": "2026-06-05",
   "notes": [
     "Single source of truth for Q402 deployed contracts and EIP-712 signing conventions.",
     "If values in this file differ from app/lib/relayer.ts, public/q402-sdk.js, or README.md — this file wins.",
@@ -224,5 +224,58 @@
   "authorizationGuard": {
     "description": "The relay server MUST reject POST /api/relay unless authorization.chainId equals chains[chain].chainId and authorization.address (lowercase) equals chains[chain].implContract (lowercase).",
     "enforcedIn": "app/api/relay/route.ts"
+  },
+  "ccip": {
+    "version": "1.6.0",
+    "notes": [
+      "Cross-chain USDC bridge via Chainlink CCIP. Scope is intentionally narrow: USDC routing on the 3-chain triangle ETH ↔ AVAX ↔ Arbitrum One.",
+      "Verified ground truth: only these 3 chains' USDC token pools have each other in `getSupportedChains()` on-chain. BNB/Mantle/Scroll/X Layer/Monad/Stable/Injective — CCIP routers exist on most but Circle has not deployed CCIP-routable USDC pools there.",
+      "Sender contract: Q402CCIPSender deployed per chain. Holds LINK + native pool topped up by facilitator. Mode C only (server-managed Agentic Wallet) for v1 — Q402 server signs ccipSend directly as Agentic Wallet, so no EIP-712 BridgeAuthorization needed in MVP.",
+      "Receiver: token-only transfer to EOA. No destination Q402 contract in v1 (Phase 2 may add Q402CCIPReceiver for programmable settlement).",
+      "Fees: free Q402 markup. User pays only actual CCIP fee, debited from Gas Tank (LINK slot or native), 1:1 with facilitator's pool consumption."
+    ],
+    "chains": {
+      "eth": {
+        "chainSelector": "5009297550715157269",
+        "router": "0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D",
+        "linkToken": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+        "sender": "PENDING_DEPLOY",
+        "supportedDestinations": ["avax", "arbitrum"],
+        "explorer": "https://etherscan.io",
+        "ccipExplorer": "https://ccip.chain.link"
+      },
+      "avax": {
+        "chainSelector": "6433500567565415381",
+        "router": "0xF4c7E640EdA248ef95972845a62bdC74237805dB",
+        "linkToken": "0x5947BB275c521040051D82396192181b413227A3",
+        "sender": "PENDING_DEPLOY",
+        "supportedDestinations": ["eth", "arbitrum"],
+        "explorer": "https://snowtrace.io",
+        "ccipExplorer": "https://ccip.chain.link"
+      },
+      "arbitrum": {
+        "chainSelector": "4949039107694359620",
+        "router": "0x141fa059441E0ca23ce184B6A78bafD2A517DdE8",
+        "linkToken": "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4",
+        "sender": "PENDING_DEPLOY",
+        "supportedDestinations": ["eth", "avax"],
+        "explorer": "https://arbiscan.io",
+        "ccipExplorer": "https://ccip.chain.link"
+      }
+    },
+    "feeTokens": {
+      "LINK": 0,
+      "native": 1
+    },
+    "gasTankSchema": {
+      "description": "Gas Tank KV is extended with a LINK slot per CCIP chain. Native slot (existing) is also valid for fee payment with a 10% CCIP surcharge.",
+      "linkKey": "gastank:{address}:{chain}:link",
+      "nativeKey": "gastank:{address}:{chain}",
+      "linkChains": ["eth", "avax", "arbitrum"]
+    },
+    "feePolicy": {
+      "q402Markup": 0,
+      "description": "Q402 takes no fee on top of the CCIP cost. User pays exactly what Chainlink charges (LINK or native, per their choice)."
+    }
   }
 }
