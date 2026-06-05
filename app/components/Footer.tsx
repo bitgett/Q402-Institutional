@@ -17,6 +17,7 @@ const CHAINS = [
   { name: "Stable",     img: "/stable.jpg"    },
   { name: "Monad",      img: "/monad.png"     },
   { name: "Scroll",     img: "/scroll.png"    },
+  { name: "Arbitrum",   img: "/arbitrum.png"  },
 ];
 
 // `action: "openContactModal"` triggers the same RegisterModal the Contact

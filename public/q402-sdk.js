@@ -10,7 +10,7 @@
  *     the relay rejects them.
  *
  * Wire shapes:
- *   - Default EIP-7702 path: avax / bnb / eth / mantle / injective / monad / scroll. Used
+ *   - Default EIP-7702 path: avax / bnb / eth / mantle / injective / monad / scroll / arbitrum. Used
  *     for both pay() and batchPay(). Sequential authNonce (base + i) on
  *     batch rows.
  *   - EIP-7702 chain variants: xlayer / stable use chain-specific nonce
@@ -45,8 +45,9 @@
  *  injective  TransferAuthorization  "Q402 Injective"    user's EOA          6  ← USDT only
  *  monad      TransferAuthorization  "Q402 Monad"        user's EOA          6
  *  scroll     TransferAuthorization  "Q402 Scroll"       user's EOA          6
+ *  arbitrum   TransferAuthorization  "Q402 Arbitrum"     user's EOA          6
  *
- *  All 9 deployed contracts compute _domainSeparator() with `address(this)`, which
+ *  All 10 deployed contracts compute _domainSeparator() with `address(this)`, which
  *  under EIP-7702 delegation equals the user's EOA — NOT the impl contract.
  *
  *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
@@ -191,6 +192,21 @@ const Q402_CHAIN_CONFIG = {
     usdt: { address: "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", decimals: 6 },
     supportedTokens: ["USDC", "USDT"],
   },
+  arbitrum: {
+    name:         "Arbitrum",
+    chainId:      42161,
+    mode:         "eip7702",
+    domainName:   "Q402 Arbitrum",
+    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Native Circle USDC (CCTP) + canonical Tether on Arbitrum One, both 6 dec.
+    // EIP-7702 live on Arbitrum One since ArbOS 40 "Callisto"; ArbOS 51 "Dia"
+    // (2026-01-08) refined precompile delegation. Same impl address as
+    // Stable/Mantle/Injective/Scroll via deterministic CREATE.
+    // The legacy bridged USDC.e (0xFF970A61...) is NOT supported.
+    usdc: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+    usdt: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
+    supportedTokens: ["USDC", "USDT"],
+  },
 };
 
 // ─── Apply BNB-only narrowing when the flag is set ───────────────────────────
@@ -206,7 +222,7 @@ if (Q402_BNB_FOCUS_MODE) {
   }
 }
 
-// EIP-7702 witness type — shared by all 9 chains (avax/bnb/eth/xlayer/stable/mantle/injective/monad/scroll).
+// EIP-7702 witness type — shared by all 10 chains (avax/bnb/eth/xlayer/stable/mantle/injective/monad/scroll/arbitrum).
 // All Q402PaymentImplementation* contracts use the identical TransferAuthorization
 // typehash. verifyingContract = address(this), which under EIP-7702 delegation = user EOA.
 const Q402_TRANSFER_AUTH_TYPES = {
@@ -264,7 +280,7 @@ class Q402Client {
   /**
    * @param {object} opts
    * @param {string} opts.apiKey     - Your Q402 API key (q402_live_xxx)
-   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"|"injective"|"monad"|"scroll"} opts.chain - Target chain
+   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"|"injective"|"monad"|"scroll"|"arbitrum"} opts.chain - Target chain
    * @param {string} [opts.relayUrl] - Override relay endpoint (default: https://q402.quackai.ai/api/relay)
    */
   constructor({ apiKey, chain = "avax", relayUrl = "https://q402.quackai.ai/api/relay" }) {
@@ -272,7 +288,7 @@ class Q402Client {
     this.chain    = chain;
     this.relayUrl = relayUrl;
     this.chainCfg = Q402_CHAIN_CONFIG[chain];
-    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll`);
+    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll, arbitrum`);
   }
 
   /**

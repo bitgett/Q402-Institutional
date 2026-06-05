@@ -146,9 +146,24 @@ const CHAINS = [
       { symbol: "USDT", address: "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", decimals: 6 },
     ],
   },
+  {
+    name: "Arbitrum",
+    rpcs: [
+      "https://arb1.arbitrum.io/rpc",
+      "https://arbitrum.publicnode.com",
+      "https://arbitrum.drpc.org",
+    ],
+    blockWindow: 5000,   // Arbitrum ~0.25s block, ~21 min window
+    // Native Circle USDC (CCTP) + canonical Tether on Arbitrum One. The legacy
+    // bridged USDC.e (0xFF970A61...) is NOT supported.
+    tokens: [
+      { symbol: "USDC", address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+      { symbol: "USDT", address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
+    ],
+  },
 ];
 
-/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad","scroll") to CHAINS[].name */
+/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad","scroll","arbitrum") to CHAINS[].name */
 export const INTENT_CHAIN_MAP: Record<string, string> = {
   bnb:       "BNB Chain",
   eth:       "Ethereum",
@@ -159,6 +174,7 @@ export const INTENT_CHAIN_MAP: Record<string, string> = {
   injective: "Injective",
   monad:     "Monad",
   scroll:    "Scroll",
+  arbitrum:  "Arbitrum",
 };
 
 /**
@@ -381,6 +397,7 @@ const CHAIN_THRESHOLDS: Record<string, readonly number[]> = {
   "Scroll":     UNIFIED_THRESHOLDS,
   "Avalanche":  UNIFIED_THRESHOLDS,
   "Ethereum":   UNIFIED_THRESHOLDS,
+  "Arbitrum":   UNIFIED_THRESHOLDS,
 };
 // Fallback = any chain (all rows equal now). Kept as a named export so
 // callers don't have to know about the per-chain map being constant.

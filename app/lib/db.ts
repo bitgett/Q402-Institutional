@@ -185,7 +185,7 @@ export async function setSubscription(address: string, data: Subscription) {
 
 /**
  * Returns true if the wallet currently has access to the Multichain paid
- * scope (paid API key slot, paid pool credit reads, 9-chain settlement).
+ * scope (paid API key slot, paid pool credit reads, 10-chain settlement).
  *
  * Access is conferred by any one of:
  *   - a real cash payment (amountUSD > 0)
@@ -899,7 +899,7 @@ export async function patchRelayedTxReceiptId(
 // remaining trial allotment.
 //
 //   quota:trial:{addr}  — trial credits remaining (BNB-only, relayer-sponsored)
-//   quota:paid:{addr}   — paid credits remaining  (9 chains, user-funded gas tank)
+//   quota:paid:{addr}   — paid credits remaining  (10 chains, user-funded gas tank)
 //
 // The relay route picks the pool based on `keyRecord.plan === "trial"` — an
 // immutable per-key signal set at generation time. Trial relay decrements

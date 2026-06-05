@@ -1,6 +1,6 @@
 /**
  * agent-example.mjs
- * Q402 Node.js Agent SDK — unified example for all 9 Q402 chains.
+ * Q402 Node.js Agent SDK — unified example for all 10 Q402 chains.
  *
  * Signing scheme (identical for every chain):
  *   - Witness type: TransferAuthorization(owner, facilitator, token, recipient,
@@ -174,6 +174,23 @@ const CHAINS = {
     },
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     explorerBase: "https://scrollscan.com/tx/",
+    nonceField: "nonce",
+  },
+  arbitrum: {
+    id: 42161, name: "Arbitrum", domainName: "Q402 Arbitrum",
+    rpc: envVars.ARBITRUM_RPC_URL ?? "https://arb1.arbitrum.io/rpc",
+    impl: envVars.ARBITRUM_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Arbitrum One mainnet (chainId 42161). Native Circle USDC (CCTP) + canonical
+    // Tether USDT, both 6 decimals. EIP-7702 live on Arbitrum since ArbOS 40
+    // "Callisto"; ArbOS 51 "Dia" (activated 2026-01-08) refined precompile
+    // delegation behavior per the EIP-7702 spec. Set-code transactions verify
+    // through the standard Nitro stack — relayer flow matches Avalanche / BNB.
+    tokens: {
+      USDC: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+      USDT: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
+    },
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    explorerBase: "https://arbiscan.io/tx/",
     nonceField: "nonce",
   },
 };

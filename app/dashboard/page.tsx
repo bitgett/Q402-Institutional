@@ -51,11 +51,12 @@ const CHAIN_META: Record<string, { name: string; token: string; color: string; i
   // Stable: USDT0 is both the gas token and the payment token — no separate native coin
   stable: { name: "Stable",     token: "USDT0", color: "#4AE54A", img: "/stable.jpg", rounded: "rounded-full" },
   scroll: { name: "Scroll",     token: "ETH",   color: "#EEB431", img: "/scroll.png", rounded: "rounded-full" },
+  arbitrum: { name: "Arbitrum", token: "ETH",   color: "#28A0F0", img: "/arbitrum.png", rounded: "rounded-full" },
 };
 
 const STEPS = [
   { n: "01", title: "Load the SDK (browser)", code: `<script src="https://q402.quackai.ai/q402-sdk.js"></script>\n<!-- or: import { Q402Client } from "q402-sdk" -->` },
-  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll\n});\n// Note: chain "injective" is USDT-only until Circle CCTP native USDC ships (Q2 2026).` },
+  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll | arbitrum\n});\n// Note: chain "injective" is USDT-only until Circle CCTP native USDC ships (Q2 2026).` },
   { n: "03", title: "One-line gasless payment", code: `const result = await q402.pay({\n  to:     "0xRecipient...",\n  amount: "5.00",\n  token:  "USDC",  // use "USDT" for chain: "injective"\n});\nconsole.log(result.txHash);` },
   { n: "04", title: "Settlement confirmed", code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: "5", token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0` },
 ];
@@ -361,6 +362,8 @@ function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean 
                   <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
                   <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
                   <option value="monad" style={{ background: "#0d1422" }}>Monad ✓</option>
+                  <option value="scroll" style={{ background: "#0d1422" }}>Scroll ✓</option>
+                  <option value="arbitrum" style={{ background: "#0d1422" }}>Arbitrum ✓</option>
                 </>
               )}
             </select>
@@ -1175,7 +1178,7 @@ export default function DashboardPage() {
               </div>
               <h2 className="text-base font-bold mb-2">Reconnect to unlock Multichain</h2>
               <p className="text-white/60 text-sm mb-4">
-                Wallet already paired with this email. Reconnect to use Gas Tank, paid plans, and 9-chain history.
+                Wallet already paired with this email. Reconnect to use Gas Tank, paid plans, and 10-chain history.
               </p>
               <button
                 onClick={() => setShowWalletConnectFromEmail(true)}
@@ -1844,7 +1847,7 @@ export default function DashboardPage() {
                       <span className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg text-white/35">🔒</span>
                     </div>
                     <p className="text-white/55 text-xs mt-2 leading-relaxed">
-                      Paid plan unlocks 9-chain relay (BNB · ETH · Avalanche · X Layer · Stable · Mantle · Injective · Monad · Scroll).
+                      Paid plan unlocks 10-chain relay (BNB · ETH · Avalanche · X Layer · Stable · Mantle · Injective · Monad · Scroll · Arbitrum).
                     </p>
                     <Link href="/#pricing" className="mt-3 inline-flex items-center gap-1.5 text-xs text-yellow hover:text-yellow/80 transition-colors font-semibold">
                       View pricing

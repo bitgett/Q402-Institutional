@@ -64,6 +64,7 @@ const CHAIN_LABEL: Partial<Record<ChainKey, string>> = {
   injective: "Injective",
   monad: "Monad",
   scroll: "Scroll",
+  arbitrum: "Arbitrum",
 };
 
 function formatBalance(n: number): string {
@@ -295,7 +296,7 @@ export function AgenticWalletCard({
           <StatTile
             label="Balance"
             value={balance ? formatBalance(balance.totalUsd) : balanceLoading ? "…" : "$—"}
-            sub="USDC + USDT across 9 chains"
+            sub="USDC + USDT across 10 chains"
             tone="hero"
             action={
               <button
@@ -330,7 +331,7 @@ export function AgenticWalletCard({
           />
         </div>
 
-        {/* 9-chain coverage grid — always visible. Surfaces both the
+        {/* 10-chain coverage grid — always visible. Surfaces both the
             full chain support footprint AND where the balance sits, so
             the user sees at a glance "I have $4 on BNB, $0 elsewhere"
             instead of "$4 total somewhere". */}
@@ -541,10 +542,10 @@ export function AgenticWalletCard({
 
 // ── ChainCoverageGrid ──────────────────────────────────────────────────────
 //
-// Always-visible 9-chain grid. Each cell = one chain, showing the chain
+// Always-visible 10-chain grid. Each cell = one chain, showing the chain
 // logo + label + (USDC + USDT) sub-totals in USD. Cells with $0 render
 // dimmed so the eye still walks past them; cells with balance get a
-// subtle accent ring. Surfaces both "Q402 supports these 9 chains" AND
+// subtle accent ring. Surfaces both "Q402 supports these 10 chains" AND
 // "here's where my money actually sits" in one row, replacing the old
 // conditional HoldingsBreakdown that only appeared when the wallet was
 // non-empty.
@@ -559,8 +560,9 @@ const CHAIN_ICON: Partial<Record<ChainKey, { src: string; alt: string }>> = {
   injective: { src: "/injective.png", alt: "Injective" },
   monad:     { src: "/monad.png",     alt: "Monad" },
   scroll:    { src: "/scroll.png",    alt: "Scroll" },
+  arbitrum:  { src: "/arbitrum.png",  alt: "Arbitrum" },
 };
-const CHAIN_ORDER: ChainKey[] = ["bnb", "eth", "avax", "xlayer", "stable", "mantle", "injective", "monad", "scroll"];
+const CHAIN_ORDER: ChainKey[] = ["bnb", "eth", "avax", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum"];
 
 function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: BalancePayload | null }) {
   const byChain = new Map<ChainKey, { usdc: number; usdt: number; total: number; error?: string }>();
@@ -582,7 +584,7 @@ function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: Balan
     >
       <div className="flex items-center justify-between mb-2">
         <div className="text-[10px] uppercase tracking-widest text-white/65 font-medium">
-          Balance by chain · 9 chains
+          Balance by chain · 10 chains
         </div>
         {balance && (
           <div className="text-[10px] text-white/55">
@@ -590,7 +592,7 @@ function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: Balan
           </div>
         )}
       </div>
-      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-1.5">
+      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-5 lg:grid-cols-10 gap-1.5">
         {CHAIN_ORDER.map((chain) => {
           const slice = byChain.get(chain);
           const total = slice?.total ?? 0;

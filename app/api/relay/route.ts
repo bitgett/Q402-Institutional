@@ -72,6 +72,10 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
   // relay. ETH-denominated floor kept conservative — gas-tank alert window
   // would otherwise trigger more often than makes operational sense.
   scroll: 0.00005,   // ~$0.20 at $4000/ETH; tune once on-chain history accrues
+  // Arbitrum One Optimistic Rollup: data-availability cost dominates per-tx gas
+  // similar to Scroll. Same conservative ETH floor; revisit after the first
+  // week of mainnet relay history accrues to tune up or down.
+  arbitrum: 0.00005, // ~$0.20 at $4000/ETH; tune once on-chain history accrues
 };
 
 
@@ -116,7 +120,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     to:           string;
     amount:       string;
     deadline:     number;
-    nonce?:       string;  // uint256 nonce for avax/bnb/eth/mantle/injective/monad/scroll (v1.2 contract)
+    nonce?:       string;  // uint256 nonce for avax/bnb/eth/mantle/injective/monad/scroll/arbitrum/arbitrum (v1.2 contract)
     witnessSig:   string;
     authorization?: {
       chainId:  number;
@@ -206,7 +210,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // The full multi-chain matrix below is what the protocol shipped on v1.27.
   // The emergency feature flag BNB_FOCUS_MODE (see app/lib/feature-flags.ts)
   // can collapse the matrix to BNB+USDC/USDT for emergency narrowing; the
-  // 9-chain entries stay in this file so flipping the flag back to false
+  // 10-chain entries stay in this file so flipping the flag back to false
   // (current default) restores the full surface with zero code churn.
   //
   //   - Injective: USDT only. Native USDC via Circle CCTP is announced for Q2 2026.
@@ -225,6 +229,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     stable:    ["USDC", "USDT"],
     monad:     ["USDC", "USDT"],
     scroll:    ["USDC", "USDT"],
+    arbitrum:  ["USDC", "USDT"],
   };
   const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
     bnb: ["USDC", "USDT"],
@@ -291,16 +296,16 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   }
   if (!isXLayer && !isStable && !authorization) {
     return NextResponse.json(
-      { error: "EIP-7702 chains (avax/bnb/eth/mantle/injective/monad/scroll) require authorization object" },
+      { error: "EIP-7702 chains (avax/bnb/eth/mantle/injective/monad/scroll/arbitrum) require authorization object" },
       { status: 400 }
     );
   }
-  // avax/bnb/eth/mantle/injective/monad/scroll also require `nonce` — it's part of the signed witness, so a
+  // avax/bnb/eth/mantle/injective/monad/scroll/arbitrum also require `nonce` — it's part of the signed witness, so a
   // server-synthesized fallback would never match the caller's signature. Fail
   // fast with a clear 400 instead of letting the onchain verify path reject it.
   if (!isXLayer && !isStable && !nonce) {
     return NextResponse.json(
-      { error: "nonce is required for avax/bnb/eth/mantle/injective/monad/scroll (uint256 string, must match the signed witness)" },
+      { error: "nonce is required for avax/bnb/eth/mantle/injective/monad/scroll/arbitrum (uint256 string, must match the signed witness)" },
       { status: 400 }
     );
   }
@@ -460,7 +465,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll.`,
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll, arbitrum.`,
     }, { status: 400 });
   }
 
@@ -522,7 +527,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     relayerAddress = key.address as Address;
   }
 
-  // ── 7b. nonce (uint256) for avax/bnb/eth/mantle/injective/monad/scroll transferWithAuthorization ─────────
+  // ── 7b. nonce (uint256) for avax/bnb/eth/mantle/injective/monad/scroll/arbitrum transferWithAuthorization ─────────
   // Parsed up front in section 2b so a malformed value can't escape past the
   // credit reservation in section 7c.
   const paymentNonce: bigint = parsedPaymentNonce;

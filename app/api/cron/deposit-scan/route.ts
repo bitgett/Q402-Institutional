@@ -36,7 +36,7 @@
  *     to start with the narrower paid pool.
  *
  * Cursor handling: KV `cron:deposit-scan:cursor`. Each tick pulls up
- * to `MAX_USERS_PER_RUN` paid owners from the cursor, scans 9 chains
+ * to `MAX_USERS_PER_RUN` paid owners from the cursor, scans 10 chains
  * in parallel, persists the next cursor. On wrap (cursor === "0") the
  * next tick restarts the keyspace. With MAX_USERS_PER_RUN=1 and a 5-
  * minute heartbeat, the full sweep at 151 paid users ≈ 12.5h — every

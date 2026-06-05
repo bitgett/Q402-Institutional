@@ -1,4 +1,4 @@
-// Chain order: BNB → Ethereum → Mantle → Avalanche → Injective → X Layer → Stable → Monad → Scroll → USDC → USDT → RLUSD
+// Chain order: BNB → Ethereum → Mantle → Avalanche → Injective → X Layer → Stable → Monad → Scroll → Arbitrum → USDC → USDT → RLUSD
 const chains = [
   {
     name: "BNB Chain",
@@ -86,6 +86,15 @@ const chains = [
     icon: (
       // eslint-disable-next-line @next/next/no-img-element
       <img src="/scroll.png" alt="Scroll" className="w-6 h-6 rounded-md" />
+    ),
+  },
+  {
+    name: "Arbitrum",
+    color: "#28A0F0",
+    status: "live",
+    icon: (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/arbitrum.png" alt="Arbitrum" className="w-6 h-6 rounded-full" />
     ),
   },
   {

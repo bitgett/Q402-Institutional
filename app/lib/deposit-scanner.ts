@@ -14,7 +14,7 @@ import { ethers } from "ethers";
 import { GASTANK_ADDRESS_LC } from "./wallets";
 
 /**
- * 9-chain table for native-coin deposits to the Gas Tank.
+ * 10-chain table for native-coin deposits to the Gas Tank.
  *
  * `blockWindow` is sized so each chain covers ~10 minutes of recent
  * history, matching the realistic gap between a user submitting a
@@ -35,6 +35,9 @@ export const DEPOSIT_CHAINS = [
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 600, explorer: "https://stablescan.xyz/tx/" },
   { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                    blockWindow: 6000, explorer: "https://monadscan.com/tx/" },
   { key: "scroll", name: "Scroll",    token: "ETH",   rpc: "https://rpc.scroll.io",                    blockWindow: 1200, explorer: "https://scrollscan.com/tx/" },
+  // Arbitrum One — block time ~0.25s after Nitro, so 5000 blocks ≈ 21 min,
+  // matching the 15-min cron cadence with headroom for late deposits.
+  { key: "arbitrum", name: "Arbitrum", token: "ETH",   rpc: "https://arb1.arbitrum.io/rpc",             blockWindow: 5000, explorer: "https://arbiscan.io/tx/" },
 ] as const;
 
 export type DepositChain = typeof DEPOSIT_CHAINS[number];

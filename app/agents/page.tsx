@@ -102,7 +102,7 @@ function Hero() {
         <span style={{ color: "#86efac" }}> it can actually use.</span>
       </h1>
       <p className="text-base md:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(226,232,240,0.75)" }}>
-        A wallet your AI signs through. Your MetaMask is untouched. Per-tx and per-day caps, 9 EVM chains, keys exportable anytime.
+        A wallet your AI signs through. Your MetaMask is untouched. Per-tx and per-day caps, 10 EVM chains, keys exportable anytime.
       </p>
       <div className="flex flex-wrap justify-center gap-3 mt-7">
         <Link
@@ -307,7 +307,7 @@ function ConsoleMockup() {
 
 function ProofRow() {
   const rows: { label: string; value: string; foot: string }[] = [
-    { label: "Chains live",       value: "9 EVM chains",     foot: "BNB · ETH · AVAX · X Layer · Stable · Mantle · Injective · Monad · Scroll" },
+    { label: "Chains live",       value: "10 EVM chains",    foot: "BNB · ETH · AVAX · X Layer · Stable · Mantle · Injective · Monad · Scroll · Arbitrum" },
     { label: "Wallet popups",     value: "Zero",             foot: "Your agent signs through Q402 — your MetaMask never touched" },
     { label: "Spend controls",    value: "Per-tx · daily",   foot: "Caps enforced at the relay on every send + batch row" },
     { label: "Settle time",       value: "~1–3 s",           foot: "Median, single-recipient, sender pays $0 gas" },
@@ -497,7 +497,7 @@ function Closing() {
       <div>
         <div className="text-xl md:text-2xl font-semibold mb-1">Spin one up.</div>
         <div className="text-sm" style={{ color: "rgba(226,232,240,0.6)" }}>
-          Free to create. Send on BNB Chain today; a multichain key opens the rest of the 9 EVM chains when you&apos;re ready.
+          Free to create. Send on BNB Chain today; a multichain key opens the rest of the 10 EVM chains when you&apos;re ready.
         </div>
       </div>
       <div className="flex flex-wrap gap-3">

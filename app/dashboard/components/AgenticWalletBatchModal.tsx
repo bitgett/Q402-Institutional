@@ -48,6 +48,7 @@ const CHAIN_OPTIONS: ChainOption[] = [
   { key: "injective", label: "Injective", tokens: ["USDT"] },
   { key: "monad",     label: "Monad",     tokens: ["USDT", "USDC"] },
   { key: "scroll",    label: "Scroll",    tokens: ["USDT", "USDC"] },
+  { key: "arbitrum",  label: "Arbitrum",  tokens: ["USDT", "USDC"] },
 ];
 
 const MAX_ROWS = 20;

@@ -124,7 +124,7 @@ const CLIENTS: ClientInstall[] = [
 // of vertical space + duplicated content from /docs#claude-mcp.
 const TOOLS: Array<{ name: string; auth: string; note: string }> = [
   { name: "q402_doctor",              auth: "no auth",     note: "Install + ongoing health check. Call on \"set up Q402\"." },
-  { name: "q402_quote",               auth: "no auth",     note: "Compare gas across 9 chains. Read-only." },
+  { name: "q402_quote",               auth: "no auth",     note: "Compare gas across 10 chains. Read-only." },
   { name: "q402_balance",             auth: "api key",     note: "Verify key + remaining quota." },
   { name: "q402_pay",                 auth: "live mode",   note: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
   { name: "q402_batch_pay",           auth: "live mode",   note: "Up to 20 recipients in one signed batch (trial: 5)." },
@@ -289,7 +289,7 @@ export default function ClaudePage() {
             transition={{ duration: 0.6, delay: 0.18 }}
             className="text-base md:text-lg text-white/70 mt-6 max-w-3xl leading-relaxed"
           >
-            9 EVM chains, gasless stablecoin payments, any MCP client. One install. Ask your AI to set it up.
+            10 EVM chains, gasless stablecoin payments, any MCP client. One install. Ask your AI to set it up.
           </motion.p>
 
           {/* ── Install — 4-client tabs ──────────────────────────────────── */}
