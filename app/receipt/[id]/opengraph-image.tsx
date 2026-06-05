@@ -20,6 +20,7 @@ const CHAIN_LABELS: Record<string, string> = {
   injective: "Injective EVM",
   monad:     "Monad",
   scroll:    "Scroll",
+  arbitrum:  "Arbitrum One",
 };
 
 export default async function OgImage({

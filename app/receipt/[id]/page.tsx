@@ -67,6 +67,7 @@ function chainLabel(chain: string): string {
     case "injective": return "Injective EVM";
     case "monad":     return "Monad";
     case "scroll":    return "Scroll";
+    case "arbitrum":  return "Arbitrum One";
     default:          return chain;
   }
 }

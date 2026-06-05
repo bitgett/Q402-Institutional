@@ -68,6 +68,7 @@ const TX_EXPLORER: Record<string, { base: string; label: string }> = {
   injective: { base: "https://blockscout.injective.network/tx/", label: "Blockscout" },
   monad:     { base: "https://monadscan.com/tx/",                label: "MonadScan" },
   scroll:    { base: "https://scrollscan.com/tx/",               label: "ScrollScan" },
+  arbitrum:  { base: "https://arbiscan.io/tx/",                  label: "Arbiscan" },
 };
 
 function explorerFor(chain: string) {
