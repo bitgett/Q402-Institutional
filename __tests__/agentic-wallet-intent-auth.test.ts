@@ -183,6 +183,9 @@ describe("/api/auth/action-challenge route shape", () => {
     // every bridge attempt stuck on "Sign the bridge challenge…" with
     // no wallet popup. Regression guard for the FIX-36 incident.
     expect(src).toMatch(/ccip\.bridge/);
+    // Agent Wallet EIP-7702 delegation clear — needed for the in-modal
+    // "Clear delegation & retry" button on AGENT_WALLET_DELEGATED.
+    expect(src).toMatch(/agentic\.clear_delegation/);
   });
 
   it("rate-limits per IP and returns the canonical message body", () => {
