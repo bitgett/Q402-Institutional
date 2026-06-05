@@ -23,6 +23,7 @@ const EXPLORERS: Record<string, { name: string; tx: (h: string) => string }> = {
   injective: { name: "Blockscout", tx: h => `https://blockscout.injective.network/tx/${h}` },
   monad:     { name: "Monadscan",  tx: h => `https://monadscan.com/tx/${h}` },
   scroll:    { name: "Scrollscan", tx: h => `https://scrollscan.com/tx/${h}` },
+  arbitrum:  { name: "Arbiscan",   tx: h => `https://arbiscan.io/tx/${h}` },
 };
 
 const CHAIN_LABELS: Record<string, string> = {
@@ -35,6 +36,7 @@ const CHAIN_LABELS: Record<string, string> = {
   injective: "Injective EVM",
   monad:     "Monad",
   scroll:    "Scroll",
+  arbitrum:  "Arbitrum One",
 };
 
 const POLL_INTERVAL_MS      = 2_500;

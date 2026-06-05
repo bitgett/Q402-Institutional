@@ -44,6 +44,7 @@ const CHAINS = {
   stable: { id: 988,   rpc: "https://rpc.stable.xyz",               explorer: "https://stablescan.xyz/tx/" },
   monad:  { id: 143,   rpc: "https://rpc.monad.xyz",                explorer: "https://monadscan.com/tx/" },
   scroll: { id: 534352, rpc: "https://rpc.scroll.io",                explorer: "https://scrollscan.com/tx/" },
+  arbitrum: { id: 42161, rpc: "https://arb1.arbitrum.io/rpc",         explorer: "https://arbiscan.io/tx/" },
 };
 
 const args = process.argv.slice(2);

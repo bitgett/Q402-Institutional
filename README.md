@@ -48,6 +48,7 @@ and the on-wire body. Chain-specific: impl contract + EIP-712 domain name.
 | Injective EVM | 1776 | USDT | live |
 | Monad | 143 | USDC, USDT (USDT0) | live |
 | Scroll | 534352 | USDC, USDT | live |
+| Arbitrum One | 42161 | USDC, USDT | live |
 
 RLUSD is Ethereum-only (issuer constraint, 18 decimals). Injective native USDC ships Q2 2026 (Circle CCTP).
 

@@ -32,6 +32,7 @@ const CHAINS = {
   injective: { id: 1776,   name: "Injective",   rpc: "https://sentry.evm-rpc.injective.network/", usdc: ["0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", 6], usdt: ["0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", 6] },
   monad:     { id: 143,    name: "Monad",       rpc: "https://rpc.monad.xyz",                   usdc: ["0x754704Bc059F8C67012fEd69BC8A327a5aafb603", 6],  usdt: ["0xe7cd86e13AC4309349F30B3435a9d337750fC82D", 6]  },
   scroll:    { id: 534352, name: "Scroll",      rpc: "https://rpc.scroll.io",                   usdc: ["0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", 6],  usdt: ["0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", 6]  },
+  arbitrum:  { id: 42161,  name: "Arbitrum",    rpc: "https://arb1.arbitrum.io/rpc",            usdc: ["0xaf88d065e77c8cC2239327C5EDb3A432268e5831", 6],  usdt: ["0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", 6]  },
 };
 
 function rawToUsd(raw, decimals) {
