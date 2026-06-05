@@ -14,6 +14,7 @@ const CHAINS = [
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                      cgId: "tether"       },
   { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                       cgId: "monad-2"      },
   { key: "scroll", name: "Scroll",    token: "ETH",   rpc: "https://rpc.scroll.io",                       cgId: "ethereum"     },
+  { key: "arbitrum", name: "Arbitrum", token: "ETH",  rpc: "https://arb1.arbitrum.io/rpc",                 cgId: "ethereum"     },
 ];
 
 // Minimum USD thresholds — alert when below these
@@ -34,6 +35,9 @@ const ALERT_THRESHOLD_USD: Record<string, number> = {
   // $4000/ETH — enough headroom for the alert to fire long before any
   // realistic burst would drain the facilitator's balance.
   scroll: 5,
+  // Arbitrum One: ETH-denominated L2 fees dominate, similar profile to Scroll.
+  // Same $5 floor for consistency; tune after first week of mainnet data.
+  arbitrum: 5,
 };
 
 async function getNativeBalance(rpc: string, address: string): Promise<string> {

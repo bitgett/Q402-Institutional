@@ -1,9 +1,9 @@
 /**
- * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 9 Q402 chains.
+ * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 10 Q402 chains.
  *
- *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective|monad|scroll> [--amount 0.05] [--to 0x...]
+ *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective|monad|scroll|arbitrum> [--amount 0.05] [--to 0x...]
  *
- * Flow (identical for every chain — all 9 impl contracts share the same
+ * Flow (identical for every chain — all 10 impl contracts share the same
  * TransferAuthorization witness + _domainSeparator(address(this)) scheme):
  *
  *   1. Payer signs TransferAuthorization EIP-712 (verifyingContract = payer EOA,
@@ -118,6 +118,14 @@ const CHAINS = {
     // Default to USDC (native Circle) on Scroll. USDT also supported.
     token: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6, symbol: "USDC",
     explorer: "https://scrollscan.com/tx/",
+  },
+  arbitrum: {
+    id: 42161, name: "Arbitrum", domainName: "Q402 Arbitrum",
+    rpc: "https://arb1.arbitrum.io/rpc",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Default to USDC (native Circle CCTP) on Arbitrum One. USDT also supported.
+    token: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6, symbol: "USDC",
+    explorer: "https://arbiscan.io/tx/",
   },
 };
 

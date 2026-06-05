@@ -60,7 +60,8 @@ type ChainKey =
   | "mantle"
   | "injective"
   | "monad"
-  | "scroll";
+  | "scroll"
+  | "arbitrum";
 
 interface ChainMeta {
   key: ChainKey;
@@ -79,6 +80,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "injective", label: "Injective",  multichainOnly: true, tokens: ["USDT"] },
   { key: "monad",     label: "Monad",      multichainOnly: true, tokens: ["USDT", "USDC"] },
   { key: "scroll",    label: "Scroll",     multichainOnly: true, tokens: ["USDT", "USDC"] },
+  { key: "arbitrum",  label: "Arbitrum",   multichainOnly: true, tokens: ["USDT", "USDC"] },
 ];
 
 type FrequencyKind = "hourly" | "daily" | "weekly" | "monthly" | "monthly-last";
@@ -520,7 +522,7 @@ export function AgenticWalletRecurringModal({
 
         {chainGated && (
           <div className="mt-2 mb-3 rounded-md border border-amber-400/30 bg-amber-400/[0.05] p-3 text-[12px] text-amber-200/85">
-            {chainMeta.label} requires the paid Multichain subscription. Stay on BNB Chain or upgrade to use the full 9-chain range.
+            {chainMeta.label} requires the paid Multichain subscription. Stay on BNB Chain or upgrade to use the full 10-chain range.
           </div>
         )}
 

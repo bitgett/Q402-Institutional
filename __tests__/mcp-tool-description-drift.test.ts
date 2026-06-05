@@ -3,7 +3,7 @@
  *
  * MCP tool descriptions are what the agent reads to decide how/whether
  * to call a tool. If the description says "BNB-FOCUS SPRINT IS ACTIVE:
- * only chain: bnb" but the server actually accepts the full 9-chain
+ * only chain: bnb" but the server actually accepts the full 10-chain
  * matrix for paid keys, the agent will refuse legitimate calls (or
  * worse, try to "correct" the user's intent).
  *
@@ -12,7 +12,7 @@
  * descriptions to match the actual per-tier policy:
  *
  *   - Trial keys → BNB only (server returns TRIAL_BNB_ONLY otherwise)
- *   - Paid keys  → full 9-chain matrix (avax, bnb, eth, xlayer, stable,
+ *   - Paid keys  → full 10-chain matrix (avax, bnb, eth, xlayer, stable,
  *                  mantle, injective, monad, scroll), USDC/USDT broadly,
  *                  RLUSD on Ethereum only, Injective USDT-only.
  */
@@ -43,7 +43,7 @@ describe.skipIf(!available)("MCP tool descriptions match actual server policy", 
     it("does NOT claim a blanket 'BNB-FOCUS SPRINT IS ACTIVE: only chain: bnb' policy", () => {
       // The blanket claim was an earlier sprint snapshot that survived
       // past BNB_FOCUS_MODE being flipped to false — it lies to the
-      // agent because the runtime actually accepts the paid 9-chain
+      // agent because the runtime actually accepts the paid 10-chain
       // matrix.
       expect(paySrc).not.toMatch(/BNB-FOCUS SPRINT IS ACTIVE/);
       expect(paySrc).not.toMatch(/every other chain and RLUSD return an error/);
@@ -54,12 +54,12 @@ describe.skipIf(!available)("MCP tool descriptions match actual server policy", 
       expect(paySrc).toMatch(/TRIAL_BNB_ONLY/);
     });
 
-    it("documents the multichain → full 9-chain matrix", () => {
+    it("documents the multichain → full 10-chain matrix", () => {
       // v0.5.0+ renamed "Paid keys" → "Multichain keys" to match the
       // dashboard's scope label. Both terms accepted so a future re-rename
       // back to "Paid" doesn't churn this test.
       expect(paySrc).toMatch(/Multichain keys|Paid keys/i);
-      expect(paySrc).toMatch(/avax.+bnb.+eth.+xlayer.+stable.+mantle.+injective.+monad.+scroll/i);
+      expect(paySrc).toMatch(/avax.+bnb.+eth.+xlayer.+stable.+mantle.+injective.+monad.+scroll.+arbitrum/i);
     });
 
     it("documents the Q402_TRIAL_API_KEY / Q402_MULTICHAIN_API_KEY split", () => {
@@ -85,9 +85,9 @@ describe.skipIf(!available)("MCP tool descriptions match actual server policy", 
       expect(quoteSrc).not.toMatch(/results are currently restricted to BNB Chain/);
     });
 
-    it("documents the 9-chain quote surface", () => {
-      expect(quoteSrc).toMatch(/9 chains/);
-      expect(quoteSrc).toMatch(/avax.+bnb.+eth.+xlayer.+stable.+mantle.+injective.+monad.+scroll/i);
+    it("documents the 10-chain quote surface", () => {
+      expect(quoteSrc).toMatch(/10 chains/);
+      expect(quoteSrc).toMatch(/avax.+bnb.+eth.+xlayer.+stable.+mantle.+injective.+monad.+scroll.+arbitrum/i);
     });
 
     it("notes that trial keys see a narrower view", () => {

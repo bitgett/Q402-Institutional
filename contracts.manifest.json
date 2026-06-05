@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts.manifest.schema.json",
-  "version": "1.8.0",
-  "updatedAt": "2026-05-20",
+  "version": "1.9.0",
+  "updatedAt": "2026-06-04",
   "notes": [
     "Single source of truth for Q402 deployed contracts and EIP-712 signing conventions.",
     "If values in this file differ from app/lib/relayer.ts, public/q402-sdk.js, or README.md — this file wins.",
@@ -198,6 +198,27 @@
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://scrollscan.com",
       "verifyUrl": "https://scrollscan.com/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
+    },
+    "arbitrum": {
+      "name": "Arbitrum",
+      "chainId": 42161,
+      "relayMode": "eip7702",
+      "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+      "witness": {
+        "type": "TransferAuthorization",
+        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "domainName": "Q402 Arbitrum",
+        "domainVersion": "1",
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Arbitrum One mainnet since ArbOS 40 'Callisto'; ArbOS 51 'Dia' (activated 2026-01-08) refined precompile delegation behavior to align with the EIP-7702 spec. Same impl address as Stable/Mantle/Injective/Scroll via deterministic CREATE (deployer 0xfc77...f466, nonce 0); distinguished at signing time by chainId 42161 + domainName 'Q402 Arbitrum'."
+      },
+      "tokens": {
+        "USDC": { "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "decimals": 6, "notes": "Native Circle USDC on Arbitrum One — issued by Circle via CCTP, not the legacy bridged USDC.e (0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8). Q402 intentionally rejects USDC.e to avoid the bridged/native confusion that surfaced during Mantle's USDT migration." },
+        "USDT": { "address": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", "decimals": 6, "notes": "Tether's canonical Arbitrum One deployment." }
+      },
+      "supportedApiTokens": ["USDC", "USDT"],
+      "explorer": "https://arbiscan.io",
+      "verifyUrl": "https://arbiscan.io/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
     }
   },
   "authorizationGuard": {

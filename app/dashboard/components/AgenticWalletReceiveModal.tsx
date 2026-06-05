@@ -3,7 +3,7 @@
 /**
  * AgenticWalletReceiveModal — chain-first deposit flow.
  *
- * Every supported EVM chain shares the same address (one EOA, nine
+ * Every supported EVM chain shares the same address (one EOA, ten
  * domains), but the safety story changes per chain — Injective is
  * USDT-only, Stable speaks USDT0, and a wrong-network deposit is
  * unrecoverable. So the modal puts the network choice *up front* as a
@@ -33,6 +33,7 @@ const RECEIVE_CHAINS: ReadonlyArray<ChainOption> = [
   { key: "injective", label: "Injective",   tokens: ["USDT"], note: "USDT only" },
   { key: "monad",     label: "Monad",       tokens: ["USDT", "USDC"] },
   { key: "scroll",    label: "Scroll",      tokens: ["USDT", "USDC"] },
+  { key: "arbitrum",  label: "Arbitrum",    tokens: ["USDT", "USDC"] },
 ];
 
 interface Props {

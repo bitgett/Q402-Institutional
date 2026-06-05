@@ -33,11 +33,11 @@ import type { ChainKey } from "./relayer";
 import { loadRelayerKey } from "./relayer-key";
 
 // Per-call timeout for eth_getCode probes. Public RPCs occasionally hang
-// or slow-respond for tens of seconds; without a bound, the 9-chain
+// or slow-respond for tens of seconds; without a bound, the 10-chain
 // parallel status read can sit on a single bad endpoint until the Vercel
 // function timeout (default 10s) consumes the whole request. 5s per
 // chain lets the slow chain show up as `error: timeout` while the
-// other 8 still return their state on time.
+// other 9 still return their state on time.
 const PROVIDER_CALL_TIMEOUT_MS = 5_000;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -65,6 +65,7 @@ export const CHAIN_IDS: Record<ChainKey, number> = {
   injective: 1776,
   monad:     143,
   scroll:    534352,
+  arbitrum:  42161,
 };
 
 // Official Q402 impl contract per chain — mirrors contracts.manifest.json.
@@ -84,6 +85,7 @@ export const Q402_IMPL_PER_CHAIN: Record<ChainKey, string> = {
   injective: "0x2fb2b2d110b6c5664e701666b3741240242bf350",
   monad:     "0x39ba9520718ee069d7f72882ff4c28a5ea8a2acc",
   scroll:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+  arbitrum:  "0x2fb2b2d110b6c5664e701666b3741240242bf350",
 };
 
 export function isOfficialQ402Impl(chain: ChainKey, impl: string | undefined): boolean {
@@ -92,7 +94,7 @@ export function isOfficialQ402Impl(chain: ChainKey, impl: string | undefined): b
 }
 
 export const CHAIN_KEYS: ReadonlyArray<ChainKey> = [
-  "avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll",
+  "avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum",
 ];
 
 // ── EIP-7702 code prefix ───────────────────────────────────────────────────
@@ -166,7 +168,7 @@ export async function getDelegationState(
 }
 
 /**
- * Read delegation state across all 9 chains in parallel.
+ * Read delegation state across all 10 chains in parallel.
  *
  * Returns one entry per chain regardless of error — UI consumes the array
  * directly to render status rows.
@@ -332,6 +334,7 @@ const EXPLORER_TX_BASE: Record<ChainKey, string> = {
   injective: "https://blockscout.injective.network/tx/",
   monad:     "https://monadscan.com/tx/",
   scroll:    "https://scrollscan.com/tx/",
+  arbitrum:  "https://arbiscan.io/tx/",
 };
 
 export function explorerTxUrl(chain: ChainKey, hash: string): string {
@@ -348,6 +351,7 @@ const EXPLORER_ADDRESS_BASE: Record<ChainKey, string> = {
   injective: "https://blockscout.injective.network/address/",
   monad:     "https://monadscan.com/address/",
   scroll:    "https://scrollscan.com/address/",
+  arbitrum:  "https://arbiscan.io/address/",
 };
 
 export function explorerAddressUrl(chain: ChainKey, addr: string): string {
@@ -364,6 +368,7 @@ const EXPLORER_LABEL: Record<ChainKey, string> = {
   injective: "Blockscout",
   monad:     "MonadScan",
   scroll:    "ScrollScan",
+  arbitrum:  "Arbiscan",
 };
 
 export function explorerLabel(chain: ChainKey): string {

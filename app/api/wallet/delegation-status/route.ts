@@ -1,8 +1,8 @@
 /**
  * GET /api/wallet/delegation-status?address=0x...
  *
- * Reports the EIP-7702 delegation state of `address` across all 9 Q402
- * chains in a single response. Read-only — runs 9 parallel
+ * Reports the EIP-7702 delegation state of `address` across all 10 Q402
+ * chains in a single response. Read-only — runs 10 parallel
  * `eth_getCode` calls behind the server's RPC fan-out (so the caller
  * doesn't have to deal with CORS / rate limits on public RPCs).
  *

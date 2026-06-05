@@ -35,7 +35,8 @@ export type AgenticChainKey =
   | "mantle"
   | "injective"
   | "monad"
-  | "scroll";
+  | "scroll"
+  | "arbitrum";
 
 interface TokenCfg {
   address: Address;
@@ -179,6 +180,20 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     tokens: {
       USDC: { address: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6 },
       USDT: { address: "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", decimals: 6 },
+    },
+  },
+  arbitrum: {
+    key: "arbitrum",
+    id: 42161,
+    name: "Arbitrum",
+    rpc: process.env.ARBITRUM_RPC_URL ?? "https://arb1.arbitrum.io/rpc",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    domainName: "Q402 Arbitrum",
+    domainVersion: "1",
+    tokens: {
+      // Native Circle USDC (CCTP) — NOT the bridged USDC.e (0xFF970A61...).
+      USDC: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
+      USDT: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
     },
   },
 };

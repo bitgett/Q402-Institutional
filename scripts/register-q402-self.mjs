@@ -147,8 +147,8 @@ const METADATA = {
   name: "Q402 (by Quack AI) — Gasless Stablecoin Payment Rails for AI Agents",
   description:
     "Q402 is Quack AI's payment infrastructure for autonomous AI agents — gasless USDC / USDT " +
-    "settlement across 9 EVM chains (BNB, Ethereum, Avalanche, X Layer, Stable, Mantle, " +
-    "Injective, Monad, Scroll) via EIP-7702 type-4 transactions + EIP-712 TransferAuthorization. " +
+    "settlement across 10 EVM chains (BNB, Ethereum, Avalanche, X Layer, Stable, Mantle, " +
+    "Injective, Monad, Scroll, Arbitrum) via EIP-7702 type-4 transactions + EIP-712 TransferAuthorization. " +
     "Free trial on BNB Chain, paid plan for multichain. Install with `npx @quackai/q402-mcp` " +
     "for Claude, Codex CLI, Cursor, or Cline.",
   services: [

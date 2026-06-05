@@ -100,7 +100,7 @@ export default function HowItWorks() {
         >
           <h2 className="text-3xl md:text-4xl font-bold mb-4">How Q402 works</h2>
           <p className="text-white/40 max-w-lg mx-auto text-sm leading-relaxed">
-            Three addresses. One transaction. Works on any EVM chain — BNB, Ethereum, Avalanche, X Layer, Mantle, Injective, Stable, Monad, Scroll.
+            Three addresses. One transaction. Works on any EVM chain — BNB, Ethereum, Avalanche, X Layer, Mantle, Injective, Stable, Monad, Scroll, Arbitrum.
           </p>
         </motion.div>
 
@@ -156,6 +156,7 @@ export default function HowItWorks() {
                   { label: "STABLE", img: "/stable.jpg",    bg: "#0F2010" },
                   { label: "MONAD",  img: "/monad.png",     bg: "#836EF9" },
                   { label: "SCROLL", img: "/scroll.png",    bg: "#FFEEDA" },
+                  { label: "ARB",    img: "/arbitrum.png",  bg: "#28A0F0" },
                 ].map((c) => (
                   <div key={c.label} className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.bg }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}

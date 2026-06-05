@@ -43,6 +43,7 @@ const CHAINS = [
   { id: "injective", name: "Injective", color: "#0082FA", img: "/injective.png", rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "monad",     name: "Monad",     color: "#836EF9", img: "/monad.png",     rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "scroll",    name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "arbitrum",  name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png",  rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
 ];
 
 // value = credits granted at that price tier. Must stay in sync with
@@ -82,6 +83,7 @@ const CHAIN_PRICES: Record<string, readonly number[]> = {
   scroll:    UNIFIED_PRICES,
   avax:      UNIFIED_PRICES,
   eth:       UNIFIED_PRICES,
+  arbitrum:  UNIFIED_PRICES,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

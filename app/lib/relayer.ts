@@ -12,7 +12,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { loadRelayerKey } from "./relayer-key";
 
 // ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
-// All 9 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad / scroll) default to EIP-7702 Type 4 TXs.
+// All 10 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad / scroll / arbitrum) default to EIP-7702 Type 4 TXs.
 // X Layer additionally supports EIP-3009 as a USDC-only fallback.
 //
 // Chain → relay method:
@@ -69,6 +69,12 @@ const CHAIN_RPC_FALLBACKS: Record<string, string[]> = {
     "https://rpc.scroll.io",
     "https://scroll-mainnet.public.blastapi.io",
     "https://scroll.drpc.org",
+  ],
+  arbitrum: [
+    "https://arb1.arbitrum.io/rpc",
+    "https://arbitrum.publicnode.com",
+    "https://arbitrum.drpc.org",
+    "https://rpc.ankr.com/arbitrum",
   ],
 };
 
@@ -201,6 +207,24 @@ export const CHAIN_CONFIG = {
     usdc: { address: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6, symbol: "USDC" },
     usdt: { address: "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", decimals: 6, symbol: "USDT" },
   },
+  arbitrum: {
+    name: "Arbitrum",
+    rpc: "https://arb1.arbitrum.io/rpc",
+    chainId: 42161,
+    token: "ETH",
+    // Q402PaymentImplementationArbitrum — deterministic CREATE address from
+    // deployer 0xfc77...f466 at nonce 0 on Arbitrum One mainnet, matching the
+    // shared address used by Stable / Mantle / Injective / Scroll. EIP-7702
+    // live on Arbitrum One since ArbOS 40 "Callisto"; ArbOS 51 "Dia" activated
+    // 2026-01-08 refined precompile delegation behavior per spec.
+    implContract: process.env.ARBITRUM_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Native Circle USDC (CCTP) + canonical Tether on Arbitrum One. The legacy
+    // bridged USDC.e (0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8) is NOT supported
+    // — Q402 stays on native Circle USDC to avoid the bridged/native confusion
+    // that surfaced during Mantle's USDT migration.
+    usdc: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6, symbol: "USDC" },
+    usdt: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6, symbol: "USDT" },
+  },
 } as const;
 
 export type ChainKey = keyof typeof CHAIN_CONFIG;
@@ -312,7 +336,7 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
 
 // ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
 // Contract: 0x8D854436ab0426F5BC6Cc70865C90576AD523E73 (X Layer mainnet)
-// Witness type: TransferAuthorization (identical scheme across all 9 chains)
+// Witness type: TransferAuthorization (identical scheme across all 10 chains)
 // Key detail: verifyingContract = user's EOA (address(this) under EIP-7702)
 //             msg.sender must equal facilitator param
 const XLAYER_EIP7702_ABI = [

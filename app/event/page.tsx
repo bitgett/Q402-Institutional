@@ -60,7 +60,7 @@ export default function EventPage() {
           <div className="max-w-md text-center">
             <h1 className="text-3xl font-bold mb-3">Event ended</h1>
             <p className="text-white/65 text-sm mb-6">
-              The Free Trial event has wrapped. The full Q402 product is on the main landing — 9 chains, USDC / USDT / RLUSD, gasless.
+              The Free Trial event has wrapped. The full Q402 product is on the main landing — 10 chains, USDC / USDT / RLUSD, gasless.
             </p>
             <Link
               href="/"

@@ -1,5 +1,5 @@
 /**
- * agentic-wallet-balance.ts — 9-chain USDC + USDT balance reader.
+ * agentic-wallet-balance.ts — 10-chain USDC + USDT balance reader.
  *
  * Reads the Agent Wallet's stablecoin balances across every supported
  * EVM chain in parallel. Each chain uses viem's multicall so the two

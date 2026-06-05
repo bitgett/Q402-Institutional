@@ -73,7 +73,7 @@ describe(`chain-count drift (${chainCount} EVM chains)`, () => {
     // dropping a chain) is caught by this file as well — the other
     // assertions cascade-fail with confusing messages otherwise.
     expect(Object.keys(manifest.chains).sort()).toEqual(
-      ["avax", "bnb", "eth", "injective", "mantle", "monad", "scroll", "stable", "xlayer"],
+      ["arbitrum", "avax", "bnb", "eth", "injective", "mantle", "monad", "scroll", "stable", "xlayer"],
     );
   });
 });

@@ -71,12 +71,12 @@ describe("/api/relay/batch route", () => {
 
   it("rejects non-batchable chains (xlayer / stable) with CHAIN_NOT_BATCHABLE", () => {
     // The server is the authoritative chain gate for batching. Browser
-    // SDK + Node client + MCP tool schema all agree on the same 7-chain
-    // set (avax / bnb / eth / mantle / injective / monad / scroll); this
-    // assertion locks the server in lockstep. Adding a new batchable
+    // SDK + Node client + MCP tool schema all agree on the same 8-chain
+    // set (avax / bnb / eth / mantle / injective / monad / scroll / arbitrum);
+    // this assertion locks the server in lockstep. Adding a new batchable
     // chain means updating this regex AND the SDK/MCP allowlists.
     expect(batchRouteSrc).toMatch(/CHAIN_NOT_BATCHABLE/);
-    expect(batchRouteSrc).toMatch(/BATCHABLE_CHAINS[\s\S]*?"avax"[\s\S]*?"bnb"[\s\S]*?"eth"[\s\S]*?"mantle"[\s\S]*?"injective"[\s\S]*?"monad"[\s\S]*?"scroll"/);
+    expect(batchRouteSrc).toMatch(/BATCHABLE_CHAINS[\s\S]*?"avax"[\s\S]*?"bnb"[\s\S]*?"eth"[\s\S]*?"mantle"[\s\S]*?"injective"[\s\S]*?"monad"[\s\S]*?"scroll"[\s\S]*?"arbitrum"/);
     expect(batchRouteSrc).not.toMatch(/BATCHABLE_CHAINS[^)]*"xlayer"/);
     expect(batchRouteSrc).not.toMatch(/BATCHABLE_CHAINS[^)]*"stable"/);
   });
@@ -196,12 +196,12 @@ describe.skipIf(!mcpAvailable)("MCP server q402_batch_pay registration", () => {
     expect(mcpBatchToolSrc).toMatch(/recipientAllowlistGuardBatch/);
   });
 
-  it("input schema restricts chain to the 7-chain batchable set", () => {
+  it("input schema restricts chain to the 8-chain batchable set", () => {
     // xlayer + stable must NOT appear in the Zod enum or in the JSON
     // schema enum — the server is authoritative but the tool surface
     // should fail fast for the agent. Same set as Node client + server.
-    expect(mcpBatchToolSrc).toMatch(/z\.enum\(\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective",\s*"monad",\s*"scroll"\s*\]\)/);
-    expect(mcpBatchToolSrc).toMatch(/enum:\s*\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective",\s*"monad",\s*"scroll"\s*\]/);
+    expect(mcpBatchToolSrc).toMatch(/z\.enum\(\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective",\s*"monad",\s*"scroll",\s*"arbitrum"\s*\]\)/);
+    expect(mcpBatchToolSrc).toMatch(/enum:\s*\[\s*"avax",\s*"bnb",\s*"eth",\s*"mantle",\s*"injective",\s*"monad",\s*"scroll",\s*"arbitrum"\s*\]/);
     // Negative: xlayer / stable should NOT appear in either enum.
     // (They may still appear in comments — restrict the check to the
     // schema declarations only via tight surrounding context.)
