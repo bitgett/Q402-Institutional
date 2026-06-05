@@ -166,6 +166,14 @@ const nativeBridgeUsedKey = (addr: string) => `bridge_native_used:${addr.toLower
 // for the state machine.
 const ccipPendingFundKey = (addr: string, chain: string) =>
   `ccip_pending_fund:${addr.toLowerCase()}:${chain}`;
+
+// Pending clear-delegation debit. Written when the on-chain clear tx
+// mines but recording the gas debit fails (e.g. KV blip). The same
+// reconciliation cron picks these up + INCRBYFLOATs the owed amount.
+// Key includes txHash so multiple pending clears against the same
+// (owner, chain) don't collide.
+const ccipPendingClearDebitKey = (addr: string, chain: string, txHash: string) =>
+  `ccip_pending_clear_debit:${addr.toLowerCase()}:${chain}:${txHash.toLowerCase()}`;
 const webhookKey         = (addr: string) => `webhook:${addr.toLowerCase()}`;
 const webhookDeliveryKey = (addr: string) => `webhook_delivery:${addr.toLowerCase()}`;
 
@@ -1571,6 +1579,60 @@ export async function clearPendingFund(address: string, chain: string): Promise<
   try {
     await kv.del(ccipPendingFundKey(address, chain));
   } catch { /* del is best-effort — TTL will sweep */ }
+}
+
+/**
+ * Pending clear-delegation debit record. Written by /api/wallet/agentic/
+ * clear-delegation when the on-chain clear succeeded but the gas-debit
+ * write to `bridge_native_used` threw. Reconciled by the same cron as
+ * pending funds, on a separate scan pass.
+ */
+export interface PendingClearDebitRecord {
+  txHash:        string;
+  estimatedEth:  number;  // pre-tx estimate, ceiling
+  ownerLc:       string;
+  chain:         string;
+  submittedAt:   number;
+}
+
+export async function setPendingClearDebit(rec: PendingClearDebitRecord): Promise<void> {
+  if (!isCCIPLinkChain(rec.chain)) return;
+  await kv.set(
+    ccipPendingClearDebitKey(rec.ownerLc, rec.chain, rec.txHash),
+    rec,
+    { ex: 3600 },
+  );
+}
+
+export async function clearPendingClearDebit(
+  addr: string,
+  chain: string,
+  txHash: string,
+): Promise<void> {
+  if (!isCCIPLinkChain(chain)) return;
+  try {
+    await kv.del(ccipPendingClearDebitKey(addr, chain, txHash));
+  } catch { /* TTL will sweep */ }
+}
+
+export async function listPendingClearDebitKeys(maxItems = 500): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | number = 0;
+  let iters = 0;
+  do {
+    const [next, batch]: [string | number, string[]] = await kv.scan(cursor, {
+      match: "ccip_pending_clear_debit:*",
+      count: 200,
+    });
+    cursor = next;
+    for (const k of batch) {
+      keys.push(k);
+      if (keys.length >= maxItems) return keys;
+    }
+    iters++;
+    if (iters > 200) break;
+  } while (String(cursor) !== "0");
+  return keys;
 }
 
 /**

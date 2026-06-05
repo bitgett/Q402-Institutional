@@ -662,15 +662,16 @@ export function AgenticWalletBridgeModal({
                           ? `Propagation buffer · ${clearElapsedSec}s left, then bridge fires`
                           : clearing === "failed"
                             ? "Clear delegation & retry bridge"
-                            : "Clear delegation & retry bridge (sponsored, ≈25s)"}
+                            : `Clear delegation & retry bridge (~25s, debits Gas Tank ${srcMeta.native})`}
                   </button>
                 )}
                 {errorCode === "AGENT_WALLET_DELEGATED" && (
                   <div className="text-[10.5px] text-white/55 leading-relaxed">
-                    One tap clears the EIP-7702 delegation on your Agent Wallet
-                    (Q402 sponsors the gas), then re-fires this bridge automatically.
-                    A future Q402 send will re-delegate the wallet — so bridge first
-                    if you have both to do.
+                    One tap clears the EIP-7702 delegation on your Agent Wallet,
+                    then re-fires this bridge automatically. The clear-tx gas
+                    (~$0.05–$0.20) debits from your Gas Tank {srcMeta.native} bucket
+                    on {srcMeta.label}. A future Q402 send will re-delegate the
+                    wallet — so bridge first if you have both to do.
                   </div>
                 )}
               </div>

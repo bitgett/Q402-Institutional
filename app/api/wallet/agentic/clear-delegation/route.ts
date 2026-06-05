@@ -38,7 +38,11 @@ import {
 import { broadcastClear, type SignedAuthorization } from "@/app/lib/eip7702";
 import { AGENTIC_CHAINS, isAgenticChainKey } from "@/app/lib/agentic-wallet-sign";
 import type { ChainKey } from "@/app/lib/relayer";
-import { getGasBalance, recordNativeBridgeUsage } from "@/app/lib/db";
+import {
+  getGasBalance,
+  recordNativeBridgeUsage,
+  setPendingClearDebit,
+} from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { isCCIPChain } from "@/app/lib/ccip";
 
@@ -220,21 +224,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         await recordNativeBridgeUsage(owner, chain, actualClearGasEth);
       }
     } catch (debitErr) {
-      // Failed to fetch receipt OR record usage. Pages ops with the full
-      // delta so the drift can be reconciled by hand. We do NOT change
-      // the success response shape — the on-chain clear already happened
-      // and the user expects to proceed to bridge.
+      // Failed to fetch receipt OR record usage. Persist a pending-debit
+      // row so the reconciliation cron can backfill the INCRBYFLOAT next
+      // tick instead of relying solely on the ops Telegram message
+      // (which can be missed / archived). We still page ops with the
+      // full delta. We do NOT change the success response shape — the
+      // on-chain clear already happened and the user expects to bridge.
       const err = debitErr instanceof Error ? debitErr.message : String(debitErr);
+      await setPendingClearDebit({
+        txHash:       result.txHash,
+        estimatedEth: estimatedClearGasEth,
+        ownerLc:      owner,
+        chain,
+        submittedAt:  Date.now(),
+      }).catch((pendingErr) => {
+        console.error("[clear-delegation] setPendingClearDebit failed", {
+          owner, chain, txHash: result.txHash,
+          err: pendingErr instanceof Error ? pendingErr.message : String(pendingErr),
+        });
+      });
       void sendOpsAlert(
-        `<b>🚨 Clear-delegation gas debit FAILED</b>\n\n` +
+        `<b>🚨 Clear-delegation gas debit FAILED — pending row written</b>\n\n` +
         `Owner: <code>${owner}</code>\n` +
         `Chain: ${chain}\n` +
         `Agent Wallet: <code>${agentAddr}</code>\n` +
         `Clear txHash: <code>${result.txHash}</code>\n` +
         `Estimated cost: ${estimatedClearGasEth.toFixed(6)} ETH\n` +
         `Error: ${err.slice(0, 200)}\n\n` +
-        `Manually INCRBYFLOAT bridge_native_used:${owner.toLowerCase()}.${chain} ` +
-        `by the actual gas cost from the tx receipt.`,
+        `Reconcile cron will retry. Manual fix: INCRBYFLOAT ` +
+        `bridge_native_used:${owner.toLowerCase()}.${chain} by the actual gas cost.`,
         "error",
       ).catch(() => { /* best-effort */ });
     }

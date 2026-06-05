@@ -42,6 +42,7 @@ import { loadGasTankKey } from "@/app/lib/gastank-key";
 import { CHAIN_CONFIG } from "@/app/lib/relayer";
 import { RELAYER_ADDRESS } from "@/app/lib/wallets";
 import { CCIP_CONFIG, type CCIPChainKey } from "@/app/lib/ccip";
+import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -156,6 +157,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       `Detail: ${keyResult.detail}`,
       "warn",
     ).catch(() => { /* best-effort */ });
+    await recordCronStatus(CRON_NAMES.TREASURY_REBALANCE, {
+      lastStatus: "error",
+      lastError:  `gastank_key_${keyResult.reason}: ${keyResult.detail}`,
+      durationMs: 0,
+    });
     return NextResponse.json(
       { error: "GASTANK_KEY_UNAVAILABLE", reason: keyResult.reason, detail: keyResult.detail },
       { status: 500 },
@@ -177,26 +183,53 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     let relayerNative = 0n;
     let gastankNative = 0n;
     let gastankLink   = 0n;
+    let feeData: ethers.FeeData | null = null;
     try {
-      [senderNative, senderLink, relayerNative, gastankNative, gastankLink] = await Promise.all([
+      [senderNative, senderLink, relayerNative, gastankNative, gastankLink, feeData] = await Promise.all([
         probeBalanceWei(provider, sender),
         probeErc20Wei(provider, LINK_TOKEN_PER_CCIP[chain], sender),
         probeBalanceWei(provider, RELAYER_ADDRESS),
         probeBalanceWei(provider, keyResult.address),
         probeErc20Wei(provider, LINK_TOKEN_PER_CCIP[chain], keyResult.address),
+        Promise.race([
+          provider.getFeeData(),
+          new Promise<never>((_, r) => setTimeout(() => r(new Error("timeout")), 5_000)),
+        ]),
       ]);
     } catch (e) {
       console.error(`[treasury-rebalance] probe failed on ${chain}:`, e);
       continue;
     }
 
+    // ── Gas-budget reservation (FIX 65) ──────────────────────────────
+    // GASTANK pays gas for every sweep it submits. Without reservation:
+    //   • A sender-native sweep that takes ALL of gastankNative leaves
+    //     zero for its own gas → tx fails "insufficient funds".
+    //   • A LINK transfer (no value, just calldata) still needs ~55k
+    //     gas worth of native to submit. Burning all of gastankNative
+    //     on sender-native leaves the LINK transfer dead.
+    // Reserve up to 3 txs × 80k gas × current maxFeePerGas, capped so
+    // a degenerate gas price spike can't reserve more than the
+    // gastank actually holds.
+    const maxFeePerGas = feeData?.maxFeePerGas ?? feeData?.gasPrice ?? 0n;
+    const GAS_PER_TX  = 80_000n;   // 21k native send + safety / 55k ERC-20 transfer + safety
+    const MAX_TXS_PER_TICK = 3n;
+    const gasReserveWei = maxFeePerGas * GAS_PER_TX * MAX_TXS_PER_TICK;
+    const gasReserveCapped = gasReserveWei > gastankNative
+      ? gastankNative
+      : gasReserveWei;
+    const gastankSpendableNative = gastankNative > gasReserveCapped
+      ? gastankNative - gasReserveCapped
+      : 0n;
+
     // ── Sender native ───────────────────────────────────────────────
+    let senderNativeSweepPlanned = 0n;
     {
       const thresholdWei = ethers.parseEther(SENDER_NATIVE_THRESHOLD_WHOLE[chain].toString());
       if (senderNative < thresholdWei) {
         const targetWei = thresholdWei * 2n;
         const needed = targetWei - senderNative;
-        const sweep = needed > gastankNative ? gastankNative : needed;
+        const sweep = needed > gastankSpendableNative ? gastankSpendableNative : needed;
         if (sweep > 0n) {
           const amountWhole = Number(ethers.formatEther(sweep));
           plans.push({
@@ -208,13 +241,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
             amountWhole,
             estUsd:      amountWhole * NATIVE_USD_PER_TOKEN[chain],
           });
+          senderNativeSweepPlanned = sweep;
         }
       }
     }
     // ── Sender LINK ─────────────────────────────────────────────────
+    // LINK transfers cost native gas too — only plan if gastank has
+    // enough native left after the reserve to cover ONE LINK tx.
     {
       const thresholdWei = ethers.parseUnits(SENDER_LINK_THRESHOLD_WHOLE[chain].toString(), 18);
-      if (senderLink < thresholdWei) {
+      const linkTxGasNeeded = maxFeePerGas * GAS_PER_TX;
+      const gastankNativeRemaining = gastankNative - senderNativeSweepPlanned;
+      if (
+        senderLink < thresholdWei &&
+        gastankLink > 0n &&
+        gastankNativeRemaining >= linkTxGasNeeded
+      ) {
         const targetWei = thresholdWei * 2n;
         const needed = targetWei - senderLink;
         const sweep = needed > gastankLink ? gastankLink : needed;
@@ -238,13 +280,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       if (relayerNative < thresholdWei) {
         const targetWei = thresholdWei * 2n;
         const needed = targetWei - relayerNative;
-        // Reserve enough native in GASTANK for any planned sender-native
-        // sweep this tick — process sender first, relayer second.
-        const senderNativeQueued = plans
-          .filter(p => p.chain === chain && p.asset === "native")
-          .reduce((a, p) => a + p.amountWei, 0n);
-        const gastankAvail = gastankNative > senderNativeQueued
-          ? gastankNative - senderNativeQueued
+        // Reserve enough native in GASTANK for: (a) the sender-native
+        // sweep planned this tick, (b) gas to actually pay for THIS
+        // relayer-native tx.
+        const gastankAvail = gastankSpendableNative > senderNativeSweepPlanned
+          ? gastankSpendableNative - senderNativeSweepPlanned
           : 0n;
         const sweep = needed > gastankAvail ? gastankAvail : needed;
         if (sweep > 0n) {
@@ -263,37 +303,78 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // ── Daily cap gate ───────────────────────────────────────────────
-  // Per chain, drop any plan that would push today's spend past the cap.
-  // Surviving plans get atomically incremented in KV before tx submit so
-  // a concurrent run can't double-spend the budget.
+  // ── Atomic daily cap gate (FIX 64) ───────────────────────────────
+  // Each plan calls INCRBYFLOAT BEFORE submitting the tx. If the result
+  // exceeds the cap, the plan is dropped AND the increment is rolled
+  // back via a negative INCRBYFLOAT. If the tx itself fails, we also
+  // roll back. This closes the lost-update window where two concurrent
+  // cron runs both observed `already=$X` and both passed the gate.
+  //
+  // The spendKey carries a 36h TTL set explicitly via `kv.expire` after
+  // the first increment of the day (a separate KV op because INCRBYFLOAT
+  // doesn't accept ex options on Upstash).
   const filtered: SweepPlan[] = [];
   const dropped: Array<{ plan: SweepPlan; reason: string }> = [];
-  const perChainSpend = new Map<string, number>();
+  const reservedPerPlan = new Map<SweepPlan, number>();
+  // Track which spendKeys we've already touched this tick so we set
+  // the TTL exactly once per key (subsequent INCRBYFLOATs preserve it).
+  const ttlSetForKey = new Set<string>();
+
   for (const p of plans) {
     const cap = dailyCapUsd(p.chain);
     const spendKey = dailySpendKey(p.chain);
-    let already = perChainSpend.get(p.chain);
-    if (already === undefined) {
-      const raw = await kv.get<number | string>(spendKey);
-      already = typeof raw === "string" ? parseFloat(raw) : (raw ?? 0);
-      if (!Number.isFinite(already)) already = 0;
-      perChainSpend.set(p.chain, already);
-    }
-    if ((already ?? 0) + p.estUsd > cap) {
-      dropped.push({ plan: p, reason: `daily_cap_${cap}_USD_already_${(already ?? 0).toFixed(2)}` });
+    let newTotal: number;
+    try {
+      newTotal = await (
+        kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> }
+      ).incrbyfloat(spendKey, p.estUsd);
+    } catch (e) {
+      // INCRBYFLOAT unavailable / KV blip — drop this plan rather than
+      // silently fall back to a lossy RMW that re-opens the race.
+      dropped.push({
+        plan: p,
+        reason: `kv_incrbyfloat_failed: ${e instanceof Error ? e.message.slice(0, 80) : "rpc_error"}`,
+      });
       continue;
     }
-    perChainSpend.set(p.chain, (already ?? 0) + p.estUsd);
+    if (newTotal > cap) {
+      // Refund the reservation so the OTHER chain's plans this tick
+      // (or the next tick) still have room.
+      await (kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> })
+        .incrbyfloat(spendKey, -p.estUsd)
+        .catch(() => { /* TTL will sweep on day rollover */ });
+      dropped.push({
+        plan: p,
+        reason: `daily_cap_${cap}_USD_would_reach_${newTotal.toFixed(2)}`,
+      });
+      continue;
+    }
+    if (!ttlSetForKey.has(spendKey)) {
+      // 36h TTL — survives UTC rollover lag. expire() on Upstash sets
+      // a fresh TTL each call; only run once per key per tick so a
+      // long-running tick doesn't keep bumping the expiry.
+      await (kv as unknown as { expire: (k: string, s: number) => Promise<number> })
+        .expire(spendKey, 36 * 60 * 60)
+        .catch(() => { /* worst case TTL just stays at whatever it was */ });
+      ttlSetForKey.add(spendKey);
+    }
+    reservedPerPlan.set(p, p.estUsd);
     filtered.push(p);
   }
 
-  // ── Execute survivors ────────────────────────────────────────────
+  // ── Execute reserved plans ───────────────────────────────────────
   const results: SweepResult[] = [];
   for (const p of filtered) {
     const cfg = CHAIN_CONFIG[p.chain];
     const provider = new ethers.JsonRpcProvider(cfg.rpc);
     const wallet = new ethers.Wallet(keyResult.privateKey, provider);
+    const refundReservation = async (): Promise<void> => {
+      const reserved = reservedPerPlan.get(p) ?? 0;
+      if (reserved <= 0) return;
+      await (kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> })
+        .incrbyfloat(dailySpendKey(p.chain), -reserved)
+        .catch(() => { /* TTL will sweep */ });
+    };
     try {
       let tx: ethers.TransactionResponse;
       if (p.asset === "native") {
@@ -313,19 +394,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
       const receipt = await tx.wait();
       if (!receipt || receipt.status !== 1) {
+        await refundReservation();
         results.push({ plan: p, ok: false, error: "tx_reverted", txHash: tx.hash });
         continue;
       }
       results.push({ plan: p, ok: true, txHash: tx.hash });
 
-      // Commit the spend after on-chain confirm — short window of
-      // double-spend exposure (between confirm and KV write) is
-      // acceptable for cron at 5min cadence.
-      await kv.set(
-        dailySpendKey(p.chain),
-        perChainSpend.get(p.chain) ?? 0,
-        { ex: 36 * 60 * 60 }, // 36h TTL — survives UTC rollover lag
-      ).catch(() => { /* TTL will sweep */ });
+      // Read the live spend total (post-INCRBYFLOAT) for the alert.
+      const liveSpend = await kv.get<number | string>(dailySpendKey(p.chain))
+        .then(r => typeof r === "string" ? parseFloat(r) : (r ?? 0))
+        .catch(() => 0);
 
       void sendOpsAlert(
         `💸 <b>GASTANK auto-rebalance</b>\n\n` +
@@ -333,10 +411,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         `Amount: ${p.amountWhole.toFixed(6)} ${p.asset} (~$${p.estUsd.toFixed(2)})\n` +
         `To: <code>${p.toAddress}</code>\n` +
         `Tx: <code>${tx.hash}</code>\n` +
-        `Today's spend on ${p.chain}: $${(perChainSpend.get(p.chain) ?? 0).toFixed(2)} / $${dailyCapUsd(p.chain)}`,
+        `Today's spend on ${p.chain}: $${liveSpend.toFixed(2)} / $${dailyCapUsd(p.chain)}`,
         "warn",
       ).catch(() => { /* best-effort */ });
     } catch (e) {
+      await refundReservation();
       results.push({
         plan: p,
         ok:   false,
@@ -363,6 +442,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const durationMs = Date.now() - startedAt;
+  const executed = results.filter(r => r.ok).length;
+  const failed   = results.filter(r => !r.ok).length;
+  await recordCronStatus(CRON_NAMES.TREASURY_REBALANCE, {
+    lastStatus: failed > 0 ? "error" : "success",
+    lastResult: {
+      planned:     plans.length,
+      reserved:    filtered.length,
+      executed,
+      failed,
+      droppedCap:  dropped.length,
+    },
+    ...(failed > 0
+      ? { lastError: `${failed}_sweeps_failed` }
+      : {}),
+    durationMs,
+  });
   return NextResponse.json({
     gastank:   keyResult.address,
     plans,
