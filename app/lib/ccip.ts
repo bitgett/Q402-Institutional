@@ -268,6 +268,15 @@ export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResu
   );
   const receipt = await tx.wait();
   if (!receipt) throw new Error("CCIP bridge: tx mined but receipt null");
+  // status === 1 success, 0 reverted. Without this check a reverted tx
+  // would fall through the event-scan loop (no BridgeInitiated emitted),
+  // return messageId = "" + feeRaw = 0n, and the caller would record a
+  // bogus "success" + skip the fee debit — even though the bridge never
+  // happened on chain. Fail loud instead so the route surfaces a clean
+  // CCIP_BRIDGE_FAILED.
+  if (receipt.status !== 1) {
+    throw new Error(`CCIP bridge: tx ${tx.hash} reverted on chain (status=${receipt.status})`);
+  }
 
   // Parse BridgeInitiated event for messageId + fee
   const iface = sender.interface;
@@ -282,6 +291,13 @@ export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResu
         break;
       }
     } catch { /* not our event */ }
+  }
+  // Defensive — receipt.status was 1 above, so the event MUST have been
+  // emitted. If we still didn't find it, something is wrong with the ABI
+  // mirror or the Sender contract — better to fail loud than record a
+  // success with empty messageId.
+  if (!messageId) {
+    throw new Error(`CCIP bridge: tx ${tx.hash} mined OK but BridgeInitiated event missing — ABI drift?`);
   }
 
   return {
