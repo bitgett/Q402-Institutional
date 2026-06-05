@@ -59,6 +59,7 @@ import {
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
+import { CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
 
 export const runtime = "nodejs";
 // 60s — first bridge runs approve.wait() + bridge.wait() back-to-back. ETH
@@ -543,27 +544,71 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         return NextResponse.json(body, { status: 409 });
       }
 
-      const [agentEth, feeData] = await Promise.all([
+      const [agentEth, feeData, latestBlock] = await Promise.all([
         probeProvider.getBalance(destReceiver),
         probeProvider.getFeeData(),
+        probeProvider.getBlock("latest"),
       ]);
-      const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
-      // executeBridge caps the bridge call at 300k gas + the optional
-      // approve tx at ~50k. 400k × maxFeePerGas is the comfortable
-      // ceiling so a marginal wallet doesn't ping-pong between "OK"
-      // and "short" on borderline gas-price ticks.
-      const gasCeilingWei = maxFeePerGas * 400_000n;
+
+      // ── Approve detection ─────────────────────────────────────────
+      // executeBridge does a one-time USDC.approve(Sender, MAX) on the
+      // first bridge per (wallet, chain). On every subsequent bridge
+      // the allowance is already infinite, so we don't need to fund
+      // for that 56k-ish gas. Probe the live allowance and size the
+      // budget accordingly.
+      const usdcAddr = CHAIN_CONFIG[src as ChainKey].usdc.address;
+      const senderAddr = CCIP_CONFIG[src].sender;
+      const ALLOWANCE_SELECTOR = "0xdd62ed3e"; // allowance(address,address)
+      const allowanceCall =
+        ALLOWANCE_SELECTOR +
+        destReceiver.replace(/^0x/, "").toLowerCase().padStart(64, "0") +
+        senderAddr.replace(/^0x/, "").toLowerCase().padStart(64, "0");
+      let needsApprove = true;
+      try {
+        const allowanceHex = await probeProvider.call({ to: usdcAddr, data: allowanceCall });
+        const allowance = BigInt(allowanceHex);
+        needsApprove = allowance < amountRaw;
+      } catch {
+        // Allowance probe failed — assume approve needed (safer to
+        // overfund slightly than to under-fund and revert).
+      }
+
+      // ── Fee estimate ──────────────────────────────────────────────
+      // `maxFeePerGas` from getFeeData() is `baseFee × 2 + tip` which
+      // is what Ethereum requires as the balance-check at submission
+      // time. But the bridge tx pays only `currentBaseFee + tip` at
+      // mining, so funding for full maxFeePerGas leaves a big spare
+      // sitting in the Agent Wallet. Use `baseFee × 1.5 + tip` —
+      // still covers one block of baseFee growth (EIP-1559 max +12.5%)
+      // and the tip surface, while shaving ~25% off the fund amount.
+      const baseFee = latestBlock?.baseFeePerGas ?? 0n;
+      const tipFee  = feeData.maxPriorityFeePerGas
+        ?? ethers.parseUnits("0.2", "gwei");
+      // Submission ceiling: what the chain requires at tx-submit time.
+      const submitMaxFeePerGas = baseFee > 0n
+        ? (baseFee * 15n) / 10n + tipFee
+        : (feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n);
+      // Gas budget: approve (56k) + bridge (315k) = 371k. Pad to 380k
+      // with approve, 320k without. Tighter than the previous 400k
+      // because the actual usage from real receipts is 313k bridge +
+      // 56k approve, so even 380k leaves only 7k headroom (well
+      // within the tolerance of the 50% buffer above on the fee).
+      const gasNeeded = needsApprove ? 380_000n : 320_000n;
+      const gasCeilingWei = submitMaxFeePerGas * gasNeeded;
       if (agentEth < gasCeilingWei) {
-        // 20% buffer over the bare delta so a single bridge doesn't
-        // exhaust the funded amount and force another top-up on the
-        // next bridge.
-        const fundDeltaWei = ((gasCeilingWei - agentEth) * 12n) / 10n;
+        // 10% buffer over the bare delta. Down from 20% — combined
+        // with the tighter fee estimate above, this cuts the "first
+        // bridge" upfront cost roughly in half without risking
+        // submission-time reverts. The actual leftover (mining price
+        // < submit ceiling) still gets carried forward to subsequent
+        // bridges, so cumulative spend over many bridges is unchanged.
+        const fundDeltaWei = ((gasCeilingWei - agentEth) * 11n) / 10n;
         const fundDeltaEth = Number(fundDeltaWei) / 1e18;
         // Worst-case funding-tx gas cost — used for both the relayer
         // pre-check below and the upper bound of what the user could be
         // billed if the receipt comes back with effectiveGasPrice == 0
         // (which would be a chain bug, but we surface it cleanly).
-        const fundGasMaxWei = maxFeePerGas * FUND_GAS_LIMIT;
+        const fundGasMaxWei = submitMaxFeePerGas * FUND_GAS_LIMIT;
         const fundGasMaxEth = Number(fundGasMaxWei) / 1e18;
 
         // ── Gate 1: user Gas Tank covers everything ─────────────────
@@ -740,7 +785,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // We never reach executeBridge without the debit being on the
         // ledger; that's the whole P1 close.
         const actualFundGasUsed   = fundReceipt.gasUsed ?? 0n;
-        const actualFundGasPrice  = fundReceipt.gasPrice ?? maxFeePerGas;
+        const actualFundGasPrice  = fundReceipt.gasPrice ?? submitMaxFeePerGas;
         const actualFundGasWei    = actualFundGasUsed * actualFundGasPrice;
         const actualFundGasEth    = Number(actualFundGasWei) / 1e18;
         const debitEth            = fundDeltaEth + actualFundGasEth;
