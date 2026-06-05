@@ -38,6 +38,9 @@ import {
 import { broadcastClear, type SignedAuthorization } from "@/app/lib/eip7702";
 import { AGENTIC_CHAINS, isAgenticChainKey } from "@/app/lib/agentic-wallet-sign";
 import type { ChainKey } from "@/app/lib/relayer";
+import { getGasBalance, recordNativeBridgeUsage } from "@/app/lib/db";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
+import { isCCIPChain } from "@/app/lib/ccip";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -128,6 +131,44 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // ── Gas Tank pre-check (CCIP chains only) ───────────────────────────
+  //
+  // The clear-delegation tx is paid by the relayer hot wallet but the
+  // outlay should land on the USER's Gas Tank — not Q402. Without this
+  // gate every bridge-recovery clear would silently subsidise the user.
+  // Estimate cost = ~60k gas × maxFeePerGas (60k = broadcastClear's
+  // 50k headroom + a 20% buffer for the actual tx variance).
+  //
+  // Scope: only debit on chains we already have a native-bridge-usage
+  // bucket for (eth/avax/arbitrum). On other chains the existing
+  // sponsored behaviour stays for now — separate Gas Tank
+  // attribution bucket would need to land first.
+  const debitFromGasTank = isCCIPChain(chain);
+  let estimatedClearGasEth = 0;
+  if (debitFromGasTank) {
+    const feeData = await publicClient.estimateFeesPerGas().catch(() => null);
+    const probedMaxFeePerGas = feeData?.maxFeePerGas
+      ?? (await publicClient.getBlock().then(b => (b.baseFeePerGas ?? 0n) * 2n).catch(() => 0n));
+    const estimatedWei = probedMaxFeePerGas * 60_000n;
+    estimatedClearGasEth = Number(estimatedWei) / 1e18;
+    const gasBal = await getGasBalance(owner);
+    const tankAvailEth = gasBal[chain] ?? 0;
+    if (tankAvailEth < estimatedClearGasEth) {
+      return NextResponse.json(
+        {
+          error:        "INSUFFICIENT_NATIVE_BALANCE",
+          chain,
+          requiredEth:  estimatedClearGasEth,
+          availableEth: tankAvailEth,
+          message:
+            `Your Gas Tank native on ${chain} is short ${(estimatedClearGasEth - tankAvailEth).toFixed(6)} ` +
+            `to cover the clear-delegation tx. Top up the Gas Tank and retry.`,
+        },
+        { status: 402 },
+      );
+    }
+  }
+
   // ── Sign the clearing authorization (address = 0x0) ─────────────────
   const nonce = await publicClient.getTransactionCount({ address: agentAddr });
   const account = privateKeyToAccount(agenticPk as Hex);
@@ -153,17 +194,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     s:       auth.s,
   };
 
+  let result: Awaited<ReturnType<typeof broadcastClear>>;
   try {
-    const result = await broadcastClear(chain as ChainKey, agentAddr, signedAuth);
-    return NextResponse.json({
-      success:     true,
-      txHash:      result.txHash,
-      blockNumber: result.blockNumber,
-      gasUsed:     result.gasUsed,
-      finalCode:   result.finalCode,
-      address:     agentAddr,
-      chain,
-    });
+    result = await broadcastClear(chain as ChainKey, agentAddr, signedAuth);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json(
@@ -171,4 +204,52 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 502 },
     );
   }
+
+  // ── Debit actual gas from user's Gas Tank ──────────────────────────
+  let actualClearGasEth = 0;
+  if (debitFromGasTank) {
+    try {
+      // broadcastClear returns gasUsed as a string and writes back to the
+      // chain so we can refetch the receipt for the effective gas price.
+      const receipt = await publicClient.getTransactionReceipt({ hash: result.txHash as Hex });
+      const gasUsedWei  = receipt.gasUsed ?? 0n;
+      const gasPriceWei = receipt.effectiveGasPrice ?? 0n;
+      const actualWei   = gasUsedWei * gasPriceWei;
+      actualClearGasEth = Number(actualWei) / 1e18;
+      if (actualClearGasEth > 0) {
+        await recordNativeBridgeUsage(owner, chain, actualClearGasEth);
+      }
+    } catch (debitErr) {
+      // Failed to fetch receipt OR record usage. Pages ops with the full
+      // delta so the drift can be reconciled by hand. We do NOT change
+      // the success response shape — the on-chain clear already happened
+      // and the user expects to proceed to bridge.
+      const err = debitErr instanceof Error ? debitErr.message : String(debitErr);
+      void sendOpsAlert(
+        `<b>🚨 Clear-delegation gas debit FAILED</b>\n\n` +
+        `Owner: <code>${owner}</code>\n` +
+        `Chain: ${chain}\n` +
+        `Agent Wallet: <code>${agentAddr}</code>\n` +
+        `Clear txHash: <code>${result.txHash}</code>\n` +
+        `Estimated cost: ${estimatedClearGasEth.toFixed(6)} ETH\n` +
+        `Error: ${err.slice(0, 200)}\n\n` +
+        `Manually INCRBYFLOAT bridge_native_used:${owner.toLowerCase()}.${chain} ` +
+        `by the actual gas cost from the tx receipt.`,
+        "error",
+      ).catch(() => { /* best-effort */ });
+    }
+  }
+
+  return NextResponse.json({
+    success:           true,
+    txHash:            result.txHash,
+    blockNumber:       result.blockNumber,
+    gasUsed:           result.gasUsed,
+    finalCode:         result.finalCode,
+    address:           agentAddr,
+    chain,
+    // null on non-CCIP chains (sponsored), >0 when we debited the user.
+    debitedEth:        debitFromGasTank ? actualClearGasEth : null,
+    estimatedDebitEth: debitFromGasTank ? estimatedClearGasEth : null,
+  });
 }
