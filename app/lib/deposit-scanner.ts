@@ -135,6 +135,105 @@ export async function scanNativeDeposits(
   return { deposits: found, chunkFailures, chunkTotal };
 }
 
+// ─── LINK ERC-20 Transfer scanner (CCIP bridge Gas Tank) ────────────────────
+
+/**
+ * CCIP chains where users can deposit LINK to fund the bridge Gas Tank.
+ * Scope is strict: only chains where Q402CCIPSender is deployed AND the
+ * USDC pool has the other 2 chains in its supported-destinations set.
+ *
+ * Token addresses canonical (Chainlink mainnet LINK):
+ *   eth      0x514910771AF9Ca656af840dff83E8264EcF986CA
+ *   avax     0x5947BB275c521040051D82396192181b413227A3  (avax-native LINK, OFT)
+ *   arbitrum 0xf97f4df75117a78c1A5a0DBb814Af92458539FB4  (canonical-bridged LINK)
+ */
+export const LINK_DEPOSIT_CHAINS = [
+  { key: "eth",      name: "Ethereum",     rpc: "https://ethereum.publicnode.com",       linkToken: "0x514910771AF9Ca656af840dff83E8264EcF986CA", blockWindow: 50,   explorer: "https://etherscan.io/tx/" },
+  { key: "avax",     name: "Avalanche",    rpc: "https://api.avax.network/ext/bc/C/rpc", linkToken: "0x5947BB275c521040051D82396192181b413227A3", blockWindow: 300,  explorer: "https://snowtrace.io/tx/" },
+  { key: "arbitrum", name: "Arbitrum One", rpc: "https://arb1.arbitrum.io/rpc",          linkToken: "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4", blockWindow: 5000, explorer: "https://arbiscan.io/tx/" },
+] as const;
+
+export type LinkDepositChain = typeof LINK_DEPOSIT_CHAINS[number];
+
+const ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+export interface LinkScanMatch {
+  /** ERC-20 sender — credited to their Gas Tank LINK slot for this chain. */
+  fromAddress: string;
+  /** LINK amount as 18-decimal fractional (e.g. 0.05 = 0.05 LINK). */
+  amount: number;
+  txHash: string;
+  blockNumber: number;
+}
+
+export interface LinkScanResult {
+  matches:       LinkScanMatch[];
+  rangeFrom:     number;
+  rangeTo:       number;
+  rpcCallFailed: boolean;
+}
+
+/**
+ * Walk the most-recent block window on a CCIP chain looking for LINK
+ * ERC-20 Transfer events where `to == facilitator`. Each match is a new
+ * deposit to credit to the sender's Gas Tank LINK slot.
+ *
+ * Filter uses eth_getLogs with the canonical Transfer topic + the LINK
+ * token contract + a padded facilitator address in topic[2]. Much cheaper
+ * than the block-scan path the native scanner uses — LINK is low-volume
+ * compared to native gas, so we can hit a single getLogs call per chain
+ * per sweep instead of 50-6000 getBlockByNumber requests.
+ *
+ * Dedup against the storage layer is the caller's responsibility (via
+ * `addLinkDeposit`'s SADD txHash set in db.ts).
+ */
+export async function scanLinkDeposits(
+  chain: LinkDepositChain,
+  facilitator: string,
+): Promise<LinkScanResult> {
+  const provider = new ethers.JsonRpcProvider(chain.rpc);
+  let current: number;
+  try {
+    current = await Promise.race([
+      provider.getBlockNumber(),
+      new Promise<never>((_, r) => setTimeout(() => r(new Error("timeout")), 5000)),
+    ]);
+  } catch {
+    return { matches: [], rangeFrom: 0, rangeTo: 0, rpcCallFailed: true };
+  }
+  const fromBlock = Math.max(0, current - chain.blockWindow);
+  const toBlock = current;
+
+  // Pad facilitator to 32-byte topic. Lowercase + leading zeros.
+  const padded = "0x" + facilitator.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+
+  try {
+    const logs = await provider.getLogs({
+      address:   chain.linkToken,
+      fromBlock,
+      toBlock,
+      topics:    [ERC20_TRANSFER_TOPIC, null, padded],
+    });
+    const matches: LinkScanMatch[] = [];
+    for (const log of logs) {
+      const fromTopic = log.topics[1];
+      if (!fromTopic) continue;
+      const fromAddress = "0x" + fromTopic.slice(26); // last 20 bytes
+      const valueRaw = BigInt(log.data);             // amount in 18-decimal
+      const amount = Number(valueRaw) / 1e18;
+      matches.push({
+        fromAddress,
+        amount,
+        txHash:      log.transactionHash,
+        blockNumber: log.blockNumber,
+      });
+    }
+    return { matches, rangeFrom: fromBlock, rangeTo: toBlock, rpcCallFailed: false };
+  } catch {
+    return { matches: [], rangeFrom: fromBlock, rangeTo: toBlock, rpcCallFailed: true };
+  }
+}
+
 /**
  * Operator alert (Telegram) — new gas-tank deposit credited.
  *
