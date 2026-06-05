@@ -117,7 +117,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_recurring_skip_next` | api key | Skip only the next fire |
 | `q402_recurring_cancel` | api key | Permanently stop a rule |
 | `q402_bridge_quote` | none | Quote a CCIP USDC bridge (LINK + native fee) |
-| `q402_bridge_send` | live mode | Execute cross-chain USDC bridge (sandbox in v0.8.2) |
+| `q402_bridge_send` | live mode | Execute cross-chain USDC bridge (sandbox-only today; live execution lands once session-binding ships) |
 | `q402_bridge_history` | api key | Recent bridges per owner |
 | `q402_bridge_gas_tank` | api key | Per-chain LINK + native Gas Tank balance |
 

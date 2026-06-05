@@ -42,6 +42,7 @@ import {
   CCIP_CONFIG,
   quoteBridgeFee,
   executeBridge,
+  getCCIPProvider,
   type CCIPChainKey,
   type FeeTokenKind,
 } from "@/app/lib/ccip";
@@ -53,6 +54,7 @@ import {
   getSubscription,
   hasMultichainScope,
 } from "@/app/lib/db";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 
 export const runtime = "nodejs";
 // 60s — first bridge runs approve.wait() + bridge.wait() back-to-back. ETH
@@ -387,6 +389,50 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
     }
 
+    // ── Pre-flight: Agent Wallet on-chain gas (source chain) ────────────
+    // The bridge tx is sent by the Agent Wallet itself (signed with its
+    // server-held private key) and pays its own source-chain gas — this
+    // is distinct from the Gas Tank LINK/native bucket above, which only
+    // funds the CCIP fee. Without this check a fresh-from-zero Agent
+    // Wallet (the common case) would sign + submit, the tx would land
+    // on-chain with "insufficient funds for intrinsic transaction cost",
+    // the user would burn one challenge for nothing, and the modal would
+    // surface a confusing revert detail.
+    try {
+      const probeProvider = getCCIPProvider(src);
+      const [agentEth, feeData] = await Promise.all([
+        probeProvider.getBalance(destReceiver),
+        probeProvider.getFeeData(),
+      ]);
+      const maxFeePerGas = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+      // executeBridge caps the bridge call at 300k gas + the optional
+      // approve tx at ~50k. 400k is the comfortable ceiling so a marginal
+      // wallet doesn't ping-pong between "OK" and "short" on borderline
+      // gas-price ticks.
+      const minRequired = maxFeePerGas * 400_000n;
+      if (agentEth < minRequired) {
+        const requiredEth = Number(minRequired) / 1e18;
+        const availableEth = Number(agentEth) / 1e18;
+        const body: Record<string, unknown> = {
+          error:       "AGENT_WALLET_GAS_LOW",
+          chain:       src,
+          address:     destReceiver,
+          requiredEth,
+          availableEth,
+          message:
+            `Your Agent Wallet on ${src} needs ~${requiredEth.toFixed(5)} native ` +
+            `to cover the source-chain bridge tx. Send native directly to ` +
+            `${destReceiver} (the Agent Wallet address) and retry.`,
+        };
+        await finaliseClaim("failed", 402, body);
+        return NextResponse.json(body, { status: 402 });
+      }
+    } catch {
+      // RPC blip on the probe — let executeBridge proceed and surface
+      // whatever error the actual tx returns. The probe is a UX guard,
+      // not a security gate.
+    }
+
     // ── Execute bridge ──────────────────────────────────────────────────
     let result;
     try {
@@ -401,20 +447,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const body: Record<string, unknown> = {
-        error: "CCIP_BRIDGE_FAILED",
-        detail: msg.slice(0, 400),
-      };
-      await finaliseClaim("failed", 502, body);
-      return NextResponse.json(body, { status: 502 });
+      // Late detection — pre-flight probe may have missed (RPC blip) or
+      // gas spiked between probe and submit. Promote the underlying viem
+      // error to the same friendly code so the dashboard renders the
+      // same "fund the Agent Wallet" CTA either way.
+      const isGasLow = /insufficient funds for intrinsic transaction cost|insufficient funds for gas/i.test(msg);
+      const body: Record<string, unknown> = isGasLow
+        ? {
+            error:   "AGENT_WALLET_GAS_LOW",
+            chain:   src,
+            address: destReceiver,
+            message:
+              `Your Agent Wallet on ${src} needs source-chain native to cover the bridge tx. ` +
+              `Send native directly to ${destReceiver} and retry.`,
+          }
+        : {
+            error: "CCIP_BRIDGE_FAILED",
+            detail: msg.slice(0, 400),
+          };
+      await finaliseClaim("failed", isGasLow ? 402 : 502, body);
+      return NextResponse.json(body, { status: isGasLow ? 402 : 502 });
     }
 
     // ── KV updates (debit Gas Tank + record history) ────────────────────
-    // Tolerate KV write failures here: the on-chain tx already mined, so
-    // the user owes the fee. Logging the failure + writing the history
-    // record afterwards is best-effort — the idempotency claim still
-    // carries the messageId so a retry can re-debit if the first attempt
-    // truly dropped on the floor.
+    //
+    // Every KV write here happens AFTER the bridge tx has already mined
+    // on-chain. The user has spent. Any KV failure must:
+    //   1. NOT propagate back to the user (their on-chain side is fine)
+    //   2. NOT swallow the failure silently — accounting drift between
+    //      on-chain spend and our ledger is exactly the class of incident
+    //      we need ops to know about within seconds, not next quarter
+    //   3. Preserve the success response shape so the dashboard renders
+    //      messageId / source tx / CCIP explorer link and the user can
+    //      track the message — the receipt is more important than the
+    //      bookkeeping.
     const actualFeeWhole = Number(result.feeRaw) / 1e18;
     try {
       if (feeToken === "LINK") {
@@ -423,12 +489,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         await recordNativeBridgeUsage(owner, src, actualFeeWhole);
       }
     } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
       console.error("[ccip/send] gas-tank debit failed (on-chain tx already mined)", {
         owner,
         src,
+        feeToken,
+        actualFeeWhole,
         messageId: result.messageId,
-        err: e instanceof Error ? e.message : String(e),
+        err,
       });
+      // Fire-and-forget — ops alert MUST NOT delay the success response
+      // back to the user (their tx is on-chain regardless).
+      void sendOpsAlert(
+        `<b>⚠ CCIP gas-tank debit failed (on-chain tx already mined)</b>\n\n` +
+        `Owner: <code>${owner}</code>\n` +
+        `Chain: ${src} · feeToken: ${feeToken}\n` +
+        `Fee owed: ${actualFeeWhole} ${feeToken === "LINK" ? "LINK" : "native"}\n` +
+        `messageId: <code>${result.messageId}</code>\n` +
+        `Error: ${err.slice(0, 200)}`,
+        "error",
+      ).catch(() => { /* alert dispatch best-effort */ });
     }
 
     const histRec: BridgeHistoryRecord = {
@@ -452,11 +532,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         kv.set(messageIdMapKey(result.messageId), histRec, { ex: 30 * 24 * 60 * 60 }), // 30d TTL
       ]);
     } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
       console.error("[ccip/send] history write failed (on-chain tx already mined)", {
         owner,
         messageId: result.messageId,
-        err: e instanceof Error ? e.message : String(e),
+        err,
       });
+      void sendOpsAlert(
+        `<b>⚠ CCIP history write failed (on-chain tx already mined)</b>\n\n` +
+        `Owner: <code>${owner}</code>\n` +
+        `Chain: ${src} → ${dst}\n` +
+        `messageId: <code>${result.messageId}</code>\n` +
+        `txHash: <code>${result.txHash}</code>\n` +
+        `Error: ${err.slice(0, 200)}\n\n` +
+        `Replay the entry from CCIP Explorer if a user files a missing-bridge ticket.`,
+        "error",
+      ).catch(() => { /* alert dispatch best-effort */ });
     }
 
     const responseBody: Record<string, unknown> = {
@@ -475,7 +566,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       approveTxHash:  result.approveTxHash,
       sendId,
     };
-    await finaliseClaim("success", 200, responseBody);
+    // finaliseClaim is best-effort — the on-chain tx already succeeded,
+    // so a transient KV write failure on the success record must NOT
+    // mask the success response from the user. (The cost of returning
+    // 500 here is the user re-firing the bridge with a fresh challenge,
+    // which would actually double-spend if the second attempt happens
+    // to hit a KV-recovered state.) Ops gets a durable Telegram marker
+    // so the missing claim row can be backfilled by hand if needed.
+    try {
+      await finaliseClaim("success", 200, responseBody);
+    } catch (e) {
+      const err = e instanceof Error ? e.message : String(e);
+      console.error("[ccip/send] success-claim finalisation failed (on-chain tx already mined)", {
+        owner,
+        messageId: result.messageId,
+        sendId,
+        err,
+      });
+      void sendOpsAlert(
+        `<b>⚠ CCIP success-claim KV write failed (on-chain tx already mined)</b>\n\n` +
+        `Owner: <code>${owner}</code>\n` +
+        `sendId: <code>${sendId}</code>\n` +
+        `messageId: <code>${result.messageId}</code>\n` +
+        `Error: ${err.slice(0, 200)}\n\n` +
+        `User received success response; idempotency claim row may be missing — ` +
+        `a same-intent retry will not be served from cache.`,
+        "error",
+      ).catch(() => { /* alert dispatch best-effort */ });
+    }
     return NextResponse.json(responseBody);
   } finally {
     await releaseLock();

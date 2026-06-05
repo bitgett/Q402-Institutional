@@ -85,11 +85,16 @@ interface SendResponse {
   srcExplorer?:   string;
   approveTxHash?: string;
   error?:         string;
+  message?:       string;
   code?:          string;
   detail?:        string;
   required?:      number;
   available?:     number;
   chain?:         string;
+  // AGENT_WALLET_GAS_LOW companion fields
+  address?:       string;
+  requiredEth?:   number;
+  availableEth?:  number;
 }
 
 interface ConfirmResponse {
@@ -748,6 +753,14 @@ function friendlyBridgeError(status: number, body: SendResponse): string {
   }
   if (code === "CCIP_QUOTE_FAILED") {
     return "Couldn't reach the CCIP router to quote the fee. Wait a moment and retry.";
+  }
+  if (code === "AGENT_WALLET_GAS_LOW") {
+    const addr = body.address ? `${body.address.slice(0, 8)}…${body.address.slice(-6)}` : "your Agent Wallet";
+    const need = typeof body.requiredEth === "number" ? body.requiredEth.toFixed(5) : "~0.0008";
+    return (
+      `Your Agent Wallet (${addr}) needs ~${need} ${body.chain === "avax" ? "AVAX" : "ETH"} on ${body.chain ?? "the source chain"} ` +
+      `to cover bridge-tx gas. Send native directly to the Agent Wallet address and retry.`
+    );
   }
   if (code === "CCIP_BRIDGE_FAILED") {
     return `Bridge tx reverted on source chain. ${body.detail ? `Detail: ${body.detail.slice(0, 140)}` : ""}`.trim();

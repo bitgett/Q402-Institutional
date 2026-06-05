@@ -51,6 +51,16 @@ describe("getGasBalance — negative drift alert", () => {
     expect(dbSrc).toMatch(/sendOpsAlert/);
   });
 
+  it("drift alert's `used` aggregates relay-gas + native-bridge usage (FIX 41 undercount fix)", () => {
+    // Without this, the alert payload understates the actual on-chain
+    // spend on CCIP chains because the bridge counter is silently
+    // dropped from the breakdown.
+    const fn = dbSrc.match(/export async function getGasBalance[\s\S]+?\n\}/);
+    expect(fn).toBeTruthy();
+    const body = fn![0];
+    expect(body).toMatch(/usedOnChain[\s\S]*?usedTotals\[chain\][\s\S]*?nativeBridgeUsedTotals\[chain\]/);
+  });
+
   it("subtracts CCIP native-fee bridge usage from the balance (FIX 32 regression guard)", () => {
     // Previously the route at /api/ccip/send wrote
     // recordNativeBridgeUsage on a native-fee bridge, but the read

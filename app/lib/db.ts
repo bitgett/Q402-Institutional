@@ -559,7 +559,12 @@ export async function getGasBalance(address: string): Promise<Record<string, num
   for (const chain of Object.keys(totals)) {
     if (totals[chain] < 0) {
       const depositedOnChain = deposits.filter(d => d.chain === chain).reduce((a, d) => a + d.amount, 0);
-      const usedOnChain      = usedTotals[chain] ?? 0;
+      // `used` must aggregate BOTH the relay-gas counter (usedTotals) and
+      // the CCIP native-fee bridge counter (nativeBridgeUsedTotals);
+      // otherwise the ops alert understates the actual on-chain spend on
+      // CCIP chains and the deficit number looks smaller than it really is.
+      const usedOnChain =
+        (usedTotals[chain] ?? 0) + (nativeBridgeUsedTotals[chain] ?? 0);
       drifting.push({ chain, balance: totals[chain], deposited: depositedOnChain, used: usedOnChain });
       totals[chain] = 0;
     }
