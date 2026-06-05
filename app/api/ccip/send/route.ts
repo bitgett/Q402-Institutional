@@ -258,14 +258,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   ]);
 
   return NextResponse.json({
-    success:       true,
-    messageId:     result.messageId,
-    txHash:        result.txHash,
-    blockNumber:   result.blockNumber,
-    feeRaw:        result.feeRaw.toString(),
-    feeWhole:      actualFeeWhole,
+    success:        true,
+    messageId:      result.messageId,
+    txHash:         result.txHash,
+    blockNumber:    result.blockNumber,
+    feeRaw:         result.feeRaw.toString(),
+    feeWhole:       actualFeeWhole,
     feeToken,
-    ccipExplorer:  `https://ccip.chain.link/msg/${result.messageId}`,
-    srcExplorer:   `${CCIP_CONFIG[src].explorer}/tx/${result.txHash}`,
+    ccipExplorer:   `https://ccip.chain.link/msg/${result.messageId}`,
+    srcExplorer:    `${CCIP_CONFIG[src].explorer}/tx/${result.txHash}`,
+    // Present iff the Agentic Wallet's USDC allowance was insufficient and
+    // we auto-submitted approve(MAX) before the bridge. One-time per wallet
+    // per chain — subsequent bridges skip this leg.
+    approveTxHash:  result.approveTxHash,
   });
 }

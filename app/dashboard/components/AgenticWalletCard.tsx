@@ -28,6 +28,7 @@ import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
 import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
 import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
+import { AgenticWalletBridgeModal } from "./AgenticWalletBridgeModal";
 import { AgenticWalletWithdrawModal, type WithdrawBucket } from "./AgenticWalletWithdrawModal";
 import { AgenticWalletRecurringSection } from "./AgenticWalletRecurringSection";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
@@ -158,6 +159,7 @@ export function AgenticWalletCard({
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  const [bridgeOpen, setBridgeOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [balance, setBalance] = useState<BalancePayload | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -362,6 +364,17 @@ export function AgenticWalletCard({
                 : "Batch sends require an active multichain subscription. Open the Payment tab to activate one."
             }
           />
+          <ActionPill
+            label={hasMultichainScope ? "Bridge USDC" : "Bridge USDC (Paid)"}
+            disabled={archived || !hasMultichainScope}
+            onClick={() => setBridgeOpen(true)}
+            iconArrow="bridge"
+            title={
+              hasMultichainScope
+                ? "Cross-chain USDC via Chainlink CCIP — ETH / AVAX / Arbitrum triangle."
+                : "Cross-chain bridging requires an active multichain subscription."
+            }
+          />
         </div>
 
         {/* Secondary utility row — wallet maintenance, low risk. */}
@@ -422,15 +435,17 @@ export function AgenticWalletCard({
           )}
         </div>
 
-        {/* Cross-chain USDC bridge (Chainlink CCIP) — v0.8.2 surfaces the
-            availability + lane matrix. Full in-modal bridge flow lives
-            on the API/MCP side until a dedicated Bridge modal lands as a
-            follow-up. Banner is hidden on chains that aren't part of the
-            3-chain CCIP triangle. */}
-        <div className="mt-3 px-3 py-2.5 rounded-xl border border-yellow/20 bg-yellow/[0.04]">
+        {/* Cross-chain USDC bridge (Chainlink CCIP). The Bridge button up
+            top is the primary entrypoint; this banner just surfaces the
+            scope + a link to CCIP Explorer for anyone who wants to track
+            a message that didn't open from this session. */}
+        <div
+          className="mt-3 px-3 py-2.5 rounded-xl border"
+          style={{ borderColor: "rgba(250,204,21,0.25)", background: "rgba(250,204,21,0.04)" }}
+        >
           <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-yellow/85 font-medium mb-0.5">
+              <div className="text-[10px] uppercase tracking-widest text-yellow-300/90 font-medium mb-0.5">
                 Cross-chain USDC bridge · NEW
               </div>
               <div className="text-xs text-white/65">
@@ -442,15 +457,17 @@ export function AgenticWalletCard({
               href="https://ccip.chain.link/status"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-shrink-0 text-xs text-yellow/85 hover:text-yellow transition-colors"
+              className="flex-shrink-0 text-xs text-yellow-300/85 hover:text-yellow-200 transition-colors"
             >
               CCIP Explorer ↗
             </a>
           </div>
           <div className="mt-2 text-[10px] text-white/45">
-            Use <code className="text-yellow/80">q402_bridge_quote</code> + <code className="text-yellow/80">q402_bridge_send</code> from
-            any MCP client (Claude, Cursor, Cline, Codex) — install with <code className="text-yellow/80">npx @quackai/q402-mcp</code>.
-            Dedicated dashboard modal lands in a follow-up release.
+            Open the <span className="text-yellow-200">Bridge USDC</span> button above, or use{" "}
+            <code className="text-yellow-200">q402_bridge_quote</code> +{" "}
+            <code className="text-yellow-200">q402_bridge_send</code> from any MCP client
+            (Claude, Cursor, Cline, Codex) — install with{" "}
+            <code className="text-yellow-200">npx @quackai/q402-mcp</code>.
           </div>
         </div>
 
@@ -563,6 +580,21 @@ export function AgenticWalletCard({
           onClose={() => setAgentOpen(false)}
           onRegistered={() => {
             setAgentOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+
+      {bridgeOpen && (
+        <AgenticWalletBridgeModal
+          walletAddress={wallet.address}
+          walletId={wallet.walletId}
+          ownerAddress={address}
+          signMessage={signMessage}
+          hasMultichainScope={hasMultichainScope}
+          onClose={() => setBridgeOpen(false)}
+          onSent={() => {
+            setBridgeOpen(false);
             onChanged();
           }}
         />
@@ -801,7 +833,7 @@ function ActionPill({
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  iconArrow: "up-right" | "down-left" | "grid";
+  iconArrow: "up-right" | "down-left" | "grid" | "bridge";
   title?: string;
 }) {
   return (
@@ -829,9 +861,12 @@ function ActionPill({
   );
 }
 
-function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "grid" }) {
+function ArrowIcon({ kind }: { kind: "up-right" | "down-left" | "grid" | "bridge" }) {
   if (kind === "grid") {
     return <span className="text-sm leading-none">⇉</span>;
+  }
+  if (kind === "bridge") {
+    return <span className="text-sm leading-none">⇌</span>;
   }
   if (kind === "down-left") {
     return <span className="text-sm leading-none rotate-180 inline-block">↗</span>;
