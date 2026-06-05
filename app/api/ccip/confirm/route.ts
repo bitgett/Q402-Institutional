@@ -102,13 +102,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     avax:     11000,  // 6h / 2s
     arbitrum: 90000,  // 6h / 0.25s
   };
-  // Chunk size per provider. Public Arbitrum RPCs refuse single-call
-  // ranges > ~10k blocks; chunking keeps us under their limits and turns
-  // a single hard failure into N small-window retries that the surrounding
-  // try/catch swallows individually.
+  // Chunk size per provider. Public Avalanche RPCs (api.avax.network)
+  // hard-cap eth_getLogs at 2048 blocks per request; public Arbitrum
+  // RPCs refuse single-call ranges > ~10k blocks. Chunking keeps us
+  // under the smallest ceiling on each lane and turns a single hard
+  // failure into N small-window retries that the surrounding try/catch
+  // swallows individually. The old 5000-block value on AVAX silently
+  // never matched anything because the RPC returned a hard 32000 error
+  // before any logs were inspected — confirm polling looked alive but
+  // never flipped to "delivered" until the user reloaded.
   const CHUNK: Record<CCIPChainKey, number> = {
     eth:      2000,
-    avax:     5000,
+    avax:     2000,
     arbitrum: 5000,
   };
   const fromBlock = Math.max(0, current - WINDOW[dst]);
