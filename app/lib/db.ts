@@ -160,6 +160,12 @@ const linkDepKey         = (addr: string) => `gasdep_link:${addr.toLowerCase()}`
 const linkDepDedupKey    = (addr: string) => `gasdep_link_hashes:${addr.toLowerCase()}`;
 const linkUsedKey        = (addr: string) => `link_used:${addr.toLowerCase()}`;
 const nativeBridgeUsedKey = (addr: string) => `bridge_native_used:${addr.toLowerCase()}`;
+// One-pending-fund-tx-per-(owner, chain). Written before the funding tx
+// is broadcast, cleared once the debit has been recorded. Inline retries
+// and the reconciliation cron both key off this; see route + cron docs
+// for the state machine.
+const ccipPendingFundKey = (addr: string, chain: string) =>
+  `ccip_pending_fund:${addr.toLowerCase()}:${chain}`;
 const webhookKey         = (addr: string) => `webhook:${addr.toLowerCase()}`;
 const webhookDeliveryKey = (addr: string) => `webhook_delivery:${addr.toLowerCase()}`;
 
@@ -1514,6 +1520,82 @@ export async function recordNativeBridgeUsage(address: string, chain: string, am
     const cur = (await kv.get<number>(key)) ?? 0;
     await kv.set(key, cur + amount);
   }
+}
+
+/**
+ * Pending CCIP auto-fund record. Written before the funding tx is
+ * broadcast, cleared once the debit lands in `bridge_native_used`. The
+ * route's auto-fund block checks this on every entry so a fund tx whose
+ * wait() timed out on a previous attempt can be reconciled cleanly on
+ * the user's next bridge — without leaking relayer ETH or double-billing.
+ *
+ * State machine:
+ *   nil           — no pending fund
+ *   {pending}     — fund tx broadcast, no receipt yet OR receipt absent
+ *                   (just-mined-not-propagated)
+ *   {debited}     — receipt success, debit recorded, ready for delete
+ *                   (we delete in the same call rather than keeping
+ *                    "debited" rows around — present here only to make
+ *                    the transition explicit for callers)
+ *
+ * TTL: 1h. Beyond that the reconciliation cron fires an ops alert and
+ * deletes the row so an orphaned record can't stall the chain forever.
+ */
+export interface PendingFundRecord {
+  txHash:        string;
+  fundDeltaWei:  string;
+  submittedAt:   number;
+  intentFp:      string;
+  ownerLc:       string;
+  chain:         string;
+}
+
+export async function getPendingFund(address: string, chain: string): Promise<PendingFundRecord | null> {
+  if (!isCCIPLinkChain(chain)) return null;
+  try {
+    return (await kv.get<PendingFundRecord>(ccipPendingFundKey(address, chain))) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setPendingFund(rec: PendingFundRecord): Promise<void> {
+  if (!isCCIPLinkChain(rec.chain)) return;
+  // 1h TTL so a record never survives indefinitely if every retry path
+  // bypasses reconciliation for some reason.
+  await kv.set(ccipPendingFundKey(rec.ownerLc, rec.chain), rec, { ex: 3600 });
+}
+
+export async function clearPendingFund(address: string, chain: string): Promise<void> {
+  if (!isCCIPLinkChain(chain)) return;
+  try {
+    await kv.del(ccipPendingFundKey(address, chain));
+  } catch { /* del is best-effort — TTL will sweep */ }
+}
+
+/**
+ * Scan the entire KV namespace for pending fund records — used by the
+ * reconciliation cron. Caller iterates each, fetches the receipt, and
+ * debits/deletes as appropriate.
+ */
+export async function listPendingFundKeys(maxItems = 500): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | number = 0;
+  let iters = 0;
+  do {
+    const [next, batch]: [string | number, string[]] = await kv.scan(cursor, {
+      match: "ccip_pending_fund:*",
+      count: 200,
+    });
+    cursor = next;
+    for (const k of batch) {
+      keys.push(k);
+      if (keys.length >= maxItems) return keys;
+    }
+    iters++;
+    if (iters > 200) break;
+  } while (String(cursor) !== "0");
+  return keys;
 }
 
 /** Per-chain native-bridge consumption (for /api/gas-tank attribution). */

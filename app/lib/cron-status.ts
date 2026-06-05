@@ -81,6 +81,7 @@ export const CRON_NAMES = {
   DEPOSIT_SCAN: "deposit-scan",
   REPUTATION_WEEKLY: "reputation-weekly",
   RELAYER_BALANCE: "relayer-balance",
+  CCIP_PENDING_FUND_RECONCILE: "ccip-pending-fund-reconcile",
 } as const;
 export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
 
@@ -123,6 +124,14 @@ export const CRON_META: Record<CronName, CronMeta> = {
   // surfaces in the cron-status watchdog quickly: a stuck probe means
   // we lose visibility into whether the hot wallet is about to dip.
   [CRON_NAMES.RELAYER_BALANCE]: {
+    expectedIntervalMs: 5 * 60 * 1000,
+    staleAfterMs: 15 * 60 * 1000,
+  },
+  // Same 5-min Render heartbeat as deposit-scan. Stale 15 min window so
+  // a missed tick surfaces in the watchdog quickly — a stuck reconcile
+  // means relayer ETH could be sitting on Agent Wallets without the
+  // matching Gas Tank debit, which is exactly the gap this cron closes.
+  [CRON_NAMES.CCIP_PENDING_FUND_RECONCILE]: {
     expectedIntervalMs: 5 * 60 * 1000,
     staleAfterMs: 15 * 60 * 1000,
   },
