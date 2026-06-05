@@ -402,23 +402,38 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Agent Wallet address — defeating the Mode C promise that the user
     // only ever has to fund the Gas Tank.
     //
-    // Instead: pre-flight the Agent Wallet's native balance, top it up
-    // from the RELAYER hot wallet to (gas-ceiling × 1.2) when short, and
-    // debit the user's Gas Tank ETH bucket for the funded amount via
-    // recordNativeBridgeUsage. From the user's POV the bridge "just
-    // works" off the Gas Tank; the relayer is reimbursed on the next
-    // sweep that reconciles bucket-to-hot-wallet.
+    // Money-flow invariant (P1 — closed by FIX 44):
+    //   The relayer hot wallet's actual outlay = fundDeltaWei sent + the
+    //   gas the funding tx itself burned. Both MUST land on the user's
+    //   side of the ledger the moment the funding tx mines, REGARDLESS of
+    //   whether the downstream bridge tx succeeds. Otherwise a bridge
+    //   that reverts after a successful fund leaks relayer ETH.
     //
-    // Failure modes:
-    //   - User's Gas Tank doesn't cover (CCIP fee + fund delta) → 402,
-    //     friendly "top up Gas Tank" copy
-    //   - Relayer doesn't have ETH to fund → 503 RELAYER_LOW (FIX 26
-    //     pre-flight should catch it before we ever land here, but the
-    //     fund tx attempt below would also surface it)
-    //   - Fund tx submitted but didn't confirm in time → executeBridge
-    //     below catches "insufficient funds…" and reports it cleanly
+    //   Implementation: record the debit IMMEDIATELY after `fundTx.wait()`
+    //   returns a success receipt, BEFORE calling executeBridge. If the
+    //   record-debit call itself throws, abort with a critical ops alert
+    //   so the drift can be reconciled by hand — never silently swallow.
+    //
+    // Relayer pre-check (P2 — closed by FIX 46):
+    //   Probe the relayer's on-chain ETH balance and ensure it covers
+    //   (fundDeltaWei + the funding-tx gas ceiling). If short, surface
+    //   RELAYER_LOW directly instead of letting sendTransaction throw
+    //   downstream with a less specific error.
+    //
+    // Funding-tx gas debit (P2 — closed by FIX 45):
+    //   Charge the user for the actual gas the funding tx burned, taken
+    //   from the receipt (`gasUsed × effectiveGasPrice`). Otherwise the
+    //   relayer absorbs an ongoing ~21k-gas cost per bridge.
+    //
+    // Wait-timeout (FIX 47):
+    //   Bound `fundTx.wait()` so a chain hiccup can't blow the 60s Vercel
+    //   function ceiling. On timeout return AUTOFUND_PENDING with
+    //   Retry-After so the retry sees the agent wallet already funded
+    //   and skips the auto-fund leg entirely.
     let agentFundEth = 0;
     let agentFundTxHash: string | undefined;
+    const FUND_GAS_LIMIT = 21_000n;  // bare native transfer; no calldata
+    const FUND_TX_WAIT_MS = 25_000;
     try {
       const probeProvider = getCCIPProvider(src);
       const [agentEth, feeData] = await Promise.all([
@@ -437,34 +452,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // next bridge.
         const fundDeltaWei = ((gasCeilingWei - agentEth) * 12n) / 10n;
         const fundDeltaEth = Number(fundDeltaWei) / 1e18;
+        // Worst-case funding-tx gas cost — used for both the relayer
+        // pre-check below and the upper bound of what the user could be
+        // billed if the receipt comes back with effectiveGasPrice == 0
+        // (which would be a chain bug, but we surface it cleanly).
+        const fundGasMaxWei = maxFeePerGas * FUND_GAS_LIMIT;
+        const fundGasMaxEth = Number(fundGasMaxWei) / 1e18;
 
-        // Gate on user's Gas Tank ETH bucket. CCIP fee for native-token
-        // bridges also pulls from the same bucket below; we must cover
-        // both together OR fail closed.
+        // ── Gate 1: user Gas Tank covers everything ─────────────────
         const gasBal = await getGasBalance(owner);
         const tankAvailEth = gasBal[src] ?? 0;
         const ccipFeeInTank = feeToken === "native" ? feeWhole : 0;
-        const totalNeed = fundDeltaEth + ccipFeeInTank;
+        const totalNeed = fundDeltaEth + fundGasMaxEth + ccipFeeInTank;
         if (tankAvailEth < totalNeed) {
           const body: Record<string, unknown> = {
-            error:       "INSUFFICIENT_NATIVE_BALANCE",
-            chain:       src,
-            requiredEth: totalNeed,
+            error:        "INSUFFICIENT_NATIVE_BALANCE",
+            chain:        src,
+            requiredEth:  totalNeed,
             availableEth: tankAvailEth,
             message:
               `Your Gas Tank native on ${src} is short ${(totalNeed - tankAvailEth).toFixed(5)} ` +
-              `to cover the bridge (source-chain gas${ccipFeeInTank > 0 ? " + CCIP fee" : ""}). ` +
+              `to cover the bridge (source-chain gas + auto-fund tx gas${ccipFeeInTank > 0 ? " + CCIP fee" : ""}). ` +
               `Top up the Gas Tank and retry — Q402 funds the Agent Wallet automatically from there.`,
           };
           await finaliseClaim("failed", 402, body);
           return NextResponse.json(body, { status: 402 });
         }
 
-        // Fund the Agent Wallet from the relayer hot wallet. Best-effort
-        // wait for confirmation: if we time out, executeBridge will
-        // either succeed (the tx may have mined just after our wait) or
-        // fail with "insufficient funds" which the catch below promotes
-        // to a friendly error.
+        // ── Gate 2: relayer has on-chain native to fund + pay tx gas ─
         const relayerKey = loadRelayerKey();
         if (!relayerKey.ok) {
           const body: Record<string, unknown> = {
@@ -474,48 +489,192 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           await finaliseClaim("failed", 503, body);
           return NextResponse.json(body, { status: 503 });
         }
+        const relayerEth = await probeProvider.getBalance(relayerKey.address);
+        // Need fund + funding gas + a 1.5× margin for bridge-side
+        // settlements that may race on the same hot wallet.
+        const relayerMinRequired = fundDeltaWei + fundGasMaxWei + (fundGasMaxWei / 2n);
+        if (relayerEth < relayerMinRequired) {
+          void sendOpsAlert(
+            `<b>⚠ Relayer balance pre-check failed in CCIP send</b>\n\n` +
+            `Chain: ${src}\n` +
+            `Relayer: <code>${relayerKey.address}</code>\n` +
+            `Balance: ${(Number(relayerEth) / 1e18).toFixed(6)} ETH\n` +
+            `Need: ${(Number(relayerMinRequired) / 1e18).toFixed(6)} ETH\n` +
+            `Top up the relayer hot wallet.`,
+            "error",
+          ).catch(() => { /* best-effort */ });
+          const body: Record<string, unknown> = {
+            error:   "RELAYER_LOW",
+            message: `Q402 relay infrastructure on ${src} is refilling. Try again in a few minutes.`,
+          };
+          await finaliseClaim("failed", 503, body);
+          return NextResponse.json(body, { status: 503 });
+        }
+
+        // ── Submit funding tx ──────────────────────────────────────
         const relayerWallet = new ethers.Wallet(relayerKey.privateKey, probeProvider);
         const fundTx = await relayerWallet.sendTransaction({
-          to:    destReceiver,
-          value: fundDeltaWei,
+          to:       destReceiver,
+          value:    fundDeltaWei,
+          gasLimit: FUND_GAS_LIMIT,
         });
-        const fundReceipt = await fundTx.wait();
+
+        // ── Wait with timeout ──────────────────────────────────────
+        let fundReceipt: Awaited<ReturnType<typeof fundTx.wait>>;
+        try {
+          fundReceipt = await Promise.race([
+            fundTx.wait(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("FUND_WAIT_TIMEOUT")), FUND_TX_WAIT_MS),
+            ),
+          ]);
+        } catch (waitErr) {
+          const timedOut = waitErr instanceof Error && waitErr.message === "FUND_WAIT_TIMEOUT";
+          void sendOpsAlert(
+            `<b>⚠ CCIP auto-fund wait ${timedOut ? "timed out" : "errored"}</b>\n\n` +
+            `Owner: <code>${owner}</code>\n` +
+            `Chain: ${src}\n` +
+            `Agent Wallet: <code>${destReceiver}</code>\n` +
+            `Fund txHash: <code>${fundTx.hash}</code>\n` +
+            `Amount: ${fundDeltaEth.toFixed(5)} native\n` +
+            `Error: ${waitErr instanceof Error ? waitErr.message : String(waitErr)}\n\n` +
+            `If the tx eventually mines, the next bridge attempt will see the Agent Wallet ` +
+            `already funded and skip auto-fund — but the relayer's outlay won't be billed ` +
+            `unless the user retries with the SAME intent fingerprint (idempotency cache).`,
+            "warn",
+          ).catch(() => { /* best-effort */ });
+          const body: Record<string, unknown> = {
+            error:    "AGENT_WALLET_AUTOFUND_PENDING",
+            fundTx:   fundTx.hash,
+            message:
+              timedOut
+                ? "Auto-fund tx is mining. Retry in ~30s — Q402 will see the Agent Wallet funded and complete the bridge."
+                : "Auto-fund tx submitted but receipt couldn't be fetched. Retry in ~30s.",
+          };
+          await finaliseClaim("failed", 503, body);
+          return NextResponse.json(body, { status: 503, headers: { "Retry-After": "30" } });
+        }
+
         if (!fundReceipt) {
-          // Tx submitted but couldn't fetch receipt — abort defensively
-          // so we don't double-fund on retry. ops alert + 503.
+          // wait() returned null (no receipt) — defensive abort.
           void sendOpsAlert(
             `<b>⚠ CCIP auto-fund tx submitted but receipt null</b>\n\n` +
             `Owner: <code>${owner}</code>\n` +
             `Chain: ${src}\n` +
-            `Agent Wallet: <code>${destReceiver}</code>\n` +
             `Fund txHash: <code>${fundTx.hash}</code>\n` +
             `Amount: ${fundDeltaEth.toFixed(5)} native`,
             "warn",
           ).catch(() => { /* best-effort */ });
           const body: Record<string, unknown> = {
             error:   "AGENT_WALLET_AUTOFUND_PENDING",
-            message: "Agent Wallet auto-fund tx is pending on chain. Try again in ~30s.",
+            fundTx:  fundTx.hash,
+            message: "Auto-fund tx is pending on chain. Try again in ~30s.",
           };
           await finaliseClaim("failed", 503, body);
           return NextResponse.json(body, { status: 503, headers: { "Retry-After": "30" } });
         }
-        agentFundEth = fundDeltaEth;
+
+        // ── If the funding tx reverted (almost impossible for a bare
+        //    native transfer but guard anyway), there's nothing to debit.
+        if (fundReceipt.status !== 1) {
+          void sendOpsAlert(
+            `<b>⚠ CCIP auto-fund tx mined but reverted</b>\n\n` +
+            `Owner: <code>${owner}</code>\n` +
+            `Chain: ${src}\n` +
+            `Fund txHash: <code>${fundTx.hash}</code>`,
+            "error",
+          ).catch(() => { /* best-effort */ });
+          const body: Record<string, unknown> = {
+            error:  "AGENT_WALLET_AUTOFUND_FAILED",
+            detail: "fund_tx_reverted",
+            message: "Auto-fund tx mined but reverted on chain. Retry in a moment.",
+          };
+          await finaliseClaim("failed", 502, body);
+          return NextResponse.json(body, { status: 502 });
+        }
+
+        // ── DEBIT IMMEDIATELY ───────────────────────────────────────
+        // From here on, the relayer's ETH has already left. ANY failure
+        // below this line MUST either (a) succeed at recording the debit
+        // and proceed, or (b) record the debit anyway + alert ops + abort.
+        // We never reach executeBridge without the debit being on the
+        // ledger; that's the whole P1 close.
+        const actualFundGasUsed   = fundReceipt.gasUsed ?? 0n;
+        const actualFundGasPrice  = fundReceipt.gasPrice ?? maxFeePerGas;
+        const actualFundGasWei    = actualFundGasUsed * actualFundGasPrice;
+        const actualFundGasEth    = Number(actualFundGasWei) / 1e18;
+        const debitEth            = fundDeltaEth + actualFundGasEth;
+        try {
+          await recordNativeBridgeUsage(owner, src, debitEth);
+        } catch (debitErr) {
+          const err = debitErr instanceof Error ? debitErr.message : String(debitErr);
+          // CRITICAL — relayer ETH is gone, debit failed. Telegram-page
+          // ops with full detail so it can be reconciled by hand.
+          void sendOpsAlert(
+            `<b>🚨 CCIP auto-fund debit FAILED (relayer ETH leaked)</b>\n\n` +
+            `Owner: <code>${owner}</code>\n` +
+            `Chain: ${src}\n` +
+            `Agent Wallet: <code>${destReceiver}</code>\n` +
+            `Fund txHash: <code>${fundTx.hash}</code>\n` +
+            `Amount: ${fundDeltaEth.toFixed(6)} + ${actualFundGasEth.toFixed(6)} gas\n` +
+            `Debit error: ${err.slice(0, 200)}\n\n` +
+            `Manually debit ${debitEth.toFixed(6)} from bridge_native_used:${owner.toLowerCase()}.${src}.`,
+            "error",
+          ).catch(() => { /* best-effort */ });
+          const body: Record<string, unknown> = {
+            error:  "AUTOFUND_DEBIT_FAILED",
+            detail: err.slice(0, 200),
+            message:
+              "Auto-fund succeeded on chain but our ledger failed to record the debit. " +
+              "Q402 ops has been paged — your retry won't double-charge.",
+          };
+          await finaliseClaim("failed", 500, body);
+          return NextResponse.json(body, { status: 500 });
+        }
+
+        agentFundEth = debitEth;
         agentFundTxHash = fundTx.hash;
       }
     } catch (e) {
-      // RPC blip on the probe / fund — let executeBridge proceed and
-      // surface whatever error the actual tx returns. We don't 503 here
-      // because the probe is a UX guard, not a security gate, and the
-      // executeBridge catch below has a friendlyBridgeError pattern for
-      // the same "insufficient funds" string anyway.
-      console.error("[ccip/send] auto-fund probe threw, falling through to executeBridge", {
+      // Pre-fund probe / gas-tank check threw. Fail-closed so ops sees
+      // the real error and the user retries cleanly. No relayer ETH at
+      // risk here because sendTransaction wasn't reached.
+      const err = e instanceof Error ? e.message : String(e);
+      const errName = e instanceof Error ? e.constructor.name : "Error";
+      console.error("[ccip/send] auto-fund pre-broadcast threw — failing closed", {
         owner,
         src,
-        err: e instanceof Error ? e.message : String(e),
+        errName,
+        err,
       });
+      void sendOpsAlert(
+        `<b>⚠ CCIP auto-fund pre-broadcast threw</b>\n\n` +
+        `Owner: <code>${owner}</code>\n` +
+        `Chain: ${src}\n` +
+        `Agent Wallet: <code>${destReceiver}</code>\n` +
+        `Error class: ${errName}\n` +
+        `Error: ${err.slice(0, 300)}`,
+        "error",
+      ).catch(() => { /* best-effort */ });
+      const body: Record<string, unknown> = {
+        error:   "AGENT_WALLET_AUTOFUND_FAILED",
+        detail:  err.slice(0, 200),
+        message:
+          "Q402's auto-fund step couldn't be completed. Your Gas Tank wasn't debited — " +
+          "retry in a moment, and if it persists we'll see the trace on our side.",
+      };
+      await finaliseClaim("failed", 503, body);
+      return NextResponse.json(body, { status: 503 });
     }
 
     // ── Execute bridge ──────────────────────────────────────────────────
+    //
+    // Money state at this point:
+    //   - If we auto-funded, agentFundEth is ALREADY debited from the
+    //     native bucket; a bridge failure here does NOT leak relayer ETH.
+    //   - The CCIP fee (LINK or native) is debited AFTER a successful
+    //     executeBridge — that's correct because if the bridge fails, no
+    //     CCIP fee was burned on chain.
     let result;
     try {
       result = await executeBridge({
@@ -529,23 +688,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // Late detection — pre-flight probe may have missed (RPC blip) or
-      // gas spiked between probe and submit. Promote the underlying viem
-      // error to the same friendly code so the dashboard renders the
-      // same "fund the Agent Wallet" CTA either way.
+      // Late detection — pre-fund probe may have missed (RPC blip), gas
+      // spiked between probe and submit, or the funding tx hadn't
+      // propagated to every RPC node by the time executeBridge fetched
+      // the wallet balance. Promote the underlying viem error to a
+      // friendly code that points users at the right action (just wait
+      // and retry — they're already funded).
       const isGasLow = /insufficient funds for intrinsic transaction cost|insufficient funds for gas/i.test(msg);
       const body: Record<string, unknown> = isGasLow
         ? {
             error:   "AGENT_WALLET_GAS_LOW",
             chain:   src,
             address: destReceiver,
-            message:
-              `Your Agent Wallet on ${src} needs source-chain native to cover the bridge tx. ` +
-              `Send native directly to ${destReceiver} and retry.`,
+            ...(agentFundTxHash ? { agentFundTxHash, agentFundEth } : {}),
+            message: agentFundTxHash
+              ? "Auto-fund mined but the bridge RPC hadn't picked up the new balance yet. " +
+                "Retry in ~30s — Q402 won't re-fund (the Agent Wallet is already topped up)."
+              : `Q402 couldn't auto-fund the Agent Wallet's source-chain gas this attempt. ` +
+                `Make sure your Gas Tank native bucket has a small buffer on ${src} and retry.`,
           }
         : {
             error: "CCIP_BRIDGE_FAILED",
             detail: msg.slice(0, 400),
+            ...(agentFundTxHash ? { agentFundTxHash, agentFundEth } : {}),
           };
       await finaliseClaim("failed", isGasLow ? 402 : 502, body);
       return NextResponse.json(body, { status: isGasLow ? 402 : 502 });
@@ -564,23 +729,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     //      track the message — the receipt is more important than the
     //      bookkeeping.
     const actualFeeWhole = Number(result.feeRaw) / 1e18;
-    // For LINK-fee bridges we only debit the LINK bucket for the fee +
-    // the native bucket for any auto-fund top-up. For native-fee bridges
-    // we debit the native bucket once for (CCIP fee + auto-fund). Both
-    // counters are atomic per-chain (INCRBYFLOAT) so the per-(owner,src)
-    // lock above is enough to keep this consistent.
-    const nativeDebitEth =
-      (feeToken === "native" ? actualFeeWhole : 0) + agentFundEth;
+    // Auto-fund (fund native amount + funding-tx gas) is already debited
+    // ABOVE, immediately after the funding tx receipt confirmed — that's
+    // the P1 close, so the relayer can't leak ETH on a downstream bridge
+    // failure. Here we only debit the CCIP fee itself (either LINK or
+    // native bucket, depending on feeToken). Counters are atomic
+    // (INCRBYFLOAT) per chain.
     try {
       if (feeToken === "LINK") {
         await recordLinkUsage(owner, src, actualFeeWhole);
-      }
-      if (nativeDebitEth > 0) {
-        await recordNativeBridgeUsage(owner, src, nativeDebitEth);
+      } else {
+        await recordNativeBridgeUsage(owner, src, actualFeeWhole);
       }
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
-      console.error("[ccip/send] gas-tank debit failed (on-chain tx already mined)", {
+      console.error("[ccip/send] gas-tank fee debit failed (on-chain tx already mined)", {
         owner,
         src,
         feeToken,
@@ -592,11 +755,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // Fire-and-forget — ops alert MUST NOT delay the success response
       // back to the user (their tx is on-chain regardless).
       void sendOpsAlert(
-        `<b>⚠ CCIP gas-tank debit failed (on-chain tx already mined)</b>\n\n` +
+        `<b>⚠ CCIP fee debit failed (on-chain tx already mined)</b>\n\n` +
         `Owner: <code>${owner}</code>\n` +
         `Chain: ${src} · feeToken: ${feeToken}\n` +
         `Fee owed: ${actualFeeWhole} ${feeToken === "LINK" ? "LINK" : "native"}\n` +
-        (agentFundEth > 0 ? `Auto-fund owed: ${agentFundEth.toFixed(5)} native\n` : "") +
+        (agentFundEth > 0 ? `(Auto-fund of ${agentFundEth.toFixed(6)} native was already debited above.)\n` : "") +
         `messageId: <code>${result.messageId}</code>\n` +
         `Error: ${err.slice(0, 200)}`,
         "error",
