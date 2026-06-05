@@ -53,6 +53,13 @@ const ALLOWED_ACTIONS = new Set([
   "agentic.recurring.create",
   "agentic.recurring.update",
   "agentic.recurring.cancel",
+  // CCIP USDC bridge — intent is { walletId, src, dst, amount, feeToken }.
+  // /api/ccip/send rebuilds the canonical message from these fields and
+  // verifies the signature there. Without this whitelist entry the
+  // challenge endpoint refuses to mint, BridgeModal's getActionAuth
+  // returns null, and the user sees "Sign the bridge challenge…" with
+  // no wallet popup.
+  "ccip.bridge",
 ]);
 
 function isAddress(s: unknown): s is string {

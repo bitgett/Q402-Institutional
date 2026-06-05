@@ -178,6 +178,11 @@ describe("/api/auth/action-challenge route shape", () => {
     expect(src).toMatch(/agentic\.restore/);
     expect(src).toMatch(/agentic\.register/);
     expect(src).toMatch(/agentic\.register\.confirm/);
+    // CCIP bridge — without this entry the challenge endpoint refuses
+    // to mint and BridgeModal's getActionAuth returns null, leaving
+    // every bridge attempt stuck on "Sign the bridge challenge…" with
+    // no wallet popup. Regression guard for the FIX-36 incident.
+    expect(src).toMatch(/ccip\.bridge/);
   });
 
   it("rate-limits per IP and returns the canonical message body", () => {
