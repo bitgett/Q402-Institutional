@@ -291,6 +291,23 @@ const LINK_TOKEN: Record<"eth" | "avax" | "arbitrum", { address: string; explore
 
 type LinkChain = "eth" | "avax" | "arbitrum";
 
+// Chainlink mark — canonical hex shield asset from /public/link.jpg.
+// Kept behind a component so the LINK tile + the deposit modal share a
+// single source of truth (and so swapping for a future SVG/AVIF is a
+// one-line change).
+function ChainlinkLogo({ size = 22 }: { size?: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/link.jpg"
+      alt="Chainlink"
+      width={size}
+      height={size}
+      className="w-full h-full object-cover"
+    />
+  );
+}
+
 function LinkDepositModal({
   initialChain,
   balances,
@@ -333,7 +350,12 @@ function LinkDepositModal({
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-base">LINK Gas Tank · CCIP</h3>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full ring-1 ring-white/10 overflow-hidden">
+              <ChainlinkLogo size={28} />
+            </div>
+            <h3 className="font-bold text-base">LINK Gas Tank · CCIP</h3>
+          </div>
           <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
         </div>
 
@@ -2147,11 +2169,8 @@ export default function DashboardPage() {
                       style={{ background: "#375BD2", opacity: 0.55 }}
                     />
                     <div className="flex items-center gap-2.5 mb-4">
-                      <div
-                        className="w-8 h-8 rounded-full flex-shrink-0 ring-1 ring-white/10 flex items-center justify-center"
-                        style={{ background: "#375BD2" }}
-                      >
-                        <span className="text-white text-[11px] font-black tracking-tight">L</span>
+                      <div className="w-8 h-8 rounded-full flex-shrink-0 ring-1 ring-white/10 overflow-hidden">
+                        <ChainlinkLogo size={32} />
                       </div>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold leading-tight truncate">LINK</div>
