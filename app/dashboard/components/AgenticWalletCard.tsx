@@ -441,11 +441,14 @@ export function AgenticWalletCard({
             a message that didn't open from this session. */}
         <div
           className="mt-3 px-3 py-2.5 rounded-xl border"
-          style={{ borderColor: "rgba(250,204,21,0.25)", background: "rgba(250,204,21,0.04)" }}
+          style={{ borderColor: "rgba(245,197,24,0.25)", background: "rgba(245,197,24,0.04)" }}
         >
           <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="text-[10px] uppercase tracking-widest text-yellow-300/90 font-medium mb-0.5">
+              <div
+                className="text-[10px] uppercase tracking-widest font-medium mb-0.5"
+                style={{ color: "rgba(245,197,24,0.9)" }}
+              >
                 Cross-chain USDC bridge · NEW
               </div>
               <div className="text-xs text-white/65">
@@ -457,16 +460,16 @@ export function AgenticWalletCard({
               href="https://ccip.chain.link/status"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-shrink-0 text-xs text-yellow-300/85 hover:text-yellow-200 transition-colors"
+              className="flex-shrink-0 text-xs text-yellow hover:text-yellow-hover transition-colors"
             >
               CCIP Explorer ↗
             </a>
           </div>
           <div className="mt-2 text-[10px] text-white/45">
-            Open the <span className="text-yellow-200">Bridge USDC</span> button above to
+            Open the <span className="text-yellow">Bridge USDC</span> button above to
             run a real bridge from the dashboard. From an MCP client (Claude / Cursor / Cline /
             Codex) you can plan + cost a bridge with{" "}
-            <code className="text-yellow-200">q402_bridge_quote</code> — actual execution
+            <code className="text-yellow">q402_bridge_quote</code> — actual execution
             still happens here for now (intent-bound signing lives in the dashboard until
             session-binding lands).
           </div>
