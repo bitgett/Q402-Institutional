@@ -398,8 +398,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   };
 
   // Subscription gate — BNB free, others require multichain.
+  //
+  // Exception: withdraw-to-owner-EOA is always free. A trial user funding
+  // their Agent Wallet on a non-BNB chain (e.g. a prefund, a refund, an
+  // incoming USDC payment) would otherwise be trapped — they couldn't
+  // return their own funds to their own EOA without first upgrading. The
+  // outbound destination is restricted to the verified owner address, so
+  // this exception can't be used to send to arbitrary recipients.
   const sub = await getSubscription(owner);
-  if (body.chain !== "bnb" && !hasMultichainScope(sub)) {
+  const isWithdrawToOwner = body.to.toLowerCase() === owner.toLowerCase();
+  if (body.chain !== "bnb" && !hasMultichainScope(sub) && !isWithdrawToOwner) {
     await refundAndRelease();
     return NextResponse.json(
       { error: "SUBSCRIPTION_REQUIRED", message: "Multichain access requires a paid subscription." },
