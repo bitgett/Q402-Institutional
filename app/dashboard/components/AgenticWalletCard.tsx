@@ -463,11 +463,12 @@ export function AgenticWalletCard({
             </a>
           </div>
           <div className="mt-2 text-[10px] text-white/45">
-            Open the <span className="text-yellow-200">Bridge USDC</span> button above, or use{" "}
-            <code className="text-yellow-200">q402_bridge_quote</code> +{" "}
-            <code className="text-yellow-200">q402_bridge_send</code> from any MCP client
-            (Claude, Cursor, Cline, Codex) — install with{" "}
-            <code className="text-yellow-200">npx @quackai/q402-mcp</code>.
+            Open the <span className="text-yellow-200">Bridge USDC</span> button above to
+            run a real bridge from the dashboard. From an MCP client (Claude / Cursor / Cline /
+            Codex) you can plan + cost a bridge with{" "}
+            <code className="text-yellow-200">q402_bridge_quote</code> — actual execution
+            still happens here for now (intent-bound signing lives in the dashboard until
+            session-binding lands).
           </div>
         </div>
 

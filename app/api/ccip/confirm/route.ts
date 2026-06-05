@@ -102,18 +102,44 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     avax:     11000,  // 6h / 2s
     arbitrum: 90000,  // 6h / 0.25s
   };
+  // Chunk size per provider. Public Arbitrum RPCs refuse single-call
+  // ranges > ~10k blocks; chunking keeps us under their limits and turns
+  // a single hard failure into N small-window retries that the surrounding
+  // try/catch swallows individually.
+  const CHUNK: Record<CCIPChainKey, number> = {
+    eth:      2000,
+    avax:     5000,
+    arbitrum: 5000,
+  };
   const fromBlock = Math.max(0, current - WINDOW[dst]);
+  const chunkSize = CHUNK[dst];
 
   const paddedMessageId = body.messageId.toLowerCase();
-  let logs: ethers.Log[];
-  try {
-    logs = await provider.getLogs({
-      fromBlock,
-      toBlock: current,
-      topics:  [EXECUTION_STATE_CHANGED_TOPIC, null, null, paddedMessageId],
-    });
-  } catch (e) {
-    return NextResponse.json({ status: "unknown", detail: e instanceof Error ? e.message : "rpc_error" }, { status: 200 });
+  const logs: ethers.Log[] = [];
+  let chunkFailures = 0;
+  // Walk newest → oldest so a recent settlement short-circuits the
+  // outstanding chunks. CCIP execution is almost always within the most
+  // recent ~30% of the window — scanning backwards halves the average
+  // tail latency.
+  for (let to = current; to >= fromBlock; to -= chunkSize) {
+    const from = Math.max(fromBlock, to - chunkSize + 1);
+    try {
+      const chunk = await provider.getLogs({
+        fromBlock: from,
+        toBlock:   to,
+        topics:    [EXECUTION_STATE_CHANGED_TOPIC, null, null, paddedMessageId],
+      });
+      if (chunk.length > 0) {
+        logs.push(...chunk);
+        // Found the matching log — no need to scan older chunks. (CCIP
+        // re-execution would land in a NEWER block, not an older one.)
+        break;
+      }
+    } catch {
+      chunkFailures++;
+      // Continue to older chunks; partial RPC failure shouldn't kill the
+      // whole confirm probe. UI will re-poll on its 12s tick.
+    }
   }
 
   if (logs.length === 0) {
@@ -122,6 +148,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       messageId: body.messageId,
       dst,
       ccipExplorer: `https://ccip.chain.link/msg/${body.messageId}`,
+      ...(chunkFailures > 0 ? { chunkFailures } : {}),
     });
   }
 
