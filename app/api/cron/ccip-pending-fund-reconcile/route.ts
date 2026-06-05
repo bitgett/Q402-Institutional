@@ -32,8 +32,10 @@ import { requireCronAuth } from "@/app/lib/cron-auth";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
   listPendingFundKeys,
+  listPendingClearDebitKeys,
   recordNativeBridgeUsage,
   type PendingFundRecord,
+  type PendingClearDebitRecord,
 } from "@/app/lib/db";
 import { getCCIPProvider, isCCIPChain, type CCIPChainKey } from "@/app/lib/ccip";
 import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
@@ -87,9 +89,35 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     const provider = getCCIPProvider(rec.chain as CCIPChainKey);
-    const receipt = await provider.getTransactionReceipt(rec.txHash).catch(() => null);
+    // Distinguish "RPC errored" from "RPC returned null" (=tx not yet
+    // mined). Previously both were collapsed into `null`, so an RPC
+    // outage that ran longer than the orphan threshold would cause us
+    // to delete rows for real, mined funds.
+    let receipt: Awaited<ReturnType<typeof provider.getTransactionReceipt>> | null = null;
+    let receiptRpcErrored = false;
+    try {
+      receipt = await provider.getTransactionReceipt(rec.txHash);
+    } catch (rpcErr) {
+      receiptRpcErrored = true;
+      console.error("[ccip-pending-fund-reconcile] receipt RPC error", {
+        key,
+        chain: rec.chain,
+        txHash: rec.txHash,
+        err: rpcErr instanceof Error ? rpcErr.message.slice(0, 80) : "rpc_error",
+      });
+    }
 
     if (!receipt) {
+      // If the RPC itself errored, we cannot distinguish "not mined"
+      // from "mined but we can't see it." Skip this row this tick and
+      // never count it toward the orphan-age threshold — wait for the
+      // RPC to recover. Persistent failure (>3 ticks) gets a separate
+      // alert via the still_pending detail string.
+      if (receiptRpcErrored) {
+        stillPending++;
+        outcomes.push({ key, outcome: "still_pending", detail: "rpc_error" });
+        continue;
+      }
       // Still pending. If it's older than the orphan threshold, page
       // ops and delete — at that age a missing receipt means the tx
       // was dropped, replaced, or never broadcast.
@@ -150,6 +178,88 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // ── Pending clear-delegation debit reconciliation (FIX 68b) ────────
+  // Same shape as the fund reconciliation but the row stores the
+  // estimated gas cost (no value transfer). We fetch the receipt to
+  // get the ACTUAL cost (gasUsed × effectiveGasPrice) and debit that.
+  let clearKeys: string[] = [];
+  let clearDebited = 0;
+  let clearStillPending = 0;
+  let clearOrphans = 0;
+  try {
+    clearKeys = await listPendingClearDebitKeys();
+  } catch (e) {
+    console.error("[ccip-pending-fund-reconcile] clear-debit scan failed", e);
+  }
+  for (const key of clearKeys) {
+    const rec = await kv.get<PendingClearDebitRecord>(key).catch(() => null);
+    if (!rec || typeof rec.txHash !== "string" || typeof rec.chain !== "string") {
+      await kv.del(key).catch(() => { /* TTL will sweep */ });
+      continue;
+    }
+    if (!isCCIPChain(rec.chain)) {
+      await kv.del(key).catch(() => { /* TTL will sweep */ });
+      continue;
+    }
+    const provider = getCCIPProvider(rec.chain as CCIPChainKey);
+    let receipt: Awaited<ReturnType<typeof provider.getTransactionReceipt>> | null = null;
+    let rpcErrored = false;
+    try {
+      receipt = await provider.getTransactionReceipt(rec.txHash);
+    } catch {
+      rpcErrored = true;
+    }
+    if (rpcErrored) {
+      clearStillPending++;
+      continue;
+    }
+    if (!receipt) {
+      const ageMs = Date.now() - (rec.submittedAt ?? 0);
+      if (ageMs > ORPHAN_THRESHOLD_MS) {
+        clearOrphans++;
+        await kv.del(key).catch(() => { /* TTL will sweep */ });
+        void sendOpsAlert(
+          `<b>⚠ Pending clear-delegation debit row orphaned</b>\n\n` +
+          `Owner: <code>${rec.ownerLc}</code>\n` +
+          `Chain: ${rec.chain}\n` +
+          `Clear txHash: <code>${rec.txHash}</code>\n` +
+          `Age: ${Math.round(ageMs / 60_000)} min\n\n` +
+          `Receipt missing after ${ORPHAN_THRESHOLD_MS / 60_000} min — manual review.`,
+          "warn",
+        ).catch(() => { /* best-effort */ });
+        continue;
+      }
+      clearStillPending++;
+      continue;
+    }
+    if (receipt.status !== 1) {
+      // Clear tx reverted — no debit owed.
+      await kv.del(key).catch(() => { /* TTL will sweep */ });
+      continue;
+    }
+    const gasWei = (receipt.gasUsed ?? 0n) * (receipt.gasPrice ?? 0n);
+    const debitEth = Number(gasWei) / 1e18;
+    try {
+      if (debitEth > 0) {
+        await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
+      }
+      await kv.del(key).catch(() => { /* TTL will sweep */ });
+      clearDebited++;
+    } catch (e) {
+      // Leave row for next tick.
+      const err = e instanceof Error ? e.message : String(e);
+      void sendOpsAlert(
+        `<b>🚨 Pending clear-debit cron INCRBYFLOAT failed — row retained</b>\n\n` +
+        `Owner: <code>${rec.ownerLc}</code>\n` +
+        `Chain: ${rec.chain}\n` +
+        `Clear txHash: <code>${rec.txHash}</code>\n` +
+        `Debit owed: ${debitEth.toFixed(6)} native\n` +
+        `Error: ${err.slice(0, 200)}`,
+        "error",
+      ).catch(() => { /* best-effort */ });
+    }
+  }
+
   const durationMs = Date.now() - startedAt;
   await recordCronStatus(CRON_NAMES.CCIP_PENDING_FUND_RECONCILE, {
     lastStatus: "success",
@@ -159,6 +269,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       reverted,
       stillPending,
       orphans,
+      clearScanned:     clearKeys.length,
+      clearDebited,
+      clearStillPending,
+      clearOrphans,
     },
     durationMs,
   });
@@ -168,6 +282,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     reverted,
     stillPending,
     orphans,
+    clearScanned:     clearKeys.length,
+    clearDebited,
+    clearStillPending,
+    clearOrphans,
     outcomes,
     durationMs,
     asOf: new Date().toISOString(),

@@ -677,26 +677,58 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // above + the cron in /api/cron/ccip-pending-fund-reconcile
         // both key off this; without it, the only path to debit a slow
         // fund tx would be the user retrying with the same intent
-        // fingerprint within the idempotency window.
-        await setPendingFund({
+        // fingerprint within the idempotency window — but the wait-then-
+        // debit path below CANNOT close the loop if it fails to fire
+        // (Vercel function kill, RPC blip during wait), so the KV row is
+        // the ONLY durable breadcrumb. P1 — FIX 63.
+        //
+        // Retry up to 3× with backoff. If still failing, page ops with
+        // the full reconciliation info (owner, chain, txHash, fundDelta,
+        // submittedAt, intentFp) so the row can be backfilled by hand.
+        // We do NOT abort the bridge — the fund tx is already on chain,
+        // so the user's response should still complete; ops just has to
+        // re-create the KV row before the cron can reconcile it.
+        const pendingRecord = {
           txHash:       fundTx.hash,
           fundDeltaWei: fundDeltaWei.toString(),
           submittedAt:  Date.now(),
           intentFp:     fp,
           ownerLc:      owner,
           chain:        src,
-        }).catch((e) => {
-          // KV write failure here is NOT fatal — the wait+debit path
-          // below still tries to close the loop. Worst case the row is
-          // missing and the only reconciliation path is the cron via
-          // its own owner-scan. Log loudly so ops can notice patterns.
-          console.error("[ccip/send] setPendingFund failed", {
-            owner,
-            src,
-            txHash: fundTx.hash,
-            err: e instanceof Error ? e.message : String(e),
-          });
-        });
+        };
+        let pendingWritten = false;
+        for (let attempt = 0; attempt < 3 && !pendingWritten; attempt++) {
+          try {
+            await setPendingFund(pendingRecord);
+            pendingWritten = true;
+          } catch (e) {
+            console.error("[ccip/send] setPendingFund attempt failed", {
+              attempt,
+              owner,
+              src,
+              txHash: fundTx.hash,
+              err: e instanceof Error ? e.message : String(e),
+            });
+            if (attempt < 2) await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
+          }
+        }
+        if (!pendingWritten) {
+          void sendOpsAlert(
+            `<b>🚨 CCIP setPendingFund FAILED after 3 retries — reconciliation row missing</b>\n\n` +
+            `Owner: <code>${owner}</code>\n` +
+            `Chain: ${src}\n` +
+            `Fund txHash: <code>${fundTx.hash}</code>\n` +
+            `Amount: ${fundDeltaEth.toFixed(6)} native (fundDeltaWei=${fundDeltaWei.toString()})\n` +
+            `Intent fingerprint: ${fp}\n` +
+            `SubmittedAt: ${pendingRecord.submittedAt}\n\n` +
+            `KV row is MISSING — cron will never see this tx. Manually SET:\n` +
+            `<code>kv.set("ccip_pending_fund:${owner.toLowerCase()}:${src}", ` +
+            `{txHash:"${fundTx.hash}",fundDeltaWei:"${fundDeltaWei.toString()}",` +
+            `submittedAt:${pendingRecord.submittedAt},intentFp:"${fp}",` +
+            `ownerLc:"${owner.toLowerCase()}",chain:"${src}"})</code>`,
+            "error",
+          ).catch(() => { /* best-effort */ });
+        }
 
         // ── Wait with timeout ──────────────────────────────────────
         let fundReceipt: Awaited<ReturnType<typeof fundTx.wait>>;

@@ -82,6 +82,7 @@ export const CRON_NAMES = {
   REPUTATION_WEEKLY: "reputation-weekly",
   RELAYER_BALANCE: "relayer-balance",
   CCIP_PENDING_FUND_RECONCILE: "ccip-pending-fund-reconcile",
+  TREASURY_REBALANCE: "treasury-rebalance",
 } as const;
 export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
 
@@ -126,6 +127,14 @@ export const CRON_META: Record<CronName, CronMeta> = {
   [CRON_NAMES.RELAYER_BALANCE]: {
     expectedIntervalMs: 5 * 60 * 1000,
     staleAfterMs: 15 * 60 * 1000,
+  },
+  // 15-min Render heartbeat — sweeps GASTANK to Sender pools + relayer.
+  // Stale 45 min window (3× cadence) so a missed tick surfaces quickly
+  // since a stuck rebalance can let Sender pools dry out → live bridges
+  // start reverting with InsufficientPool errors.
+  [CRON_NAMES.TREASURY_REBALANCE]: {
+    expectedIntervalMs: 15 * 60 * 1000,
+    staleAfterMs: 45 * 60 * 1000,
   },
   // Same 5-min Render heartbeat as deposit-scan. Stale 15 min window so
   // a missed tick surfaces in the watchdog quickly — a stuck reconcile
