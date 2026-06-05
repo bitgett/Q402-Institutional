@@ -508,6 +508,41 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         }
       }
 
+      // ── EIP-7702 delegation gate ───────────────────────────────────
+      // Q402's payment impl contract has no `receive()` function (the
+      // Mode A/B docs flag this as a known v1 limitation). So any
+      // Agent Wallet that has ever processed a /api/wallet/agentic/send
+      // gets delegated to Q402 impl via the type-4 tx, and from that
+      // point on a plain native transfer to that wallet REVERTS. That
+      // includes the auto-fund tx below. Detect and fail closed with a
+      // specific code so the dashboard can guide the user to clear the
+      // delegation (q402_clear_delegation MCP tool, dashboard button)
+      // before bridging.
+      //
+      // TODO follow-up: have the auto-fund block call broadcastClear()
+      // server-side before sendTransaction, debit the user for the
+      // clear-tx gas, and continue inline. That removes the manual
+      // step but adds ~50k gas per bridge — defer until we have a
+      // baseline on bridge volume.
+      const agentCode = await probeProvider.getCode(destReceiver).catch(() => "0x");
+      if (agentCode !== "0x" && agentCode.toLowerCase().startsWith("0xef0100")) {
+        const delegateTarget = "0x" + agentCode.slice(8, 48);
+        const body: Record<string, unknown> = {
+          error:           "AGENT_WALLET_DELEGATED",
+          chain:           src,
+          address:         destReceiver,
+          delegateTarget,
+          message:
+            "Your Agent Wallet is EIP-7702 delegated to the Q402 payment contract on " +
+            `${src}, which doesn't accept native transfers. Clear the delegation first ` +
+            `(q402_clear_delegation MCP tool, or the Agent Wallet → Clear delegation ` +
+            `button on the dashboard) and retry the bridge. Note: a follow-up Q402 send ` +
+            `will re-delegate the wallet, so prefer bridging before the next /send.`,
+        };
+        await finaliseClaim("failed", 409, body);
+        return NextResponse.json(body, { status: 409 });
+      }
+
       const [agentEth, feeData] = await Promise.all([
         probeProvider.getBalance(destReceiver),
         probeProvider.getFeeData(),
