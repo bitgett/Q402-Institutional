@@ -28,7 +28,7 @@
  *      minutes to flip "Bridging…" → "Delivered ✓".
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
 import { ThemedSelect } from "./ThemedSelect";
@@ -334,11 +334,12 @@ export function AgenticWalletBridgeModal({
       onClick={submitting ? undefined : onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl border p-6 space-y-4 max-h-[92vh] overflow-y-auto"
-        style={{ background: "#0F1929", borderColor: "rgba(250,204,21,0.22)" }}
+        className="w-full max-w-lg rounded-2xl border flex flex-col max-h-[92vh] overflow-hidden"
+        style={{ background: "#0F1929", borderColor: "rgba(245,197,24,0.22)" }}
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between">
+        {/* Header — pinned (no scroll) so title + close X stay visible. */}
+        <div className="flex items-start justify-between px-6 pt-5 pb-3 shrink-0">
           <div>
             <div className="text-white font-semibold text-lg">Bridge USDC · Chainlink CCIP</div>
             <div className="text-[11px] text-white/40 font-mono mt-0.5">
@@ -356,17 +357,19 @@ export function AgenticWalletBridgeModal({
           </button>
         </div>
 
+        {/* Scrollable middle band — soaks the variable-length form/quote/result. */}
+        <div className="px-6 pb-2 space-y-4 flex-1 overflow-y-auto">
         {!hasMultichainScope && !result && (
           <div
             className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed"
             style={{
-              background: "rgba(250,204,21,0.07)",
-              borderColor: "rgba(250,204,21,0.25)",
+              background: "rgba(245,197,24,0.07)",
+              borderColor: "rgba(245,197,24,0.25)",
               color: "rgba(254,240,138,0.95)",
             }}
           >
             Cross-chain USDC bridging needs an active Multichain subscription.{" "}
-            <a href="/payment" className="underline hover:text-yellow-200">View plans →</a>
+            <a href="/payment" className="underline hover:text-yellow-hover">View plans →</a>
           </div>
         )}
 
@@ -375,16 +378,19 @@ export function AgenticWalletBridgeModal({
             <div
               className="rounded-md border px-3 py-2.5 text-[11.5px] leading-relaxed"
               style={{
-                background: "rgba(250,204,21,0.05)",
-                borderColor: "rgba(250,204,21,0.18)",
+                background: "rgba(245,197,24,0.05)",
+                borderColor: "rgba(245,197,24,0.18)",
                 color: "rgba(226,232,240,0.78)",
               }}
             >
               Same EOA on the destination chain. Q402 markup is zero — you only pay the
               actual CCIP fee out of your Gas Tank{" "}
-              <span className="text-yellow-200">{feeToken === "LINK" ? "LINK" : srcMeta.native}</span>{" "}
+              <span className="text-yellow">{feeToken === "LINK" ? "LINK" : srcMeta.native}</span>{" "}
               bucket on {srcMeta.label}.
-              <div className="mt-1.5 pt-1.5 border-t border-yellow-300/15 text-white/60">
+              <div
+                className="mt-1.5 pt-1.5 border-t text-white/60"
+                style={{ borderColor: "rgba(245,197,24,0.15)" }}
+              >
                 Heads up: the bridge tx itself is signed by your Agent Wallet, so it needs a
                 small amount of {srcMeta.native} on {srcMeta.label} to cover source-chain gas
                 (~$0.05–$0.50). This is separate from the CCIP fee debited above.
@@ -449,9 +455,17 @@ export function AgenticWalletBridgeModal({
                       onClick={() => { setFeeToken(t); setQuote(null); }}
                       className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
                         active
-                          ? "border-yellow-300 text-yellow-200 bg-yellow-300/8"
+                          ? "text-yellow"
                           : "border-white/10 text-white/55 hover:text-white"
                       }`}
+                      style={
+                        active
+                          ? {
+                              borderColor: "#F5C518",
+                              background: "rgba(245,197,24,0.08)",
+                            }
+                          : undefined
+                      }
                     >
                       {label}
                     </button>
@@ -527,16 +541,6 @@ export function AgenticWalletBridgeModal({
               </div>
             )}
 
-            <button
-              type="button"
-              disabled={!canSubmit || !hasMultichainScope}
-              onClick={submit}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-yellow-300 text-slate-900 hover:bg-yellow-200 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {submitting
-                ? "Bridging…"
-                : `Bridge ${amount || "—"} USDC · ${srcMeta.label} → ${dstMeta.label}`}
-            </button>
           </>
         ) : (
           <BridgeResult
@@ -545,9 +549,35 @@ export function AgenticWalletBridgeModal({
             confirmTxHash={confirmTxHash}
             srcMeta={srcMeta}
             dstMeta={dstMeta}
-            onDone={onSent}
           />
         )}
+        </div>
+        {/* Sticky footer — action button stays visible without scroll. */}
+        <div
+          className="px-6 py-4 shrink-0 border-t"
+          style={{ borderColor: "rgba(255,255,255,0.06)", background: "#0F1929" }}
+        >
+          {!result ? (
+            <button
+              type="button"
+              disabled={!canSubmit || !hasMultichainScope}
+              onClick={submit}
+              className="w-full px-3 py-2.5 rounded-md text-sm font-semibold bg-yellow text-navy hover:bg-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {submitting
+                ? "Bridging…"
+                : `Bridge ${amount || "—"} USDC · ${srcMeta.label} → ${dstMeta.label}`}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onSent}
+              className="w-full px-3 py-2.5 rounded-md text-sm font-semibold bg-emerald-400 text-navy hover:bg-emerald-300"
+            >
+              Done
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -568,8 +598,11 @@ function FeeCell({
 }) {
   return (
     <div
-      className={`rounded-lg border px-2.5 py-2 ${highlighted ? "border-yellow-300/55" : "border-white/10"}`}
-      style={{ background: highlighted ? "rgba(250,204,21,0.07)" : "rgba(255,255,255,0.02)" }}
+      className={`rounded-lg border px-2.5 py-2 ${highlighted ? "" : "border-white/10"}`}
+      style={{
+        background: highlighted ? "rgba(245,197,24,0.08)" : "rgba(255,255,255,0.02)",
+        ...(highlighted ? { borderColor: "rgba(245,197,24,0.55)" } : {}),
+      }}
     >
       <div className="flex items-center justify-between">
         <span className="text-white/65 text-[10px] uppercase tracking-widest font-medium">{label}</span>
@@ -595,14 +628,12 @@ function BridgeResult({
   confirmTxHash,
   srcMeta,
   dstMeta,
-  onDone,
 }: {
   result: SendResponse;
   confirmStatus: ConfirmResponse["status"];
   confirmTxHash: string | null;
   srcMeta: ChainMeta;
   dstMeta: ChainMeta;
-  onDone: () => void;
 }) {
   const statusLabel =
     confirmStatus === "delivered" ? "Delivered ✓"
@@ -611,11 +642,15 @@ function BridgeResult({
   const statusTone =
     confirmStatus === "delivered" ? "text-emerald-300 border-emerald-400/30 bg-emerald-400/5"
     : confirmStatus === "failed"  ? "text-red-300 border-red-400/30 bg-red-400/5"
-    : "text-yellow-200 border-yellow-300/30 bg-yellow-300/5";
+    : "text-yellow";
+  const statusInlineStyle: CSSProperties =
+    confirmStatus === "delivered" || confirmStatus === "failed"
+      ? {}
+      : { borderColor: "rgba(245,197,24,0.30)", background: "rgba(245,197,24,0.05)" };
 
   return (
     <div className="space-y-3">
-      <div className={`rounded-md border px-3 py-2 text-sm ${statusTone}`}>
+      <div className={`rounded-md border px-3 py-2 text-sm ${statusTone}`} style={statusInlineStyle}>
         {statusLabel} · {srcMeta.label} → {dstMeta.label}
         {confirmStatus === "pending" && (
           <div className="text-[10.5px] text-white/55 mt-1">
@@ -661,14 +696,6 @@ function BridgeResult({
           {result.feeToken === "LINK" ? "LINK" : srcMeta.native} · debited from your Gas Tank.
         </div>
       )}
-
-      <button
-        type="button"
-        onClick={onDone}
-        className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300"
-      >
-        Done
-      </button>
     </div>
   );
 }
