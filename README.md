@@ -96,7 +96,7 @@ Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
 Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything else → Multichain.
 6+ BNB batches return `status="ambiguous"` so the agent asks the user how to split.
 
-**16 tools** (all sandbox by default; live needs an API key + a signing path):
+**20 tools** (all sandbox by default; live needs an API key + a signing path):
 
 | Tool | Auth | What it does |
 |---|---|---|
@@ -116,6 +116,39 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_recurring_resume` | api key | Resume a paused / stopped rule |
 | `q402_recurring_skip_next` | api key | Skip only the next fire |
 | `q402_recurring_cancel` | api key | Permanently stop a rule |
+| `q402_bridge_quote` | none | Quote a CCIP USDC bridge (LINK + native fee) |
+| `q402_bridge_send` | live mode | Execute cross-chain USDC bridge (sandbox in v0.8.2) |
+| `q402_bridge_history` | api key | Recent bridges per owner |
+| `q402_bridge_gas_tank` | api key | Per-chain LINK + native Gas Tank balance |
+
+---
+
+## Cross-chain USDC bridge (Chainlink CCIP)
+
+Phase 1: **3-chain triangle** — ETH ↔ AVAX ↔ Arbitrum (6 directed lanes).
+The other 7 Q402 chains stay native-gasless only — Circle hasn't deployed
+CCIP-routable USDC pools there yet.
+
+- Source: Q402CCIPSender contract on each of eth/avax/arbitrum
+- Destination: USDC arrives directly at the user's Agentic Wallet (same EOA across chains)
+- Fee: paid in LINK (~10% cheaper) or native, from the user's Gas Tank
+- Markup: **zero** — user pays only the actual Chainlink CCIP cost
+
+| Lane | Sample fee (1 USDC) |
+|---|---|
+| arb → avax | ~$0.60 native / ~$0.36 LINK |
+| arb → eth  | ~$4.65 native (L1 gas dominates) |
+| eth → arb / avax | ~$1.20 |
+| avax → eth | ~$9 (L1 gas) |
+| avax → arb | ~$1.14 |
+
+API + MCP surfaces:
+- `GET /api/ccip/lanes` — public 6-lane matrix
+- `POST /api/ccip/quote` — live fee quote (LINK + native)
+- `POST /api/ccip/send` — intent-bound bridge execution (Mode C, server-managed Agentic Wallet)
+- `POST /api/ccip/confirm` — destination ExecutionStateChanged poll
+- `GET /api/ccip/bridge-history` — per-owner history
+- MCP tools: `q402_bridge_quote`, `q402_bridge_send`, `q402_bridge_history`, `q402_bridge_gas_tank`
 
 ---
 

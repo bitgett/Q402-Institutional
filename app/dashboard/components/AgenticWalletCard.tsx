@@ -422,6 +422,38 @@ export function AgenticWalletCard({
           )}
         </div>
 
+        {/* Cross-chain USDC bridge (Chainlink CCIP) — v0.8.2 surfaces the
+            availability + lane matrix. Full in-modal bridge flow lives
+            on the API/MCP side until a dedicated Bridge modal lands as a
+            follow-up. Banner is hidden on chains that aren't part of the
+            3-chain CCIP triangle. */}
+        <div className="mt-3 px-3 py-2.5 rounded-xl border border-yellow/20 bg-yellow/[0.04]">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-widest text-yellow/85 font-medium mb-0.5">
+                Cross-chain USDC bridge · NEW
+              </div>
+              <div className="text-xs text-white/65">
+                ETH ↔ AVAX ↔ Arbitrum via Chainlink CCIP. Fee in LINK (~10% cheaper) or native.
+                Zero Q402 markup — you pay only the actual CCIP cost.
+              </div>
+            </div>
+            <a
+              href="https://ccip.chain.link/status"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 text-xs text-yellow/85 hover:text-yellow transition-colors"
+            >
+              CCIP Explorer ↗
+            </a>
+          </div>
+          <div className="mt-2 text-[10px] text-white/45">
+            Use <code className="text-yellow/80">q402_bridge_quote</code> + <code className="text-yellow/80">q402_bridge_send</code> from
+            any MCP client (Claude, Cursor, Cline, Codex) — install with <code className="text-yellow/80">npx @quackai/q402-mcp</code>.
+            Dedicated dashboard modal lands in a follow-up release.
+          </div>
+        </div>
+
         {/* Recurring payments — list + create. Lives inside the wallet
             card so pending fires surface in context with the rest of
             the wallet state instead of a top-of-page strip. */}
