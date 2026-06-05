@@ -172,37 +172,62 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // crediting only when the owner happens to land in the cursor window
   // would create a long-tail "I sent LINK but the dashboard still says
   // 0" support pattern.
+  //
+  // Wrapped in a try/catch around the WHOLE block: if any single
+  // matching deposit's addLinkDeposit() raises (WRONGTYPE on legacy
+  // keys, KV transient, etc.), the per-owner native scan below MUST
+  // still run + recordCronStatus MUST still fire. Otherwise the cron
+  // silently flatlines (lastFiredAt stuck) and ops only notices via
+  // a missed deposit ticket.
   let linkDepositsCredited = 0;
   const linkFailedChains: string[] = [];
-  const linkResults = await Promise.allSettled(
-    LINK_DEPOSIT_CHAINS.map((chain) =>
-      scanLinkDeposits(chain, GASTANK_ADDRESS).then((scan) => ({ chain, scan })),
-    ),
-  );
-  for (let i = 0; i < linkResults.length; i++) {
-    const r = linkResults[i];
-    if (r.status !== "fulfilled") {
-      linkFailedChains.push(LINK_DEPOSIT_CHAINS[i].key);
-      continue;
+  let linkSweepError: string | null = null;
+  try {
+    const linkResults = await Promise.allSettled(
+      LINK_DEPOSIT_CHAINS.map((chain) =>
+        scanLinkDeposits(chain, GASTANK_ADDRESS).then((scan) => ({ chain, scan })),
+      ),
+    );
+    for (let i = 0; i < linkResults.length; i++) {
+      const r = linkResults[i];
+      if (r.status !== "fulfilled") {
+        linkFailedChains.push(LINK_DEPOSIT_CHAINS[i].key);
+        continue;
+      }
+      const { chain, scan } = r.value;
+      if (scan.rpcCallFailed) {
+        linkFailedChains.push(chain.key);
+        continue;
+      }
+      for (const m of scan.matches) {
+        // Skip zero-value transfers — defensive against tokens whose
+        // transferFrom emits a Transfer with zero amount as a side
+        // effect (none of the CCIP LINK tokens do today, but free).
+        if (m.amount <= 0) continue;
+        try {
+          const added = await addLinkDeposit(m.fromAddress.toLowerCase(), {
+            chain: chain.key,
+            amount: m.amount,
+            txHash: m.txHash,
+            depositedAt: new Date().toISOString(),
+          });
+          if (added) linkDepositsCredited++;
+        } catch (e) {
+          // Per-match isolation: a bad KV write on one match doesn't
+          // poison the rest of the LINK sweep or the surrounding native
+          // scan loop.
+          console.error("[deposit-scan] addLinkDeposit failed", {
+            owner:   m.fromAddress,
+            chain:   chain.key,
+            txHash:  m.txHash,
+            err:     e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
     }
-    const { chain, scan } = r.value;
-    if (scan.rpcCallFailed) {
-      linkFailedChains.push(chain.key);
-      continue;
-    }
-    for (const m of scan.matches) {
-      // Skip zero-value transfers — defensive against tokens whose
-      // transferFrom emits a Transfer with zero amount as a side
-      // effect (none of the CCIP LINK tokens do today, but free).
-      if (m.amount <= 0) continue;
-      const added = await addLinkDeposit(m.fromAddress.toLowerCase(), {
-        chain: chain.key,
-        amount: m.amount,
-        txHash: m.txHash,
-        depositedAt: new Date().toISOString(),
-      });
-      if (added) linkDepositsCredited++;
-    }
+  } catch (e) {
+    linkSweepError = e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200);
+    console.error("[deposit-scan] LINK sweep threw:", e);
   }
 
   // Process owners sequentially (per-owner wall time is bounded by the
@@ -211,61 +236,91 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   let newDeposits = 0;
   const perOwner: OwnerResult[] = [];
 
-  for (const address of addresses) {
-    const failedChains: string[] = [];
-    const partialChains: OwnerResult["partialChains"] = [];
-    let ownerCredits = 0;
-    const results = await Promise.allSettled(
-      DEPOSIT_CHAINS.map((chain) =>
-        scanNativeDeposits(chain, address).then((scan) => ({ chain, scan })),
-      ),
-    );
-    for (let i = 0; i < results.length; i++) {
-      const r = results[i];
-      if (r.status !== "fulfilled") {
-        failedChains.push(DEPOSIT_CHAINS[i].key);
-        continue;
-      }
-      const { chain, scan } = r.value;
-      if (scan.chunkFailures > 0) {
-        partialChains.push({
-          chain: chain.key,
-          chunkFailures: scan.chunkFailures,
-          chunkTotal: scan.chunkTotal,
-        });
-      }
-      for (const tx of scan.deposits) {
-        const added = await addGasDeposit(address, {
-          chain: chain.key,
-          token: chain.token,
-          amount: tx.amount,
-          txHash: tx.txHash,
-          depositedAt: new Date().toISOString(),
-        });
-        if (added) {
-          ownerCredits++;
-          newDeposits++;
-          await notifyTelegramDeposit({
-            address,
-            chain,
-            amount: tx.amount,
-            txHash: tx.txHash,
-            source: "cron",
+  // Per-owner native scan, wrapped in a try/catch per owner so a single
+  // misbehaving address (e.g. a KV WRONGTYPE on its gasdep:* list, or a
+  // Telegram fetch hiccup that bubbles up) doesn't poison the rest of
+  // the slice or strand recordCronStatus at the bottom.
+  let perOwnerError: string | null = null;
+  try {
+    for (const address of addresses) {
+      const failedChains: string[] = [];
+      const partialChains: OwnerResult["partialChains"] = [];
+      let ownerCredits = 0;
+      const results = await Promise.allSettled(
+        DEPOSIT_CHAINS.map((chain) =>
+          scanNativeDeposits(chain, address).then((scan) => ({ chain, scan })),
+        ),
+      );
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status !== "fulfilled") {
+          failedChains.push(DEPOSIT_CHAINS[i].key);
+          continue;
+        }
+        const { chain, scan } = r.value;
+        if (scan.chunkFailures > 0) {
+          partialChains.push({
+            chain: chain.key,
+            chunkFailures: scan.chunkFailures,
+            chunkTotal: scan.chunkTotal,
           });
         }
+        for (const tx of scan.deposits) {
+          try {
+            const added = await addGasDeposit(address, {
+              chain: chain.key,
+              token: chain.token,
+              amount: tx.amount,
+              txHash: tx.txHash,
+              depositedAt: new Date().toISOString(),
+            });
+            if (added) {
+              ownerCredits++;
+              newDeposits++;
+              await notifyTelegramDeposit({
+                address,
+                chain,
+                amount: tx.amount,
+                txHash: tx.txHash,
+                source: "cron",
+              }).catch(() => { /* notify is best-effort */ });
+            }
+          } catch (e) {
+            console.error("[deposit-scan] addGasDeposit failed", {
+              address,
+              chain:  chain.key,
+              txHash: tx.txHash,
+              err:    e instanceof Error ? e.message : String(e),
+            });
+          }
+        }
       }
+      perOwner.push({ address, newDeposits: ownerCredits, failedChains, partialChains });
     }
-    perOwner.push({ address, newDeposits: ownerCredits, failedChains, partialChains });
+  } catch (e) {
+    perOwnerError = e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200);
+    console.error("[deposit-scan] per-owner loop threw:", e);
   }
 
   const durationMs = Date.now() - startedAt;
+  const sweepHadError = linkSweepError !== null || perOwnerError !== null;
   await recordCronStatus(CRON_NAMES.DEPOSIT_SCAN, {
-    lastStatus: "success",
+    lastStatus: sweepHadError ? "error" : "success",
+    ...(sweepHadError
+      ? {
+          lastError: [
+            linkSweepError ? `link_sweep: ${linkSweepError}` : null,
+            perOwnerError  ? `per_owner: ${perOwnerError}`    : null,
+          ].filter(Boolean).join(" · "),
+        }
+      : {}),
     lastResult: {
       addressesScanned: addresses.length,
       newDeposits,
       linkDepositsCredited,
       linkFailedChains: linkFailedChains.length,
+      linkSweepError,
+      perOwnerError,
       wrapped,
       partialChainCount: perOwner.reduce((s, o) => s + o.partialChains.length, 0),
       failedChainCount: perOwner.reduce((s, o) => s + o.failedChains.length, 0),
