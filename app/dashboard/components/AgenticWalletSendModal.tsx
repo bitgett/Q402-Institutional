@@ -277,7 +277,8 @@ export function AgenticWalletSendModal({
         ) : (
           <>
             {/* Source-of-funds primer — clears the #1 confusion: "wait, is
-                this signing with my MetaMask?" */}
+                this signing with my MetaMask?" + the #2 confusion: "wait,
+                Q402 doesn't actually pay my ETH gas on paid plans?" */}
             <div
               className="rounded-md border px-3 py-2.5 text-[11.5px] leading-relaxed"
               style={{
@@ -287,8 +288,13 @@ export function AgenticWalletSendModal({
               }}
             >
               Sending from your <span className="text-emerald-300">Agent Wallet</span>,
-              not your MetaMask. Q402 sponsors the gas; only the stablecoin moves
-              from your Agent Wallet balance.
+              not your MetaMask. Only the stablecoin moves from your Agent Wallet balance.
+              <div className="mt-1.5 pt-1.5 border-t border-emerald-300/15 text-white/55">
+                Gas: <span className="text-emerald-200">Trial</span> = Q402 sponsors{" "}
+                <span className="text-emerald-200">BNB Chain only</span>.{" "}
+                <span className="text-emerald-200">Multichain</span> = relay gas debits
+                from your Gas Tank on the selected chain. Top up via the Gas Tank tab.
+              </div>
             </div>
 
             <div className="space-y-3">

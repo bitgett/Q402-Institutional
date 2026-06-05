@@ -8,10 +8,42 @@ describe("friendlyError", () => {
     expect(fe.next?.href).toBe("/payment");
   });
 
-  it("treats bare 402 (no code) as SUBSCRIPTION_REQUIRED", () => {
+  it("does NOT assume bare 402 is SUBSCRIPTION_REQUIRED (gas-tank empties + relay rejections also return 402)", () => {
     const fe = friendlyError(402, {});
-    expect(fe.headline).toMatch(/Multichain subscription/);
-    expect(fe.next?.label).toMatch(/plan/i);
+    // No code, no message — falls to generic copy, NOT a misleading
+    // "needs Multichain" banner. Regression guard for the case where a
+    // paid Multichain user hits a 402 because their Gas Tank is empty.
+    expect(fe.headline).not.toMatch(/Multichain subscription/);
+  });
+
+  it("maps TRIAL_BNB_ONLY with /payment CTA", () => {
+    const fe = friendlyError(402, { error: "TRIAL_BNB_ONLY" });
+    expect(fe.headline).toMatch(/Trial key only/);
+    expect(fe.next?.href).toBe("/payment");
+  });
+
+  it("maps NO_API_KEY with /payment CTA", () => {
+    const fe = friendlyError(402, { error: "NO_API_KEY" });
+    expect(fe.headline).toMatch(/Activate a Q402/);
+    expect(fe.next?.href).toBe("/payment");
+  });
+
+  it("maps the relay's free-form gas-tank exhaustion message", () => {
+    const fe = friendlyError(402, { error: "Insufficient gas tank on eth. Deposit native tokens to your gas tank." });
+    expect(fe.headline).toMatch(/Gas Tank is empty on eth/);
+    expect(fe.headline).not.toMatch(/Multichain subscription/);
+    expect(fe.next?.href).toBe("#gas-tank");
+  });
+
+  it("maps the relay's generic 400 to an Agent-Wallet-balance hint instead of a bare HTTP code", () => {
+    const fe = friendlyError(400, { error: "Relay failed. Check your signature and parameters." });
+    expect(fe.headline).toMatch(/0 balance/);
+    expect(fe.headline).not.toMatch(/HTTP 400/);
+  });
+
+  it("surfaces a free-form backend error string as the headline when no specific branch matches", () => {
+    const fe = friendlyError(400, { error: "some_backend_specific_error" });
+    expect(fe.headline).toBe("some_backend_specific_error");
   });
 
   it("maps DAILY_LIMIT_EXCEEDED and echoes the cap", () => {
