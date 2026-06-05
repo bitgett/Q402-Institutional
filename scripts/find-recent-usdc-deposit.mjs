@@ -21,7 +21,7 @@
  */
 
 import { kv } from "@vercel/kv";
-import { JsonRpcProvider, Interface } from "ethers";
+import { JsonRpcProvider } from "ethers";
 
 const ETH_RPC = "https://ethereum.publicnode.com";
 const USDC_ETH = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"; // canonical USDC on eth mainnet (6-dec)
