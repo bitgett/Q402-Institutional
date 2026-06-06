@@ -31,9 +31,11 @@ import { kv } from "@vercel/kv";
 import { requireCronAuth } from "@/app/lib/cron-auth";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
+  acquirePendingFundReconcileLock,
   listPendingFundKeys,
   listPendingClearDebitKeys,
   recordNativeBridgeUsage,
+  releasePendingFundReconcileLock,
   type PendingFundRecord,
   type PendingClearDebitRecord,
 } from "@/app/lib/db";
@@ -88,93 +90,113 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       continue;
     }
 
-    const provider = getCCIPProvider(rec.chain as CCIPChainKey);
-    // Distinguish "RPC errored" from "RPC returned null" (=tx not yet
-    // mined). Previously both were collapsed into `null`, so an RPC
-    // outage that ran longer than the orphan threshold would cause us
-    // to delete rows for real, mined funds.
-    let receipt: Awaited<ReturnType<typeof provider.getTransactionReceipt>> | null = null;
-    let receiptRpcErrored = false;
-    try {
-      receipt = await provider.getTransactionReceipt(rec.txHash);
-    } catch (rpcErr) {
-      receiptRpcErrored = true;
-      console.error("[ccip-pending-fund-reconcile] receipt RPC error", {
-        key,
-        chain: rec.chain,
-        txHash: rec.txHash,
-        err: rpcErr instanceof Error ? rpcErr.message.slice(0, 80) : "rpc_error",
-      });
+    // ── CAS lock against the inline /api/ccip/send reconciler ─────────
+    // If the user fires another bridge attempt during this cron tick,
+    // the route's inline reconcile block competes with us for the same
+    // receipt → debit → del sequence. SETNX with 30s TTL ensures only
+    // one writer proceeds; the cron skips this row this tick and the
+    // next tick picks it up.
+    const lockClaimed = await acquirePendingFundReconcileLock(rec.ownerLc, rec.chain);
+    if (!lockClaimed) {
+      stillPending++;
+      outcomes.push({ key, outcome: "still_pending", detail: "inline_reconcile_in_flight" });
+      continue;
     }
 
-    if (!receipt) {
-      // If the RPC itself errored, we cannot distinguish "not mined"
-      // from "mined but we can't see it." Skip this row this tick and
-      // never count it toward the orphan-age threshold — wait for the
-      // RPC to recover. Persistent failure (>3 ticks) gets a separate
-      // alert via the still_pending detail string.
-      if (receiptRpcErrored) {
+    const provider = getCCIPProvider(rec.chain as CCIPChainKey);
+    try {
+      // Distinguish "RPC errored" from "RPC returned null" (=tx not yet
+      // mined). Previously both were collapsed into `null`, so an RPC
+      // outage that ran longer than the orphan threshold would cause us
+      // to delete rows for real, mined funds.
+      let receipt: Awaited<ReturnType<typeof provider.getTransactionReceipt>> | null = null;
+      let receiptRpcErrored = false;
+      try {
+        receipt = await provider.getTransactionReceipt(rec.txHash);
+      } catch (rpcErr) {
+        receiptRpcErrored = true;
+        console.error("[ccip-pending-fund-reconcile] receipt RPC error", {
+          key,
+          chain: rec.chain,
+          txHash: rec.txHash,
+          err: rpcErr instanceof Error ? rpcErr.message.slice(0, 80) : "rpc_error",
+        });
+      }
+
+      if (!receipt) {
+        // If the RPC itself errored, we cannot distinguish "not mined"
+        // from "mined but we can't see it." Skip this row this tick and
+        // never count it toward the orphan-age threshold — wait for the
+        // RPC to recover. Persistent failure (>3 ticks) gets a separate
+        // alert via the still_pending detail string.
+        if (receiptRpcErrored) {
+          stillPending++;
+          outcomes.push({ key, outcome: "still_pending", detail: "rpc_error" });
+          continue;
+        }
+        // Still pending. If it's older than the orphan threshold, page
+        // ops and delete — at that age a missing receipt means the tx
+        // was dropped, replaced, or never broadcast.
+        const ageMs = Date.now() - (rec.submittedAt ?? 0);
+        if (ageMs > ORPHAN_THRESHOLD_MS) {
+          orphans++;
+          outcomes.push({ key, outcome: "orphan", detail: `age=${Math.round(ageMs / 60_000)}min` });
+          await kv.del(key).catch(() => { /* TTL will sweep */ });
+          void sendOpsAlert(
+            `<b>⚠ CCIP pending fund row orphaned</b>\n\n` +
+            `Owner: <code>${rec.ownerLc}</code>\n` +
+            `Chain: ${rec.chain}\n` +
+            `Fund txHash: <code>${rec.txHash}</code>\n` +
+            `Age: ${Math.round(ageMs / 60_000)} min\n\n` +
+            `Receipt still missing after ${ORPHAN_THRESHOLD_MS / 60_000} min — tx was likely ` +
+            `dropped or replaced. Row deleted; no debit recorded (relayer didn't pay).`,
+            "warn",
+          ).catch(() => { /* best-effort */ });
+          continue;
+        }
         stillPending++;
-        outcomes.push({ key, outcome: "still_pending", detail: "rpc_error" });
+        outcomes.push({ key, outcome: "still_pending", detail: `age=${Math.round(ageMs / 60_000)}min` });
         continue;
       }
-      // Still pending. If it's older than the orphan threshold, page
-      // ops and delete — at that age a missing receipt means the tx
-      // was dropped, replaced, or never broadcast.
-      const ageMs = Date.now() - (rec.submittedAt ?? 0);
-      if (ageMs > ORPHAN_THRESHOLD_MS) {
-        orphans++;
-        outcomes.push({ key, outcome: "orphan", detail: `age=${Math.round(ageMs / 60_000)}min` });
+
+      if (receipt.status !== 1) {
+        reverted++;
+        outcomes.push({ key, outcome: "reverted", detail: rec.txHash });
         await kv.del(key).catch(() => { /* TTL will sweep */ });
+        continue;
+      }
+
+      // Mined + success. Compute the actual cost and debit.
+      const gasWei  = (receipt.gasUsed ?? 0n) * (receipt.gasPrice ?? 0n);
+      const valWei  = (() => { try { return BigInt(rec.fundDeltaWei); } catch { return 0n; } })();
+      const debitEth = Number(valWei + gasWei) / 1e18;
+      try {
+        await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
+        await kv.del(key).catch(() => { /* TTL will sweep */ });
+        debited++;
+        outcomes.push({ key, outcome: "debited", detail: `${debitEth.toFixed(6)} native` });
+      } catch (e) {
+        // Leave the row in place for the next tick. Ops alert so a
+        // persistent KV failure is visible.
+        const err = e instanceof Error ? e.message : String(e);
+        outcomes.push({ key, outcome: "still_pending", detail: `debit_failed: ${err.slice(0, 60)}` });
         void sendOpsAlert(
-          `<b>⚠ CCIP pending fund row orphaned</b>\n\n` +
+          `<b>🚨 CCIP pending-fund cron debit FAILED — row retained</b>\n\n` +
           `Owner: <code>${rec.ownerLc}</code>\n` +
           `Chain: ${rec.chain}\n` +
           `Fund txHash: <code>${rec.txHash}</code>\n` +
-          `Age: ${Math.round(ageMs / 60_000)} min\n\n` +
-          `Receipt still missing after ${ORPHAN_THRESHOLD_MS / 60_000} min — tx was likely ` +
-          `dropped or replaced. Row deleted; no debit recorded (relayer didn't pay).`,
-          "warn",
+          `Debit owed: ${debitEth.toFixed(6)} native\n` +
+          `Error: ${err.slice(0, 200)}\n\n` +
+          `Cron will retry next tick. Manual fix: INCRBYFLOAT on ` +
+          `bridge_native_used:${rec.ownerLc}.${rec.chain} + DEL ${key}.`,
+          "error",
         ).catch(() => { /* best-effort */ });
-        continue;
       }
-      stillPending++;
-      outcomes.push({ key, outcome: "still_pending", detail: `age=${Math.round(ageMs / 60_000)}min` });
-      continue;
-    }
-
-    if (receipt.status !== 1) {
-      reverted++;
-      outcomes.push({ key, outcome: "reverted", detail: rec.txHash });
-      await kv.del(key).catch(() => { /* TTL will sweep */ });
-      continue;
-    }
-
-    // Mined + success. Compute the actual cost and debit.
-    const gasWei  = (receipt.gasUsed ?? 0n) * (receipt.gasPrice ?? 0n);
-    const valWei  = (() => { try { return BigInt(rec.fundDeltaWei); } catch { return 0n; } })();
-    const debitEth = Number(valWei + gasWei) / 1e18;
-    try {
-      await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
-      await kv.del(key).catch(() => { /* TTL will sweep */ });
-      debited++;
-      outcomes.push({ key, outcome: "debited", detail: `${debitEth.toFixed(6)} native` });
-    } catch (e) {
-      // Leave the row in place for the next tick. Ops alert so a
-      // persistent KV failure is visible.
-      const err = e instanceof Error ? e.message : String(e);
-      outcomes.push({ key, outcome: "still_pending", detail: `debit_failed: ${err.slice(0, 60)}` });
-      void sendOpsAlert(
-        `<b>🚨 CCIP pending-fund cron debit FAILED — row retained</b>\n\n` +
-        `Owner: <code>${rec.ownerLc}</code>\n` +
-        `Chain: ${rec.chain}\n` +
-        `Fund txHash: <code>${rec.txHash}</code>\n` +
-        `Debit owed: ${debitEth.toFixed(6)} native\n` +
-        `Error: ${err.slice(0, 200)}\n\n` +
-        `Cron will retry next tick. Manual fix: INCRBYFLOAT on ` +
-        `bridge_native_used:${rec.ownerLc}.${rec.chain} + DEL ${key}.`,
-        "error",
-      ).catch(() => { /* best-effort */ });
+    } finally {
+      // Always release the SETNX lock so the next tick (cron OR inline
+      // /api/ccip/send retry) can pick up wherever this iteration left
+      // off. continue + finally is well-defined in JS.
+      await releasePendingFundReconcileLock(rec.ownerLc, rec.chain);
     }
   }
 

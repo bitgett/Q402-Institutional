@@ -50,7 +50,9 @@ import {
   getLinkBalance,
   recordLinkUsage,
   getGasBalance,
+  acquirePendingFundReconcileLock,
   recordNativeBridgeUsage,
+  releasePendingFundReconcileLock,
   getSubscription,
   hasMultichainScope,
   getPendingFund,
@@ -455,57 +457,100 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       //     and let the user retry in 30s
       const pending = await getPendingFund(owner, src);
       if (pending) {
-        const reconciledReceipt = await probeProvider
-          .getTransactionReceipt(pending.txHash)
-          .catch(() => null);
-        if (!reconciledReceipt) {
+        // ── Cross-intent drift guard ─────────────────────────────────
+        // The pending fund record was written for a SPECIFIC intent
+        // (src/dst/amount/feeToken combo, fingerprinted as intentFp).
+        // If THIS retry is for a different intent (e.g. user changed
+        // dst from avax→arbitrum, or amount from 1→100 USDC), the
+        // pending fund delta and the new intent's gas needs don't
+        // line up — agentFundTxHash would link the user's bridge
+        // history record to a tx that funded a DIFFERENT bridge. Bail
+        // and let the user wait for the cron to settle the old intent
+        // (~5 min) so this route runs against a clean state.
+        if (pending.intentFp && pending.intentFp !== fp) {
           const body: Record<string, unknown> = {
             error:    "AGENT_WALLET_AUTOFUND_PENDING",
             fundTx:   pending.txHash,
             message:
-              "Your previous auto-fund tx is still mining. Retry in ~30s — " +
-              "Q402 will reconcile and complete the bridge from the existing tx.",
+              "A previous auto-fund tx for a different bridge intent is still settling. " +
+              "Wait ~5 min for it to reconcile (or use the previous src/dst/amount), then retry.",
+          };
+          await finaliseClaim("failed", 503, body);
+          return NextResponse.json(body, { status: 503, headers: { "Retry-After": "300" } });
+        }
+        // ── CAS lock against the cron reconciler ─────────────────────
+        // The /api/cron/ccip-pending-fund-reconcile cron can race this
+        // inline path: both fetch the same receipt and both INCRBYFLOAT
+        // the user's bridge_native_used bucket → double debit. SETNX
+        // with 30s TTL ensures only one writer proceeds; loser returns
+        // AUTOFUND_PENDING so the user retries after the cron completes.
+        const reconcileLock = await acquirePendingFundReconcileLock(owner, src);
+        if (!reconcileLock) {
+          const body: Record<string, unknown> = {
+            error:    "AGENT_WALLET_AUTOFUND_PENDING",
+            fundTx:   pending.txHash,
+            message:
+              "Q402's reconciliation cron is already settling your previous auto-fund tx. " +
+              "Retry in ~30s.",
           };
           await finaliseClaim("failed", 503, body);
           return NextResponse.json(body, { status: 503, headers: { "Retry-After": "30" } });
         }
-        if (reconciledReceipt.status === 1) {
-          const recGasUsed   = reconciledReceipt.gasUsed ?? 0n;
-          const recGasPrice  = reconciledReceipt.gasPrice ?? 0n;
-          const recGasWei    = recGasUsed * recGasPrice;
-          const recFundWei   = BigInt(pending.fundDeltaWei);
-          const recDebitEth  = Number(recFundWei + recGasWei) / 1e18;
-          try {
-            await recordNativeBridgeUsage(owner, src, recDebitEth);
-            await clearPendingFund(owner, src);
-            agentFundEth     = recDebitEth;
-            agentFundTxHash  = pending.txHash;
-          } catch (recErr) {
-            const err = recErr instanceof Error ? recErr.message : String(recErr);
-            void sendOpsAlert(
-              `<b>🚨 CCIP pending-fund reconciliation debit FAILED</b>\n\n` +
-              `Owner: <code>${owner}</code>\n` +
-              `Chain: ${src}\n` +
-              `Pending fund tx: <code>${pending.txHash}</code>\n` +
-              `Debit attempted: ${recDebitEth.toFixed(6)} native\n` +
-              `Error: ${err.slice(0, 200)}\n\n` +
-              `KV row stays — cron will retry. Manual debit also OK from ` +
-              `bridge_native_used:${owner.toLowerCase()}.${src}.`,
-              "error",
-            ).catch(() => { /* best-effort */ });
+        try {
+          const reconciledReceipt = await probeProvider
+            .getTransactionReceipt(pending.txHash)
+            .catch(() => null);
+          if (!reconciledReceipt) {
             const body: Record<string, unknown> = {
-              error:  "AUTOFUND_DEBIT_FAILED",
-              detail: err.slice(0, 200),
+              error:    "AGENT_WALLET_AUTOFUND_PENDING",
+              fundTx:   pending.txHash,
               message:
-                "Your previous auto-fund tx confirmed but Q402's ledger couldn't record the debit. " +
-                "Ops has been paged; your retry won't be charged twice. Try again in a moment.",
+                "Your previous auto-fund tx is still mining. Retry in ~30s — " +
+                "Q402 will reconcile and complete the bridge from the existing tx.",
             };
-            await finaliseClaim("failed", 500, body);
-            return NextResponse.json(body, { status: 500 });
+            await finaliseClaim("failed", 503, body);
+            return NextResponse.json(body, { status: 503, headers: { "Retry-After": "30" } });
           }
-        } else {
-          // Reverted — clear and continue. We owe nothing for a reverted tx.
-          await clearPendingFund(owner, src);
+          if (reconciledReceipt.status === 1) {
+            const recGasUsed   = reconciledReceipt.gasUsed ?? 0n;
+            const recGasPrice  = reconciledReceipt.gasPrice ?? 0n;
+            const recGasWei    = recGasUsed * recGasPrice;
+            const recFundWei   = BigInt(pending.fundDeltaWei);
+            const recDebitEth  = Number(recFundWei + recGasWei) / 1e18;
+            try {
+              await recordNativeBridgeUsage(owner, src, recDebitEth);
+              await clearPendingFund(owner, src);
+              agentFundEth     = recDebitEth;
+              agentFundTxHash  = pending.txHash;
+            } catch (recErr) {
+              const err = recErr instanceof Error ? recErr.message : String(recErr);
+              void sendOpsAlert(
+                `<b>🚨 CCIP pending-fund reconciliation debit FAILED</b>\n\n` +
+                `Owner: <code>${owner}</code>\n` +
+                `Chain: ${src}\n` +
+                `Pending fund tx: <code>${pending.txHash}</code>\n` +
+                `Debit attempted: ${recDebitEth.toFixed(6)} native\n` +
+                `Error: ${err.slice(0, 200)}\n\n` +
+                `KV row stays — cron will retry. Manual debit also OK from ` +
+                `bridge_native_used:${owner.toLowerCase()}.${src}.`,
+                "error",
+              ).catch(() => { /* best-effort */ });
+              const body: Record<string, unknown> = {
+                error:  "AUTOFUND_DEBIT_FAILED",
+                detail: err.slice(0, 200),
+                message:
+                  "Your previous auto-fund tx confirmed but Q402's ledger couldn't record the debit. " +
+                  "Ops has been paged; your retry won't be charged twice. Try again in a moment.",
+              };
+              await finaliseClaim("failed", 500, body);
+              return NextResponse.json(body, { status: 500 });
+            }
+          } else {
+            // Reverted — clear and continue. We owe nothing for a reverted tx.
+            await clearPendingFund(owner, src);
+          }
+        } finally {
+          await releasePendingFundReconcileLock(owner, src);
         }
       }
 

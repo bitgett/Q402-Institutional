@@ -82,6 +82,74 @@ export function friendlyError(status: number, body: BackendError): FriendlyError
   if (code === "AGENTIC_WALLET_ARCHIVED" || code === "WALLET_ARCHIVED") {
     return { headline: "This wallet is archived. Restore it before sending." };
   }
+
+  // ── CCIP bridge / delegation lifecycle ────────────────────────────────
+  // These codes come from /api/ccip/send and the bridge auto-fund block.
+  // Without these maps the user sees a generic 5xx "Send failed on our
+  // side" which is misleading — these are recoverable user-actionable
+  // states (delegated wallet, in-flight fund, etc), not Q402 outages.
+  if (code === "AGENT_WALLET_DELEGATED" || code === "AGENT_WALLET_NOT_DELEGATED") {
+    // Both flavors land here: the bridge auto-fund refusing because the
+    // Agent Wallet IS delegated to Q402 impl (no `receive()`), AND the
+    // clear-delegation endpoint refusing because the wallet is NOT
+    // delegated. The bridge modal's Clear Delegation button is the
+    // single recovery path — surface it directly.
+    return {
+      headline:
+        "Your Agent Wallet's EIP-7702 delegation is blocking native funds. Clear it from the " +
+        "bridge modal before retrying.",
+      next: { label: "Clear delegation", href: "#clear-delegation" },
+    };
+  }
+  if (code === "AGENT_WALLET_AUTOFUND_PENDING") {
+    return {
+      headline:
+        "Auto-fund tx is still mining for your Agent Wallet. Wait ~30s and retry — the bridge will " +
+        "pick up the new balance automatically.",
+    };
+  }
+  if (code === "AGENT_WALLET_AUTOFUND_FAILED") {
+    return {
+      headline:
+        "Auto-fund couldn't deliver native gas to your Agent Wallet. Top up directly from the " +
+        "dashboard or wait for the reconciliation cron to retry.",
+      next: { label: "Top up Gas Tank", href: "#gas-tank" },
+    };
+  }
+  if (code === "AUTOFUND_DEBIT_FAILED") {
+    return {
+      headline:
+        "Bridge auto-fund went through on-chain but the Gas Tank debit didn't record. Ops is paged; " +
+        "a reconciliation cron will fix the bucket — your balance is safe.",
+    };
+  }
+  if (code === "CLEAR_IN_FLIGHT") {
+    return {
+      headline:
+        "A clear-delegation tx is already running for this wallet. Wait ~60s for it to finish before retrying.",
+    };
+  }
+  if (code === "CLEAR_DID_NOT_APPLY") {
+    return {
+      headline:
+        "Clear-delegation tx confirmed but the wallet is still delegated. Ops is paged; try again " +
+        "in a few minutes.",
+    };
+  }
+  if (code === "AUTH_SIG_MISMATCH" || code === "AUTH_SIG_RECOVERY_FAILED") {
+    return {
+      headline:
+        "Couldn't verify the clear-delegation signature locally. Reload the dashboard and retry — " +
+        "no gas was spent.",
+    };
+  }
+  if (code === "CLEAR_FAILED") {
+    return {
+      headline:
+        "Couldn't broadcast the clear-delegation tx. Check the chain status and retry; no Gas Tank " +
+        "balance was deducted.",
+    };
+  }
   if (code === "relay_unavailable" || code === "keystore_unavailable") {
     return {
       headline:

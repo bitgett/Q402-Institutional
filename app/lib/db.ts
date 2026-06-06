@@ -1582,6 +1582,55 @@ export async function clearPendingFund(address: string, chain: string): Promise<
 }
 
 /**
+ * Per-(owner, chain) CAS lock for the pending-fund reconcile path.
+ *
+ * Two writers can reach the same pending-fund record concurrently:
+ *   (a) the inline reconcile block at the top of /api/ccip/send's
+ *       auto-fund path — fires on every retry attempt by the same user
+ *   (b) the /api/cron/ccip-pending-fund-reconcile cron — fires every ~5
+ *       minutes on the Render heartbeat
+ *
+ * Without coordination both can fetch the same receipt, both compute
+ * `gasUsed × effectiveGasPrice`, both call `recordNativeBridgeUsage`,
+ * and both call `clearPendingFund`. The KV INCRBYFLOAT is atomic per
+ * call but DOES double-debit the user's bridge_native_used bucket.
+ *
+ * SETNX with 30s TTL is enough: the read+receipt-fetch+INCRBYFLOAT+del
+ * sequence completes in well under 30s on a healthy RPC, and a stuck
+ * lock self-clears on the next tick. Returns true if this caller won
+ * the race and should proceed; false means another writer is already
+ * reconciling and this caller should skip.
+ */
+export async function acquirePendingFundReconcileLock(
+  address: string,
+  chain: string,
+): Promise<boolean> {
+  if (!isCCIPLinkChain(chain)) return true; // no-op chains don't race
+  try {
+    const claimed = await kv.set(
+      `ccip_pending_fund_reconcile_lock:${address.toLowerCase()}:${chain}`,
+      "1",
+      { nx: true, ex: 30 },
+    );
+    return claimed === "OK";
+  } catch {
+    // KV unavailable — fall through to no-lock behaviour rather than
+    // wedge the route. Reconcile cron will catch any stragglers.
+    return true;
+  }
+}
+
+export async function releasePendingFundReconcileLock(
+  address: string,
+  chain: string,
+): Promise<void> {
+  if (!isCCIPLinkChain(chain)) return;
+  try {
+    await kv.del(`ccip_pending_fund_reconcile_lock:${address.toLowerCase()}:${chain}`);
+  } catch { /* TTL will sweep */ }
+}
+
+/**
  * Pending clear-delegation debit record. Written by /api/wallet/agentic/
  * clear-delegation when the on-chain clear succeeded but the gas-debit
  * write to `bridge_native_used` threw. Reconciled by the same cron as
