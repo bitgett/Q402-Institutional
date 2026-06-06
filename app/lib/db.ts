@@ -1513,21 +1513,22 @@ export async function recordLinkUsage(address: string, chain: string, amount: nu
  * KV bucket (`bridge_native_used:{addr}.{chain}`) so the Gas Tank UI
  * can attribute bridge spend vs relay spend separately.
  *
- * Atomic via INCRBYFLOAT for the same reason as LINK. Falls back to
- * RMW on KV clients that don't expose the primitive.
+ * Atomic via INCRBYFLOAT. RMW fallback was REMOVED — it double-debited
+ * on the "INCRBYFLOAT applied server-side, response lost in transit"
+ * path (the catch fired despite the bucket already being credited, and
+ * the RMW path then added the amount AGAIN on top of the silent success).
+ *
+ * Callers MUST guard this with `claimAndDebitNativeBridge` instead of
+ * calling it directly when the work is per-txHash idempotent. This
+ * function throws on KV failure; the per-txHash claim caller is
+ * responsible for releasing the claim so a retry can re-attempt.
  */
 export async function recordNativeBridgeUsage(address: string, chain: string, amount: number): Promise<void> {
   if (!isCCIPLinkChain(chain) || amount <= 0) return;
-  try {
-    await (kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> }).incrbyfloat(
-      `${nativeBridgeUsedKey(address)}.${chain}`,
-      amount,
-    );
-  } catch {
-    const key = `${nativeBridgeUsedKey(address)}.${chain}`;
-    const cur = (await kv.get<number>(key)) ?? 0;
-    await kv.set(key, cur + amount);
-  }
+  await (kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> }).incrbyfloat(
+    `${nativeBridgeUsedKey(address)}.${chain}`,
+    amount,
+  );
 }
 
 /**
@@ -1615,21 +1616,33 @@ function orphanFundKey(txHash: string): string {
   return `ccip_orphan_fund:${txHash.toLowerCase()}`;
 }
 
-export async function recordOrphanFund(rec: OrphanFundRecord): Promise<void> {
-  if (!isCCIPLinkChain(rec.chain)) return;
-  // NO TTL — orphan rows must survive long enough for ops to triage.
-  // Manual cleanup expected.
-  try {
-    await kv.set(orphanFundKey(rec.txHash), rec);
-  } catch (e) {
-    // Last-resort logging — if we can't even write the orphan row, the
-    // only paper trail is the Telegram alert + console log from the
-    // caller.
-    console.error("[recordOrphanFund] write failed", {
-      txHash: rec.txHash, chain: rec.chain, owner: rec.ownerLc,
-      err: e instanceof Error ? e.message : String(e),
-    });
+/**
+ * Write an orphan-fund row. Retries up to 3× with backoff. Returns
+ * `true` if the row landed, `false` if every attempt failed —
+ * callers MUST surface a `false` return as a separate ops alert so
+ * the user/on-call knows there is NO durable breadcrumb at all (the
+ * fund tx broadcasted, the regular pending row failed 3×, and the
+ * orphan backstop also failed). Previously the function swallowed
+ * the error silently while the caller reported "orphan row written"
+ * — completely misleading.
+ */
+export async function recordOrphanFund(rec: OrphanFundRecord): Promise<boolean> {
+  if (!isCCIPLinkChain(rec.chain)) return true; // no-op chains don't write
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      // NO TTL — orphan rows must survive long enough for ops to triage.
+      await kv.set(orphanFundKey(rec.txHash), rec);
+      return true;
+    } catch (e) {
+      console.error("[recordOrphanFund] write failed", {
+        attempt,
+        txHash: rec.txHash, chain: rec.chain, owner: rec.ownerLc,
+        err: e instanceof Error ? e.message : String(e),
+      });
+      if (attempt < 2) await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
+    }
   }
+  return false;
 }
 
 export async function listOrphanFundKeys(maxItems = 200): Promise<string[]> {
@@ -1725,45 +1738,76 @@ export async function releasePendingFundReconcileLock(
 }
 
 /**
- * Per-txHash idempotency claim for native-bridge debits.
+ * Atomic per-txHash claim + INCRBYFLOAT — single Redis EVAL roundtrip.
  *
- * Wraps `recordNativeBridgeUsage` so a single fund/clear tx cannot be
- * INCRBYFLOAT-debited twice — even if two writers race the lock above,
- * even if INCRBYFLOAT's response is lost and RMW retries silently
- * stomp the bucket, even if the cron picks up a row whose DEL failed
- * after a successful debit. The claim is the single source of truth
- * for "has this txHash been debited?".
+ * This is the safe primitive for native-bridge debits. The earlier
+ * two-step approach (`claimNativeBridgeDebit` then `recordNative
+ * BridgeUsage`) had two holes the auditor caught:
+ *   1. Claim set, INCR throws → claim survives, bucket never credited,
+ *      next cron skips because claim says "already done" → PERMANENT
+ *      MISSED DEBIT.
+ *   2. INCR applied server-side, response lost in transit → caller
+ *      retried via RMW fallback (since removed) → DOUBLE DEBIT.
+ * Both go away when claim + INCR are in one Lua script: either both
+ * succeed or neither does. If the network drops the response after
+ * the script ran, the claim records the txHash as debited; the
+ * caller's retry path sees the claim and returns "already_debited"
+ * without re-running INCR.
  *
- * TTL = 24h: the longest practical interval between a fund tx mining
- * and its eventual reconciliation. Beyond that, an orphaned claim is
- * harmless (the tx is long-debited) and a fresh tx will have a
- * different hash.
+ * Return shape:
+ *   { debited: true, newBalance } — claim acquired + INCR succeeded
+ *   { debited: false, reason: "already_claimed" } — another writer won
+ *   throws on KV connection error — caller decides whether to retry
  *
- * Returns `true` if THIS caller acquired the claim and should perform
- * the debit; `false` if another writer already did. Callers must
- * still call recordNativeBridgeUsage themselves — this function does
- * not perform the side effect, only the gate.
- *
- * On KV outage returns `true` (proceed) so the route doesn't wedge —
- * degraded mode reintroduces the small double-debit risk window the
- * full claim/lock layering otherwise closes.
+ * Claim TTL = 24h. Beyond that, an orphaned claim is harmless because
+ * the txHash is long-settled and a fresh tx has a fresh hash.
  */
-export async function claimNativeBridgeDebit(
+export interface AtomicDebitResult {
+  debited: boolean;
+  newBalance?: number;
+  reason?: "already_claimed";
+}
+
+const CLAIM_AND_DEBIT_LUA =
+  "local claim = redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2]) " +
+  "if claim then " +
+  "  local newBal = redis.call('INCRBYFLOAT', KEYS[2], ARGV[3]) " +
+  "  return {'debited', newBal} " +
+  "else " +
+  "  return {'already_claimed'} " +
+  "end";
+
+export async function claimAndDebitNativeBridge(
   txHash: string,
   ownerLc: string,
   chain: string,
-): Promise<boolean> {
-  if (!isCCIPLinkChain(chain)) return true;
-  try {
-    const claimed = await kv.set(
-      `bridge_debit_claim:${txHash.toLowerCase()}`,
-      `${ownerLc.toLowerCase()}:${chain}`,
-      { nx: true, ex: 86_400 }, // 24h — outlasts any realistic reconcile horizon
-    );
-    return claimed === "OK";
-  } catch {
-    return true;
+  amount: number,
+): Promise<AtomicDebitResult> {
+  // Non-CCIP chains don't carry the bridge_native_used bucket — return
+  // a synthetic "debited" so caller's flow proceeds. amount <= 0 same
+  // (defensive — a zero debit is a no-op).
+  if (!isCCIPLinkChain(chain) || amount <= 0) {
+    return { debited: true };
   }
+  const claimKey  = `bridge_debit_claim:${txHash.toLowerCase()}`;
+  const bucketKey = `${nativeBridgeUsedKey(ownerLc)}.${chain}`;
+  const claimValue = `${ownerLc.toLowerCase()}:${chain}`;
+  const result = await (kv as unknown as {
+    eval: (s: string, keys: string[], args: string[]) => Promise<unknown>;
+  }).eval(
+    CLAIM_AND_DEBIT_LUA,
+    [claimKey, bucketKey],
+    [claimValue, "86400", String(amount)],
+  );
+  // Upstash returns Lua-table as a JS array. ["debited", "12.345"] or
+  // ["already_claimed"].
+  if (Array.isArray(result) && result[0] === "debited") {
+    const newBal = typeof result[1] === "string" ? Number(result[1])
+                 : typeof result[1] === "number" ? result[1]
+                 : undefined;
+    return { debited: true, newBalance: newBal };
+  }
+  return { debited: false, reason: "already_claimed" };
 }
 
 /**

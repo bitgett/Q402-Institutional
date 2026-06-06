@@ -32,11 +32,12 @@ import { requireCronAuth } from "@/app/lib/cron-auth";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
   acquirePendingFundReconcileLock,
-  claimNativeBridgeDebit,
+  claimAndDebitNativeBridge,
+  listOrphanFundKeys,
   listPendingFundKeys,
   listPendingClearDebitKeys,
-  recordNativeBridgeUsage,
   releasePendingFundReconcileLock,
+  type OrphanFundRecord,
   type PendingFundRecord,
   type PendingClearDebitRecord,
 } from "@/app/lib/db";
@@ -179,22 +180,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const valWei  = (() => { try { return BigInt(rec.fundDeltaWei); } catch { return 0n; } })();
       const debitEth = Number(valWei + gasWei) / 1e18;
       try {
-        // Per-txHash idempotency claim. If the inline reconciler
-        // already debited this hash (lock above doesn't catch the
-        // case where the inline path completed AFTER its release
-        // but BEFORE this cron tick saw the stale row), the claim
-        // refuses and we skip the INCRBYFLOAT. We still DEL the
-        // pending row.
-        const claimedDebit = await claimNativeBridgeDebit(rec.txHash, rec.ownerLc, rec.chain);
-        if (claimedDebit) {
-          await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
-        }
+        // Atomic claim + INCRBYFLOAT in one Lua script. Closes BOTH
+        // the inline-vs-cron race AND the "INCR response lost → RMW
+        // retry stomps" gap. If the inline reconciler already settled
+        // this hash, the script returns "already_claimed" and we just
+        // DEL the pending row — the bucket is already correct.
+        const debitResult = await claimAndDebitNativeBridge(rec.txHash, rec.ownerLc, rec.chain, debitEth);
         await kv.del(key).catch(() => { /* TTL will sweep */ });
         debited++;
         outcomes.push({
           key,
           outcome: "debited",
-          detail: claimedDebit ? `${debitEth.toFixed(6)} native` : "already_claimed_skipped",
+          detail: debitResult.debited
+            ? `${debitEth.toFixed(6)} native`
+            : "already_claimed_skipped",
         });
       } catch (e) {
         // Leave the row in place for the next tick. Ops alert so a
@@ -286,14 +285,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const debitEth = Number(gasWei) / 1e18;
     try {
       if (debitEth > 0) {
-        // Same per-txHash idempotency claim as the fund path. The
-        // clear-delegation route may have already debited inline;
-        // this prevents double-debit if its KV DEL of the pending
-        // row failed silently.
-        const claimedDebit = await claimNativeBridgeDebit(rec.txHash, rec.ownerLc, rec.chain);
-        if (claimedDebit) {
-          await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
-        }
+        // Atomic claim + INCRBYFLOAT (Lua). Closes the same race the
+        // fund path closes — clear-delegation route may have already
+        // debited inline; this prevents double-debit if its KV DEL of
+        // the pending row failed silently.
+        await claimAndDebitNativeBridge(rec.txHash, rec.ownerLc, rec.chain, debitEth);
       }
       await kv.del(key).catch(() => { /* TTL will sweep */ });
       clearDebited++;
@@ -307,6 +303,76 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         `Clear txHash: <code>${rec.txHash}</code>\n` +
         `Debit owed: ${debitEth.toFixed(6)} native\n` +
         `Error: ${err.slice(0, 200)}`,
+        "error",
+      ).catch(() => { /* best-effort */ });
+    }
+  }
+
+  // ── Orphan-fund reconciliation pass ────────────────────────────────
+  // Orphan rows are written when the regular `setPendingFund` 3-retry
+  // budget exhausted AFTER the funding tx broadcasted. They have NO
+  // TTL — they sit forever until we credit them here. Without this
+  // pass, the audit's "orphan records are stored but never processed"
+  // finding would mean every degraded-KV event leaks user gas.
+  //
+  // Shape matches the fund reconcile loop. Different list key.
+  let orphanKeys: string[] = [];
+  let orphanDebited = 0;
+  let orphanStillPending = 0;
+  let orphanReverted = 0;
+  try {
+    orphanKeys = await listOrphanFundKeys();
+  } catch (e) {
+    console.error("[ccip-pending-fund-reconcile] orphan scan failed", e);
+  }
+  for (const key of orphanKeys) {
+    const rec = await kv.get<OrphanFundRecord>(key).catch(() => null);
+    if (!rec || typeof rec.txHash !== "string" || typeof rec.chain !== "string") {
+      await kv.del(key).catch(() => { /* swallow */ });
+      continue;
+    }
+    if (!isCCIPChain(rec.chain)) {
+      await kv.del(key).catch(() => { /* swallow */ });
+      continue;
+    }
+    const provider = getCCIPProvider(rec.chain as CCIPChainKey);
+    let receipt: Awaited<ReturnType<typeof provider.getTransactionReceipt>> | null = null;
+    try {
+      receipt = await provider.getTransactionReceipt(rec.txHash);
+    } catch {
+      orphanStillPending++;
+      continue;
+    }
+    if (!receipt) {
+      // Orphan rows are by definition POST-broadcast. If the receipt
+      // doesn't exist after we've already written the orphan row, the
+      // tx was likely dropped/replaced. Leave the row; ops will triage
+      // (orphan rows have no TTL, no auto-sweep).
+      orphanStillPending++;
+      continue;
+    }
+    if (receipt.status !== 1) {
+      // Reverted — no debit owed. DEL the orphan row.
+      orphanReverted++;
+      await kv.del(key).catch(() => { /* swallow */ });
+      continue;
+    }
+    try {
+      const gasWei  = (receipt.gasUsed ?? 0n) * (receipt.gasPrice ?? 0n);
+      const valWei  = (() => { try { return BigInt(rec.fundDeltaWei); } catch { return 0n; } })();
+      const debitEth = Number(valWei + gasWei) / 1e18;
+      await claimAndDebitNativeBridge(rec.txHash, rec.ownerLc, rec.chain, debitEth);
+      await kv.del(key).catch(() => { /* swallow */ });
+      orphanDebited++;
+    } catch (e) {
+      orphanStillPending++;
+      void sendOpsAlert(
+        `<b>🚨 Orphan-fund debit FAILED — row retained</b>\n\n` +
+        `Owner: <code>${rec.ownerLc}</code>\n` +
+        `Chain: ${rec.chain}\n` +
+        `Fund txHash: <code>${rec.txHash}</code>\n` +
+        `Error: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}\n\n` +
+        `Will retry next tick. Reason this row exists: ${rec.reason}`,
         "error",
       ).catch(() => { /* best-effort */ });
     }
@@ -326,6 +392,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       clearDebited,
       clearStillPending,
       clearOrphans,
+      orphanScanned:    orphanKeys.length,
+      orphanDebited,
+      orphanReverted,
+      orphanStillPending,
     },
     durationMs,
   });
@@ -334,11 +404,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     debited,
     reverted,
     stillPending,
+    skippedInlineInFlight,
     orphans,
     clearScanned:     clearKeys.length,
     clearDebited,
     clearStillPending,
     clearOrphans,
+    orphanScanned:    orphanKeys.length,
+    orphanDebited,
+    orphanReverted,
+    orphanStillPending,
     outcomes,
     durationMs,
     asOf: new Date().toISOString(),

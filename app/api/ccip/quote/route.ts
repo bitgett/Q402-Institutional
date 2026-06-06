@@ -26,6 +26,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { isCCIPChain, CCIP_CONFIG, quoteBridgeFee, feeToUsd, type CCIPChainKey } from "@/app/lib/ccip";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,23 @@ function isAddress(s: string): boolean {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // ── Per-IP rate limit ──────────────────────────────────────────────────
+  // The quote route is intentionally unauth (no API key required) so the
+  // MCP, dashboard, and AI agents can preview fees freely. But every
+  // request triggers an on-chain Router.getFee() call on the source
+  // chain — without a cap, an attacker can burn RPC quota + Vercel
+  // function concurrency at $0 cost. 60 req/min per IP is plenty for
+  // a human user (one quote refresh per click) and a bursty agent
+  // (~1 quote per second). Fail-open: we'd rather over-serve during a
+  // KV blip than block legitimate quotes.
+  const ip = getClientIP(req);
+  if (!(await rateLimit(ip, "ccip-quote", 60, 60, /* failOpen */ true))) {
+    return NextResponse.json(
+      { error: "Too many quote requests. Slow down and retry in a minute." },
+      { status: 429 },
+    );
+  }
+
   let body: QuoteBody;
   try {
     body = (await req.json()) as QuoteBody;

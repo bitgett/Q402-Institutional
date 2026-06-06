@@ -44,9 +44,8 @@ import {
 import { AGENTIC_CHAINS, isAgenticChainKey } from "@/app/lib/agentic-wallet-sign";
 import type { ChainKey } from "@/app/lib/relayer";
 import {
-  claimNativeBridgeDebit,
+  claimAndDebitNativeBridge,
   getGasBalance,
-  recordNativeBridgeUsage,
   setPendingClearDebit,
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
@@ -354,14 +353,13 @@ async function runClear(args: RunClearArgs): Promise<NextResponse> {
       const actualWei   = gasUsedWei * gasPriceWei;
       actualClearGasEth = Number(actualWei) / 1e18;
       if (actualClearGasEth > 0) {
-        // Per-txHash idempotency claim. The reconcile cron can race
-        // here if `setPendingClearDebit` was written by an earlier
-        // attempt that timed out after INCRBYFLOAT succeeded but
-        // before the row was cleared. Claim refuses the second write.
-        const claimedDebit = await claimNativeBridgeDebit(result.txHash, owner, chain);
-        if (claimedDebit) {
-          await recordNativeBridgeUsage(owner, chain, actualClearGasEth);
-        }
+        // Atomic claim + INCRBYFLOAT (Lua). The reconcile cron can
+        // race here if `setPendingClearDebit` was written by an
+        // earlier attempt that timed out after INCRBYFLOAT succeeded
+        // but before the row was cleared. The Lua script makes claim
+        // + debit a single atomic op so neither orphan-claim nor
+        // double-debit is possible.
+        await claimAndDebitNativeBridge(result.txHash, owner, chain, actualClearGasEth);
       }
     } catch (debitErr) {
       // Failed to fetch receipt OR record usage. Persist a pending-debit

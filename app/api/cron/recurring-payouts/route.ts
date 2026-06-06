@@ -20,10 +20,17 @@
  *                             the AES-GCM-encrypted PK). Advance
  *                             nextRunAt. Counters++.
  *
- * Daily cap is bypassed by design: the user authorised the recurring
- * amount via intent-bound sig at rule creation time. The rule itself
- * is the spend ceiling. Per-tx max is re-checked at fire time only as
- * a defence against the user lowering it after the rule was created.
+ * Daily cap IS enforced at fire time (security audit FIX 2026-06-07).
+ * Previously the cron only re-checked per-tx max, leaving an abuse
+ * vector: API-key-only rule creation × no rule-count cap × no daily
+ * cap on fire = an attacker with the user's API key could create
+ * many small-amount hourly rules and drain the wallet far past the
+ * dashboard's daily cap. Fires now reserve against
+ * `chargeAgainstDailyLimit` for the rule's total amount; if today's
+ * bucket would overflow, the fire is skipped (transient — same
+ * nextActionAt is re-attempted next tick when the bucket has space).
+ * A non-transient cap exceedance (rule total alone > cap) still
+ * terminates the rule the same way per-tx exceedance does.
  *
  * Failure handling:
  *   - per-tx cap exceeded            → terminal "fired-cap-exceeded"
@@ -51,6 +58,8 @@ import { dispatchRecurringWebhook } from "@/app/lib/recurring-webhook";
 import {
   getActiveAgenticWallet,
   decryptPrivateKey,
+  chargeAgainstDailyLimit,
+  refundDailySpend,
 } from "@/app/lib/agentic-wallet";
 import {
   signAgenticPayment,
@@ -93,6 +102,8 @@ interface PerRuleOutcome {
     | "skipped-subscription-lapsed"
     | "skipped-no-api-key"
     | "skipped-per-tx-exceeded"
+    | "skipped-daily-cap-too-low"
+    | "skipped-daily-cap-full"
     | "transient-error"
     | "recovered-missed-bookkeeping";
   txHash?: string;
@@ -200,6 +211,58 @@ async function processOneRule(
     }
   }
 
+  // 2b. Daily-cap reservation (security audit FIX 2026-06-07).
+  //    Compute the rule's total fire amount and reserve it against the
+  //    wallet's dailyLimitUsd bucket BEFORE firing. If the rule's total
+  //    is itself above the cap, terminate the rule (analog to per-tx
+  //    exceedance). If the bucket overflows because of TODAY'S earlier
+  //    fires, skip this fire (transient — tomorrow's bucket allows).
+  //    Without this, API-key-only rule creation × any rule-count + a
+  //    "daily cap bypassed by design" cron is an abuse vector.
+  let ruleTotalUsd = 0;
+  for (const r of rule.recipients) {
+    const n = Number(r.amount);
+    if (Number.isFinite(n) && n > 0) ruleTotalUsd += n;
+  }
+  let dailyReserved = false;
+  if (
+    ruleTotalUsd > 0 &&
+    typeof wallet.dailyLimitUsd === "number" &&
+    Number.isFinite(wallet.dailyLimitUsd) &&
+    wallet.dailyLimitUsd > 0
+  ) {
+    // Terminal: rule total alone exceeds cap. Same shape as per-tx
+    // exceedance — the user must raise the cap or cancel + recreate.
+    if (ruleTotalUsd > wallet.dailyLimitUsd) {
+      const errMsg =
+        `rule total $${ruleTotalUsd.toFixed(2)} exceeds the wallet's daily cap ` +
+        `$${wallet.dailyLimitUsd.toFixed(2)}. Raise the cap (or cancel + recreate the rule).`;
+      await recordRuleCapExceeded(rule, errMsg, nowMs);
+      fireStateWebhook(rule, "recurring.stopped", errMsg, nowMs);
+      return { ruleKey, walletId: rule.walletId, outcome: "skipped-daily-cap-too-low" };
+    }
+    const reservation = await chargeAgainstDailyLimit(
+      rule.ownerAddr,
+      rule.walletId,
+      ruleTotalUsd,
+      wallet.dailyLimitUsd,
+    );
+    if (!reservation.allowed) {
+      // Transient: today's bucket is full. Don't terminate — next tick
+      // is rolled back when the cap rolls (00:00 UTC). Reuse the
+      // existing transient-error log path so the rule's
+      // nextActionAt isn't advanced.
+      await recordRuleTransientError(
+        rule,
+        `daily-cap reservation deferred (bucket full): spent $${reservation.spent}, ` +
+          `cap $${reservation.limit}, requested $${reservation.requested}.`,
+        nowMs,
+      );
+      return { ruleKey, walletId: rule.walletId, outcome: "skipped-daily-cap-full" };
+    }
+    dailyReserved = true;
+  }
+
   // 3. Subscription gate — recurring is a paid feature on every chain,
   //    including BNB. Trial keys may MANUALLY pay via /api/relay, but
   //    scheduled fires consume paid-tier quota / sponsorship and must
@@ -207,9 +270,21 @@ async function processOneRule(
   //    a key-scope confusion: a paid user creating a BNB rule should
   //    never see their fires routed through their trial key just
   //    because trialApiKey was still present on the sub.
+  // Helper: refund the daily reservation on every path that aborts AFTER
+  // we charged but BEFORE the relay confirms. Without this, a paid-sub
+  // lapse / fire-lock contention / sign failure would silently lock
+  // ruleTotalUsd out of the user's cap for the rest of the day even
+  // though no money moved.
+  const refundDailyIfReserved = async () => {
+    if (dailyReserved) {
+      await refundDailySpend(rule.ownerAddr, rule.walletId, ruleTotalUsd).catch(() => {});
+    }
+  };
+
   const sub = await getSubscription(rule.ownerAddr);
   if (!hasMultichainScope(sub)) {
     const errMsg = `Recurring requires an active paid Multichain subscription on every chain (including BNB). Re-subscribe and resume to retry.`;
+    await refundDailyIfReserved();
     await recordRuleCapExceeded(rule, errMsg, nowMs);
     fireStateWebhook(rule, "recurring.stopped", errMsg, nowMs);
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-subscription-lapsed" };
@@ -221,6 +296,7 @@ async function processOneRule(
   const apiKey = sub?.apiKey;
   if (!apiKey) {
     const errMsg = `No paid apiKey on the subscription. Re-activate the paid plan and resume to retry.`;
+    await refundDailyIfReserved();
     await recordRuleCapExceeded(rule, errMsg, nowMs);
     fireStateWebhook(rule, "recurring.stopped", errMsg, nowMs);
     return { ruleKey, walletId: rule.walletId, outcome: "skipped-no-api-key" };
@@ -241,6 +317,11 @@ async function processOneRule(
       // stuck slot — no relay, no second on-chain send. Without this,
       // every future heartbeat would also hit the marker and bail,
       // leaving the user with a rule that appears "never to fire".
+      //
+      // Refund the reservation: the FIRST tick already charged on the
+      // way to firing, so charging again here would double-debit the
+      // user's daily bucket.
+      await refundDailyIfReserved();
       await advanceAfterMissedBookkeeping(rule, nowMs);
       return {
         ruleKey,
@@ -249,6 +330,9 @@ async function processOneRule(
         error: claim.reason,
       };
     }
+    // Lock contention with another tick. Refund — the OTHER tick will
+    // charge fresh inside its own iteration.
+    await refundDailyIfReserved();
     return {
       ruleKey,
       walletId: rule.walletId,
@@ -263,6 +347,7 @@ async function processOneRule(
     // re-run) isn't blocked for the full TTL; the relayer-key
     // recovery is a config fix, not a re-fire race.
     await releaseFireSlot(rule);
+    await refundDailyIfReserved();
     await recordRuleTransientError(rule, "relayer key not loaded", nowMs);
     fireStateWebhook(rule, "recurring.error", "relayer key not loaded", nowMs);
     return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: "relay_unavailable" };
@@ -338,6 +423,8 @@ async function processOneRule(
   // Case (a) — zero recipients settled. Release lock, transient retry.
   if (firstFailureBeforeAnySuccess !== null && settledRows.length === 0) {
     await releaseFireSlot(rule);
+    // No money moved on chain; full refund of the reservation.
+    await refundDailyIfReserved();
     await recordRuleTransientError(rule, firstFailureBeforeAnySuccess, nowMs);
     fireStateWebhook(rule, "recurring.error", firstFailureBeforeAnySuccess, nowMs);
     return {
@@ -358,6 +445,15 @@ async function processOneRule(
   //    late and the Recent Fires entry for that slot is missing (the
   //    recovery path doesn't write to the fire log).
   const settledUsdTotal = settledRows.reduce((acc, r) => acc + Number(r.amount), 0);
+  // Partial-success refund: we reserved ruleTotalUsd against the daily
+  // cap but only `settledUsdTotal` actually moved. The diff is owed
+  // back to the user's bucket so it isn't shadow-locked until 00:00 UTC.
+  if (dailyReserved) {
+    const unsettledUsd = Math.max(0, ruleTotalUsd - settledUsdTotal);
+    if (unsettledUsd > 0) {
+      await refundDailySpend(rule.ownerAddr, rule.walletId, unsettledUsd).catch(() => {});
+    }
+  }
   const partialFailureNote =
     failedRows.length > 0
       ? `${settledRows.length}/${rule.recipients.length} fired; failed rows: ${failedRows
