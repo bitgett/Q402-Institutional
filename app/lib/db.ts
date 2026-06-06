@@ -1582,6 +1582,77 @@ export async function clearPendingFund(address: string, chain: string): Promise<
 }
 
 /**
+ * Orphan-fund breadcrumb — written when the normal `setPendingFund`
+ * write fails ALL retries after the funding tx has already broadcast.
+ *
+ * Distinction from `setPendingFund`:
+ *   - regular pending row: 1h TTL, keyed `ccip_pending_fund:{addr}:{chain}`,
+ *     single in-flight slot per (owner, chain). Sweeps cleanly via the
+ *     reconciliation cron.
+ *   - orphan-fund row: NO TTL, keyed by txHash so a writer that lost
+ *     its primary slot doesn't get sweep-collected before ops can
+ *     reconcile. Manual cleanup after debit.
+ *
+ * This is the secondary durable store the audit asked for: even if the
+ * Telegram ops alert is missed or archived, the row survives until ops
+ * explicitly deletes it. The reconciliation cron's main scan misses
+ * these (different key prefix), so ops MUST either backfill the regular
+ * pending row OR debit + DEL directly. The `listOrphanFundKeys` helper
+ * supports a future cron pass.
+ */
+export interface OrphanFundRecord {
+  txHash:        string;
+  fundDeltaWei:  string;
+  submittedAt:   number;
+  intentFp:      string;
+  ownerLc:       string;
+  chain:         string;
+  /** Free-form why-it's-here string for the on-call. */
+  reason:        string;
+}
+
+function orphanFundKey(txHash: string): string {
+  return `ccip_orphan_fund:${txHash.toLowerCase()}`;
+}
+
+export async function recordOrphanFund(rec: OrphanFundRecord): Promise<void> {
+  if (!isCCIPLinkChain(rec.chain)) return;
+  // NO TTL — orphan rows must survive long enough for ops to triage.
+  // Manual cleanup expected.
+  try {
+    await kv.set(orphanFundKey(rec.txHash), rec);
+  } catch (e) {
+    // Last-resort logging — if we can't even write the orphan row, the
+    // only paper trail is the Telegram alert + console log from the
+    // caller.
+    console.error("[recordOrphanFund] write failed", {
+      txHash: rec.txHash, chain: rec.chain, owner: rec.ownerLc,
+      err: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
+export async function listOrphanFundKeys(maxItems = 200): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | number = 0;
+  let iters = 0;
+  do {
+    const [next, batch]: [string | number, string[]] = await kv.scan(cursor, {
+      match: "ccip_orphan_fund:*",
+      count: 100,
+    });
+    cursor = next;
+    for (const k of batch) {
+      keys.push(k);
+      if (keys.length >= maxItems) return keys;
+    }
+    iters++;
+    if (iters > 200) break;
+  } while (String(cursor) !== "0");
+  return keys;
+}
+
+/**
  * Per-(owner, chain) CAS lock for the pending-fund reconcile path.
  *
  * Two writers can reach the same pending-fund record concurrently:
@@ -1590,44 +1661,109 @@ export async function clearPendingFund(address: string, chain: string): Promise<
  *   (b) the /api/cron/ccip-pending-fund-reconcile cron — fires every ~5
  *       minutes on the Render heartbeat
  *
- * Without coordination both can fetch the same receipt, both compute
- * `gasUsed × effectiveGasPrice`, both call `recordNativeBridgeUsage`,
- * and both call `clearPendingFund`. The KV INCRBYFLOAT is atomic per
- * call but DOES double-debit the user's bridge_native_used bucket.
+ * The lock is a SAFE LEASE — a random per-call token is stored as the
+ * value; release does a Lua compare-and-delete. Without this, after
+ * writer A's TTL expires and writer B claims a fresh lease, A's
+ * finally-clause DEL would unconditionally erase B's lock. The
+ * compare-and-delete refuses to release a lock A no longer owns.
  *
- * SETNX with 30s TTL is enough: the read+receipt-fetch+INCRBYFLOAT+del
- * sequence completes in well under 30s on a healthy RPC, and a stuck
- * lock self-clears on the next tick. Returns true if this caller won
- * the race and should proceed; false means another writer is already
- * reconciling and this caller should skip.
+ * On KV outage acquire returns a sentinel ("__nolock__") so the route
+ * still proceeds — paired with `claimNativeBridgeDebit`'s per-txHash
+ * idempotency, a lost lock cannot cause double-debit. The lock is
+ * latency optimisation; the claim is the safety net.
+ *
+ * Returns the lease token on win, `null` on loss. The sentinel
+ * `__nolock__` is treated as "proceed without lock — KV blip"; pass it
+ * back to release() which short-circuits.
  */
+const RECONCILE_LOCK_NOOP = "__nolock__";
+
 export async function acquirePendingFundReconcileLock(
   address: string,
   chain: string,
-): Promise<boolean> {
-  if (!isCCIPLinkChain(chain)) return true; // no-op chains don't race
+): Promise<string | null> {
+  if (!isCCIPLinkChain(chain)) return RECONCILE_LOCK_NOOP; // no-op chains don't race
+  const token = (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
   try {
     const claimed = await kv.set(
       `ccip_pending_fund_reconcile_lock:${address.toLowerCase()}:${chain}`,
-      "1",
+      token,
       { nx: true, ex: 30 },
     );
-    return claimed === "OK";
+    return claimed === "OK" ? token : null;
   } catch {
     // KV unavailable — fall through to no-lock behaviour rather than
-    // wedge the route. Reconcile cron will catch any stragglers.
-    return true;
+    // wedge the route. Per-txHash `claimNativeBridgeDebit` still
+    // guarantees idempotency in this degraded mode.
+    return RECONCILE_LOCK_NOOP;
   }
 }
 
 export async function releasePendingFundReconcileLock(
   address: string,
   chain: string,
+  token: string | null,
 ): Promise<void> {
+  if (!token || token === RECONCILE_LOCK_NOOP) return;
   if (!isCCIPLinkChain(chain)) return;
   try {
-    await kv.del(`ccip_pending_fund_reconcile_lock:${address.toLowerCase()}:${chain}`);
+    // Lua compare-and-delete — releases the lock only if THIS caller
+    // is still the owner. After TTL expires + another writer takes the
+    // lock, the old owner's DEL would otherwise wipe the new owner's
+    // lease (classic distributed-lock lease drift). The script is
+    // atomic on Redis/Upstash; eval is provided by @vercel/kv via the
+    // underlying @upstash/redis client.
+    const script = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+    await (kv as unknown as {
+      eval: (s: string, keys: string[], args: string[]) => Promise<unknown>;
+    }).eval(
+      script,
+      [`ccip_pending_fund_reconcile_lock:${address.toLowerCase()}:${chain}`],
+      [token],
+    );
   } catch { /* TTL will sweep */ }
+}
+
+/**
+ * Per-txHash idempotency claim for native-bridge debits.
+ *
+ * Wraps `recordNativeBridgeUsage` so a single fund/clear tx cannot be
+ * INCRBYFLOAT-debited twice — even if two writers race the lock above,
+ * even if INCRBYFLOAT's response is lost and RMW retries silently
+ * stomp the bucket, even if the cron picks up a row whose DEL failed
+ * after a successful debit. The claim is the single source of truth
+ * for "has this txHash been debited?".
+ *
+ * TTL = 24h: the longest practical interval between a fund tx mining
+ * and its eventual reconciliation. Beyond that, an orphaned claim is
+ * harmless (the tx is long-debited) and a fresh tx will have a
+ * different hash.
+ *
+ * Returns `true` if THIS caller acquired the claim and should perform
+ * the debit; `false` if another writer already did. Callers must
+ * still call recordNativeBridgeUsage themselves — this function does
+ * not perform the side effect, only the gate.
+ *
+ * On KV outage returns `true` (proceed) so the route doesn't wedge —
+ * degraded mode reintroduces the small double-debit risk window the
+ * full claim/lock layering otherwise closes.
+ */
+export async function claimNativeBridgeDebit(
+  txHash: string,
+  ownerLc: string,
+  chain: string,
+): Promise<boolean> {
+  if (!isCCIPLinkChain(chain)) return true;
+  try {
+    const claimed = await kv.set(
+      `bridge_debit_claim:${txHash.toLowerCase()}`,
+      `${ownerLc.toLowerCase()}:${chain}`,
+      { nx: true, ex: 86_400 }, // 24h — outlasts any realistic reconcile horizon
+    );
+    return claimed === "OK";
+  } catch {
+    return true;
+  }
 }
 
 /**

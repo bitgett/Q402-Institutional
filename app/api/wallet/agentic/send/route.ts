@@ -88,8 +88,15 @@ interface SendRecord {
    * requests deduplicate before we touch the relay. The first request
    * flips it to `complete` or `failed` once the relay returns; later
    * arrivals see whichever final state is cached.
+   *
+   * `relay_unreachable_uncertain` is set when the relay HTTP fetch
+   * throws after the request has been dispatched — we cannot tell
+   * whether the relay broadcast on chain or not. Retries see this
+   * status and refuse to re-fire (a fresh witness nonce would double-
+   * submit if the original DID broadcast). Manual resolution path:
+   * user/ops verifies on chain, then DELs the key to allow retry.
    */
-  status: "processing" | "complete" | "failed";
+  status: "processing" | "complete" | "failed" | "relay_unreachable_uncertain";
   txHash?: string;
   startedAt: number;
   finishedAt?: number;
@@ -502,9 +509,51 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       internalTrustToken: process.env.CRON_SECRET,
     });
   } catch (e) {
-    await refundAndRelease();
+    // Relay HTTP fetch threw. The relay MAY have already broadcast the
+    // tx on chain — we cannot distinguish "request died before relay
+    // saw it" (safe to retry) from "relay broadcasted, response in
+    // flight died" (unsafe — retry would double-submit because
+    // signAgenticPayment uses a fresh randomUint256Nonce on each
+    // call). The witness contract enforces nonce uniqueness so a
+    // truly-already-broadcast tx would revert on second submission,
+    // BUT only if the contract sees the SAME nonce — fresh nonce
+    // = fresh authorization that the contract accepts. Treat as
+    // uncertain: KEEP the claim alive (no DEL), refund the budget
+    // (safer to over-refund than over-charge under uncertainty),
+    // page ops. Retries on the same intent fingerprint hit the
+    // existing-claim handler above and get the uncertain status.
+    await refundDailySpend(owner, walletId, numAmount).catch(() => {});
+    const uncertainRecord: SendRecord = {
+      sendId,
+      status: "relay_unreachable_uncertain",
+      startedAt,
+      finishedAt: Date.now(),
+      relayBody: null,
+      relayStatus: 0,
+    };
+    await kv.set(idempotencyKey, uncertainRecord, { ex: IDEMPOTENCY_TTL_SEC }).catch(() => {
+      /* if we can't overwrite, the original `processing` claim stays — also safe */
+    });
+    void sendOpsAlert(
+      `agentic-wallet/send relay FETCH threw — outcome UNCERTAIN. ` +
+        `owner=${owner} walletId=${walletId} sendId=${sendId} chain=${body.chain} ` +
+        `token=${body.token} amount=${body.amount} to=${body.to}. ` +
+        `Verify on-chain BEFORE clearing the idempotency key — a retry would re-sign ` +
+        `with a fresh witness nonce and double-submit if the relay actually broadcast. ` +
+        `Error: ${e instanceof Error ? e.message : String(e)}`,
+      "critical",
+    );
     console.error("[agentic-wallet/send] relay forward failed:", e);
-    return NextResponse.json({ error: "relay_forward_failed" }, { status: 502 });
+    return NextResponse.json(
+      {
+        error: "relay_outcome_uncertain",
+        sendId,
+        message:
+          "We couldn't confirm whether the relay broadcast your transfer. " +
+          "Check your wallet history on-chain before retrying — ops has been paged.",
+      },
+      { status: 502 },
+    );
   }
 
   const relayBody = await relayResponse.json().catch(() => null);

@@ -32,6 +32,7 @@ import { requireCronAuth } from "@/app/lib/cron-auth";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
   acquirePendingFundReconcileLock,
+  claimNativeBridgeDebit,
   listPendingFundKeys,
   listPendingClearDebitKeys,
   recordNativeBridgeUsage,
@@ -103,8 +104,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // receipt → debit → del sequence. SETNX with 30s TTL ensures only
     // one writer proceeds; the cron skips this row this tick and the
     // next tick picks it up.
-    const lockClaimed = await acquirePendingFundReconcileLock(rec.ownerLc, rec.chain);
-    if (!lockClaimed) {
+    const lockToken = await acquirePendingFundReconcileLock(rec.ownerLc, rec.chain);
+    if (!lockToken) {
       skippedInlineInFlight++;
       outcomes.push({ key, outcome: "skipped_inline_in_flight" });
       continue;
@@ -178,10 +179,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const valWei  = (() => { try { return BigInt(rec.fundDeltaWei); } catch { return 0n; } })();
       const debitEth = Number(valWei + gasWei) / 1e18;
       try {
-        await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
+        // Per-txHash idempotency claim. If the inline reconciler
+        // already debited this hash (lock above doesn't catch the
+        // case where the inline path completed AFTER its release
+        // but BEFORE this cron tick saw the stale row), the claim
+        // refuses and we skip the INCRBYFLOAT. We still DEL the
+        // pending row.
+        const claimedDebit = await claimNativeBridgeDebit(rec.txHash, rec.ownerLc, rec.chain);
+        if (claimedDebit) {
+          await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
+        }
         await kv.del(key).catch(() => { /* TTL will sweep */ });
         debited++;
-        outcomes.push({ key, outcome: "debited", detail: `${debitEth.toFixed(6)} native` });
+        outcomes.push({
+          key,
+          outcome: "debited",
+          detail: claimedDebit ? `${debitEth.toFixed(6)} native` : "already_claimed_skipped",
+        });
       } catch (e) {
         // Leave the row in place for the next tick. Ops alert so a
         // persistent KV failure is visible.
@@ -202,8 +216,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } finally {
       // Always release the SETNX lock so the next tick (cron OR inline
       // /api/ccip/send retry) can pick up wherever this iteration left
-      // off. continue + finally is well-defined in JS.
-      await releasePendingFundReconcileLock(rec.ownerLc, rec.chain);
+      // off. continue + finally is well-defined in JS. The token-bound
+      // release refuses to delete a lock another writer took after our
+      // TTL expired (Lua compare-and-delete).
+      await releasePendingFundReconcileLock(rec.ownerLc, rec.chain, lockToken);
     }
   }
 
@@ -270,7 +286,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const debitEth = Number(gasWei) / 1e18;
     try {
       if (debitEth > 0) {
-        await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
+        // Same per-txHash idempotency claim as the fund path. The
+        // clear-delegation route may have already debited inline;
+        // this prevents double-debit if its KV DEL of the pending
+        // row failed silently.
+        const claimedDebit = await claimNativeBridgeDebit(rec.txHash, rec.ownerLc, rec.chain);
+        if (claimedDebit) {
+          await recordNativeBridgeUsage(rec.ownerLc, rec.chain, debitEth);
+        }
       }
       await kv.del(key).catch(() => { /* TTL will sweep */ });
       clearDebited++;
