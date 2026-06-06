@@ -14,7 +14,7 @@ import ClaudeMcpCard from "../components/ClaudeMcpCard";
 import { AgenticWalletTab } from "./components/AgenticWalletTab";
 import ClaimWalletPrompt from "./ClaimWalletPrompt";
 import WrongWalletHardBlock from "./WrongWalletHardBlock";
-import { getAuthCreds, clearAuthCache, getFreshChallenge } from "../lib/auth-client";
+import { getAuthCreds, clearAuthCache, getActionAuth } from "../lib/auth-client";
 import { GASTANK_ADDRESS } from "../lib/wallets";
 import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
 import { TRIAL_DURATION_DAYS, TRIAL_CREDITS } from "../lib/feature-flags";
@@ -1589,10 +1589,6 @@ export default function DashboardPage() {
 
   async function rotateKey() {
     if (!address) return;
-    // Key rotation requires a fresh one-time challenge (not the cached session nonce)
-    const chal = await getFreshChallenge(address, signMessage);
-    if (!chal) return;
-    const { challenge, signature } = chal;
     // Route to the slot the user is actually looking at. The Trial view's
     // card displays sub.trialApiKey (or the pre-Phase-1 sub.apiKey when
     // plan === "trial" and trialApiKey is empty); the Multichain view
@@ -1600,12 +1596,19 @@ export default function DashboardPage() {
     // touched the paid slot, so the trial view's rotate button left the
     // displayed key unchanged.
     const scope = trialViewActive ? "trial" : "paid";
+    // Key rotation requires an INTENT-BOUND signature
+    // (action="keys.rotate", intent={scope}) so a signature collected
+    // for any other action (wallet bind, email link, trial activation,
+    // …) cannot be replayed to mint a fresh API key. Audit FIX
+    // 2026-06-07.
+    const auth = await getActionAuth(address, "keys.rotate", { scope }, signMessage);
+    if (!auth) return;
     setRotatingKey(true);
     try {
       const res = await fetch("/api/keys/rotate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, challenge, signature, scope }),
+        body: JSON.stringify({ address, nonce: auth.challenge, signature: auth.signature, scope }),
       });
       const data = await res.json();
       if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }

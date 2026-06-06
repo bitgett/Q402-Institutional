@@ -51,7 +51,7 @@ import {
   recordLinkUsage,
   getGasBalance,
   acquirePendingFundReconcileLock,
-  claimNativeBridgeDebit,
+  claimAndDebitNativeBridge,
   recordNativeBridgeUsage,
   recordOrphanFund,
   releasePendingFundReconcileLock,
@@ -525,15 +525,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             const recFundWei   = BigInt(pending.fundDeltaWei);
             const recDebitEth  = Number(recFundWei + recGasWei) / 1e18;
             try {
-              // Per-txHash idempotency claim. If another writer (cron
-              // OR another inline retry) already claimed this hash, we
-              // skip the INCRBYFLOAT entirely — they own the debit.
-              // The pending row may already be gone in that case; the
-              // clearPendingFund call below is best-effort either way.
-              const claimedDebit = await claimNativeBridgeDebit(pending.txHash, owner, src);
-              if (claimedDebit) {
-                await recordNativeBridgeUsage(owner, src, recDebitEth);
-              }
+              // Atomic per-txHash claim + INCRBYFLOAT in one Redis EVAL.
+              // If another writer (cron OR another inline retry) already
+              // settled this hash, the script returns "already_claimed"
+              // and we skip the INCR — the bucket is already correct.
+              // If the script reaches INCR and the network drops the
+              // response, the claim survives on the server and our
+              // retry will see "already_claimed" — no double debit
+              // and no missed debit.
+              await claimAndDebitNativeBridge(pending.txHash, owner, src, recDebitEth);
               await clearPendingFund(owner, src);
               agentFundEth     = recDebitEth;
               agentFundTxHash  = pending.txHash;
@@ -787,10 +787,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           // Last-resort durable breadcrumb — write to the orphan-fund
           // bucket (no TTL, keyed by txHash) so the row survives even
           // if the Telegram ops alert is missed or archived. The
-          // regular reconcile cron does NOT scan this prefix; manual
-          // recovery is expected (debit + DEL). A future cron pass
-          // can `listOrphanFundKeys()` and reconcile automatically.
-          await recordOrphanFund({
+          // orphan-reconcile pass in the existing cron scans this
+          // prefix and credits the debit on the next tick.
+          const orphanWritten = await recordOrphanFund({
             txHash:       fundTx.hash,
             fundDeltaWei: fundDeltaWei.toString(),
             submittedAt:  pendingRecord.submittedAt,
@@ -799,23 +798,45 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             chain:        src,
             reason:       "setPendingFund 3x retry exhausted after broadcast",
           });
-          void sendOpsAlert(
-            `<b>🚨 CCIP setPendingFund FAILED after 3 retries — orphan row written</b>\n\n` +
-            `Owner: <code>${owner}</code>\n` +
-            `Chain: ${src}\n` +
-            `Fund txHash: <code>${fundTx.hash}</code>\n` +
-            `Amount: ${fundDeltaEth.toFixed(6)} native (fundDeltaWei=${fundDeltaWei.toString()})\n` +
-            `Intent fingerprint: ${fp}\n` +
-            `SubmittedAt: ${pendingRecord.submittedAt}\n\n` +
-            `Regular cron won't see this tx — orphan breadcrumb written at ` +
-            `<code>ccip_orphan_fund:${fundTx.hash.toLowerCase()}</code> ` +
-            `(no TTL, manual cleanup). To reconcile, either restore the ` +
-            `regular pending row OR debit directly: INCRBYFLOAT ` +
-            `bridge_native_used:${owner.toLowerCase()}.${src} (after ` +
-            `claiming bridge_debit_claim:${fundTx.hash.toLowerCase()}), ` +
-            `then DEL ccip_orphan_fund:${fundTx.hash.toLowerCase()}.`,
-            "error",
-          ).catch(() => { /* best-effort */ });
+          if (orphanWritten) {
+            void sendOpsAlert(
+              `<b>🚨 CCIP setPendingFund FAILED after 3 retries — orphan row written</b>\n\n` +
+              `Owner: <code>${owner}</code>\n` +
+              `Chain: ${src}\n` +
+              `Fund txHash: <code>${fundTx.hash}</code>\n` +
+              `Amount: ${fundDeltaEth.toFixed(6)} native (fundDeltaWei=${fundDeltaWei.toString()})\n` +
+              `Intent fingerprint: ${fp}\n` +
+              `SubmittedAt: ${pendingRecord.submittedAt}\n\n` +
+              `Reconcile cron's orphan pass will credit the debit on the next tick ` +
+              `(orphan key: <code>ccip_orphan_fund:${fundTx.hash.toLowerCase()}</code>).`,
+              "error",
+            ).catch(() => { /* best-effort */ });
+          } else {
+            // CRITICAL: even the orphan write failed. The fund tx is
+            // on-chain, no durable breadcrumb exists, and the user
+            // SHOULD be debited. Distinct alert + structured console
+            // log so ops can immediately reconstruct manually.
+            console.error("[ccip/send] CRITICAL: pending AND orphan writes both failed", {
+              owner, src, txHash: fundTx.hash,
+              fundDeltaWei: fundDeltaWei.toString(),
+              intentFp: fp,
+              submittedAt: pendingRecord.submittedAt,
+            });
+            void sendOpsAlert(
+              `<b>🆘 CCIP fund tx on-chain but NO durable record (pending + orphan both failed)</b>\n\n` +
+              `Owner: <code>${owner}</code>\n` +
+              `Chain: ${src}\n` +
+              `Fund txHash: <code>${fundTx.hash}</code>\n` +
+              `Amount: ${fundDeltaEth.toFixed(6)} native (fundDeltaWei=${fundDeltaWei.toString()})\n` +
+              `Intent fp: ${fp} · SubmittedAt: ${pendingRecord.submittedAt}\n\n` +
+              `IMMEDIATE MANUAL ACTION REQUIRED — KV is severely degraded. Once KV ` +
+              `recovers, manually claim+debit: SET bridge_debit_claim:${fundTx.hash.toLowerCase()} ` +
+              `"${owner.toLowerCase()}:${src}" NX EX 86400, then INCRBYFLOAT ` +
+              `bridge_native_used:${owner.toLowerCase()}.${src} by the actual cost ` +
+              `(gasUsed×gasPrice + value).`,
+              "error",
+            ).catch(() => { /* best-effort */ });
+          }
         }
 
         // ── Wait with timeout ──────────────────────────────────────
@@ -910,16 +931,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const actualFundGasEth    = Number(actualFundGasWei) / 1e18;
         const debitEth            = fundDeltaEth + actualFundGasEth;
         try {
-          // Per-txHash idempotency claim — if a concurrent retry or the
-          // reconcile cron already debited THIS fund tx, we skip the
-          // INCRBYFLOAT but still proceed (the bridge can run; the
-          // ledger is correct). Without this, a request that DELs the
-          // pending row before this finaliseClaim returns can race the
-          // cron and double-debit.
-          const claimedDebit = await claimNativeBridgeDebit(fundTx.hash, owner, src);
-          if (claimedDebit) {
-            await recordNativeBridgeUsage(owner, src, debitEth);
-          }
+          // Atomic per-txHash claim + INCRBYFLOAT. If a concurrent
+          // retry or the reconcile cron already settled this fund tx
+          // the script returns "already_claimed" and we don't re-INCR
+          // (no double debit). If the network drops the response after
+          // INCR ran, the claim guarantees our retry sees the same
+          // "already_claimed" verdict.
+          await claimAndDebitNativeBridge(fundTx.hash, owner, src, debitEth);
           // Debit landed (or was already on the ledger) — pending row no
           // longer needed.
           await clearPendingFund(owner, src).catch(() => { /* TTL will sweep */ });

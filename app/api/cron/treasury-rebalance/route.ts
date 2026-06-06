@@ -375,8 +375,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         .incrbyfloat(dailySpendKey(p.chain), -reserved)
         .catch(() => { /* TTL will sweep */ });
     };
+    let tx: ethers.TransactionResponse | null = null;
     try {
-      let tx: ethers.TransactionResponse;
       if (p.asset === "native") {
         tx = await wallet.sendTransaction({
           to:       p.toAddress,
@@ -392,7 +392,39 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           data: transferData,
         });
       }
-      const receipt = await tx.wait();
+      // Split the wait into its own try/catch. A `sendTransaction`
+      // throw means the tx never broadcast → safe to refund. A
+      // `tx.wait()` throw means the tx is in the mempool but we
+      // can't observe the receipt — refunding here lets the next
+      // cron tick re-send and double-spend if the original mines.
+      // Treat wait-throw as uncertain: KEEP the reservation, page
+      // ops, leave a breadcrumb for manual reconciliation.
+      let receipt: Awaited<ReturnType<typeof tx.wait>>;
+      try {
+        receipt = await tx.wait();
+      } catch (waitErr) {
+        const err = waitErr instanceof Error ? waitErr.message : String(waitErr);
+        results.push({
+          plan: p,
+          ok:   false,
+          error: `wait_failed_uncertain: ${err.slice(0, 160)}`,
+          txHash: tx.hash,
+        });
+        void sendOpsAlert(
+          `<b>🚨 treasury rebalance tx broadcast but wait() FAILED — OUTCOME UNCERTAIN</b>\n\n` +
+          `Target: ${p.target} on ${p.chain}\n` +
+          `Tx: <code>${tx.hash}</code>\n` +
+          `Amount: ${p.amountWhole.toFixed(6)} ${p.asset} (~$${p.estUsd.toFixed(2)})\n\n` +
+          `Reservation NOT refunded — if you refund and the tx mined, the next ` +
+          `cron tick over-spends past the daily cap. Verify on-chain: if mined, ` +
+          `leave as-is. If dropped, manually INCRBYFLOAT ` +
+          `cron:treasury-rebalance:spend:${utcDayKey()}:${p.chain} ` +
+          `by -${(reservedPerPlan.get(p) ?? 0).toFixed(2)}.\n\n` +
+          `Wait error: ${err.slice(0, 200)}`,
+          "error",
+        ).catch(() => { /* best-effort */ });
+        continue;
+      }
       if (!receipt || receipt.status !== 1) {
         await refundReservation();
         results.push({ plan: p, ok: false, error: "tx_reverted", txHash: tx.hash });
@@ -415,7 +447,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         "warn",
       ).catch(() => { /* best-effort */ });
     } catch (e) {
-      await refundReservation();
+      // sendTransaction itself threw → tx never broadcast → safe to
+      // refund the reservation. If we already have a tx object here
+      // it means a pre-wait error path threw; safest is still to
+      // surface it. We do NOT refund on wait-failure (handled above).
+      if (!tx) {
+        await refundReservation();
+      }
       results.push({
         plan: p,
         ok:   false,
