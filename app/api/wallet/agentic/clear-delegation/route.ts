@@ -27,6 +27,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { kv } from "@vercel/kv";
 import { privateKeyToAccount } from "viem/accounts";
 import { createPublicClient, http, type Address, type Hex } from "viem";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -35,7 +36,11 @@ import {
   getActiveAgenticWallet,
   decryptPrivateKey,
 } from "@/app/lib/agentic-wallet";
-import { broadcastClear, type SignedAuthorization } from "@/app/lib/eip7702";
+import {
+  broadcastClear,
+  recoverAuthorizationAddress,
+  type SignedAuthorization,
+} from "@/app/lib/eip7702";
 import { AGENTIC_CHAINS, isAgenticChainKey } from "@/app/lib/agentic-wallet-sign";
 import type { ChainKey } from "@/app/lib/relayer";
 import {
@@ -103,6 +108,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const owner = authResult;
   const walletId = body.walletId.toLowerCase();
 
+  // ── Per-OWNER rate limit ────────────────────────────────────────────
+  // The IP-level limit above (5/h per IP) doesn't close the case where a
+  // single owner rotates IPs (VPN, cloud egress) and hammers sponsored
+  // clears on non-CCIP chains where Q402 still pays gas. Cap each owner
+  // address at 3/h so even with IP rotation the relayer drain is
+  // bounded. CCIP chains debit from Gas Tank so they self-cap, but
+  // sponsored chains do not — owner-level cap covers both for free.
+  if (!(await rateLimit(`owner:${owner}`, "agentic-clear-delegation-owner", 3, 3600))) {
+    return NextResponse.json(
+      {
+        error:   "RATE_LIMITED",
+        message: "Too many clear-delegation requests from this wallet in the last hour. Retry later.",
+      },
+      { status: 429 },
+    );
+  }
+
   // ── Wallet lookup + decrypt ──────────────────────────────────────────
   const wallet = await getActiveAgenticWallet(owner, walletId);
   if (!wallet) {
@@ -110,6 +132,48 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const agenticPk = decryptPrivateKey(wallet);
   const agentAddr = wallet.address as Address;
+
+  // ── Per-wallet × per-chain SETNX lock ────────────────────────────────
+  // Two concurrent clear-delegation requests for the same (walletId, chain)
+  // would race the on-chain nonce: the second tx reuses the nonce from the
+  // first signAuthorization, gets rejected by EVM, but only after the
+  // sponsor relayer pays inclusion gas on the failed type-4. The route's
+  // IP-level rate limit (5/h) does NOT close this — a single dashboard
+  // session can fire two requests faster than the in-flight one mines.
+  //
+  // 60s TTL covers the ~45s maxDuration plus a small grace window.
+  // Lock is freed in `finally`. SETNX guarantees the second caller sees
+  // CLEAR_IN_FLIGHT immediately instead of paying gas for nothing.
+  const clearLockKey = `aw:clear-lock:${walletId}:${chain}`;
+  const clearLockClaimed = await kv.set(clearLockKey, "1", { nx: true, ex: 60 });
+  if (clearLockClaimed !== "OK") {
+    return NextResponse.json(
+      {
+        error: "CLEAR_IN_FLIGHT",
+        message: "A clear-delegation tx is already in flight for this wallet on this chain. Retry in ~60s.",
+      },
+      { status: 409 },
+    );
+  }
+
+  try {
+    return await runClear({ owner, walletId, chain, cfg, agentAddr, agenticPk });
+  } finally {
+    await kv.del(clearLockKey).catch(() => { /* best-effort lock release */ });
+  }
+}
+
+interface RunClearArgs {
+  owner:     string;
+  walletId:  string;
+  chain:     ChainKey;
+  cfg:       (typeof AGENTIC_CHAINS)[ChainKey];
+  agentAddr: Address;
+  agenticPk: string;
+}
+
+async function runClear(args: RunClearArgs): Promise<NextResponse> {
+  const { owner, chain, cfg, agentAddr, agenticPk } = args;
 
   // ── Probe current delegation state ──────────────────────────────────
   // If the wallet is already undelegated, return early — no on-chain
@@ -198,6 +262,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     s:       auth.s,
   };
 
+  // ── Recover-and-match check ─────────────────────────────────────────
+  // The EVM SILENTLY drops a bad authorization entry inside a type-0x04
+  // tx — the sponsor still pays gas and the receipt looks "successful",
+  // but the delegation is unchanged. If signAuthorization wedged (e.g.
+  // it produced a v=0/v=1 mismatch, or the chainId/nonce/address args
+  // got corrupted between sign and broadcast) the recover step here
+  // catches that BEFORE we pay sponsor gas for nothing. Recovered
+  // address must equal the Agent Wallet.
+  try {
+    const recovered = recoverAuthorizationAddress(signedAuth);
+    if (recovered.toLowerCase() !== agentAddr.toLowerCase()) {
+      return NextResponse.json(
+        {
+          error:     "AUTH_SIG_MISMATCH",
+          detail:    "authorization recovered to a different address than the Agent Wallet",
+          recovered: recovered.toLowerCase(),
+          expected:  agentAddr.toLowerCase(),
+        },
+        { status: 500 },
+      );
+    }
+  } catch (recErr) {
+    const msg = recErr instanceof Error ? recErr.message : String(recErr);
+    return NextResponse.json(
+      { error: "AUTH_SIG_RECOVERY_FAILED", detail: msg.slice(0, 200) },
+      { status: 500 },
+    );
+  }
+
   let result: Awaited<ReturnType<typeof broadcastClear>>;
   try {
     result = await broadcastClear(chain as ChainKey, agentAddr, signedAuth);
@@ -205,6 +298,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json(
       { error: "CLEAR_FAILED", detail: msg.slice(0, 240) },
+      { status: 502 },
+    );
+  }
+
+  // ── finalCode invariant ─────────────────────────────────────────────
+  // broadcastClear refetches getCode AFTER mining. If the sponsor tx
+  // confirmed but the delegation didn't actually clear (nonce-stale
+  // authorization, EVM dropped the auth entry silently, …), finalCode
+  // stays non-`0x`. We MUST surface this to the user — silently
+  // returning success means the dashboard says "cleared" while the
+  // Agent Wallet is still delegated and the next bridge auto-fund will
+  // revert again. We also page ops since the sponsor already paid gas
+  // for a no-op — that's a relayer ETH leak that needs investigation.
+  if (result.finalCode && result.finalCode !== "0x") {
+    void sendOpsAlert(
+      `<b>🚨 Clear-delegation MINED but delegation persists</b>\n\n` +
+      `Owner: <code>${owner}</code>\n` +
+      `Chain: ${chain}\n` +
+      `Agent Wallet: <code>${agentAddr}</code>\n` +
+      `txHash: <code>${result.txHash}</code>\n` +
+      `finalCode: <code>${result.finalCode.slice(0, 64)}</code>\n` +
+      `Sponsor paid ${result.gasUsed} gas for a no-op clear.`,
+      "error",
+    ).catch(() => { /* best-effort */ });
+    return NextResponse.json(
+      {
+        error:     "CLEAR_DID_NOT_APPLY",
+        detail:    "sponsor tx confirmed but the Agent Wallet is still delegated; check ops alert",
+        txHash:    result.txHash,
+        finalCode: result.finalCode,
+      },
       { status: 502 },
     );
   }

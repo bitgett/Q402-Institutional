@@ -34,6 +34,9 @@ const NPM_LATEST_URL = "https://registry.npmjs.org/@quackai/q402-mcp/latest";
 function rawUrlFor(version: string): string {
   return `https://raw.githubusercontent.com/bitgett/q402-mcp/v${version}/src/chains.ts`;
 }
+function rawUrlForPath(version: string, path: string): string {
+  return `https://raw.githubusercontent.com/bitgett/q402-mcp/v${version}/${path}`;
+}
 
 interface ManifestToken { address: string; decimals: number }
 interface ManifestChain {
@@ -257,5 +260,68 @@ describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)"
     // allowlist. If RLUSD is ever removed here without removing it from the
     // manifest's eth.tokens entry, this test catches the asymmetry.
     expect(mcpSource).toMatch(/eth:\s*\{[\s\S]*?supportedTokens:\s*\[\s*"USDC"\s*,\s*"USDT"\s*,\s*"RLUSD"\s*\][\s\S]*?\}/);
+  });
+
+  // ── 5-surface version sync (cross-repo, cross-artifact) ────────────────
+  // The MCP package publishes its version through five independent surfaces:
+  //   1. src/version.ts          (runtime-readable PACKAGE_VERSION)
+  //   2. package.json            (npm metadata)
+  //   3. package-lock.json       (npm lockfile root version field)
+  //   4. server.json             (MCP Registry manifest — twice: top-level + packages[0])
+  //   5. .codex-plugin/plugin.json (Codex plugin manifest)
+  //
+  // Any one of these can drift during a release if the bump is partial. The
+  // npm publish + MCP Registry republish + Codex plugin manifest all read from
+  // different files, so a desync produces inconsistent badge versions, mcp
+  // Registry surface vs reality drift, or wrong-version client errors.
+  //
+  // The drift guard fetches each surface at the same `v{version}` git tag as
+  // the chain registry above and asserts they all equal the npm-published
+  // version. Soft-skips on offline (same posture as the chain block).
+  it("version is consistent across all 5 publish surfaces at the npm-tagged commit", async () => {
+    await loadMcpChainsSource();
+    if (skipIfOffline()) return;
+    expect(mcpVersion, "mcpVersion resolved").toBeTruthy();
+    const want = mcpVersion!;
+
+    // Parallel fetch — these are independent. Use the same retry helper so
+    // transient registry/raw flakes don't downgrade real drift to a skip.
+    const [versionTs, pkgJson, lockJson, serverJson, codexJson] = await Promise.all([
+      fetchWithRetry(rawUrlForPath(want, "src/version.ts")).then(r => r.ok ? r.text() : null),
+      fetchWithRetry(rawUrlForPath(want, "package.json")).then(r => r.ok ? r.text() : null),
+      fetchWithRetry(rawUrlForPath(want, "package-lock.json")).then(r => r.ok ? r.text() : null),
+      fetchWithRetry(rawUrlForPath(want, "server.json")).then(r => r.ok ? r.text() : null),
+      fetchWithRetry(rawUrlForPath(want, ".codex-plugin/plugin.json")).then(r => r.ok ? r.text() : null),
+    ]);
+
+    // src/version.ts — single quoted constant.
+    expect(versionTs, "src/version.ts must be fetchable at the npm-tagged commit").not.toBeNull();
+    const versionTsMatch = versionTs!.match(/PACKAGE_VERSION\s*=\s*"([^"]+)"/);
+    expect(versionTsMatch?.[1], "src/version.ts PACKAGE_VERSION").toBe(want);
+
+    // package.json — root version field.
+    expect(pkgJson, "package.json must be fetchable").not.toBeNull();
+    const pkg = JSON.parse(pkgJson!) as { version?: string };
+    expect(pkg.version, "package.json version").toBe(want);
+
+    // package-lock.json — top-level version (npm@7+ always writes this).
+    expect(lockJson, "package-lock.json must be fetchable").not.toBeNull();
+    const lock = JSON.parse(lockJson!) as { version?: string; packages?: Record<string, { version?: string }> };
+    expect(lock.version, "package-lock.json top-level version").toBe(want);
+    // lockfileVersion 2/3 also writes packages[""].version — check that too if present.
+    if (lock.packages && lock.packages[""] && lock.packages[""].version !== undefined) {
+      expect(lock.packages[""].version, 'package-lock.json packages[""].version').toBe(want);
+    }
+
+    // server.json — top-level + packages[0].
+    expect(serverJson, "server.json must be fetchable").not.toBeNull();
+    const server = JSON.parse(serverJson!) as { version?: string; packages?: Array<{ version?: string }> };
+    expect(server.version, "server.json top-level version").toBe(want);
+    expect(server.packages?.[0]?.version, "server.json packages[0].version").toBe(want);
+
+    // .codex-plugin/plugin.json — version field.
+    expect(codexJson, ".codex-plugin/plugin.json must be fetchable").not.toBeNull();
+    const codex = JSON.parse(codexJson!) as { version?: string };
+    expect(codex.version, "plugin.json version").toBe(want);
   });
 });

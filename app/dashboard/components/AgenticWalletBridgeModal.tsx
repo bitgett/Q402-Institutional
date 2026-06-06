@@ -209,8 +209,18 @@ export function AgenticWalletBridgeModal({
   }, [amount]);
 
   const amountValid = isDecimalAmount(amount);
-  const canQuote = !quoteLoading && amountValid && src !== dst;
-  const canSubmit = !submitting && quote !== null && amountValid && src !== dst;
+  // Lock the form while a clear-delegation tx is mid-flight. Without
+  // this the user can flip src/dst/amount/feeToken while the SIGNED
+  // clear authorization is still landing on chain — clearing="ok" then
+  // fires submit() against the new chain, where the wallet is STILL
+  // delegated, and the auto-fund block reverts again. The snapshot
+  // inside handleClearDelegation is the second line of defense; this
+  // is the first.
+  const clearInFlight =
+    clearing === "signing" || clearing === "broadcasting" || clearing === "propagating";
+  const formLocked = submitting || clearInFlight;
+  const canQuote = !quoteLoading && amountValid && src !== dst && !formLocked;
+  const canSubmit = !submitting && quote !== null && amountValid && src !== dst && !clearInFlight;
 
   async function fetchQuote() {
     if (!amountValid) return;
@@ -319,14 +329,21 @@ export function AgenticWalletBridgeModal({
    * retry the clear or fall back to the dashboard's wallet-status flow.
    */
   async function handleClearDelegation() {
-    if (clearing === "signing" || clearing === "broadcasting") return;
+    if (clearing === "signing" || clearing === "broadcasting" || clearing === "propagating") return;
+    // Snapshot the form state at click-time. If the user changes src
+    // between starting the clear and the post-clear submit() retry,
+    // we'd otherwise clear delegation on chain A and re-fire submit()
+    // against chain B — which leaves chain B still delegated and
+    // wastes the clear gas. The snapshot pins the entire intent.
+    const snapshot = { src, dst, amount, feeToken };
+    if (snapshot.src !== src) return; // paranoia — already captured
     setError(null);
     setErrorCode(null);
     setClearing("signing");
     try {
       const intent: Record<string, string> = {
         walletId,
-        chain: src,
+        chain: snapshot.src,
       };
       const auth = await getActionAuth(ownerAddress, "agentic.clear_delegation", intent, signMessage);
       if (!auth) {
@@ -352,7 +369,7 @@ export function AgenticWalletBridgeModal({
             nonce:     auth.challenge,
             signature: auth.signature,
             walletId,
-            chain: src,
+            chain: snapshot.src,
           }),
         });
         const data = (await res.json().catch(() => ({}))) as {
@@ -377,8 +394,34 @@ export function AgenticWalletBridgeModal({
           setClearElapsedSec(s);
           await new Promise(r => setTimeout(r, 1_000));
         }
+        // If the user changed src/dst/amount/feeToken during the clear
+        // (form was unlocked), refuse to auto-resubmit — clearing="ok"
+        // would otherwise drive a submit() against the WRONG chain
+        // pair, double-spending. Surface the drift and let the user
+        // click Send manually after reviewing the form.
+        const drifted =
+          snapshot.src !== src ||
+          snapshot.dst !== dst ||
+          snapshot.amount !== amount ||
+          snapshot.feeToken !== feeToken;
+        if (drifted) {
+          setClearing("ok");
+          setError(
+            "Delegation cleared, but you changed the bridge form during the wait. " +
+            "Review the new values and click Send to bridge.",
+          );
+          return;
+        }
         setClearing("ok");
-        await submit();
+        try {
+          await submit();
+        } catch (submitErr) {
+          // submit() owns its own error handling, but if it throws
+          // outright we still need to roll clearing back so the
+          // recovery button doesn't get stuck on "Cleared ✓".
+          setClearing("failed");
+          setError(submitErr instanceof Error ? submitErr.message : String(submitErr));
+        }
       } finally {
         clearInterval(tickInterval);
       }
@@ -514,6 +557,7 @@ export function AgenticWalletBridgeModal({
                   onChange={setSrc}
                   options={CHAINS.map(c => ({ value: c.key, label: c.label }))}
                   ariaLabel="Source chain"
+                  disabled={formLocked}
                 />
               </div>
               <div>
@@ -523,6 +567,7 @@ export function AgenticWalletBridgeModal({
                   onChange={setDst}
                   options={LANES[src].map(k => ({ value: k, label: chainMeta(k).label }))}
                   ariaLabel="Destination chain"
+                  disabled={formLocked}
                 />
               </div>
             </div>
@@ -537,7 +582,8 @@ export function AgenticWalletBridgeModal({
                 onChange={e => setAmount(e.target.value)}
                 placeholder="1.50"
                 inputMode="decimal"
-                className="w-full rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25"
+                disabled={formLocked}
+                className="w-full rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   background: "rgba(255,255,255,0.02)",
                   borderColor:
@@ -562,7 +608,8 @@ export function AgenticWalletBridgeModal({
                       key={t}
                       type="button"
                       onClick={() => { setFeeToken(t); setQuote(null); }}
-                      className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                      disabled={formLocked}
+                      className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         active
                           ? "text-yellow"
                           : "border-white/10 text-white/55 hover:text-white"
