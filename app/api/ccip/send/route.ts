@@ -655,14 +655,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // within the tolerance of the 50% buffer above on the fee).
       const gasNeeded = needsApprove ? 380_000n : 320_000n;
       const gasCeilingWei = submitMaxFeePerGas * gasNeeded;
-      if (agentEth < gasCeilingWei) {
+      // When paying the CCIP fee in NATIVE, the Sender's ccipSend is
+      // `payable` — the fee comes out of msg.value, which the Agent
+      // Wallet must hold IN ADDITION to source-chain gas. If we only
+      // require `agentEth >= gasCeilingWei` and the wallet happens to
+      // have exactly the gas amount, the bridge submission reverts
+      // "insufficient funds for value+gas". Add feeRaw to the threshold
+      // so the auto-fund top-up covers gas + fee together; otherwise
+      // the user hits AGENT_WALLET_GAS_LOW with a Gas Tank that's
+      // already at 0 for the native bucket.
+      const feeShortfallWei = feeToken === "native" ? feeRaw : 0n;
+      const agentEthThreshold = gasCeilingWei + feeShortfallWei;
+      if (agentEth < agentEthThreshold) {
         // 10% buffer over the bare delta. Down from 20% — combined
         // with the tighter fee estimate above, this cuts the "first
         // bridge" upfront cost roughly in half without risking
         // submission-time reverts. The actual leftover (mining price
         // < submit ceiling) still gets carried forward to subsequent
         // bridges, so cumulative spend over many bridges is unchanged.
-        const fundDeltaWei = ((gasCeilingWei - agentEth) * 11n) / 10n;
+        const fundDeltaWei = ((agentEthThreshold - agentEth) * 11n) / 10n;
         const fundDeltaEth = Number(fundDeltaWei) / 1e18;
         // Worst-case funding-tx gas cost — used for both the relayer
         // pre-check below and the upper bound of what the user could be

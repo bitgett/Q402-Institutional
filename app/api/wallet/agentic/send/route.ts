@@ -523,13 +523,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // page ops. Retries on the same intent fingerprint hit the
     // existing-claim handler above and get the uncertain status.
     await refundDailySpend(owner, walletId, numAmount).catch(() => {});
+    // Note: relayStatus is intentionally OMITTED (undefined) here, not
+    // set to 0. The retry handler at the top of this route reads
+    // `httpStatus = live.relayStatus ?? (isProcessing ? 202 : 500)` —
+    // `??` only short-circuits on null/undefined, so `0` would pass
+    // through and `NextResponse.json(..., {status: 0})` throws
+    // RangeError (HTTP status must be 200-599). Leaving relayStatus
+    // undefined lets the fallback `500` kick in, which is the correct
+    // semantics for "manual recovery required, do not retry".
     const uncertainRecord: SendRecord = {
       sendId,
       status: "relay_unreachable_uncertain",
       startedAt,
       finishedAt: Date.now(),
       relayBody: null,
-      relayStatus: 0,
     };
     await kv.set(idempotencyKey, uncertainRecord, { ex: IDEMPOTENCY_TTL_SEC }).catch(() => {
       /* if we can't overwrite, the original `processing` claim stays — also safe */

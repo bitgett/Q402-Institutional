@@ -213,13 +213,23 @@ export function AgenticWalletBridgeModal({
     }
     setQuote(null);
     setQuoteError(null);
+    // Stale error + errorCode would otherwise keep the "Clear
+    // delegation" CTA visible after the user flips chains. The CTA
+    // applies to whichever chain was active when the error fired;
+    // clicking it after a chain flip would clear the WRONG chain's
+    // delegation and confuse the user.
+    setError(null);
+    setErrorCode(null);
   }, [src, dst]);
 
-  // Clear stale quote when amount changes.
+  // Clear stale quote + stale error when amount or feeToken changes.
+  // Same reason as above: the prior error referred to the prior intent.
   useEffect(() => {
     setQuote(null);
     setQuoteError(null);
-  }, [amount]);
+    setError(null);
+    setErrorCode(null);
+  }, [amount, feeToken]);
 
   const amountValid = isDecimalAmount(amount);
   // Lock the form while a clear-delegation tx is mid-flight. Without
@@ -312,7 +322,18 @@ export function AgenticWalletBridgeModal({
       const data = (await res.json().catch(() => ({}))) as SendResponse;
       if (!res.ok || !data.success) {
         setError(friendlyBridgeError(res.status, data));
-        setErrorCode(typeof data.error === "string" ? data.error : null);
+        // Read `code` BEFORE `error` — auth-derived failures
+        // (NONCE_EXPIRED, SIG_MISMATCH) put the machine code in `code`
+        // and a human-readable sentence in `error`. The "Clear
+        // delegation" CTA's `errorCode === "AGENT_WALLET_DELEGATED"`
+        // check would otherwise miss any code whose route emits the
+        // (error, code) shape instead of stuffing the code into the
+        // error field.
+        const rawCode =
+          typeof data.code === "string" ? data.code :
+          typeof data.error === "string" ? data.error :
+          null;
+        setErrorCode(rawCode);
         return;
       }
       setResult(data);
@@ -479,6 +500,14 @@ export function AgenticWalletBridgeModal({
       const liveStatus = confirmStatusRef.current;
       if (polls < maxPolls && liveStatus !== "delivered" && liveStatus !== "failed") {
         setTimeout(poll, 12_000);
+      } else if (polls >= maxPolls && (liveStatus === "pending" || liveStatus === undefined)) {
+        // Polling budget exhausted (~6 min) without a terminal state.
+        // Flip to "unknown" so the UI renders a clear "still in flight —
+        // track on CCIP Explorer" line instead of looking permanently
+        // "Bridging…". CCIP delivery can take 20+ min on busy lanes;
+        // we don't want to chew the browser, but the user needs an
+        // explicit handoff to the explorer link.
+        setConfirmStatus("unknown");
       }
     }
     const t = setTimeout(poll, 6_000);
@@ -834,13 +863,15 @@ function BridgeResult({
   const statusLabel =
     confirmStatus === "delivered" ? "Delivered ✓"
     : confirmStatus === "failed"  ? "Failed ✗"
+    : confirmStatus === "unknown" ? "Still in flight — check CCIP Explorer ↗"
     : "Bridging…";
   const statusTone =
     confirmStatus === "delivered" ? "text-emerald-300 border-emerald-400/30 bg-emerald-400/5"
     : confirmStatus === "failed"  ? "text-red-300 border-red-400/30 bg-red-400/5"
+    : confirmStatus === "unknown" ? "text-white/70 border-white/15 bg-white/[0.02]"
     : "text-yellow";
   const statusInlineStyle: CSSProperties =
-    confirmStatus === "delivered" || confirmStatus === "failed"
+    confirmStatus === "delivered" || confirmStatus === "failed" || confirmStatus === "unknown"
       ? {}
       : { borderColor: "rgba(245,197,24,0.30)", background: "rgba(245,197,24,0.05)" };
 
@@ -941,7 +972,14 @@ function ResultRow({
 // (gas-tank-low, fee-spike, CCIP-quote-failed, sender-not-deployed) don't
 // overlap with the agentic-send route's vocabulary.
 function friendlyBridgeError(status: number, body: SendResponse): string {
-  const code = body.error ?? "";
+  // Read `code` first, then fall back to `error`. The send route emits
+  // both shapes: some failure paths put the machine code in `error`
+  // (and surface a friendly message in `message`); others (auth-
+  // derived: NONCE_EXPIRED, SIG_MISMATCH) put a sentence in `error`
+  // and the code in `code`. Reading `error` only — the previous
+  // behavior — silently broke every `code === "X"` branch for the
+  // latter shape and left "Clear delegation" CTA fragile.
+  const code = body.code ?? body.error ?? "";
   if (code === "CCIP_SENDER_NOT_DEPLOYED") {
     return "Bridge is temporarily disabled on this lane (sender contract pending redeploy).";
   }
@@ -965,6 +1003,9 @@ function friendlyBridgeError(status: number, body: SendResponse): string {
       "send re-delegates the wallet, so bridge before /send when you can."
     );
   }
+  if (code === "AGENT_WALLET_NOT_DELEGATED") {
+    return "Agent Wallet is already undelegated on this chain — nothing to clear. Retry the bridge.";
+  }
   if (code === "AGENT_WALLET_GAS_LOW") {
     // Safety-net path. Normally the route auto-funds the Agent Wallet
     // from the user's Gas Tank ETH bucket, so the user never has to
@@ -984,17 +1025,44 @@ function friendlyBridgeError(status: number, body: SendResponse): string {
       "Retry in ~30 seconds and the bridge will go through."
     );
   }
+  if (code === "AGENT_WALLET_AUTOFUND_FAILED") {
+    return (
+      "Auto-fund couldn't deliver native gas to your Agent Wallet. Top up the Gas Tank directly " +
+      "from the dashboard or wait for the reconciliation cron to retry."
+    );
+  }
+  if (code === "AUTOFUND_DEBIT_FAILED") {
+    return (
+      "Bridge auto-fund went through on-chain but the Gas Tank debit didn't record. Ops is paged; " +
+      "a reconciliation cron will fix the bucket — your balance is safe. Retry in a moment."
+    );
+  }
+  if (code === "CCIP_BRIDGE_BUSY") {
+    return "Another bridge is already in flight for this Agent Wallet on this lane. Wait ~30s and retry.";
+  }
+  if (code === "RELAYER_LOW") {
+    return "Q402 relay infrastructure is refilling on this chain. Try again in a few minutes — your Gas Tank and quota are untouched.";
+  }
+  if (code === "CLEAR_IN_FLIGHT") {
+    return "A clear-delegation tx is already running for this wallet. Wait ~60s before retrying.";
+  }
+  if (code === "CLEAR_DID_NOT_APPLY") {
+    return "Clear-delegation tx confirmed but the wallet is still delegated. Ops is paged; try again in a few minutes.";
+  }
+  if (code === "AUTH_SIG_MISMATCH" || code === "AUTH_SIG_RECOVERY_FAILED") {
+    return "Couldn't verify the bridge signature locally. Reload the dashboard and re-sign.";
+  }
   if (code === "CCIP_BRIDGE_FAILED") {
     return `Bridge tx reverted on source chain. ${body.detail ? `Detail: ${body.detail.slice(0, 140)}` : ""}`.trim();
   }
   if (code === "AGENTIC_WALLET_NOT_FOUND") {
     return "Agent Wallet not found on this source chain — reload the page.";
   }
-  if (code === "NONCE_EXPIRED" || code === "BAD_SIGNATURE") {
+  if (code === "NONCE_EXPIRED" || code === "SIG_MISMATCH" || code === "BAD_SIGNATURE") {
     return "Your bridge challenge expired or didn't verify. Re-sign and try again.";
   }
   if (status === 402) {
     return "Cross-chain bridging needs an active Multichain subscription.";
   }
-  return body.detail ?? body.error ?? `Bridge failed (HTTP ${status}).`;
+  return body.message ?? body.detail ?? body.error ?? `Bridge failed (HTTP ${status}).`;
 }
