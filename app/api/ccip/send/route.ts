@@ -467,7 +467,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         // history record to a tx that funded a DIFFERENT bridge. Bail
         // and let the user wait for the cron to settle the old intent
         // (~5 min) so this route runs against a clean state.
-        if (pending.intentFp && pending.intentFp !== fp) {
+        //
+        // Treat a MISSING intentFp the same way: rows written by the
+        // pre-deploy code path don't carry the binding, so they are
+        // by definition unsafe to reconcile against a new request.
+        // Forces the cron path to settle them.
+        if (!pending.intentFp || pending.intentFp !== fp) {
           const body: Record<string, unknown> = {
             error:    "AGENT_WALLET_AUTOFUND_PENDING",
             fundTx:   pending.txHash,

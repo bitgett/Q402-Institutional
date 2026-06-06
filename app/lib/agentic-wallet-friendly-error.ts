@@ -88,17 +88,26 @@ export function friendlyError(status: number, body: BackendError): FriendlyError
   // Without these maps the user sees a generic 5xx "Send failed on our
   // side" which is misleading — these are recoverable user-actionable
   // states (delegated wallet, in-flight fund, etc), not Q402 outages.
-  if (code === "AGENT_WALLET_DELEGATED" || code === "AGENT_WALLET_NOT_DELEGATED") {
-    // Both flavors land here: the bridge auto-fund refusing because the
-    // Agent Wallet IS delegated to Q402 impl (no `receive()`), AND the
-    // clear-delegation endpoint refusing because the wallet is NOT
-    // delegated. The bridge modal's Clear Delegation button is the
-    // single recovery path — surface it directly.
+  if (code === "AGENT_WALLET_DELEGATED") {
+    // Bridge auto-fund refused because the Agent Wallet IS delegated to
+    // Q402 impl (which has no `receive()`), so a native transfer to
+    // the wallet reverts. Recovery = run clear-delegation; the bridge
+    // modal exposes the button inline.
     return {
       headline:
         "Your Agent Wallet's EIP-7702 delegation is blocking native funds. Clear it from the " +
         "bridge modal before retrying.",
-      next: { label: "Clear delegation", href: "#clear-delegation" },
+      next: { label: "Clear delegation", href: "/dashboard#clear-delegation" },
+    };
+  }
+  if (code === "AGENT_WALLET_NOT_DELEGATED") {
+    // Distinct semantics from AGENT_WALLET_DELEGATED above: this comes
+    // back when the user invoked clear-delegation against a wallet
+    // that is ALREADY undelegated. Telling them to "clear it" is
+    // exactly backwards — they tried to clear and it's already clear.
+    return {
+      headline:
+        "This Agent Wallet is already undelegated on this chain — nothing to clear. Retry the bridge.",
     };
   }
   if (code === "AGENT_WALLET_AUTOFUND_PENDING") {
@@ -113,7 +122,11 @@ export function friendlyError(status: number, body: BackendError): FriendlyError
       headline:
         "Auto-fund couldn't deliver native gas to your Agent Wallet. Top up directly from the " +
         "dashboard or wait for the reconciliation cron to retry.",
-      next: { label: "Top up Gas Tank", href: "#gas-tank" },
+      // Absolute URL — modal-context CTAs to in-page anchors don't
+      // resolve when the anchor lives on the parent dashboard, not
+      // inside the modal viewport. The bridge modal's onClose hook
+      // fires when a CTA navigates away.
+      next: { label: "Top up Gas Tank", href: "/dashboard#gas-tank" },
     };
   }
   if (code === "AUTOFUND_DEBIT_FAILED") {

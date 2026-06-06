@@ -188,6 +188,19 @@ export function AgenticWalletBridgeModal({
   // the next setTimeout iteration sees the freshest value.
   const confirmStatusRef = useRef(confirmStatus);
   useEffect(() => { confirmStatusRef.current = confirmStatus; }, [confirmStatus]);
+
+  // Mirror the form state into a ref so the drift detector inside
+  // handleClearDelegation reads CURRENT React state, not the closure-
+  // captured values from the render that produced the handler. Without
+  // this, snapshot.src vs src is always equal-to-itself inside one
+  // invocation (the local `src` is the captured const, not whatever
+  // setSrc set it to during the await). The ref is the only escape
+  // hatch back to "current" state inside an async function body.
+  const formStateRef = useRef({ src, dst, amount, feeToken });
+  useEffect(() => {
+    formStateRef.current = { src, dst, amount, feeToken };
+  }, [src, dst, amount, feeToken]);
+
   useModalEscape(onClose, submitting);
 
   // Auto-pick a compatible destination if the user flips src to a chain
@@ -395,15 +408,18 @@ export function AgenticWalletBridgeModal({
           await new Promise(r => setTimeout(r, 1_000));
         }
         // If the user changed src/dst/amount/feeToken during the clear
-        // (form was unlocked), refuse to auto-resubmit — clearing="ok"
-        // would otherwise drive a submit() against the WRONG chain
-        // pair, double-spending. Surface the drift and let the user
-        // click Send manually after reviewing the form.
+        // (form was unlocked, or formLocked got bypassed in a refactor),
+        // refuse to auto-resubmit — clearing="ok" would otherwise drive
+        // a submit() against the WRONG chain pair, double-spending.
+        // Read the ref, NOT the closure-captured locals — those are
+        // pinned to the render that produced this handler. The ref is
+        // the only path to current state inside this async body.
+        const current = formStateRef.current;
         const drifted =
-          snapshot.src !== src ||
-          snapshot.dst !== dst ||
-          snapshot.amount !== amount ||
-          snapshot.feeToken !== feeToken;
+          snapshot.src !== current.src ||
+          snapshot.dst !== current.dst ||
+          snapshot.amount !== current.amount ||
+          snapshot.feeToken !== current.feeToken;
         if (drifted) {
           setClearing("ok");
           setError(
@@ -413,15 +429,12 @@ export function AgenticWalletBridgeModal({
           return;
         }
         setClearing("ok");
-        try {
-          await submit();
-        } catch (submitErr) {
-          // submit() owns its own error handling, but if it throws
-          // outright we still need to roll clearing back so the
-          // recovery button doesn't get stuck on "Cleared ✓".
-          setClearing("failed");
-          setError(submitErr instanceof Error ? submitErr.message : String(submitErr));
-        }
+        // submit() catches its own errors and surfaces them via
+        // setError; it never throws. We intentionally do NOT wrap this
+        // in try/catch — a hypothetical future throw should propagate
+        // to the outer catch (line ~408) which rolls clearing back to
+        // "failed". Wrapping here would silently shadow that path.
+        await submit();
       } finally {
         clearInterval(tickInterval);
       }

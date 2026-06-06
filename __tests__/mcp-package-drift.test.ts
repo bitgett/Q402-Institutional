@@ -294,9 +294,11 @@ describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)"
       fetchWithRetry(rawUrlForPath(want, ".codex-plugin/plugin.json")).then(r => r.ok ? r.text() : null),
     ]);
 
-    // src/version.ts — single quoted constant.
+    // src/version.ts — double-quoted constant in current source, but the
+    // regex tolerates single quotes too so a future Prettier flip doesn't
+    // silently downgrade this assertion to "couldn't extract → skip".
     expect(versionTs, "src/version.ts must be fetchable at the npm-tagged commit").not.toBeNull();
-    const versionTsMatch = versionTs!.match(/PACKAGE_VERSION\s*=\s*"([^"]+)"/);
+    const versionTsMatch = versionTs!.match(/PACKAGE_VERSION\s*=\s*["']([^"']+)["']/);
     expect(versionTsMatch?.[1], "src/version.ts PACKAGE_VERSION").toBe(want);
 
     // package.json — root version field.
@@ -304,14 +306,17 @@ describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)"
     const pkg = JSON.parse(pkgJson!) as { version?: string };
     expect(pkg.version, "package.json version").toBe(want);
 
-    // package-lock.json — top-level version (npm@7+ always writes this).
+    // package-lock.json — top-level version + packages[""].version.
+    // npm@7+ ALWAYS writes both for lockfileVersion 2/3, which is the
+    // shape this repo ships. Require both, not "if present" — a corrupt
+    // lockfile (someone hand-edited the root project entry) should
+    // surface as a red CI run, not a silent skip.
     expect(lockJson, "package-lock.json must be fetchable").not.toBeNull();
     const lock = JSON.parse(lockJson!) as { version?: string; packages?: Record<string, { version?: string }> };
     expect(lock.version, "package-lock.json top-level version").toBe(want);
-    // lockfileVersion 2/3 also writes packages[""].version — check that too if present.
-    if (lock.packages && lock.packages[""] && lock.packages[""].version !== undefined) {
-      expect(lock.packages[""].version, 'package-lock.json packages[""].version').toBe(want);
-    }
+    expect(lock.packages, "package-lock.json packages map must exist").toBeDefined();
+    expect(lock.packages?.[""], 'package-lock.json packages[""] entry must exist').toBeDefined();
+    expect(lock.packages?.[""]?.version, 'package-lock.json packages[""].version').toBe(want);
 
     // server.json — top-level + packages[0].
     expect(serverJson, "server.json must be fetchable").not.toBeNull();
