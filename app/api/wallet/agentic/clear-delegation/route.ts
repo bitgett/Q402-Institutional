@@ -115,7 +115,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // address at 3/h so even with IP rotation the relayer drain is
   // bounded. CCIP chains debit from Gas Tank so they self-cap, but
   // sponsored chains do not — owner-level cap covers both for free.
-  if (!(await rateLimit(`owner:${owner}`, "agentic-clear-delegation-owner", 3, 3600))) {
+  //
+  // failOpen=true: this layer is defense-in-depth ONLY. The IP cap above
+  // (fail-closed) is the primary control; the SETNX clear-lock + the
+  // gas-tank debit are independent caps below. If KV is unavailable
+  // here, blocking the user's recovery flow (delegation cleared then
+  // can't bridge) is worse than the transient over-spend risk a KV
+  // blip allows. The other two layers still bound the worst case.
+  if (!(await rateLimit(`owner:${owner}`, "agentic-clear-delegation-owner", 3, 3600, true))) {
     return NextResponse.json(
       {
         error:   "RATE_LIMITED",
@@ -173,7 +180,7 @@ interface RunClearArgs {
 }
 
 async function runClear(args: RunClearArgs): Promise<NextResponse> {
-  const { owner, chain, cfg, agentAddr, agenticPk } = args;
+  const { owner, walletId, chain, cfg, agentAddr, agenticPk } = args;
 
   // ── Probe current delegation state ──────────────────────────────────
   // If the wallet is already undelegated, return early — no on-chain
@@ -315,6 +322,7 @@ async function runClear(args: RunClearArgs): Promise<NextResponse> {
     void sendOpsAlert(
       `<b>🚨 Clear-delegation MINED but delegation persists</b>\n\n` +
       `Owner: <code>${owner}</code>\n` +
+      `Wallet: <code>${walletId}</code>\n` +
       `Chain: ${chain}\n` +
       `Agent Wallet: <code>${agentAddr}</code>\n` +
       `txHash: <code>${result.txHash}</code>\n` +
@@ -370,6 +378,7 @@ async function runClear(args: RunClearArgs): Promise<NextResponse> {
       void sendOpsAlert(
         `<b>🚨 Clear-delegation gas debit FAILED — pending row written</b>\n\n` +
         `Owner: <code>${owner}</code>\n` +
+        `Wallet: <code>${walletId}</code>\n` +
         `Chain: ${chain}\n` +
         `Agent Wallet: <code>${agentAddr}</code>\n` +
         `Clear txHash: <code>${result.txHash}</code>\n` +

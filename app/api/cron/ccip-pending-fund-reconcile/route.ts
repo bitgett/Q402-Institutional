@@ -50,7 +50,7 @@ const ORPHAN_THRESHOLD_MS = 60 * 60 * 1000;
 
 interface ReconcileOutcome {
   key:      string;
-  outcome:  "debited" | "reverted" | "still_pending" | "orphan" | "row_invalid" | "chain_invalid";
+  outcome:  "debited" | "reverted" | "still_pending" | "orphan" | "row_invalid" | "chain_invalid" | "skipped_inline_in_flight";
   detail?:  string;
 }
 
@@ -76,6 +76,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   let reverted = 0;
   let stillPending = 0;
   let orphans = 0;
+  // Rows the cron declined to touch because the inline reconciler in
+  // /api/ccip/send was already holding the SETNX lock. Distinct from
+  // stillPending — that bucket is "tx not yet mined", this bucket is
+  // "we skipped on purpose". Ops dashboards alerting on stillPending
+  // thresholds want these separated so a high-traffic hour doesn't
+  // flood the alert channel.
+  let skippedInlineInFlight = 0;
 
   for (const key of keys) {
     const rec = await kv.get<PendingFundRecord>(key).catch(() => null);
@@ -98,8 +105,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // next tick picks it up.
     const lockClaimed = await acquirePendingFundReconcileLock(rec.ownerLc, rec.chain);
     if (!lockClaimed) {
-      stillPending++;
-      outcomes.push({ key, outcome: "still_pending", detail: "inline_reconcile_in_flight" });
+      skippedInlineInFlight++;
+      outcomes.push({ key, outcome: "skipped_inline_in_flight" });
       continue;
     }
 
@@ -290,6 +297,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       debited,
       reverted,
       stillPending,
+      skippedInlineInFlight,
       orphans,
       clearScanned:     clearKeys.length,
       clearDebited,
