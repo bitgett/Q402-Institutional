@@ -378,10 +378,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     let tx: ethers.TransactionResponse | null = null;
     try {
       if (p.asset === "native") {
+        // 21k is the EOA→EOA exact cost. The sender-native target is
+        // the Q402CCIPSender CONTRACT whose `receive()` emits a
+        // NativePoolTopup event — event emission + contract code
+        // execution overhead pushes the real cost to ~30-35k. The
+        // 21k ceiling caused every sender-native tick to hit
+        // out-of-gas (revert with data=null reason=null), and the
+        // uncertain-outcome branch below preserved the reservation
+        // instead of refunding → ops spam every 15min, daily cap
+        // bucket over-drained. 50k gives headroom for any
+        // event-emitting receive() on any target.
+        const isContractTarget = p.target.startsWith("sender-");
         tx = await wallet.sendTransaction({
           to:       p.toAddress,
           value:    p.amountWei,
-          gasLimit: 21_000n,
+          gasLimit: isContractTarget ? 50_000n : 21_000n,
         });
       } else {
         const transferData = ERC20_TRANSFER_SELECTOR +
@@ -392,37 +403,88 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
           data: transferData,
         });
       }
-      // Split the wait into its own try/catch. A `sendTransaction`
-      // throw means the tx never broadcast → safe to refund. A
-      // `tx.wait()` throw means the tx is in the mempool but we
-      // can't observe the receipt — refunding here lets the next
-      // cron tick re-send and double-spend if the original mines.
-      // Treat wait-throw as uncertain: KEEP the reservation, page
-      // ops, leave a breadcrumb for manual reconciliation.
+      // Wait-error triage:
+      //   - CALL_EXCEPTION (action=sendTransaction, ethers v6 signal
+      //     for "tx mined and reverted") = DEFINITIVE failure. We
+      //     KNOW the outcome — refund the reservation just like an
+      //     in-band `receipt.status === 0`.
+      //   - Network/RPC errors (NETWORK_ERROR, SERVER_ERROR, fetch
+      //     timeout, etc.) = TRUE uncertainty. Keep the reservation
+      //     and page ops; next cron tick may observe the receipt.
+      // Previous code lumped all wait throws as uncertain — turned
+      // an out-of-gas revert (every tick, same plan) into per-tick
+      // ops spam plus a leaking daily-cap reservation.
       let receipt: Awaited<ReturnType<typeof tx.wait>>;
       try {
         receipt = await tx.wait();
       } catch (waitErr) {
         const err = waitErr instanceof Error ? waitErr.message : String(waitErr);
+        const errCode =
+          (waitErr as { code?: string } | null)?.code ??
+          (waitErr as { error?: { code?: string } } | null)?.error?.code ?? "";
+        const isDefinitiveRevert =
+          errCode === "CALL_EXCEPTION" ||
+          /execution reverted|out of gas|out_of_gas/i.test(err);
+        if (isDefinitiveRevert) {
+          // Tx ran, ran out of gas / reverted. Refund + emit a
+          // throttled (once per day per chain+target+code) alert so
+          // the same bug isn't paging ops every 15 minutes.
+          await refundReservation();
+          results.push({
+            plan: p,
+            ok:   false,
+            error: `tx_reverted_post_wait: ${err.slice(0, 160)}`,
+            txHash: tx.hash,
+          });
+          const dedupKey =
+            `cron:treasury-rebalance:revert-alert:${utcDayKey()}:${p.chain}:${p.target}`;
+          const already = await kv.get<number>(dedupKey).catch(() => null);
+          if (!already) {
+            await kv.set(dedupKey, Date.now(), { ex: 36 * 60 * 60 }).catch(() => {});
+            void sendOpsAlert(
+              `<b>⚠ treasury rebalance tx REVERTED — reservation refunded</b>\n\n` +
+              `Target: ${p.target} on ${p.chain}\n` +
+              `To: <code>${p.toAddress}</code>\n` +
+              `Tx: <code>${tx.hash}</code>\n` +
+              `Amount: ${p.amountWhole.toFixed(6)} ${p.asset} (~$${p.estUsd.toFixed(2)})\n\n` +
+              `Refund applied. THIS ALERT IS ONCE-PER-DAY per (chain, target) — if you ` +
+              `see it the cron is hitting the same revert every tick. Likely root causes: ` +
+              `(a) gasLimit too low for contract receive(), (b) target contract paused, ` +
+              `(c) manifest sender address out of date.\n\n` +
+              `Wait error: ${err.slice(0, 240)}`,
+              "warn",
+            ).catch(() => { /* best-effort */ });
+          }
+          continue;
+        }
+        // Genuinely uncertain (network, RPC). Keep the reservation,
+        // throttle the page-ops to once per (day, chain, target).
         results.push({
           plan: p,
           ok:   false,
           error: `wait_failed_uncertain: ${err.slice(0, 160)}`,
           txHash: tx.hash,
         });
-        void sendOpsAlert(
-          `<b>🚨 treasury rebalance tx broadcast but wait() FAILED — OUTCOME UNCERTAIN</b>\n\n` +
-          `Target: ${p.target} on ${p.chain}\n` +
-          `Tx: <code>${tx.hash}</code>\n` +
-          `Amount: ${p.amountWhole.toFixed(6)} ${p.asset} (~$${p.estUsd.toFixed(2)})\n\n` +
-          `Reservation NOT refunded — if you refund and the tx mined, the next ` +
-          `cron tick over-spends past the daily cap. Verify on-chain: if mined, ` +
-          `leave as-is. If dropped, manually INCRBYFLOAT ` +
-          `cron:treasury-rebalance:spend:${utcDayKey()}:${p.chain} ` +
-          `by -${(reservedPerPlan.get(p) ?? 0).toFixed(2)}.\n\n` +
-          `Wait error: ${err.slice(0, 200)}`,
-          "error",
-        ).catch(() => { /* best-effort */ });
+        const uncertainDedupKey =
+          `cron:treasury-rebalance:uncertain-alert:${utcDayKey()}:${p.chain}:${p.target}`;
+        const alreadyUncertain = await kv.get<number>(uncertainDedupKey).catch(() => null);
+        if (!alreadyUncertain) {
+          await kv.set(uncertainDedupKey, Date.now(), { ex: 36 * 60 * 60 }).catch(() => {});
+          void sendOpsAlert(
+            `<b>🚨 treasury rebalance tx broadcast but wait() FAILED — OUTCOME UNCERTAIN</b>\n\n` +
+            `Target: ${p.target} on ${p.chain}\n` +
+            `Tx: <code>${tx.hash}</code>\n` +
+            `Amount: ${p.amountWhole.toFixed(6)} ${p.asset} (~$${p.estUsd.toFixed(2)})\n\n` +
+            `Reservation NOT refunded — if you refund and the tx mined, the next ` +
+            `cron tick over-spends past the daily cap. Verify on-chain: if mined, ` +
+            `leave as-is. If dropped, manually INCRBYFLOAT ` +
+            `cron:treasury-rebalance:spend:${utcDayKey()}:${p.chain} ` +
+            `by -${(reservedPerPlan.get(p) ?? 0).toFixed(2)}.\n\n` +
+            `THIS ALERT IS ONCE-PER-DAY per (chain, target).\n\n` +
+            `Wait error: ${err.slice(0, 240)}`,
+            "error",
+          ).catch(() => { /* best-effort */ });
+        }
         continue;
       }
       if (!receipt || receipt.status !== 1) {
