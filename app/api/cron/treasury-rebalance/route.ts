@@ -89,6 +89,27 @@ const RELAYER_NATIVE_THRESHOLD_WHOLE: Record<CCIPChainKey, number> = {
 };
 
 /**
+ * Per-chain MIN sweep value in USD-equivalent. Below this, the plan
+ * is dropped entirely — paying $2-5 ETH gas to move $1 worth of ETH
+ * is a net loss. The plan generator emits no plan instead of a
+ * tiny one, so no tx fires, no daily-cap reservation is consumed,
+ * and GASTANK keeps accumulating until the next eligible tick has
+ * enough to make a sweep worth doing.
+ *
+ * Self-balancing: if traffic is happening, user deposits land in
+ * GASTANK → eventually crosses MIN → sweep fires → pools refilled.
+ * If no traffic, no deposits, no sweeps, no gas waste.
+ *
+ * Per-chain values: each is set to roughly 10× expected gas cost so
+ * gas overhead is bounded at ≤10% of the sweep value.
+ */
+const MIN_SWEEP_VALUE_USD: Record<CCIPChainKey, number> = {
+  eth:      30,   // gas $2-5 → ≤17% overhead
+  avax:     1,    // gas <$0.05 → ≤5% overhead
+  arbitrum: 2,    // gas <$0.10 → ≤5% overhead
+};
+
+/**
  * Per-chain MINIMUM interval between sweep attempts. The viz-backend
  * trigger fires this endpoint every 6h; this map then THROTTLES which
  * chains actually evaluate their plans on a given tick.
@@ -289,16 +310,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const sweep = needed > gastankSpendableNative ? gastankSpendableNative : needed;
         if (sweep > 0n) {
           const amountWhole = Number(ethers.formatEther(sweep));
-          plans.push({
-            chain,
-            target:      "sender-native",
-            toAddress:   sender,
-            asset:       "native",
-            amountWei:   sweep,
-            amountWhole,
-            estUsd:      amountWhole * NATIVE_USD_PER_TOKEN[chain],
-          });
-          senderNativeSweepPlanned = sweep;
+          const estUsd      = amountWhole * NATIVE_USD_PER_TOKEN[chain];
+          // Skip the plan if the sweep value is below the per-chain
+          // minimum — paying $2-5 gas on ETH to move $1 worth of ETH
+          // is a net loss. Self-balancing: GASTANK keeps accumulating
+          // user deposits until a sweep is worth doing.
+          if (estUsd >= MIN_SWEEP_VALUE_USD[chain]) {
+            plans.push({
+              chain,
+              target:      "sender-native",
+              toAddress:   sender,
+              asset:       "native",
+              amountWei:   sweep,
+              amountWhole,
+              estUsd,
+            });
+            senderNativeSweepPlanned = sweep;
+          }
         }
       }
     }
@@ -322,15 +350,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const sweep = needed > gastankLink ? gastankLink : needed;
         if (sweep > 0n) {
           const amountWhole = Number(ethers.formatUnits(sweep, 18));
-          plans.push({
-            chain,
-            target:      "sender-link",
-            toAddress:   sender,
-            asset:       "LINK",
-            amountWei:   sweep,
-            amountWhole,
-            estUsd:      amountWhole * LINK_USD,
-          });
+          const estUsd      = amountWhole * LINK_USD;
+          // Same min-value gate. LINK is the preferred fee path so
+          // GASTANK LINK accrues from deposit-scan; once it crosses
+          // MIN, the sweep fires.
+          if (estUsd >= MIN_SWEEP_VALUE_USD[chain]) {
+            plans.push({
+              chain,
+              target:      "sender-link",
+              toAddress:   sender,
+              asset:       "LINK",
+              amountWei:   sweep,
+              amountWhole,
+              estUsd,
+            });
+          }
         }
       }
     }
@@ -352,15 +386,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         const sweep = needed > gastankAvail ? gastankAvail : needed;
         if (sweep > 0n) {
           const amountWhole = Number(ethers.formatEther(sweep));
-          plans.push({
-            chain,
-            target:      "relayer-native",
-            toAddress:   RELAYER_ADDRESS,
-            asset:       "native",
-            amountWei:   sweep,
-            amountWhole,
-            estUsd:      amountWhole * NATIVE_USD_PER_TOKEN[chain],
-          });
+          const estUsd      = amountWhole * NATIVE_USD_PER_TOKEN[chain];
+          // Same min-value gate — relayer-native sweep skipped if
+          // the value doesn't beat the per-chain gas-vs-value floor.
+          // (Positive guard rather than `continue` because the
+          // last-attempt stamp at the end of the chain loop must
+          // still write even when this plan is skipped.)
+          if (estUsd >= MIN_SWEEP_VALUE_USD[chain]) {
+            plans.push({
+              chain,
+              target:      "relayer-native",
+              toAddress:   RELAYER_ADDRESS,
+              asset:       "native",
+              amountWei:   sweep,
+              amountWhole,
+              estUsd,
+            });
+          }
         }
       }
     }
