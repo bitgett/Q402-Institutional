@@ -58,26 +58,58 @@ const LINK_TOKEN_PER_CCIP: Record<CCIPChainKey, string> = {
 const ERC20_TRANSFER_SELECTOR = "0xa9059cbb";
 const ERC20_BALANCE_OF_SELECTOR = "0x70a08231";
 
-/** Per-chain native threshold for Sender contract — same as monitor. */
+/**
+ * Per-chain native threshold for Sender contract.
+ *
+ * ETH is set HIGHER than the other chains because ETH gas makes
+ * frequent sweeps painful — at ~$2-5 per sweep tx, we want each ETH
+ * sweep to cover several days of expected burn, not be a daily drip.
+ * The cron's per-chain throttle (CHAIN_SWEEP_INTERVAL_MS) below
+ * enforces ETH sweeps at most once per 24h; thresholds here give the
+ * pool a ~3-5 day buffer between sweeps at moderate traffic.
+ *
+ * AVAX + Arbitrum keep tight thresholds (sweep often, gas is free).
+ */
 const SENDER_NATIVE_THRESHOLD_WHOLE: Record<CCIPChainKey, number> = {
-  eth:      0.01,
+  eth:      0.02,    // ~$34 — 24h-cadence buffer
   avax:     0.5,
   arbitrum: 0.005,
 };
 
-/** Per-chain LINK threshold for Sender contract — same as monitor. */
 const SENDER_LINK_THRESHOLD_WHOLE: Record<CCIPChainKey, number> = {
-  eth:      1.0,
+  eth:      5.0,     // ~$60 — preferred fee path, kept generous
   avax:     1.0,
   arbitrum: 1.0,
 };
 
-/** Per-chain RELAYER native threshold (~3× one-tx budget at 1 gwei). */
 const RELAYER_NATIVE_THRESHOLD_WHOLE: Record<CCIPChainKey, number> = {
-  eth:      0.003,
+  eth:      0.01,    // ~$17 — 24h-cadence buffer
   avax:     0.05,
   arbitrum: 0.002,
 };
+
+/**
+ * Per-chain MINIMUM interval between sweep attempts. The viz-backend
+ * trigger fires this endpoint every 6h; this map then THROTTLES which
+ * chains actually evaluate their plans on a given tick.
+ *
+ * ETH 24h: at $2-5 gas per sweep, 4× daily sweeps = $240-600/month
+ * overhead on a chain with single-digit bridge traffic. Throttling to
+ * once per day caps the worst case to $60-150/month and most days
+ * are no-op (thresholds above survive ~3-5 days).
+ *
+ * AVAX + Arbitrum 6h: gas is effectively free (<$0.10/sweep), so
+ * frequent sweeps are pure operational hygiene.
+ */
+const CHAIN_SWEEP_INTERVAL_MS: Record<CCIPChainKey, number> = {
+  eth:      24 * 60 * 60 * 1000, // 24h
+  avax:      6 * 60 * 60 * 1000, // 6h
+  arbitrum:  6 * 60 * 60 * 1000, // 6h
+};
+
+function chainLastAttemptKey(chain: CCIPChainKey): string {
+  return `cron:treasury-rebalance:last-attempt:${chain}`;
+}
 
 /**
  * Per-chain per-day spend cap (USD equivalent). Hard limit on what
@@ -170,12 +202,30 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const startedAt = Date.now();
   const plans: SweepPlan[] = [];
+  const throttled: Array<{ chain: CCIPChainKey; minIntervalMs: number; sinceLastMs: number }> = [];
 
   for (const chain of CCIP_CHAINS) {
     const cfg = CHAIN_CONFIG[chain];
     if (!cfg?.rpc) continue;
     const sender = CCIP_CONFIG[chain].sender;
     if (sender === "PENDING_DEPLOY") continue;
+
+    // Per-chain throttle. ETH gets 24h, others get 6h — see the
+    // CHAIN_SWEEP_INTERVAL_MS comment. A "last attempt" stamp is
+    // written at the end of every evaluation (success OR failure)
+    // so a chain that hit transient errors retries on the NEXT tick
+    // past its interval, not 6h later.
+    try {
+      const lastAttempt = await kv.get<number>(chainLastAttemptKey(chain)) ?? 0;
+      const sinceLastMs = Date.now() - lastAttempt;
+      const minIntervalMs = CHAIN_SWEEP_INTERVAL_MS[chain];
+      if (lastAttempt > 0 && sinceLastMs < minIntervalMs) {
+        throttled.push({ chain, minIntervalMs, sinceLastMs });
+        continue;
+      }
+    } catch {
+      // KV blip — proceed (better to over-sweep than wedge the cron).
+    }
 
     const provider = new ethers.JsonRpcProvider(cfg.rpc);
     let senderNative = 0n;
@@ -223,11 +273,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       : 0n;
 
     // ── Sender native ───────────────────────────────────────────────
+    //
+    // Target = 10× threshold (was 2×). Rationale: ETH gas makes
+    // sweeping itself expensive ($2-5 per tx), so each sweep should
+    // be a meaningful refill, not a minimum top-up that triggers
+    // another sweep tomorrow. Capped by `gastankSpendableNative` so
+    // if GASTANK doesn't have 10× threshold available, we just send
+    // what we can — no behaviour change at low balances.
     let senderNativeSweepPlanned = 0n;
     {
       const thresholdWei = ethers.parseEther(SENDER_NATIVE_THRESHOLD_WHOLE[chain].toString());
       if (senderNative < thresholdWei) {
-        const targetWei = thresholdWei * 2n;
+        const targetWei = thresholdWei * 10n;
         const needed = targetWei - senderNative;
         const sweep = needed > gastankSpendableNative ? gastankSpendableNative : needed;
         if (sweep > 0n) {
@@ -257,7 +314,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         gastankLink > 0n &&
         gastankNativeRemaining >= linkTxGasNeeded
       ) {
-        const targetWei = thresholdWei * 2n;
+        // 10× target — same "one big sweep, not many small" logic as
+        // sender-native above. LINK is the preferred fee path so a
+        // generous topup means most days the cron is a no-op.
+        const targetWei = thresholdWei * 10n;
         const needed = targetWei - senderLink;
         const sweep = needed > gastankLink ? gastankLink : needed;
         if (sweep > 0n) {
@@ -275,10 +335,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
     // ── Relayer native ──────────────────────────────────────────────
+    // Same 10× target logic. Note the gastankAvail subtracts the
+    // sender-native sweep planned earlier this tick so we don't
+    // double-spend the same GASTANK ETH.
     {
       const thresholdWei = ethers.parseEther(RELAYER_NATIVE_THRESHOLD_WHOLE[chain].toString());
       if (relayerNative < thresholdWei) {
-        const targetWei = thresholdWei * 2n;
+        const targetWei = thresholdWei * 10n;
         const needed = targetWei - relayerNative;
         // Reserve enough native in GASTANK for: (a) the sender-native
         // sweep planned this tick, (b) gas to actually pay for THIS
@@ -301,6 +364,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         }
       }
     }
+    // Stamp this chain's last-attempt time AT THE END of the
+    // evaluation — covers both "we generated plans" and "no plans
+    // needed". Either way the chain has been evaluated this tick;
+    // the next eligibility is `now + CHAIN_SWEEP_INTERVAL_MS[chain]`.
+    await kv.set(chainLastAttemptKey(chain), Date.now()).catch(() => {});
   }
 
   // ── Atomic daily cap gate (FIX 64) ───────────────────────────────
@@ -552,6 +620,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       executed,
       failed,
       droppedCap:  dropped.length,
+      throttled:   throttled.length,
     },
     ...(failed > 0
       ? { lastError: `${failed}_sweeps_failed` }
@@ -564,6 +633,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     filtered,
     dropped,
     results,
+    throttled,
     durationMs,
     asOf: new Date().toISOString(),
   });
