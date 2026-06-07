@@ -140,7 +140,7 @@ const TOOLS: Array<{ name: string; auth: string; note: string }> = [
   { name: "q402_recurring_skip_next", auth: "api key",     note: "Skip ONLY the next fire. Cadence preserved." },
   { name: "q402_recurring_cancel",    auth: "api key",     note: "Permanently stop a rule." },
   { name: "q402_bridge_quote",        auth: "no auth",     note: "Quote CCIP fee for a USDC bridge on eth/avax/arbitrum." },
-  { name: "q402_bridge_send",         auth: "sandbox",     note: "Plan a CCIP USDC bridge. Live execution from the dashboard." },
+  { name: "q402_bridge_send",         auth: "live key",    note: "Execute a CCIP USDC bridge from your Agent Wallet (Mode C). Sandbox-by-default; sandbox: false + live key fires a real bridge." },
   { name: "q402_bridge_history",      auth: "owner sig",   note: "List recent CCIP bridges. Owner-sig auth via dashboard." },
   { name: "q402_bridge_gas_tank",     auth: "owner sig",   note: "LINK + native Gas Tank bucket per CCIP chain." },
 ];
