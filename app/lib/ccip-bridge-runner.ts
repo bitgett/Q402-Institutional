@@ -844,20 +844,29 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
         owner, src, feeToken, actualFeeWhole, agentFundEth, messageId: result.messageId, err,
       });
       // Durable breadcrumb for the reconcile cron's third pass.
-      void setPendingFeeDebit({
-        txHash:     result.txHash,
-        feeToken,
-        amount:     actualFeeWhole,
-        ownerLc:    owner,
-        chain:      src,
-        submittedAt: Date.now(),
-        messageId:  result.messageId,
-      }).catch((pendingErr) => {
+      // AWAITED — a void fire-and-forget here would let Vercel
+      // discontinue the write after the success response, losing the
+      // ONLY persistent record that the cron uses to retry the debit.
+      // Bridge succeeded on chain; the user is owed fee bookkeeping.
+      // If the pending-row write itself throws we still proceed (the
+      // ops alert below carries enough info for manual recovery), but
+      // the await ensures the happy-path KV write actually lands.
+      try {
+        await setPendingFeeDebit({
+          txHash:     result.txHash,
+          feeToken,
+          amount:     actualFeeWhole,
+          ownerLc:    owner,
+          chain:      src,
+          submittedAt: Date.now(),
+          messageId:  result.messageId,
+        });
+      } catch (pendingErr) {
         console.error("[ccip-bridge-runner] setPendingFeeDebit failed", {
           owner, src, txHash: result.txHash,
           err: pendingErr instanceof Error ? pendingErr.message : String(pendingErr),
         });
-      });
+      }
       void sendOpsAlert(
         `<b>⚠ CCIP fee debit failed — pending-fee-debit row written for cron reconciliation</b>\n\n` +
         `Owner: <code>${owner}</code>\n` +
@@ -925,21 +934,35 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
       ...(agentFundTxHash ? { agentFundTxHash, agentFundEth } : {}),
       sendId,
     };
-    // Permanent settled-fp marker BEFORE finaliseClaim. The marker is
-    // the no-TTL backstop the top-of-function `getBridgeSettled` check
-    // reads — even if finaliseClaim throws below, this marker
-    // guarantees a same-intent retry can never double-bridge. Best
-    // effort: if THIS write also throws we still proceed (the regular
-    // 24h success cache below is the immediate replay path).
-    void markBridgeSettled(fp, {
-      messageId: result.messageId,
-      txHash:    result.txHash,
-      src,
-      dst,
-      amount,
-      feeToken,
-      settledAt: Date.now(),
-    }).catch((markerErr) => {
+    // ── Permanent settled-fp marker (AWAITED before response) ──────────
+    //
+    // The marker is the no-TTL backstop the top-of-function
+    // `getBridgeSettled` check reads. We MUST await it before sending
+    // the success response — `void marker(...)` would let Vercel
+    // discontinue the operation after the response goes out
+    // (documented serverless behaviour: "Operations performed after
+    // the response is returned may be discontinued"). Without a
+    // durable marker AND a finaliseClaim that also fails, a same-fp
+    // retry 24h+ later could double-bridge.
+    //
+    // If the marker write throws we LOG + ALERT but still proceed —
+    // the 24h success cache below is the immediate replay path; the
+    // missing marker only matters for >24h retries which are rare,
+    // and ops will backfill via the alert's restore command. Failing
+    // the user's response NOW (bridge already on chain) would force
+    // a retry that hits the 30min cache anyway, so the only thing we
+    // gain is user confusion.
+    try {
+      await markBridgeSettled(fp, {
+        messageId: result.messageId,
+        txHash:    result.txHash,
+        src,
+        dst,
+        amount,
+        feeToken,
+        settledAt: Date.now(),
+      });
+    } catch (markerErr) {
       console.error("[ccip-bridge-runner] markBridgeSettled failed", {
         owner, fp, messageId: result.messageId,
         err: markerErr instanceof Error ? markerErr.message : String(markerErr),
@@ -956,7 +979,7 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
         `"amount":"${amount}","feeToken":"${feeToken}","settledAt":${Date.now()}}'`,
         "error",
       ).catch(() => { /* best-effort */ });
-    });
+    }
 
     try {
       await finaliseClaim("success", 200, responseBody);
