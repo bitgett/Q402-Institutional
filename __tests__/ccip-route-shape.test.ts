@@ -66,6 +66,12 @@ describe("CCIP API route shape", () => {
 
   describe("/api/ccip/send", () => {
     const src = readFile("app/api/ccip/send/route.ts");
+    // The bridge execution body lives in the shared runner (extracted
+    // 0.8.10 so /api/wallet/agentic/bridge can reuse the same code on
+    // Mode C API-key auth). Money-flow assertions read against the
+    // runner, not the route, since the route is now a thin auth +
+    // validation wrapper.
+    const runner = readFile("app/lib/ccip-bridge-runner.ts");
 
     it("body schema accepts only the documented field set", () => {
       for (const f of ["address", "nonce", "signature", "walletId", "src", "dst", "amount", "feeToken"]) {
@@ -86,9 +92,9 @@ describe("CCIP API route shape", () => {
     it("checks Gas Tank balance BEFORE submitting on-chain TX", () => {
       // Order matters — checking after submit would let a user with empty
       // Gas Tank still incur (and have to pay for) a tx that we then debit
-      // them for.
-      const sendIdx = src.indexOf("executeBridge(");
-      const balCheckIdx = src.indexOf("INSUFFICIENT_LINK_BALANCE");
+      // them for. Lives in the runner now.
+      const sendIdx = runner.indexOf("executeBridge(");
+      const balCheckIdx = runner.indexOf("INSUFFICIENT_LINK_BALANCE");
       expect(balCheckIdx).toBeGreaterThan(0);
       expect(balCheckIdx).toBeLessThan(sendIdx);
     });
