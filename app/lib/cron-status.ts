@@ -128,13 +128,19 @@ export const CRON_META: Record<CronName, CronMeta> = {
     expectedIntervalMs: 5 * 60 * 1000,
     staleAfterMs: 15 * 60 * 1000,
   },
-  // 15-min Render heartbeat — sweeps GASTANK to Sender pools + relayer.
-  // Stale 45 min window (3× cadence) so a missed tick surfaces quickly
-  // since a stuck rebalance can let Sender pools dry out → live bridges
-  // start reverting with InsufficientPool errors.
+  // 6-hour Render heartbeat — sweeps GASTANK to Sender pools + relayer.
+  // Was 15-min, but each sweep tops up to 2× threshold so a healthy
+  // pool survives many bridges between refills; at early-launch
+  // volume (single-digit bridges/day) the minutes-grained cadence
+  // was over-frequent and produced ops-alert pressure on every
+  // transient failure. Relayer-side gas is watched independently by
+  // the relayer-balance cron (5 min), so this cron no longer needs
+  // minutes-grained responsiveness. Stale window: 8h (~33% headroom
+  // over cadence) so a single missed tick surfaces within a
+  // sensible window without paging on tail latency.
   [CRON_NAMES.TREASURY_REBALANCE]: {
-    expectedIntervalMs: 15 * 60 * 1000,
-    staleAfterMs: 45 * 60 * 1000,
+    expectedIntervalMs: 6 * 60 * 60 * 1000,
+    staleAfterMs: 8 * 60 * 60 * 1000,
   },
   // Same 5-min Render heartbeat as deposit-scan. Stale 15 min window so
   // a missed tick surfaces in the watchdog quickly — a stuck reconcile
