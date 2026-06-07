@@ -117,9 +117,9 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_recurring_skip_next` | api key | Skip only the next fire |
 | `q402_recurring_cancel` | api key | Permanently stop a rule |
 | `q402_bridge_quote` | none | Quote a CCIP USDC bridge (LINK + native fee) |
-| `q402_bridge_send` | live mode | Execute cross-chain USDC bridge (sandbox-only today; live execution lands once session-binding ships) |
-| `q402_bridge_history` | api key | Recent bridges per owner |
-| `q402_bridge_gas_tank` | api key | Per-chain LINK + native Gas Tank balance |
+| `q402_bridge_send` | live key | Execute a cross-chain USDC bridge from the Agent Wallet (Mode C, since MCP 0.8.10). Sandbox-by-default; `sandbox: false` + live Multichain key fires a real on-chain bridge. |
+| `q402_bridge_history` | not yet wired | Returns a dashboard pointer (`{ implemented: false, dashboardUrl }`). Live MCP execution needs session-bound owner-sig auth (follow-up). View at /dashboard → Agent → Bridge History. |
+| `q402_bridge_gas_tank` | not yet wired | Returns static guidance + the canonical Gas Tank deposit address. Live balance lookup needs owner-sig auth (dashboard for now). |
 
 ---
 
