@@ -205,7 +205,12 @@ async function resolveOwner(
 
   // Mode C — apiKey only
   if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
-    if (body.apiKey.startsWith("q402_test_")) {
+    // Reject BOTH `q402_test_` AND legacy `q402_sandbox_` prefixes —
+    // db.ts still treats both as sandbox in the transaction-iteration
+    // path, so a paid-owner-attached legacy q402_sandbox_ key that's
+    // still active would otherwise hit this live send route. Matches
+    // recurring-by-key + the new bridge route's posture.
+    if (body.apiKey.startsWith("q402_test_") || body.apiKey.startsWith("q402_sandbox_")) {
       return NextResponse.json(
         { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet sends." },
         { status: 401 },

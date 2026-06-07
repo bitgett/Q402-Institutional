@@ -97,6 +97,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (BigInt(body.amount) === 0n) {
     return NextResponse.json({ error: "amount must be > 0" }, { status: 400 });
   }
+  // Validate maxFeeRaw shape BEFORE BigInt() — `BigInt("abc")` would
+  // throw SyntaxError uncaught and return a 500 instead of a clean
+  // 400. Integer string only (raw 18-dec wei).
+  if (body.maxFeeRaw !== undefined && (typeof body.maxFeeRaw !== "string" || !/^\d+$/.test(body.maxFeeRaw))) {
+    return NextResponse.json({ error: "maxFeeRaw must be a non-negative integer string (raw 18-dec wei)" }, { status: 400 });
+  }
   const feeToken: FeeTokenKind = body.feeToken === "native" ? "native" : "LINK";
 
   // ── Sender contract must be deployed ────────────────────────────────────
@@ -114,8 +120,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 401 },
     );
   }
-  // Sandbox keys would otherwise hit a free real-money bridge.
-  if (body.apiKey.startsWith("q402_test_")) {
+  // Reject both modern (`q402_test_`) AND legacy (`q402_sandbox_`)
+  // sandbox prefixes — db.ts still treats both as sandbox in the
+  // transaction-iteration path, so a paid-owner-attached legacy
+  // q402_sandbox_ key that's still active would otherwise hit this
+  // live bridge route. Matches recurring-by-key's posture; the send
+  // route was patched in the same audit batch.
+  if (body.apiKey.startsWith("q402_test_") || body.apiKey.startsWith("q402_sandbox_")) {
     return NextResponse.json(
       { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet bridges." },
       { status: 401 },

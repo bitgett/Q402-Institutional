@@ -33,19 +33,22 @@ import {
 } from "@/app/lib/ccip";
 import {
   getLinkBalance,
-  recordLinkUsage,
   getGasBalance,
   acquirePendingFundReconcileLock,
   claimAndDebitNativeBridge,
-  recordNativeBridgeUsage,
+  claimAndDebitLinkBridge,
   recordOrphanFund,
   releasePendingFundReconcileLock,
   getPendingFund,
   setPendingFund,
+  setPendingFeeDebit,
   clearPendingFund,
+  markBridgeSettled,
+  getBridgeSettled,
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
+import { rateLimit } from "@/app/lib/ratelimit";
 import { CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
 
 export interface BridgeHistoryRecord {
@@ -75,7 +78,19 @@ interface BridgeSendRecord {
   relayBody?:    Record<string, unknown>;
 }
 
-const IDEMPOTENCY_TTL_SEC = 30 * 60;
+// Idempotency cache TTL.
+//   - `processing` claim: 30 min (no change). Long enough to ride out
+//     the longest-tail bridge (60s maxDuration × occasional KV retries).
+//   - `success` cache: 24 h. Was 30 min; the audit caught that a
+//     finaliseClaim KV write failure + a same-intent retry 31+ min
+//     later could double-bridge. The settled-fp marker (no TTL) is
+//     the permanent backstop; the 24h success cache keeps the RICH
+//     response (messageId/explorer links) hot for typical replay
+//     windows.
+//   - `failed` cache: 60s (short — a transient 4xx shouldn't shadow-
+//     lock a corrected retry). Set inside finaliseClaim itself.
+const IDEMPOTENCY_TTL_PROCESSING_SEC = 30 * 60;
+const IDEMPOTENCY_TTL_SUCCESS_SEC    = 24 * 60 * 60;
 
 export function bridgeHistKey(owner: string): string {
   return `ccip_bridge:${owner.toLowerCase()}`;
@@ -154,13 +169,77 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
   const amount = args.amount;
   const amountRaw = BigInt(amount);
 
-  // ── Idempotency claim (per-intent) ──────────────────────────────────────
+  // ── Settled-fingerprint marker (permanent backstop) ────────────────────
+  // Before the regular idempotency claim, check the no-TTL settled
+  // marker. If the previous identical-intent bridge succeeded on chain
+  // but its finaliseClaim KV write failed (rare but real — the catch
+  // path at the bottom of this function eats the throw to preserve
+  // the success response), the regular 30-min/24-h claim cache may
+  // be gone but the marker is forever. Without this check, a retry
+  // after both TTLs expired could double-bridge.
   const fp = bridgeFingerprint(owner, walletId, src, dst, amount, feeToken);
+  const settled = await getBridgeSettled(fp);
+  if (settled) {
+    return NextResponse.json(
+      {
+        success: true,
+        idempotent: true,
+        fromSettledMarker: true,
+        messageId: settled.messageId,
+        txHash: settled.txHash,
+        src: settled.src,
+        dst: settled.dst,
+        amount: settled.amount,
+        feeToken: settled.feeToken,
+        settledAt: settled.settledAt,
+        ccipExplorer: `https://ccip.chain.link/msg/${settled.messageId}`,
+        note:
+          "This bridge intent settled previously and is recorded in the " +
+          "permanent settled-marker. The 30-min cache may have expired; " +
+          "this response is the durable replay. To bridge again, vary the " +
+          "amount or chain pair.",
+      },
+      { status: 200 },
+    );
+  }
+
+  // ── Per-wallet bridge rate limit ────────────────────────────────────────
+  //
+  // Design call: bridge IGNORES dailyLimitUsd / perTxMaxUsd. The Agent
+  // Wallet's caps were designed for "spending" (third-party recipient).
+  // Bridge `destReceiver` is hard-bound to `wallet.address` server-side
+  // — the user cannot pick a different receiver, so funds stay in the
+  // SAME EOA they were already in, just on a different chain. Attacker
+  // with a compromised key cannot redirect USDC anywhere it isn't
+  // already going.
+  //
+  // BUT: attacker can still drain the Gas Tank LINK + native via
+  // repeated bridges (each one pays CCIP fee + auto-fund tx gas).
+  // This rate limit caps that exposure to 10 bridges/hour per
+  // (walletId, src) lane. fail-OPEN: KV blip shouldn't shadow-lock
+  // legitimate bridges; the lower-level idempotency claim still
+  // prevents same-intent double-spend, so degraded KV is bounded.
+  if (!(await rateLimit(`wallet:${walletId}:${src}`, "ccip-bridge-wallet", 10, 3600, /* failOpen */ true))) {
+    return NextResponse.json(
+      {
+        error: "BRIDGE_RATE_LIMITED",
+        message:
+          "This Agent Wallet has fired more than 10 bridges on this source chain in the last hour. " +
+          "Wait a bit and retry — this cap is per-(wallet, lane) and resets on a rolling window.",
+      },
+      { status: 429 },
+    );
+  }
+
+  // ── Idempotency claim (per-intent) ──────────────────────────────────────
   const idempotencyKey = bridgeClaimKey(fp);
   const startedAt = Date.now();
   const sendId = ethers.hexlify(ethers.randomBytes(8)).slice(2);
   const initialClaim: BridgeSendRecord = { status: "processing", startedAt, sendId };
-  const claimed = await kv.set(idempotencyKey, initialClaim, { nx: true, ex: IDEMPOTENCY_TTL_SEC });
+  const claimed = await kv.set(idempotencyKey, initialClaim, {
+    nx: true,
+    ex: IDEMPOTENCY_TTL_PROCESSING_SEC,
+  });
   if (!claimed) {
     const live = await kv.get<BridgeSendRecord>(idempotencyKey);
     if (live) {
@@ -190,7 +269,7 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
     relayBody: Record<string, unknown>,
   ): Promise<void> {
     const finishedAt = Date.now();
-    const finalTtl = status === "success" ? IDEMPOTENCY_TTL_SEC : 60;
+    const finalTtl = status === "success" ? IDEMPOTENCY_TTL_SUCCESS_SEC : 60;
     await kv.set(
       idempotencyKey,
       { status, startedAt, finishedAt, sendId, relayStatus, relayBody },
@@ -265,7 +344,12 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
           required: feeWhole,
           available: linkBal[src] ?? 0,
           chain: src,
-          deposit: `Send LINK on ${src} to the Q402 facilitator to top up.`,
+          // Point at the dashboard's Gas Tank deposit flow rather than
+          // any specific address. The canonical deposit sink is
+          // GASTANK_ADDRESS (0x10fb…747a), NOT the facilitator
+          // (RELAYER_ADDRESS) — the previous copy could send users
+          // to the wrong address and lose their LINK.
+          deposit: `Top up LINK on ${src} via the dashboard Bridge Gas Tank flow (https://q402.quackai.ai/dashboard → Agent → Bridge Gas Tank).`,
         };
         await finaliseClaim("failed", 402, body);
         return NextResponse.json(body, { status: 402 });
@@ -738,26 +822,53 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
     }
 
     // ── KV updates (debit Gas Tank + record history) ────────────────────
+    //
+    // Atomic claim+debit, same shape as the auto-fund path. Closes the
+    // audit's "fee debit fail-open is asymmetric with auto-fund's
+    // obsession" finding — if the INCRBYFLOAT response is lost the
+    // claim survives and our retry sees "already_claimed"; if the
+    // entire EVAL throws we write a pending-fee-debit row so the
+    // reconciliation cron can backfill. User still gets a success
+    // response either way — the bridge IS on-chain — but the ledger
+    // is no longer silently wrong.
     const actualFeeWhole = Number(result.feeRaw) / 1e18;
     try {
       if (feeToken === "LINK") {
-        await recordLinkUsage(owner, src, actualFeeWhole);
+        await claimAndDebitLinkBridge(result.txHash, owner, src, actualFeeWhole);
       } else {
-        await recordNativeBridgeUsage(owner, src, actualFeeWhole);
+        await claimAndDebitNativeBridge(result.txHash, owner, src, actualFeeWhole);
       }
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
       console.error("[ccip-bridge-runner] gas-tank fee debit failed (on-chain tx already mined)", {
         owner, src, feeToken, actualFeeWhole, agentFundEth, messageId: result.messageId, err,
       });
+      // Durable breadcrumb for the reconcile cron's third pass.
+      void setPendingFeeDebit({
+        txHash:     result.txHash,
+        feeToken,
+        amount:     actualFeeWhole,
+        ownerLc:    owner,
+        chain:      src,
+        submittedAt: Date.now(),
+        messageId:  result.messageId,
+      }).catch((pendingErr) => {
+        console.error("[ccip-bridge-runner] setPendingFeeDebit failed", {
+          owner, src, txHash: result.txHash,
+          err: pendingErr instanceof Error ? pendingErr.message : String(pendingErr),
+        });
+      });
       void sendOpsAlert(
-        `<b>⚠ CCIP fee debit failed (on-chain tx already mined)</b>\n\n` +
+        `<b>⚠ CCIP fee debit failed — pending-fee-debit row written for cron reconciliation</b>\n\n` +
         `Owner: <code>${owner}</code>\n` +
         `Chain: ${src} · feeToken: ${feeToken}\n` +
         `Fee owed: ${actualFeeWhole} ${feeToken === "LINK" ? "LINK" : "native"}\n` +
         (agentFundEth > 0 ? `(Auto-fund of ${agentFundEth.toFixed(6)} native was already debited above.)\n` : "") +
         `messageId: <code>${result.messageId}</code>\n` +
-        `Error: ${err.slice(0, 200)}`,
+        `txHash: <code>${result.txHash}</code>\n` +
+        `Error: ${err.slice(0, 200)}\n\n` +
+        `Cron will retry. Manual debit also OK from ` +
+        `${feeToken === "LINK" ? "link_used" : "bridge_native_used"}:${owner.toLowerCase()}.${src}.`,
         "error",
       ).catch(() => { /* alert dispatch best-effort */ });
     }
@@ -814,6 +925,39 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
       ...(agentFundTxHash ? { agentFundTxHash, agentFundEth } : {}),
       sendId,
     };
+    // Permanent settled-fp marker BEFORE finaliseClaim. The marker is
+    // the no-TTL backstop the top-of-function `getBridgeSettled` check
+    // reads — even if finaliseClaim throws below, this marker
+    // guarantees a same-intent retry can never double-bridge. Best
+    // effort: if THIS write also throws we still proceed (the regular
+    // 24h success cache below is the immediate replay path).
+    void markBridgeSettled(fp, {
+      messageId: result.messageId,
+      txHash:    result.txHash,
+      src,
+      dst,
+      amount,
+      feeToken,
+      settledAt: Date.now(),
+    }).catch((markerErr) => {
+      console.error("[ccip-bridge-runner] markBridgeSettled failed", {
+        owner, fp, messageId: result.messageId,
+        err: markerErr instanceof Error ? markerErr.message : String(markerErr),
+      });
+      void sendOpsAlert(
+        `<b>⚠ CCIP settled-marker write failed</b>\n\n` +
+        `Owner: <code>${owner}</code>\n` +
+        `fp: <code>${fp}</code>\n` +
+        `messageId: <code>${result.messageId}</code>\n` +
+        `txHash: <code>${result.txHash}</code>\n\n` +
+        `If the regular 24h cache also misses, a 24h+ retry of the same intent could double-bridge. ` +
+        `Restore manually: SET ccip_bridge_settled:${fp} ` +
+        `'{"messageId":"${result.messageId}","txHash":"${result.txHash}","src":"${src}","dst":"${dst}",` +
+        `"amount":"${amount}","feeToken":"${feeToken}","settledAt":${Date.now()}}'`,
+        "error",
+      ).catch(() => { /* best-effort */ });
+    });
+
     try {
       await finaliseClaim("success", 200, responseBody);
     } catch (e) {

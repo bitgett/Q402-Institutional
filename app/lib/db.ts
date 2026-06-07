@@ -1484,27 +1484,21 @@ export async function getLinkUsedTotals(address: string): Promise<Record<string,
 /**
  * Atomically increment the consumed-LINK counter for one chain.
  *
- * Uses Redis INCRBYFLOAT against a per-chain scalar key so concurrent
- * bridges from the same owner cannot lose increments to a read-modify-
- * write race. (Previously two parallel bridges could both read 0,
- * each add their fee, and the second write would clobber the first.)
+ * RMW fallback REMOVED for the same reason as recordNativeBridgeUsage:
+ * on the "INCRBYFLOAT applied server-side, response lost in transit"
+ * path the catch fired despite the bucket already being credited, and
+ * the RMW path then added the amount AGAIN on top of the silent
+ * success → double-debit. Callers MUST guard this with
+ * `claimAndDebitLinkBridge` when the work is per-txHash idempotent.
+ * This function throws on KV failure; the per-txHash claim caller is
+ * responsible for the recovery path (write a pending-fee-debit row).
  */
 export async function recordLinkUsage(address: string, chain: string, amount: number): Promise<void> {
   if (!isCCIPLinkChain(chain) || amount <= 0) return;
-  try {
-    // Upstash client exposes incrbyfloat — atomic on the Redis side.
-    await (kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> }).incrbyfloat(
-      `${linkUsedKey(address)}.${chain}`,
-      amount,
-    );
-  } catch {
-    // Fallback for SDK shapes that don't expose incrbyfloat (e.g.
-    // local-mock KV in tests) — non-atomic but functional. The fallback
-    // is a deliberate degradation, not a silent skip.
-    const key = `${linkUsedKey(address)}.${chain}`;
-    const cur = (await kv.get<number>(key)) ?? 0;
-    await kv.set(key, cur + amount);
-  }
+  await (kv as unknown as { incrbyfloat: (k: string, v: number) => Promise<number> }).incrbyfloat(
+    `${linkUsedKey(address)}.${chain}`,
+    amount,
+  );
 }
 
 /**
@@ -1783,15 +1777,53 @@ export async function claimAndDebitNativeBridge(
   chain: string,
   amount: number,
 ): Promise<AtomicDebitResult> {
-  // Non-CCIP chains don't carry the bridge_native_used bucket — return
-  // a synthetic "debited" so caller's flow proceeds. amount <= 0 same
-  // (defensive — a zero debit is a no-op).
+  return claimAndDebitInternal(
+    `bridge_debit_claim:${txHash.toLowerCase()}`,
+    `${nativeBridgeUsedKey(ownerLc)}.${chain}`,
+    `${ownerLc.toLowerCase()}:${chain}`,
+    chain,
+    amount,
+  );
+}
+
+/**
+ * Atomic claim + INCRBYFLOAT for the LINK bucket (mirrors the native
+ * helper above). Closes the same two holes for the CCIP fee path when
+ * the user pays in LINK: claim+INCR in one EVAL so the
+ * "claim-without-debit" gap doesn't exist, and a lost INCR response
+ * leaves the claim recorded so a retry sees "already_claimed".
+ *
+ * Claim key is shared with the native helper (`bridge_debit_claim:
+ * {txHash}`) so a single bridge tx hash maps to exactly one debit
+ * event regardless of which bucket got credited — mixed-fee retries
+ * (which can't happen today but a future feature might allow) can't
+ * double-debit.
+ */
+export async function claimAndDebitLinkBridge(
+  txHash: string,
+  ownerLc: string,
+  chain: string,
+  amount: number,
+): Promise<AtomicDebitResult> {
+  return claimAndDebitInternal(
+    `bridge_debit_claim:${txHash.toLowerCase()}`,
+    `${linkUsedKey(ownerLc)}.${chain}`,
+    `${ownerLc.toLowerCase()}:${chain}:link`,
+    chain,
+    amount,
+  );
+}
+
+async function claimAndDebitInternal(
+  claimKey: string,
+  bucketKey: string,
+  claimValue: string,
+  chain: string,
+  amount: number,
+): Promise<AtomicDebitResult> {
   if (!isCCIPLinkChain(chain) || amount <= 0) {
     return { debited: true };
   }
-  const claimKey  = `bridge_debit_claim:${txHash.toLowerCase()}`;
-  const bucketKey = `${nativeBridgeUsedKey(ownerLc)}.${chain}`;
-  const claimValue = `${ownerLc.toLowerCase()}:${chain}`;
   const result = await (kv as unknown as {
     eval: (s: string, keys: string[], args: string[]) => Promise<unknown>;
   }).eval(
@@ -1808,6 +1840,125 @@ export async function claimAndDebitNativeBridge(
     return { debited: true, newBalance: newBal };
   }
   return { debited: false, reason: "already_claimed" };
+}
+
+/**
+ * Pending CCIP fee-debit record. Written by the bridge runner when
+ * the post-bridge fee debit (LINK or native, depending on feeToken)
+ * throws AFTER the bridge tx already mined. Previously this path just
+ * surfaced an ops alert and returned success to the user — leaving
+ * the LINK/native bucket NOT decremented for a bridge the user
+ * successfully sent. Audit caught this asymmetry: auto-fund failures
+ * were obsessively reconciled but fee failures were silently absorbed.
+ *
+ * Reconciled by the same cron as pending funds, on a third scan pass.
+ * 1h TTL — the cron runs every ~5min so the row is reconciled within
+ * a handful of ticks, and the per-txHash atomic claim guarantees the
+ * cron's debit attempt is idempotent (a successful in-process retry
+ * after the initial throw won't double-debit).
+ */
+export interface PendingFeeDebitRecord {
+  txHash:    string;
+  feeToken:  "LINK" | "native";
+  /** Whole-units owed (LINK whole or native ETH-equivalent whole). */
+  amount:    number;
+  ownerLc:   string;
+  chain:     string;
+  submittedAt: number;
+  /** CCIP messageId of the bridge whose fee this row represents — for ops triage. */
+  messageId: string;
+}
+
+function ccipPendingFeeDebitKey(addr: string, chain: string, txHash: string): string {
+  return `ccip_pending_fee_debit:${addr.toLowerCase()}:${chain}:${txHash.toLowerCase()}`;
+}
+
+export async function setPendingFeeDebit(rec: PendingFeeDebitRecord): Promise<void> {
+  if (!isCCIPLinkChain(rec.chain)) return;
+  await kv.set(ccipPendingFeeDebitKey(rec.ownerLc, rec.chain, rec.txHash), rec, { ex: 3600 });
+}
+
+export async function listPendingFeeDebitKeys(maxItems = 500): Promise<string[]> {
+  const keys: string[] = [];
+  let cursor: string | number = 0;
+  let iters = 0;
+  do {
+    const [next, batch]: [string | number, string[]] = await kv.scan(cursor, {
+      match: "ccip_pending_fee_debit:*",
+      count: 200,
+    });
+    cursor = next;
+    for (const k of batch) {
+      keys.push(k);
+      if (keys.length >= maxItems) return keys;
+    }
+    iters++;
+    if (iters > 200) break;
+  } while (String(cursor) !== "0");
+  return keys;
+}
+
+/**
+ * Settled-fingerprint marker.
+ *
+ * The bridge route's idempotency cache uses a 30-min TTL. After the
+ * TTL expires, the same intent fingerprint (owner/walletId/src/dst/
+ * amount/feeToken) becomes "free" again — if the previous bridge's
+ * `finaliseClaim("success", …)` write FAILED (KV blip exactly at the
+ * wrong moment, in the catch-and-log path), a same-intent retry 31+
+ * minutes later would slip past the empty claim and double-bridge.
+ *
+ * This marker is written AFTER the on-chain bridge succeeds, BEFORE
+ * `finaliseClaim`. It has NO TTL — it is the permanent record that
+ * this fingerprint was already settled. New bridge attempts check
+ * this marker before claiming the idempotency key; a present marker
+ * forces the request through the existing-claim replay path even if
+ * the regular 30-min cache rolled.
+ *
+ * Distinction from the idempotency cache:
+ *   - cache  (30min TTL) carries the FULL response body so a retry
+ *     within the window replays the original messageId/txHash/explorer
+ *     links. Most replays land here.
+ *   - marker (no TTL) is just a "yes, this fp succeeded" boolean. If
+ *     a retry lands here (cache expired), we return a generic
+ *     "already settled" response with the original messageId pulled
+ *     from the marker. Coarser UX but correct.
+ *
+ * Trade-off: legitimate identical retries after 30min (e.g. user
+ * bridges $5 eth→avax twice in one day, hours apart) will now hit
+ * the marker and be told "already settled" instead of running a new
+ * bridge. Mitigation: the fingerprint includes amount + chain pair,
+ * so retries with ANY different amount or lane bypass the marker.
+ * Users wanting a second identical bridge can vary the amount by
+ * $0.01 — annoying but rare in practice.
+ */
+export interface BridgeSettledMarker {
+  messageId:  string;
+  txHash:     string;
+  src:        string;
+  dst:        string;
+  amount:     string;
+  feeToken:   string;
+  settledAt:  number;
+}
+
+function bridgeSettledKey(fp: string): string {
+  return `ccip_bridge_settled:${fp}`;
+}
+
+export async function markBridgeSettled(fp: string, marker: BridgeSettledMarker): Promise<void> {
+  // No TTL — permanent record. The fp namespace is keccak16, so
+  // collision risk is zero in practice; storage growth is bounded
+  // by total successful bridges across all time, which is manageable.
+  await kv.set(bridgeSettledKey(fp), marker);
+}
+
+export async function getBridgeSettled(fp: string): Promise<BridgeSettledMarker | null> {
+  try {
+    return (await kv.get<BridgeSettledMarker>(bridgeSettledKey(fp))) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

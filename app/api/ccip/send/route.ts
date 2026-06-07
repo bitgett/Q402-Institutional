@@ -87,6 +87,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (amountRaw === 0n) {
     return NextResponse.json({ error: "amount must be > 0" }, { status: 400 });
   }
+  // Validate maxFeeRaw shape BEFORE BigInt() — `BigInt("abc")` throws
+  // SyntaxError uncaught and returns a 500 to the user instead of a
+  // clean 400. The fee cap is raw 18-dec wei; integer string only.
+  if (body.maxFeeRaw !== undefined && (typeof body.maxFeeRaw !== "string" || !/^\d+$/.test(body.maxFeeRaw))) {
+    return NextResponse.json({ error: "maxFeeRaw must be a non-negative integer string (raw 18-dec wei)" }, { status: 400 });
+  }
   const feeToken: FeeTokenKind = body.feeToken === "native" ? "native" : "LINK";
 
   // ── Sender contract must be deployed ────────────────────────────────────

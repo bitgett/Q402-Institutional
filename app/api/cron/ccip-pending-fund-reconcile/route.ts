@@ -33,13 +33,16 @@ import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import {
   acquirePendingFundReconcileLock,
   claimAndDebitNativeBridge,
+  claimAndDebitLinkBridge,
   listOrphanFundKeys,
   listPendingFundKeys,
   listPendingClearDebitKeys,
+  listPendingFeeDebitKeys,
   releasePendingFundReconcileLock,
   type OrphanFundRecord,
   type PendingFundRecord,
   type PendingClearDebitRecord,
+  type PendingFeeDebitRecord,
 } from "@/app/lib/db";
 import { getCCIPProvider, isCCIPChain, type CCIPChainKey } from "@/app/lib/ccip";
 import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
@@ -378,6 +381,57 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // ── Pending CCIP fee-debit reconciliation pass ─────────────────────
+  // Bridge runner writes one of these rows when the post-bridge fee
+  // debit throws AFTER the bridge tx already mined. The atomic
+  // claim+debit primitive makes the retry safe (same txHash claim
+  // refuses double-debit), but the cron is what actually fires the
+  // retry. Same row TTL as pending-fund (1h), same 5-min cadence.
+  let feeKeys: string[] = [];
+  let feeDebited = 0;
+  let feeStillPending = 0;
+  try {
+    feeKeys = await listPendingFeeDebitKeys();
+  } catch (e) {
+    console.error("[ccip-pending-fund-reconcile] fee-debit scan failed", e);
+  }
+  for (const key of feeKeys) {
+    const rec = await kv.get<PendingFeeDebitRecord>(key).catch(() => null);
+    if (!rec || typeof rec.txHash !== "string" || typeof rec.chain !== "string") {
+      await kv.del(key).catch(() => { /* swallow */ });
+      continue;
+    }
+    if (!isCCIPChain(rec.chain) || typeof rec.amount !== "number" || rec.amount <= 0) {
+      await kv.del(key).catch(() => { /* swallow */ });
+      continue;
+    }
+    try {
+      if (rec.feeToken === "LINK") {
+        await claimAndDebitLinkBridge(rec.txHash, rec.ownerLc, rec.chain, rec.amount);
+      } else {
+        await claimAndDebitNativeBridge(rec.txHash, rec.ownerLc, rec.chain, rec.amount);
+      }
+      await kv.del(key).catch(() => { /* swallow */ });
+      feeDebited++;
+    } catch (e) {
+      feeStillPending++;
+      void sendOpsAlert(
+        `<b>🚨 Pending fee-debit cron retry FAILED — row retained</b>\n\n` +
+        `Owner: <code>${rec.ownerLc}</code>\n` +
+        `Chain: ${rec.chain} · feeToken: ${rec.feeToken}\n` +
+        `Bridge txHash: <code>${rec.txHash}</code>\n` +
+        `messageId: <code>${rec.messageId}</code>\n` +
+        `Amount owed: ${rec.amount.toFixed(6)} ${rec.feeToken === "LINK" ? "LINK" : "native"}\n` +
+        `Error: ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}\n\n` +
+        `Will retry next tick. Manual debit: INCRBYFLOAT ` +
+        `${rec.feeToken === "LINK" ? "link_used" : "bridge_native_used"}` +
+        `:${rec.ownerLc}.${rec.chain} by ${rec.amount.toFixed(6)} ` +
+        `(claim bridge_debit_claim:${rec.txHash.toLowerCase()} first).`,
+        "error",
+      ).catch(() => { /* best-effort */ });
+    }
+  }
+
   const durationMs = Date.now() - startedAt;
   await recordCronStatus(CRON_NAMES.CCIP_PENDING_FUND_RECONCILE, {
     lastStatus: "success",
@@ -396,6 +450,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       orphanDebited,
       orphanReverted,
       orphanStillPending,
+      feeScanned:       feeKeys.length,
+      feeDebited,
+      feeStillPending,
     },
     durationMs,
   });
@@ -414,6 +471,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     orphanDebited,
     orphanReverted,
     orphanStillPending,
+    feeScanned:       feeKeys.length,
+    feeDebited,
+    feeStillPending,
     outcomes,
     durationMs,
     asOf: new Date().toISOString(),
