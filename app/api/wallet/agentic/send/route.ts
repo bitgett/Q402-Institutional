@@ -171,6 +171,29 @@ function sendKey(fp: string): string {
   return `aw:send:${fp}`;
 }
 
+// Durable "this fingerprint produced ≥1 confirmed on-chain settlement"
+// marker — written with NO TTL (unlike the 30-min idempotency record).
+// The idempotency claim dedups concurrent + recent (<30min) retries; this
+// marker is the LONG-TERM replay guard. Without it, a retry of the exact
+// same intent (same fp, incl. hookParams) after the 30-min record expires
+// would re-sign with a fresh witness nonce and DOUBLE-SETTLE — the
+// contract accepts the fresh nonce as a new authorization. Mirrors the
+// CCIP bridge's markBridgeSettled. Send-path volume is low (real Agent
+// Wallet users only — the viz fires through /api/relay, not here), so
+// no-TTL growth is bounded.
+function sendSettledKey(fp: string): string {
+  return `aw:send:settled:${fp}`;
+}
+
+/** Trimmed record stored in the durable settled marker (no large relayBody). */
+interface SettledMarker {
+  sendId: string;
+  status: SendRecord["status"];
+  txHash?: string;
+  legs?: SendRecord["legs"];
+  settledAt: number;
+}
+
 /**
  * Resolve owner from auth, given the (already-validated) intent fields.
  * The owner-sig path requires walletId in the body so it can bind to
@@ -405,6 +428,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     hookParamsTag,
   );
   const idempotencyKey = sendKey(fp);
+  const settledKey = sendSettledKey(fp);
+
+  // ── Durable settled-marker replay guard ────────────────────────────────
+  // Checked BEFORE the idempotency claim: if this exact fingerprint
+  // already produced an on-chain settlement in a prior request — even one
+  // older than the 30-min idempotency TTL — replay the stored result
+  // instead of re-firing. A fresh witness nonce would otherwise let the
+  // contract accept a duplicate. The read is best-effort (null on KV
+  // error); the SET NX claim below is the hard concurrency gate and also
+  // needs KV, so a KV outage fails the send there regardless.
+  const priorSettled = await kv.get<SettledMarker>(settledKey).catch(() => null);
+  if (priorSettled) {
+    const isPartial = priorSettled.status === "partial";
+    const isUncertain = priorSettled.status === "relay_unreachable_uncertain";
+    return NextResponse.json(
+      {
+        sendId: priorSettled.sendId,
+        status: priorSettled.status,
+        ...(priorSettled.txHash ? { txHash: priorSettled.txHash } : {}),
+        ...(priorSettled.legs ? { split: true, legs: priorSettled.legs } : {}),
+        replayed: true,
+        message:
+          "This exact payment already settled on-chain in a prior request; " +
+          "returning the original result instead of re-firing.",
+      },
+      { status: isUncertain ? 502 : isPartial ? 207 : 200 },
+    );
+  }
+
   const startedAt = Date.now();
   const sendId = randomBytes(8).toString("hex");
   const claim: SendRecord = { status: "processing", startedAt, sendId };
@@ -740,6 +792,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const splitTtl = uncertain || allSettled || settledLegs.length > 0 ? IDEMPOTENCY_TTL_SEC : 60;
     await kv.set(idempotencyKey, splitRecord, { ex: splitTtl }).catch(() => {});
 
+    // Durable replay guard: any time ≥1 leg confirmed on-chain (complete,
+    // partial, OR uncertain-after-some-settled), persist a no-TTL marker
+    // so a retry beyond the 30-min idempotency window can never re-fire
+    // the already-settled legs. All-failed / threw-on-first-leg (0
+    // settled) writes nothing — that intent is safe to retry.
+    if (settledLegs.length > 0) {
+      const marker: SettledMarker = {
+        sendId,
+        status: splitStatus,
+        txHash: settledLegs[0]?.txHash,
+        legs: splitRecord.legs,
+        settledAt: Date.now(),
+      };
+      await kv.set(settledKey, marker).catch(() => {});
+    }
+
     const httpStatus = uncertain ? 502 : allSettled ? 200 : settledLegs.length > 0 ? 207 : 502;
     return NextResponse.json(
       {
@@ -908,6 +976,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         `Error: ${e instanceof Error ? e.message : String(e)}`,
       "critical",
     );
+  }
+
+  // Durable replay guard (no TTL): on a confirmed on-chain settlement,
+  // persist a marker so a retry of this exact intent beyond the 30-min
+  // idempotency window can never re-fire (a fresh witness nonce would
+  // otherwise double-settle). Written after the idempotency set so even
+  // if that write failed above, the long-term guard still lands.
+  if (success) {
+    const marker: SettledMarker = {
+      sendId,
+      status: "complete",
+      txHash: finalRecord.txHash,
+      settledAt: Date.now(),
+    };
+    await kv.set(settledKey, marker).catch(() => {});
   }
 
   return NextResponse.json(
