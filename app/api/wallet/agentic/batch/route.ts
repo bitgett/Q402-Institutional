@@ -108,7 +108,7 @@ interface BatchRecord {
   results: BatchResultRow[];
   startedAt: number;
   finishedAt?: number;
-  status: "processing" | "complete";
+  status: "processing" | "complete" | "partial" | "failed";
   /**
    * True when row 0 failed and the rest of the batch was marked
    * ABORTED_AFTER_ROW_0_FAILURE without firing. Persisted on the
@@ -130,6 +130,17 @@ function isPositiveDecimalString(s: unknown): s is string {
 
 function batchKey(fp: string): string {
   return `aw:batch:${fp}`;
+}
+
+// Durable "this batch fingerprint produced ≥1 confirmed on-chain row"
+// marker — NO TTL, unlike the 10-min idempotency record. The TTL'd
+// record dedups recent retries; this is the long-term guard. Without it,
+// a retry of the same batch after 10 min re-signs every row with fresh
+// witness nonces and re-fires (double-settle). Mirrors the send path's
+// aw:send:settled. Batch is multichain-only (paid, low volume), so
+// no-TTL growth is bounded.
+function batchSettledKey(fp: string): string {
+  return `aw:batch:settled:${fp}`;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -321,19 +332,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     rows,
   );
   const key = batchKey(fp);
-  const cached = await kv.get<BatchRecord>(key);
-  if (cached) {
+  const settledMarkerKey = batchSettledKey(fp);
+
+  // Durable replay guard FIRST: a batch that already settled ≥1 row in a
+  // prior request — even older than the 10-min TTL record — replays its
+  // stored result instead of re-firing every row with fresh nonces.
+  const durable = await kv.get<BatchRecord>(settledMarkerKey).catch(() => null);
+  const replay = durable ?? (await kv.get<BatchRecord>(key));
+  if (replay) {
     return NextResponse.json(
       {
-        batchId: cached.batchId,
-        status: cached.status,
-        results: cached.results,
-        aborted: cached.aborted ?? false,
+        batchId: replay.batchId,
+        status: replay.status,
+        results: replay.results,
+        aborted: replay.aborted ?? false,
         idempotent: true,
-        startedAt: cached.startedAt,
-        finishedAt: cached.finishedAt,
+        replayed: !!durable,
+        startedAt: replay.startedAt,
+        finishedAt: replay.finishedAt,
       },
-      { status: 200 },
+      { status: replay.status === "partial" ? 207 : replay.status === "failed" ? 502 : 200 },
     );
   }
 
@@ -554,11 +572,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const results: BatchResultRow[] = [firstResult, ...restResults];
 
   const successful = results.filter((r) => r.ok);
+  // Honest terminal status: a batch with failed rows is NOT "complete".
+  // Direct API users key on HTTP status + this field, so report partial
+  // (207) when some rows failed and failed (502) when none settled.
+  const batchStatus: BatchRecord["status"] =
+    successful.length === results.length
+      ? "complete"
+      : successful.length > 0
+        ? "partial"
+        : "failed";
   const finalRecord: BatchRecord = {
     ...initialRecord,
     results,
     finishedAt: Date.now(),
-    status: "complete",
+    status: batchStatus,
     aborted: row0Aborted,
   };
   // If we cannot write the final record, future retries will re-fire
@@ -582,6 +609,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // Durable replay guard: once ≥1 row confirmed on-chain, persist a
+  // no-TTL marker so a retry beyond the 10-min window can't re-fire the
+  // settled rows. A write failure here is NOT swallowed — it pages ops,
+  // because losing this marker is exactly the post-TTL double-settle the
+  // marker exists to prevent.
+  if (successful.length > 0) {
+    try {
+      await kv.set(settledMarkerKey, finalRecord);
+    } catch (e) {
+      void sendOpsAlert(
+        `agentic-wallet/batch DURABLE marker write failed for ${owner} ` +
+          `(batchId=${batchId}, chain=${body.chain}, settled=${successful.length}/${results.length}). ` +
+          `A retry after the 10-min TTL could re-fire settled rows — verify before any replay. ` +
+          `Error: ${e instanceof Error ? e.message : String(e)}`,
+        "critical",
+      );
+    }
+  }
+
   // Reconcile the daily-cap reservation against the actual settled
   // total. We reserved `totalAmount` up front; refund the failed rows
   // so retries (different recipient set) keep their budget.
@@ -594,7 +640,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json(
     {
       batchId,
-      status: "complete",
+      status: batchStatus,
       results,
       settled: successful.length,
       failed: results.length - successful.length,
@@ -603,6 +649,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       startedAt: finalRecord.startedAt,
       finishedAt: finalRecord.finishedAt,
     },
-    { status: 200 },
+    { status: batchStatus === "partial" ? 207 : batchStatus === "failed" ? 502 : 200 },
   );
 }

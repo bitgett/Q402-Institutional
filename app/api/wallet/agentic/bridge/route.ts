@@ -155,6 +155,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 402 },
     );
   }
+  // hasMultichainScope only confirms the OWNER's account is paid — NOT
+  // that the PRESENTED key is the paid key. On a paid account the owner
+  // may also hold a Trial key (q402_live_ prefix, lower-privilege,
+  // BNB-only intent). Without this, a leaked Trial key could bridge the
+  // Agent Wallet + Gas Tank cross-chain. Require the exact live
+  // multichain key, mirroring /batch's paid-key gate.
+  if (body.apiKey !== sub?.apiKey) {
+    return NextResponse.json(
+      {
+        error: "STALE_API_KEY",
+        message:
+          "This apiKey is not the live multichain key (or it's a trial key; " +
+          "bridging requires the paid multichain key). Rotate to the current key " +
+          "in your dashboard and retry.",
+      },
+      { status: 401 },
+    );
+  }
 
   // ── Resolve Agent Wallet ────────────────────────────────────────────────
   // Mode C accepts an explicit walletId OR falls back to the owner's

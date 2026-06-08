@@ -73,10 +73,18 @@ describe("MultiPayeeSplit.run — allow (no-op) paths", () => {
     const r = await multiPayeeSplit.run(ctx("1"));
     expect(r.action).toBe("allow");
   });
-  it("allows when a single-leg split (degenerate)", async () => {
-    enable([{ recipient: A, bps: 10000 }]);
+  it("allows a single-leg split when the leg IS the payment recipient (no-op)", async () => {
+    const TO = "0x" + "9".repeat(40); // matches ctx default recipient
+    enable([{ recipient: TO, bps: 10000 }]);
     const r = await multiPayeeSplit.run(ctx("1"));
     expect(r.action).toBe("allow");
+  });
+  it("DENIES a single-leg split whose leg differs from `to` (misdirection guard)", async () => {
+    // leg = A, but ctx recipient is 0x999... — allowing would pay `to`,
+    // ignoring the leg, silently sending funds elsewhere than declared.
+    enable([{ recipient: A, bps: 10000 }]);
+    const r = await multiPayeeSplit.run(ctx("1"));
+    expect(r).toMatchObject({ action: "deny", code: "SPLIT_SINGLE_LEG_MISMATCH" });
   });
 });
 
