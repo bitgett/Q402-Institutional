@@ -47,6 +47,7 @@ import {
   submitToRelay,
   internalBaseUrl,
 } from "@/app/lib/agentic-wallet-sign";
+import { runHooks, type HookParams } from "@/app/lib/hooks";
 import type { Address, Hex } from "viem";
 
 export const runtime = "nodejs";
@@ -80,6 +81,9 @@ interface SendBody {
   signature?: string;
   // Mode C — server-mediated, MCP holds only the apiKey
   apiKey?: string;
+  // Q402 Hooks — per-payment hook parameters. Optional; absent means
+  // no per-intent hook config (stored per-wallet config still applies).
+  hookParams?: HookParams;
 }
 
 interface SendRecord {
@@ -476,6 +480,38 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await refundAndRelease();
     return NextResponse.json({ error: "relay_unavailable" }, { status: 503 });
   }
+
+  // ── Q402 Hooks — beforeSettle ──────────────────────────────────────────
+  // Runs AFTER all native gating (per-tx max, daily cap, subscription,
+  // api key) and BEFORE the signature + relay. A hook deny here aborts
+  // the settlement; we refundAndRelease so the daily reservation +
+  // idempotency claim don't shadow-lock the (recipient, amount) the way
+  // any other gate-failure path does. The dispatcher is a no-op when no
+  // hooks are enabled for this wallet (the common case), so this adds a
+  // single cached KV read on the hot path.
+  const hookResult = await runHooks("beforeSettle", {
+    lifecycle: "beforeSettle",
+    owner,
+    walletId,
+    chain: body.chain,
+    token: body.token,
+    recipient: body.to.toLowerCase(),
+    amount: body.amount,
+    amountUsd: numAmount,
+    source: "send",
+    params: body.hookParams,
+  });
+  if (hookResult.outcome.action === "deny") {
+    await refundAndRelease();
+    const { code, reason, status, meta } = hookResult.outcome;
+    return NextResponse.json(
+      { error: code, message: reason, ...(meta ? { detail: meta } : {}) },
+      { status: status ?? 403 },
+    );
+  }
+  // NOTE: a `split` outcome (MultiPayeeSplit) is not yet wired into the
+  // single-recipient send path — that fan-out lands in Phase 4. Until
+  // then the dispatcher only ever returns allow/deny here.
 
   // Sign + submit. `startedAt` was set when we minted the SET NX claim
   // so the cached final record stitches back to the wallet popup time
