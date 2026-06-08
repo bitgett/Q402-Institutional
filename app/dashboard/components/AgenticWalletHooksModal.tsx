@@ -52,6 +52,12 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True only once we've SUCCESSFULLY read the current policy. Saving
+  // does a full replace (buildConfig reconstructs the whole config from
+  // the form), so saving before a successful load would overwrite the
+  // wallet's real policy with the form's default-OFF state — silently
+  // wiping it. Gate the save on this.
+  const [loadOk, setLoadOk] = useState(false);
   const inFlightRef = useRef(false);
   useModalEscape(onClose, saving);
 
@@ -66,10 +72,26 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
         const res = await fetch(`/api/wallet/agentic/hooks?${qs.toString()}`);
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
-        if (res.ok && data.config) hydrate(data.config as WalletHookConfig);
+        if (res.ok) {
+          // res.ok with an empty config is still a successful read (the
+          // wallet simply has no policy yet) — safe to edit + save.
+          if (data.config) hydrate(data.config as WalletHookConfig);
+          setLoadOk(true);
+        } else {
+          setError(
+            (data.error ?? `Couldn't load current policy (HTTP ${res.status}).`) +
+              " Reopen and retry before saving — saving now would overwrite your existing policy.",
+          );
+        }
         setLoading(false);
       } catch (e) {
-        if (!cancelled) { setError(e instanceof Error ? e.message : String(e)); setLoading(false); }
+        if (!cancelled) {
+          setError(
+            (e instanceof Error ? e.message : String(e)) +
+              " — couldn't load current policy; reopen before saving.",
+          );
+          setLoading(false);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -149,6 +171,10 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
 
   async function submit() {
     if (inFlightRef.current) return;
+    if (!loadOk) {
+      setError("Current policy hasn't loaded — reopen the dialog and retry. Saving now could overwrite it.");
+      return;
+    }
     inFlightRef.current = true;
     setError(null);
     const built = buildConfig();
@@ -243,8 +269,12 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
                   <div className={labelCls}>If unverifiable</div>
                   <select value={onUnknown} onChange={(e) => setOnUnknown(e.target.value === "deny" ? "deny" : "allow")}
                     className={inputCls} style={inputStyle}>
-                    <option value="allow">allow</option>
-                    <option value="deny">deny</option>
+                    {/* Explicit dark bg + light text on each option — the
+                        native open dropdown uses an OS-white background, and
+                        the select's inherited text-white would render the
+                        non-highlighted options white-on-white (invisible). */}
+                    <option value="allow" style={{ background: "#0F1929", color: "#EAF2EC" }}>allow</option>
+                    <option value="deny" style={{ background: "#0F1929", color: "#EAF2EC" }}>deny</option>
                   </select>
                 </div>
               </div>
@@ -261,9 +291,10 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
 
             {error && <div className="text-[12px] text-red-300/85">{error}</div>}
 
-            <button type="button" onClick={submit} disabled={saving}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40">
-              {saving ? "Saving…" : "Save hook policy"}
+            <button type="button" onClick={submit} disabled={saving || !loadOk}
+              title={!loadOk ? "Current policy hasn't loaded — reopen and retry before saving." : undefined}
+              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed">
+              {saving ? "Saving…" : !loadOk ? "Couldn't load policy — reopen" : "Save hook policy"}
             </button>
           </>
         )}
