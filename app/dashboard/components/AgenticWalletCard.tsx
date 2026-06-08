@@ -26,6 +26,7 @@ import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { AgenticWalletSendModal } from "./AgenticWalletSendModal";
 import { AgenticWalletBatchModal } from "./AgenticWalletBatchModal";
 import { AgenticWalletLimitsModal } from "./AgenticWalletLimitsModal";
+import { AgenticWalletHooksModal } from "./AgenticWalletHooksModal";
 import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
 import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
 import { AgenticWalletBridgeModal } from "./AgenticWalletBridgeModal";
@@ -158,6 +159,7 @@ export function AgenticWalletCard({
   const [withdrawBucket, setWithdrawBucket] = useState<WithdrawBucket | null>(null);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
+  const [hooksOpen, setHooksOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [bridgeOpen, setBridgeOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -397,6 +399,14 @@ export function AgenticWalletCard({
           >
             ⚙ Spending limits
           </button>
+          <button
+            type="button"
+            disabled={archived}
+            onClick={() => setHooksOpen(true)}
+            className="text-white/75 hover:text-emerald-300 transition-colors disabled:opacity-40"
+          >
+            ⬡ Hooks
+          </button>
           {wallet.erc8004AgentId ? (
             <a
               href={wallet.reputation?.scan8004Url ?? agentScanUrl(wallet.erc8004AgentId)}
@@ -570,6 +580,19 @@ export function AgenticWalletCard({
           onClose={() => setLimitsOpen(false)}
           onSaved={() => {
             setLimitsOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+
+      {hooksOpen && (
+        <AgenticWalletHooksModal
+          ownerAddress={address}
+          walletId={wallet.walletId}
+          signMessage={signMessage}
+          onClose={() => setHooksOpen(false)}
+          onSaved={() => {
+            setHooksOpen(false);
             onChanged();
           }}
         />

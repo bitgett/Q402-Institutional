@@ -26,3 +26,5 @@ export {
   validateWalletHookConfig,
   assertSplitsSumTo10000,
 } from "./config";
+
+export { canonicalHookConfig } from "./canonical";
