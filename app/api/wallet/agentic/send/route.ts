@@ -302,6 +302,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const walletId = wallet.address.toLowerCase();
 
+  // ── Hook param trust boundary ──────────────────────────────────────────
+  // Per-payment hookParams (params.splits especially) are NOT part of the
+  // owner's EIP-191 signed intent (which covers walletId/chain/token/to/
+  // amount). On the owner-sig path an attacker who can modify the request
+  // body in flight could inject `splits` to redirect a signed payment's
+  // funds to recipients of their choice — the signature protects the
+  // recipient, but a MultiPayeeSplit injection routes around it.
+  //
+  // So we only TRUST body.hookParams on the Mode C (apiKey) path, where
+  // the key holder IS the payment authority and controls the body
+  // legitimately. On the owner-sig path, body hookParams are dropped and
+  // only the wallet's STORED hook config (written via authenticated
+  // config endpoints) applies.
+  const isModeC = typeof body.apiKey === "string" && body.apiKey.length > 0;
+  const trustedHookParams = isModeC ? body.hookParams : undefined;
+
   // ── Q402 Hooks — beforeAuthorize ───────────────────────────────────────
   // Runs at the EARLIEST point we have (owner, walletId, recipient,
   // amount) — before the idempotency claim or any daily-limit charge.
@@ -318,7 +334,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     amount: body.amount,
     amountUsd: Number(body.amount),
     source: "send",
-    params: body.hookParams,
+    params: trustedHookParams,
   });
   if (authHook.outcome.action === "deny") {
     const { code, reason, status, meta } = authHook.outcome;
@@ -531,7 +547,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     amount: body.amount,
     amountUsd: numAmount,
     source: "send",
-    params: body.hookParams,
+    params: trustedHookParams,
   });
   if (hookResult.outcome.action === "deny") {
     await refundAndRelease();
@@ -553,6 +569,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // re-settle a leg that already landed.
   if (hookResult.outcome.action === "split") {
     const legs = hookResult.outcome.parts;
+
+    // Screen EACH split leg recipient through beforeAuthorize hooks
+    // (ComplianceGate) before any settlement. The original body.to was
+    // screened above, but the split legs are DIFFERENT addresses (from
+    // wallet config or per-payment params) and were never checked — a
+    // split could otherwise fan out to a sanctioned leg. A single
+    // sanctioned leg denies the whole split (no partial settle to a
+    // blocked address); we refundAndRelease since nothing has fired.
+    for (const leg of legs) {
+      const legAuth = await runHooks("beforeAuthorize", {
+        lifecycle: "beforeAuthorize",
+        owner,
+        walletId,
+        chain: body.chain,
+        token: body.token,
+        recipient: leg.recipient.toLowerCase(),
+        amount: leg.amount,
+        amountUsd: Number(leg.amount),
+        source: "send",
+        params: undefined,
+      });
+      if (legAuth.outcome.action === "deny") {
+        await refundAndRelease();
+        const { code, reason, status, meta } = legAuth.outcome;
+        return NextResponse.json(
+          { error: code, message: reason, blockedRecipient: leg.recipient.toLowerCase(), split: true, ...(meta ? { detail: meta } : {}) },
+          { status: status ?? 403 },
+        );
+      }
+    }
+
     const pkSplit = decryptPrivateKey(wallet);
     const settledLegs: Array<{ recipient: string; amount: string; txHash: string }> = [];
     const failedLegs: Array<{ recipient: string; amount: string; error: string }> = [];

@@ -59,6 +59,7 @@ import {
   type AgenticChainKey,
   type AgenticToken,
 } from "@/app/lib/agentic-wallet-sign";
+import { runHooks } from "@/app/lib/hooks";
 import type { Address, Hex } from "viem";
 
 export const runtime = "nodejs";
@@ -263,6 +264,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "AGENTIC_WALLET_ARCHIVED" }, { status: 410 });
   }
   const walletId = wallet.address.toLowerCase();
+
+  // ── Q402 Hooks — beforeAuthorize, screened per recipient ───────────────
+  // ComplianceGate (OFAC) is GLOBAL — it must cover EVERY payment surface,
+  // not just /send, or a sanctioned recipient is one endpoint-swap away
+  // from being paid. Screen each batch row; a single sanctioned recipient
+  // denies the WHOLE batch (we don't partial-settle a batch that contains
+  // a blocked address). Runs before the idempotency claim / daily charge.
+  // No-op when no beforeAuthorize hooks apply.
+  for (const r of rows) {
+    const auth = await runHooks("beforeAuthorize", {
+      lifecycle: "beforeAuthorize",
+      owner,
+      walletId,
+      chain: body.chain,
+      token: body.token,
+      recipient: r.to.toLowerCase(),
+      amount: r.amount,
+      amountUsd: Number(r.amount),
+      source: "batch",
+      // Batch has no per-payment hook params surface in v1; stored
+      // per-wallet config (e.g. ComplianceGate's global list) applies.
+      params: undefined,
+    });
+    if (auth.outcome.action === "deny") {
+      const { code, reason, status, meta } = auth.outcome;
+      return NextResponse.json(
+        { error: code, message: reason, blockedRecipient: r.to.toLowerCase(), ...(meta ? { detail: meta } : {}) },
+        { status: status ?? 403 },
+      );
+    }
+  }
 
   // ── Idempotency check. Fingerprint mixes scope (apiKey hash vs
   // "owner-sig") so a Trial-key failure doesn't shadow-lock a Multichain
