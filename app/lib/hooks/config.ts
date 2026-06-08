@@ -22,17 +22,24 @@ function walletHookKey(walletId: string): string {
 }
 
 /**
- * Read a wallet's hook config. Returns `null` when none is set OR when
- * KV is unreachable — callers treat both as "no per-wallet hooks".
+ * Read a wallet's hook config. Returns `null` ONLY when no config is set
+ * (kv.get returns null for an absent key). A genuine KV error
+ * (connection failure, timeout) is THROWN, not swallowed — this matters
+ * for fail-closed hooks: if we silently returned null on a KV error, a
+ * hook's `shouldRun` would read `enabled !== true` and SKIP, turning a
+ * fail-CLOSED policy (e.g. SpendCapPolicy's allowlist) into fail-open on
+ * an infra blip. By throwing, the dispatcher's shouldRun/run error
+ * handling applies the hook's failMode: fail-open hooks skip (degrade
+ * to "no policy"), fail-closed hooks deny. That's exactly what failMode
+ * is for — swallowing the error here defeated it.
+ *
+ * Read-only display callers (the GET config route) wrap this in
+ * try/catch and surface a 503 instead of a misleading empty config.
  */
 export async function getWalletHookConfig(
   walletId: string,
 ): Promise<WalletHookConfig | null> {
-  try {
-    return (await kv.get<WalletHookConfig>(walletHookKey(walletId))) ?? null;
-  } catch {
-    return null;
-  }
+  return (await kv.get<WalletHookConfig>(walletHookKey(walletId))) ?? null;
 }
 
 /**
