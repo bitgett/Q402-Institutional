@@ -371,7 +371,22 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
     // ── Auto-fund Agent Wallet source-chain gas from the Gas Tank ──────
     let agentFundEth = 0;
     let agentFundTxHash: string | undefined;
-    const FUND_GAS_LIMIT = 21_000n;
+    // Per-chain fund-tx gas limit. 21k is the canonical EOA→EOA cost
+    // on Ethereum mainnet, but Arbitrum's gas model includes an L1
+    // data-posting overhead even for an empty-calldata transfer —
+    // the L2 minimum effective intrinsic gas lands around 30-60k,
+    // so a 21k cap is rejected pre-broadcast with
+    // "intrinsic gas too low". 100k on Arbitrum gives generous
+    // headroom for L1 fee fluctuation without overpaying meaningfully
+    // (Arbitrum gas is cheap; the limit is a ceiling, actual usage
+    // is still ~30k and the relayer is only billed for what's used).
+    // AVAX C-Chain follows ETH semantics so 21k is fine there.
+    const FUND_GAS_LIMIT_PER_CHAIN: Record<CCIPChainKey, bigint> = {
+      eth:      21_000n,
+      avax:     21_000n,
+      arbitrum: 100_000n,
+    };
+    const FUND_GAS_LIMIT = FUND_GAS_LIMIT_PER_CHAIN[src];
     const FUND_TX_WAIT_MS = 25_000;
     try {
       const probeProvider = getCCIPProvider(src);
