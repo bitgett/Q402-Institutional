@@ -186,6 +186,11 @@ describe("/api/auth/action-challenge route shape", () => {
     // Agent Wallet EIP-7702 delegation clear — needed for the in-modal
     // "Clear delegation & retry" button on AGENT_WALLET_DELEGATED.
     expect(src).toMatch(/agentic\.clear_delegation/);
+    // Q402 Hooks per-wallet policy write — SAME failure mode as the
+    // FIX-36 bridge incident: a missing allowlist entry makes the Hooks
+    // modal's getActionAuth return null, so "Save hook policy" shows a
+    // sign hint with NO wallet popup. Regression guard.
+    expect(src).toMatch(/agentic\.hooks_config/);
   });
 
   it("rate-limits per IP and returns the canonical message body", () => {

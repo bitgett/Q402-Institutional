@@ -187,7 +187,7 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
     try {
       const configHash = ethers.keccak256(ethers.toUtf8Bytes(canonicalHookConfig(built)));
       const auth = await getActionAuth(ownerAddress, "agentic.hooks_config", { walletId, configHash }, signMessage);
-      if (!auth) { setError("Sign the hook-config challenge in your wallet to save."); return; }
+      if (!auth) { setError("Wallet signature wasn't completed. Approve the prompt in your wallet to save your hook policy."); return; }
       const res = await fetch("/api/wallet/agentic/hooks", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
