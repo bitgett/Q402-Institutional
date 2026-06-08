@@ -49,6 +49,13 @@ const ALLOWED_ACTIONS = new Set([
   "agentic.register",
   "agentic.register.confirm",
   "agentic.limits",
+  // Q402 Hooks per-wallet policy write. Intent is { walletId, configHash }
+  // where configHash = keccak(canonical(config)); /api/wallet/agentic/hooks
+  // rebuilds + verifies it. Without this entry the challenge mint rejects
+  // the action, getActionAuth returns null, and the wallet prompt never
+  // opens — the save silently fails with a "sign in your wallet" hint and
+  // no popup. (Caught in dashboard click-through.)
+  "agentic.hooks_config",
   "agentic.restore",
   "agentic.recurring.create",
   "agentic.recurring.update",
