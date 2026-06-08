@@ -75,6 +75,43 @@ export function validateWalletHookConfig(config: WalletHookConfig): void {
       assertSplitsSumTo10000(ms.defaultSplits);
     }
   }
+  if (config.spendCap) {
+    const sc = config.spendCap;
+    if (typeof sc.enabled !== "boolean") {
+      throw new Error("spendCap.enabled must be boolean");
+    }
+    if (sc.allowedRecipients !== undefined) {
+      if (!Array.isArray(sc.allowedRecipients)) {
+        throw new Error("spendCap.allowedRecipients must be an array");
+      }
+      for (const r of sc.allowedRecipients) {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(r)) {
+          throw new Error(`spendCap.allowedRecipients has a non-0x address: ${r}`);
+        }
+      }
+    }
+    if (sc.allowedWindowsUtc !== undefined) {
+      if (!Array.isArray(sc.allowedWindowsUtc)) {
+        throw new Error("spendCap.allowedWindowsUtc must be an array");
+      }
+      for (const w of sc.allowedWindowsUtc) {
+        if (!Number.isInteger(w.startHour) || w.startHour < 0 || w.startHour > 23) {
+          throw new Error(`spendCap window startHour must be 0..23: ${w.startHour}`);
+        }
+        if (!Number.isInteger(w.endHour) || w.endHour < 1 || w.endHour > 24) {
+          throw new Error(`spendCap window endHour must be 1..24: ${w.endHour}`);
+        }
+        if (w.endHour <= w.startHour) {
+          throw new Error(`spendCap window endHour must be > startHour: ${w.startHour}..${w.endHour}`);
+        }
+      }
+    }
+    if (sc.perCallApprovalUsd !== undefined) {
+      if (typeof sc.perCallApprovalUsd !== "number" || !Number.isFinite(sc.perCallApprovalUsd) || sc.perCallApprovalUsd <= 0) {
+        throw new Error("spendCap.perCallApprovalUsd must be a positive number");
+      }
+    }
+  }
 }
 
 /**

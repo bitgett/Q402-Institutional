@@ -27,6 +27,7 @@ import { reputationGate } from "./reputation-gate";
 import { conditionalOracle } from "./conditional-oracle";
 import { complianceGate } from "./compliance";
 import { multiPayeeSplit } from "./multipayee-split";
+import { spendCapPolicy } from "./spend-cap";
 
 /**
  * Installed hooks. Order matters: hooks run top-to-bottom, and the
@@ -35,17 +36,19 @@ import { multiPayeeSplit } from "./multipayee-split";
  * etc.).
  *
  * Hooks 1.0 wave (all shipped):
- *   #1 ComplianceGate    (beforeAuthorize)
+ *   #1 ComplianceGate    (beforeAuthorize) — global OFAC screen
+ *      SpendCapPolicy    (beforeAuthorize) — allowlist/window/soft-cap
  *   #2 ReputationGate    (beforeSettle)
  *   #4 ConditionalOracle (beforeSettle)
  *   #3 MultiPayeeSplit   (beforeSettle, transform)
  *
- * Order within beforeSettle: gates BEFORE the transform, so a deny
- * (reputation / oracle) short-circuits before we bother computing a
- * split. MultiPayeeSplit is last.
+ * Order: ComplianceGate first (global, cheapest deny). Within
+ * beforeSettle, gates BEFORE the transform so a deny short-circuits
+ * before we compute a split.
  */
 export const HOOKS: Hook[] = [
   complianceGate,
+  spendCapPolicy,
   reputationGate,
   conditionalOracle,
   multiPayeeSplit,
@@ -72,6 +75,11 @@ export async function runHooks(
 ): Promise<DispatchResult> {
   const ran: string[] = [];
   let split: Extract<HookOutcome, { action: "split" }> | null = null;
+  // Precedence: deny short-circuits immediately; require_approval and
+  // split are REMEMBERED and the chain continues so a later (stronger)
+  // deny can override. At the end: require_approval outranks split
+  // (don't settle a split until approved), which outranks allow.
+  let requireApproval: Extract<HookOutcome, { action: "require_approval" }> | null = null;
 
   for (const hook of hooks) {
     if (hook.lifecycle !== lifecycle) continue;
@@ -127,8 +135,16 @@ export async function runHooks(
     }
 
     if (outcome.action === "deny") {
-      // First deny wins — short-circuit the rest of the chain.
+      // Deny is the strongest verdict — short-circuit the whole chain,
+      // overriding any remembered require_approval / split.
       return { outcome, ran };
+    }
+
+    if (outcome.action === "require_approval") {
+      // Remember and continue — a later deny still overrides. Keep the
+      // FIRST require_approval (its code/reason is what the user sees).
+      if (!requireApproval) requireApproval = outcome;
+      continue;
     }
 
     if (outcome.action === "split") {
@@ -162,5 +178,7 @@ export async function runHooks(
     }
   }
 
-  return { outcome: split ?? { action: "allow" }, ran };
+  // No deny fired. Precedence among the soft outcomes:
+  // require_approval > split > allow.
+  return { outcome: requireApproval ?? split ?? { action: "allow" }, ran };
 }

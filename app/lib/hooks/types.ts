@@ -109,11 +109,20 @@ export interface HookContext {
 
 /**
  * A hook's verdict.
- *   allow  — proceed.
- *   deny   — block with a stable code + human reason + HTTP status.
- *   split  — replace the single settlement with N legs (beforeSettle
- *            only; the dispatcher rejects a split returned at any other
- *            lifecycle).
+ *   allow            — proceed.
+ *   deny             — block hard with a stable code + reason + status.
+ *   require_approval — soft-block: a human could approve this (e.g. a
+ *                      payment above the soft cap). The settlement does
+ *                      NOT proceed; the route surfaces an
+ *                      "approval_required" response. Distinct from deny
+ *                      so the caller knows it's holdable, not forbidden.
+ *   split            — replace the single settlement with N legs
+ *                      (beforeSettle only).
+ *
+ * Dispatcher precedence (strongest wins): deny > require_approval >
+ * split > allow. So a deny anywhere in the chain overrides an earlier
+ * require_approval/split, and an approval hold outranks a split (don't
+ * settle the split until approved).
  */
 export type HookOutcome =
   | { action: "allow" }
@@ -124,6 +133,14 @@ export type HookOutcome =
       /** HTTP status the route should surface. Default 403. */
       status?: number;
       /** Optional structured detail for the response body. */
+      meta?: Record<string, unknown>;
+    }
+  | {
+      action: "require_approval";
+      code: string;
+      reason: string;
+      /** HTTP status the route should surface. Default 202. */
+      status?: number;
       meta?: Record<string, unknown>;
     }
   | {
@@ -171,5 +188,24 @@ export interface WalletHookConfig {
     enabled: boolean;
     /** Default split applied when the request carries no per-payment splits. */
     defaultSplits?: SplitSpec[];
+  };
+  /**
+   * SpendCapPolicy (#part-of-#1 policy engine). Programmable spend rules
+   * layered ON TOP of the Agent Wallet's native perTxMaxUsd/dailyLimitUsd
+   * (which are hard denies). This adds the things native caps don't have:
+   *   - allowedRecipients — a whitelist; a recipient not on it is denied.
+   *   - allowedWindowsUtc — settle only within these UTC hour windows.
+   *   - perCallApprovalUsd — a SOFT cap; an amount at/above it returns
+   *     require_approval (human-in-the-loop) rather than a hard deny.
+   *     Distinct from the native perTxMaxUsd hard ceiling.
+   */
+  spendCap?: {
+    enabled: boolean;
+    /** Whitelist of lowercase 0x recipients. Empty/absent = no whitelist. */
+    allowedRecipients?: string[];
+    /** Allowed settlement windows in UTC hours [startHour, endHour). */
+    allowedWindowsUtc?: Array<{ startHour: number; endHour: number }>;
+    /** Amount (USD) at/above which the payment needs human approval. */
+    perCallApprovalUsd?: number;
   };
 }
