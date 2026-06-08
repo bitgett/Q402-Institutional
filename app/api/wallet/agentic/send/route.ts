@@ -343,6 +343,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: status ?? 403 },
     );
   }
+  if (authHook.outcome.action === "require_approval") {
+    // SpendCapPolicy (or any beforeAuthorize hook) holds the payment for
+    // human approval. Nothing claimed/charged yet at this point, so we
+    // just surface the hold. The approval flow (approve → re-submit) is
+    // out of v1 scope; the agent/UI handles the hold.
+    const { code, reason, status, meta } = authHook.outcome;
+    return NextResponse.json(
+      { status: "approval_required", code, message: reason, ...(meta ? { detail: meta } : {}) },
+      { status: status ?? 202 },
+    );
+  }
 
   // ── Idempotency: SET NX claim BEFORE any relay work ────────────────────
   // Two concurrent identical requests must NOT both fire on-chain. The
@@ -557,6 +568,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: status ?? 403 },
     );
   }
+  if (hookResult.outcome.action === "require_approval") {
+    // A beforeSettle hook holds the payment for approval. The daily
+    // reservation + idempotency claim are already held here, so
+    // refundAndRelease before surfacing the hold (don't shadow-lock the
+    // intent while it waits for a human).
+    await refundAndRelease();
+    const { code, reason, status, meta } = hookResult.outcome;
+    return NextResponse.json(
+      { status: "approval_required", code, message: reason, ...(meta ? { detail: meta } : {}) },
+      { status: status ?? 202 },
+    );
+  }
 
   // ── MultiPayeeSplit (#3) fan-out ───────────────────────────────────────
   // A `split` outcome replaces the single settlement with N legs. This is
@@ -590,12 +613,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         source: "send",
         params: undefined,
       });
-      if (legAuth.outcome.action === "deny") {
+      if (legAuth.outcome.action === "deny" || legAuth.outcome.action === "require_approval") {
+        // A split leg is blocked OR needs approval — hold the WHOLE
+        // split (we don't partial-settle a split with a blocked/held
+        // leg). Nothing has fired yet; refundAndRelease.
         await refundAndRelease();
         const { code, reason, status, meta } = legAuth.outcome;
+        const held = legAuth.outcome.action === "require_approval";
         return NextResponse.json(
-          { error: code, message: reason, blockedRecipient: leg.recipient.toLowerCase(), split: true, ...(meta ? { detail: meta } : {}) },
-          { status: status ?? 403 },
+          {
+            ...(held ? { status: "approval_required" } : { error: code }),
+            code,
+            message: reason,
+            heldRecipient: leg.recipient.toLowerCase(),
+            split: true,
+            ...(meta ? { detail: meta } : {}),
+          },
+          { status: status ?? (held ? 202 : 403) },
         );
       }
     }

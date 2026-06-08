@@ -230,4 +230,51 @@ describe("hook dispatcher", () => {
     expect(r.outcome.action).toBe("allow");
     expect(r.ran).toEqual(["one", "two", "three"]);
   });
+
+  // ── require_approval precedence (deny > require_approval > split > allow) ──
+  const APPROVAL = (code: string): HookOutcome => ({
+    action: "require_approval",
+    code,
+    reason: code,
+    status: 202,
+  });
+
+  it("require_approval is returned when no deny follows", async () => {
+    const r = await runHooks("beforeAuthorize", ctx({ lifecycle: "beforeAuthorize" }), [
+      hook("cap", "beforeAuthorize", () => APPROVAL("OVER_CAP")),
+    ]);
+    expect(r.outcome).toMatchObject({ action: "require_approval", code: "OVER_CAP" });
+  });
+
+  it("a later DENY overrides an earlier require_approval", async () => {
+    const r = await runHooks("beforeAuthorize", ctx({ lifecycle: "beforeAuthorize" }), [
+      hook("cap", "beforeAuthorize", () => APPROVAL("OVER_CAP")),
+      hook("compliance", "beforeAuthorize", () => DENY("BLOCKED")),
+    ]);
+    expect(r.outcome).toMatchObject({ action: "deny", code: "BLOCKED" });
+  });
+
+  it("require_approval keeps the FIRST one + continues the chain", async () => {
+    let secondRan = false;
+    const r = await runHooks("beforeAuthorize", ctx({ lifecycle: "beforeAuthorize" }), [
+      hook("a", "beforeAuthorize", () => APPROVAL("FIRST")),
+      hook("b", "beforeAuthorize", () => {
+        secondRan = true;
+        return APPROVAL("SECOND");
+      }),
+    ]);
+    expect(r.outcome).toMatchObject({ action: "require_approval", code: "FIRST" });
+    expect(secondRan).toBe(true);
+  });
+
+  it("require_approval OUTRANKS a split (don't settle until approved)", async () => {
+    const r = await runHooks("beforeSettle", ctx(), [
+      hook("splitter", "beforeSettle", () => ({
+        action: "split",
+        parts: [{ recipient: "0xa", amount: "1.5" }],
+      })),
+      hook("cap", "beforeSettle", () => APPROVAL("OVER_CAP")),
+    ]);
+    expect(r.outcome).toMatchObject({ action: "require_approval", code: "OVER_CAP" });
+  });
 });

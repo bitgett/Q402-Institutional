@@ -287,11 +287,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       // per-wallet config (e.g. ComplianceGate's global list) applies.
       params: undefined,
     });
-    if (auth.outcome.action === "deny") {
+    if (auth.outcome.action === "deny" || auth.outcome.action === "require_approval") {
+      // A batch recipient is blocked OR needs approval — the whole batch
+      // is held (no partial-settle of a batch containing a blocked/held
+      // row). Nothing claimed yet at this point.
       const { code, reason, status, meta } = auth.outcome;
+      const held = auth.outcome.action === "require_approval";
       return NextResponse.json(
-        { error: code, message: reason, blockedRecipient: r.to.toLowerCase(), ...(meta ? { detail: meta } : {}) },
-        { status: status ?? 403 },
+        {
+          ...(held ? { status: "approval_required" } : { error: code }),
+          code,
+          message: reason,
+          heldRecipient: r.to.toLowerCase(),
+          ...(meta ? { detail: meta } : {}),
+        },
+        { status: status ?? (held ? 202 : 403) },
       );
     }
   }
