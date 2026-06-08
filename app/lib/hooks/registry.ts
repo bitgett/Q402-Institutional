@@ -24,6 +24,9 @@ import type {
   HookOutcome,
 } from "./types";
 import { reputationGate } from "./reputation-gate";
+import { conditionalOracle } from "./conditional-oracle";
+import { complianceGate } from "./compliance";
+import { multiPayeeSplit } from "./multipayee-split";
 
 /**
  * Installed hooks. Order matters: hooks run top-to-bottom, and the
@@ -31,13 +34,22 @@ import { reputationGate } from "./reputation-gate";
  * first when the wave fills out (ComplianceGate before ReputationGate,
  * etc.).
  *
- * Hooks 1.0 wave:
- *   #2 ReputationGate    (beforeSettle)  — shipped
- *   #4 ConditionalOracle (beforeSettle)  — pending
- *   #1 ComplianceGate    (beforeAuthorize) — pending
- *   #3 MultiPayeeSplit   (beforeSettle)  — pending
+ * Hooks 1.0 wave (all shipped):
+ *   #1 ComplianceGate    (beforeAuthorize)
+ *   #2 ReputationGate    (beforeSettle)
+ *   #4 ConditionalOracle (beforeSettle)
+ *   #3 MultiPayeeSplit   (beforeSettle, transform)
+ *
+ * Order within beforeSettle: gates BEFORE the transform, so a deny
+ * (reputation / oracle) short-circuits before we bother computing a
+ * split. MultiPayeeSplit is last.
  */
-export const HOOKS: Hook[] = [reputationGate];
+export const HOOKS: Hook[] = [
+  complianceGate,
+  reputationGate,
+  conditionalOracle,
+  multiPayeeSplit,
+];
 
 export interface DispatchResult {
   outcome: HookOutcome;

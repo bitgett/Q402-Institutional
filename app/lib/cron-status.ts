@@ -83,6 +83,7 @@ export const CRON_NAMES = {
   RELAYER_BALANCE: "relayer-balance",
   CCIP_PENDING_FUND_RECONCILE: "ccip-pending-fund-reconcile",
   TREASURY_REBALANCE: "treasury-rebalance",
+  OFAC_REFRESH: "ofac-refresh",
 } as const;
 export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
 
@@ -149,5 +150,14 @@ export const CRON_META: Record<CronName, CronMeta> = {
   [CRON_NAMES.CCIP_PENDING_FUND_RECONCILE]: {
     expectedIntervalMs: 5 * 60 * 1000,
     staleAfterMs: 15 * 60 * 1000,
+  },
+  // OFAC sanctioned-address refresh — daily. The list only changes when
+  // Treasury updates the SDN; a daily pull is ample. Stale window 50h
+  // (~2× cadence) so one missed day trips the watchdog. The
+  // ComplianceGate hook ALSO alerts on >48h staleness independently —
+  // this entry is for the unified cron-status dashboard.
+  [CRON_NAMES.OFAC_REFRESH]: {
+    expectedIntervalMs: 24 * 60 * 60 * 1000,
+    staleAfterMs: 50 * 60 * 60 * 1000,
   },
 };
