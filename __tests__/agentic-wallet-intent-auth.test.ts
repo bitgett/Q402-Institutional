@@ -191,6 +191,9 @@ describe("/api/auth/action-challenge route shape", () => {
     // modal's getActionAuth return null, so "Save hook policy" shows a
     // sign hint with NO wallet popup. Regression guard.
     expect(src).toMatch(/agentic\.hooks_config/);
+    // API key rotation — same missing-allowlist failure mode (no popup
+    // on the dashboard Rotate Key button). Regression guard.
+    expect(src).toMatch(/keys\.rotate/);
   });
 
   it("rate-limits per IP and returns the canonical message body", () => {

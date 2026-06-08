@@ -59,10 +59,24 @@ export const multiPayeeSplit: Hook = {
     const splits: SplitSpec[] | undefined = ctx.params?.splits ?? ms.defaultSplits;
     if (!splits || splits.length === 0) return { action: "allow" };
 
-    // A single-leg "split" to the original recipient is a no-op — let it
-    // settle single. (Also avoids a degenerate split with one 10000-bps
-    // leg adding a pointless fan-out.)
-    if (splits.length === 1) return { action: "allow" };
+    // Single-leg "split": a no-op ONLY if the leg is the same recipient
+    // as the payment's `to`. If the one leg points ELSEWHERE, allowing
+    // would settle to `to` (ignoring the leg) — i.e. the funds go to a
+    // different address than the split declared. That's a silent
+    // misdirection, so deny it as a contradictory config instead.
+    if (splits.length === 1) {
+      const only = splits[0];
+      if (only.recipient.toLowerCase() === ctx.recipient.toLowerCase()) {
+        return { action: "allow" };
+      }
+      return {
+        action: "deny",
+        code: "SPLIT_SINGLE_LEG_MISMATCH",
+        reason: "A 1-leg split must target the payment recipient; a different single leg is ambiguous (funds would go to `to`, not the leg).",
+        status: 400,
+        meta: { to: ctx.recipient.toLowerCase(), leg: only.recipient.toLowerCase() },
+      };
+    }
 
     try {
       assertSplitsSumTo10000(splits);

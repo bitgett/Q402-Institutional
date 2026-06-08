@@ -40,6 +40,10 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
   const [allowedRecipients, setAllowedRecipients] = useState(""); // newline/comma separated
   const [windowStart, setWindowStart] = useState("");
   const [windowEnd, setWindowEnd] = useState("");
+  // The UI edits only the FIRST window. Any additional windows on a
+  // config set via the API are preserved here and re-attached on save,
+  // so saving from this dialog never silently drops them.
+  const [extraWindows, setExtraWindows] = useState<Array<{ startHour: number; endHour: number }>>([]);
   const [perCallApproval, setPerCallApproval] = useState("");
   // ReputationGate
   const [rgEnabled, setRgEnabled] = useState(false);
@@ -105,6 +109,7 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
       const w = cfg.spendCap.allowedWindowsUtc?.[0];
       setWindowStart(w ? String(w.startHour) : "");
       setWindowEnd(w ? String(w.endHour) : "");
+      setExtraWindows(cfg.spendCap.allowedWindowsUtc?.slice(1) ?? []);
       setPerCallApproval(cfg.spendCap.perCallApprovalUsd != null ? String(cfg.spendCap.perCallApprovalUsd) : "");
     }
     if (cfg.reputationGate) {
@@ -134,7 +139,10 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
         if (!Number.isInteger(s) || s < 0 || s > 23) return "Window start must be 0–23.";
         if (!Number.isInteger(e) || e < 1 || e > 24) return "Window end must be 1–24.";
         if (e <= s) return "Window end must be after start.";
-        sc.allowedWindowsUtc = [{ startHour: s, endHour: e }];
+        sc.allowedWindowsUtc = [{ startHour: s, endHour: e }, ...extraWindows];
+      } else if (extraWindows.length > 0) {
+        // Window-0 cleared but API-set extras remain — keep them.
+        sc.allowedWindowsUtc = [...extraWindows];
       }
       if (perCallApproval.trim() !== "") {
         const n = Number(perCallApproval);

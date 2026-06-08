@@ -100,6 +100,15 @@ describe("assertSplitsSumTo10000", () => {
     ).toThrow(/sum to 10000/);
   });
 
+  it("rejects too many legs (> MAX_SPLIT_LEGS) — sequential-relay DoS guard", () => {
+    // 11 legs of ~909 bps; summing aside, the count cap must trip first.
+    const legs = Array.from({ length: 11 }, (_, i) => ({
+      recipient: "0x" + String(i).padStart(40, "0"),
+      bps: 909,
+    }));
+    expect(() => assertSplitsSumTo10000(legs)).toThrow(/too many legs/);
+  });
+
   it("rejects over-100% (10001)", () => {
     expect(() =>
       assertSplitsSumTo10000([

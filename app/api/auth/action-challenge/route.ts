@@ -56,6 +56,12 @@ const ALLOWED_ACTIONS = new Set([
   // opens — the save silently fails with a "sign in your wallet" hint and
   // no popup. (Caught in dashboard click-through.)
   "agentic.hooks_config",
+  // API key rotation — intent { scope }; /api/keys/rotate rebuilds +
+  // verifies. Same missing-allowlist failure mode as hooks_config: the
+  // dashboard Rotate Key button's getActionAuth returned null with no
+  // wallet popup. (Pre-existing — keys.rotate moved to intent-auth but
+  // was never allowlisted.)
+  "keys.rotate",
   "agentic.restore",
   "agentic.recurring.create",
   "agentic.recurring.update",

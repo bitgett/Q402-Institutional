@@ -805,7 +805,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         legs: splitRecord.legs,
         settledAt: Date.now(),
       };
-      await kv.set(settledKey, marker).catch(() => {});
+      try {
+        await kv.set(settledKey, marker);
+      } catch (e) {
+        // Same as the single path: ≥1 leg is on-chain, so losing this
+        // marker risks re-firing settled legs after the TTL. Page ops.
+        void sendOpsAlert(
+          `agentic-wallet/send SPLIT durable marker write failed for ${owner} ` +
+            `(walletId=${walletId}, sendId=${sendId}, ${settledLegs.length} legs settled). ` +
+            `A retry after the TTL could re-fire settled legs — verify before replay. ` +
+            `Error: ${e instanceof Error ? e.message : String(e)}`,
+          "critical",
+        );
+      }
     }
 
     const httpStatus = uncertain ? 502 : allSettled ? 200 : settledLegs.length > 0 ? 207 : 502;
@@ -990,7 +1002,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       txHash: finalRecord.txHash,
       settledAt: Date.now(),
     };
-    await kv.set(settledKey, marker).catch(() => {});
+    try {
+      await kv.set(settledKey, marker);
+    } catch (e) {
+      // The durable marker is the post-TTL double-settle guard. Losing it
+      // silently is the exact failure it prevents, so page ops instead of
+      // swallowing — the 30-min idempotency record still covers the near
+      // term, but a retry after that could re-fire.
+      void sendOpsAlert(
+        `agentic-wallet/send DURABLE marker write failed for ${owner} ` +
+          `(walletId=${walletId}, sendId=${sendId}, txHash=${finalRecord.txHash ?? "(none)"}). ` +
+          `Settled on-chain; a retry after the 30-min TTL could re-fire — verify before replay. ` +
+          `Error: ${e instanceof Error ? e.message : String(e)}`,
+        "critical",
+      );
+    }
   }
 
   return NextResponse.json(

@@ -128,11 +128,23 @@ export function validateWalletHookConfig(config: WalletHookConfig): void {
  * Shared by the config validator and the MultiPayeeSplit hook's
  * per-payment path.
  */
+/**
+ * Max legs in a MultiPayeeSplit. Each leg is a SEQUENTIAL on-chain relay
+ * (not an atomic batchPay), so without a cap a 10,000-leg split (1 bps
+ * each) would fan out thousands of relays — blowing past the route's 60s
+ * budget and the batch route's own 20-recipient limit. 10 is ample for
+ * royalty / revenue-share / fee splits and stays well inside maxDuration.
+ */
+export const MAX_SPLIT_LEGS = 10;
+
 export function assertSplitsSumTo10000(
   splits: Array<{ recipient: string; bps: number }>,
 ): void {
   if (!Array.isArray(splits) || splits.length === 0) {
     throw new Error("splits must be a non-empty array");
+  }
+  if (splits.length > MAX_SPLIT_LEGS) {
+    throw new Error(`split has too many legs (${splits.length}); max ${MAX_SPLIT_LEGS}`);
   }
   let total = 0;
   for (const leg of splits) {

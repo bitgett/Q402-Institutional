@@ -32,6 +32,7 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { validateWebhookUrl } from "@/app/lib/webhook-validator";
 import { safeWebhookFetch } from "@/app/lib/safe-fetch";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
+import { isSanctioned } from "@/app/lib/hooks/compliance";
 import {
   CHAIN_CONFIG,
   getTokenConfig,
@@ -258,6 +259,30 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // ── 1a. Address format validation ────────────────────────────────────────
   if (!ETH_ADDR.test(from) || !ETH_ADDR.test(to)) {
     return NextResponse.json({ error: "Invalid address format" }, { status: 400 });
+  }
+
+  // ── 1a-OFAC. Global sanctioned-address screen ────────────────────────────
+  // /api/relay is the chokepoint for EVERY settlement path — agentic
+  // send/batch, recurring payouts, direct SDK, MCP eoa/local, the viz.
+  // The ComplianceGate hook screens at the agentic entry points, but
+  // screening HERE is what makes OFAC truly global: a direct relay call
+  // to a sanctioned recipient is blocked too, closing the
+  // "swap-the-endpoint" bypass. A confirmed hit → 451. A KV read error
+  // fails OPEN at this backstop (the entry points already fail closed)
+  // but pages ops, so a transient blip can't halt the entire rail.
+  try {
+    if (await isSanctioned(to)) {
+      return NextResponse.json(
+        { error: "COMPLIANCE_BLOCKED", message: "Recipient is on the OFAC sanctioned-address list. This payment cannot be processed." },
+        { status: 451 },
+      );
+    }
+  } catch (e) {
+    void sendOpsAlert(
+      `relay OFAC screen READ failed (failing OPEN) for recipient ${to.toLowerCase()} on ${chain}. ` +
+        `Check KV / the ofac:sanctioned set. Error: ${e instanceof Error ? e.message : String(e)}`,
+      "critical",
+    );
   }
 
   // ── 1b. amount validation (positive integer bigint) ──────────────────────
