@@ -100,7 +100,7 @@ interface SendRecord {
    * submit if the original DID broadcast). Manual resolution path:
    * user/ops verifies on chain, then DELs the key to allow retry.
    */
-  status: "processing" | "complete" | "failed" | "relay_unreachable_uncertain";
+  status: "processing" | "complete" | "failed" | "relay_unreachable_uncertain" | "partial";
   txHash?: string;
   startedAt: number;
   finishedAt?: number;
@@ -108,6 +108,12 @@ interface SendRecord {
   relayStatus?: number;
   /** Short id so the dashboard can correlate retries to the original. */
   sendId: string;
+  /**
+   * MultiPayeeSplit (#3) fan-out result. Present iff the payment was
+   * split into N legs. Each leg is its own on-chain settlement; `status`
+   * is "complete" when all legs settled, "partial" when some did.
+   */
+  legs?: Array<{ recipient: string; amount: string; txHash?: string; error?: string }>;
 }
 
 function isHexAddress(s: unknown): s is string {
@@ -295,6 +301,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const walletId = wallet.address.toLowerCase();
+
+  // ── Q402 Hooks — beforeAuthorize ───────────────────────────────────────
+  // Runs at the EARLIEST point we have (owner, walletId, recipient,
+  // amount) — before the idempotency claim or any daily-limit charge.
+  // ComplianceGate (OFAC screening) lives here so a sanctioned recipient
+  // is rejected outright, consuming no reservation. A deny short-circuits
+  // before we touch KV claims. No-op when no beforeAuthorize hooks apply.
+  const authHook = await runHooks("beforeAuthorize", {
+    lifecycle: "beforeAuthorize",
+    owner,
+    walletId,
+    chain: body.chain,
+    token: body.token,
+    recipient: body.to.toLowerCase(),
+    amount: body.amount,
+    amountUsd: Number(body.amount),
+    source: "send",
+    params: body.hookParams,
+  });
+  if (authHook.outcome.action === "deny") {
+    const { code, reason, status, meta } = authHook.outcome;
+    return NextResponse.json(
+      { error: code, message: reason, ...(meta ? { detail: meta } : {}) },
+      { status: status ?? 403 },
+    );
+  }
 
   // ── Idempotency: SET NX claim BEFORE any relay work ────────────────────
   // Two concurrent identical requests must NOT both fire on-chain. The
@@ -509,9 +541,123 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: status ?? 403 },
     );
   }
-  // NOTE: a `split` outcome (MultiPayeeSplit) is not yet wired into the
-  // single-recipient send path — that fan-out lands in Phase 4. Until
-  // then the dispatcher only ever returns allow/deny here.
+
+  // ── MultiPayeeSplit (#3) fan-out ───────────────────────────────────────
+  // A `split` outcome replaces the single settlement with N legs. This is
+  // a SELF-CONTAINED branch that early-returns — it does NOT touch the
+  // hardened single-recipient path below. Each leg is signed + relayed
+  // sequentially; the legs sum to the full amount (the hook guarantees
+  // exact-sum), so the already-charged daily reservation covers them with
+  // no double-charge. Partial-failure model mirrors recurring-payouts:
+  // settled legs are recorded, unsettled portion is refunded, we never
+  // re-settle a leg that already landed.
+  if (hookResult.outcome.action === "split") {
+    const legs = hookResult.outcome.parts;
+    const pkSplit = decryptPrivateKey(wallet);
+    const settledLegs: Array<{ recipient: string; amount: string; txHash: string }> = [];
+    const failedLegs: Array<{ recipient: string; amount: string; error: string }> = [];
+    let uncertain = false;
+
+    for (const leg of legs) {
+      let signedLeg;
+      try {
+        signedLeg = await signAgenticPayment({
+          privateKey: pkSplit as Hex,
+          chain: body.chain,
+          token: body.token,
+          to: leg.recipient as Address,
+          amount: leg.amount,
+          facilitator: relayerKey.address as Address,
+        });
+      } catch (e) {
+        // Sign failure on a leg = nothing broadcast for it. Record as
+        // failed and continue to the remaining legs (a bad single leg
+        // shouldn't strand the rest).
+        failedLegs.push({ recipient: leg.recipient, amount: leg.amount, error: e instanceof Error ? e.message.slice(0, 120) : "sign_failed" });
+        continue;
+      }
+      let legResp: Response;
+      try {
+        legResp = await submitToRelay(internalBaseUrl(), apiKey, signedLeg, {
+          source: "send",
+          internalTrustToken: process.env.CRON_SECRET,
+        });
+      } catch (e) {
+        // Relay THREW for this leg — same uncertain double-submit risk
+        // as the single path. Stop the fan-out: legs already settled
+        // stay settled, this leg is uncertain, remaining legs are not
+        // attempted. Keep the claim alive (no DEL) + page ops.
+        uncertain = true;
+        void sendOpsAlert(
+          `agentic-wallet/send SPLIT leg relay FETCH threw — outcome UNCERTAIN. ` +
+            `owner=${owner} walletId=${walletId} sendId=${sendId} chain=${body.chain} ` +
+            `token=${body.token} leg.to=${leg.recipient} leg.amount=${leg.amount}. ` +
+            `${settledLegs.length} legs already settled. Verify on-chain before clearing ` +
+            `the idempotency key. Error: ${e instanceof Error ? e.message : String(e)}`,
+          "critical",
+        );
+        failedLegs.push({ recipient: leg.recipient, amount: leg.amount, error: "relay_outcome_uncertain" });
+        break;
+      }
+      const legBody = await legResp.json().catch(() => null);
+      const legOk = legResp.ok && legBody && typeof legBody === "object" && "txHash" in legBody;
+      if (legOk) {
+        settledLegs.push({ recipient: leg.recipient, amount: leg.amount, txHash: (legBody as { txHash: string }).txHash });
+      } else {
+        failedLegs.push({ recipient: leg.recipient, amount: leg.amount, error: typeof legBody === "object" && legBody && "error" in legBody ? String((legBody as { error: unknown }).error) : `relay_http_${legResp.status}` });
+      }
+    }
+
+    // Refund the UNSETTLED portion of the daily reservation. The
+    // reservation was charged for numAmount (the full total); we only
+    // actually spent the sum of settled legs.
+    const settledUsd = settledLegs.reduce((acc, l) => acc + Number(l.amount), 0);
+    const unsettledUsd = Math.max(0, numAmount - settledUsd);
+    if (unsettledUsd > 0) {
+      await refundDailySpend(owner, walletId, unsettledUsd).catch(() => {});
+    }
+
+    const allSettled = failedLegs.length === 0;
+    const splitStatus: SendRecord["status"] = uncertain
+      ? "relay_unreachable_uncertain"
+      : allSettled
+        ? "complete"
+        : settledLegs.length > 0
+          ? "partial"
+          : "failed";
+    const splitRecord: SendRecord = {
+      sendId,
+      status: splitStatus,
+      startedAt,
+      finishedAt: Date.now(),
+      txHash: settledLegs[0]?.txHash,
+      legs: [
+        ...settledLegs.map((l) => ({ recipient: l.recipient, amount: l.amount, txHash: l.txHash })),
+        ...failedLegs.map((l) => ({ recipient: l.recipient, amount: l.amount, error: l.error })),
+      ],
+    };
+    // Uncertain → keep the claim alive at full TTL (a retry must NOT
+    // re-fire). complete/partial → full TTL so retries replay. failed →
+    // short TTL so a remediated retry isn't shadow-locked.
+    const splitTtl = uncertain || allSettled || settledLegs.length > 0 ? IDEMPOTENCY_TTL_SEC : 60;
+    await kv.set(idempotencyKey, splitRecord, { ex: splitTtl }).catch(() => {});
+
+    const httpStatus = uncertain ? 502 : allSettled ? 200 : settledLegs.length > 0 ? 207 : 502;
+    return NextResponse.json(
+      {
+        sendId,
+        status: splitStatus,
+        split: true,
+        legs: splitRecord.legs,
+        settled: settledLegs.length,
+        failed: failedLegs.length,
+        ...(uncertain
+          ? { message: "A split leg's relay outcome is uncertain. Ops has been paged; verify on-chain before retrying." }
+          : {}),
+      },
+      { status: httpStatus },
+    );
+  }
 
   // Sign + submit. `startedAt` was set when we minted the SET NX claim
   // so the cached final record stitches back to the wallet popup time
