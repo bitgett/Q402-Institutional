@@ -527,7 +527,31 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
       const submitMaxFeePerGas = baseFee > 0n
         ? (baseFee * 15n) / 10n + tipFee
         : (feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n);
-      const gasNeeded = needsApprove ? 380_000n : 320_000n;
+      // Per-chain bridge gas budget. ETH/AVAX size accurately from
+      // observed gasUsed (~56k approve + ~315k bridge = ~371k with
+      // headroom = 380k). Arbitrum's gasUsed INCLUDES the L1 data-
+      // posting fee as additional gas, so the same operation reports
+      // 2-4× higher gasUsed depending on calldata size and L1 base
+      // fee. A naïve 380k budget on Arbitrum funded only ~$0.02 worth
+      // of ETH when the actual approve + bridge consumes ~$0.04
+      // worth — Agent Wallet ran out, executeBridge's estimateGas
+      // pre-flight rejected with "insufficient funds for intrinsic
+      // transaction cost", surfaced as AGENT_WALLET_GAS_LOW.
+      //
+      // Conservative Arbitrum budgets (2× ETH baseline) cover the
+      // L1 fee envelope at current conditions with headroom. Unused
+      // gas is refunded to the Agent Wallet at end-of-tx, so
+      // overbudgeting costs the user a slightly bigger Gas Tank
+      // debit upfront but the surplus stays in the wallet for the
+      // next bridge.
+      const BRIDGE_GAS_BUDGET: Record<CCIPChainKey, { withApprove: bigint; withoutApprove: bigint }> = {
+        eth:      { withApprove:   380_000n, withoutApprove:   320_000n },
+        avax:     { withApprove:   380_000n, withoutApprove:   320_000n },
+        arbitrum: { withApprove: 1_200_000n, withoutApprove: 1_000_000n },
+      };
+      const gasNeeded = needsApprove
+        ? BRIDGE_GAS_BUDGET[src].withApprove
+        : BRIDGE_GAS_BUDGET[src].withoutApprove;
       const gasCeilingWei = submitMaxFeePerGas * gasNeeded;
       const feeShortfallWei = feeToken === "native" ? feeRaw : 0n;
       const agentEthThreshold = gasCeilingWei + feeShortfallWei;
