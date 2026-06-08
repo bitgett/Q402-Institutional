@@ -108,7 +108,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
 
-  const config = await getWalletHookConfig(wallet.address.toLowerCase());
+  // getWalletHookConfig throws on a genuine KV error (vs null for "no
+  // config set"). For this read/display path we surface a 503 rather
+  // than a misleading empty config — the dashboard can retry.
+  let config: WalletHookConfig | null;
+  try {
+    config = await getWalletHookConfig(wallet.address.toLowerCase());
+  } catch (e) {
+    console.error("[api/wallet/agentic/hooks GET] config read failed:", e);
+    return NextResponse.json({ error: "hooks_read_failed" }, { status: 503 });
+  }
   return NextResponse.json({ walletId: wallet.address.toLowerCase(), config: config ?? {} });
 }
 

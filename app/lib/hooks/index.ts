@@ -27,4 +27,4 @@ export {
   assertSplitsSumTo10000,
 } from "./config";
 
-export { canonicalHookConfig } from "./canonical";
+export { canonicalHookConfig, canonicalJson } from "./canonical";

@@ -26,9 +26,20 @@ function sortValue(v: unknown): unknown {
 }
 
 /**
+ * Canonical JSON string for ANY value — recursively key-sorted, no
+ * whitespace. Two semantically-equal payloads hash identically
+ * regardless of key insertion order. Used for hook-config intent
+ * binding AND for folding per-payment hookParams into the send
+ * idempotency fingerprint.
+ */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(sortValue(value));
+}
+
+/**
  * Canonical JSON string for a hook config — recursively key-sorted,
  * no whitespace. Deterministic across client + server.
  */
 export function canonicalHookConfig(config: WalletHookConfig): string {
-  return JSON.stringify(sortValue(config));
+  return canonicalJson(config);
 }

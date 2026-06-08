@@ -47,7 +47,7 @@ import {
   submitToRelay,
   internalBaseUrl,
 } from "@/app/lib/agentic-wallet-sign";
-import { runHooks, type HookParams } from "@/app/lib/hooks";
+import { runHooks, canonicalJson, type HookParams } from "@/app/lib/hooks";
 import type { Address, Hex } from "viem";
 
 export const runtime = "nodejs";
@@ -147,6 +147,7 @@ function agenticSendFingerprint(
   to: string,
   amount: string,
   scope: string,
+  hookParamsTag: string,
 ): string {
   const seed = [
     owner.toLowerCase(),
@@ -156,6 +157,12 @@ function agenticSendFingerprint(
     to.toLowerCase(),
     amount,
     scope,
+    // Hook params (condition / splits / recipientAgentId) change what
+    // actually settles — a different split or oracle condition to the
+    // same (to, amount) is a DIFFERENT intent and must not collide on
+    // one idempotency slot. Empty tag ("none") when no trusted hook
+    // params apply, so non-hook sends keep their existing fingerprint.
+    hookParamsTag,
   ].join("|");
   return ethers.keccak256(ethers.toUtf8Bytes(seed)).slice(2, 18);
 }
@@ -378,6 +385,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     typeof body.apiKey === "string" && body.apiKey.length > 0
       ? `apikey_${ethers.keccak256(ethers.toUtf8Bytes(body.apiKey)).slice(2, 18)}`
       : "owner-sig";
+  // Fold the TRUSTED hook params into the fingerprint so a different
+  // split / oracle condition to the same (to, amount) gets its own
+  // idempotency slot instead of colliding with a prior intent. Uses
+  // trustedHookParams (the Mode-C-only set) — owner-sig calls drop hook
+  // params, so their tag stays "none" and their fingerprint is
+  // unchanged from before this fix.
+  const hookParamsTag = trustedHookParams
+    ? ethers.keccak256(ethers.toUtf8Bytes(canonicalJson(trustedHookParams))).slice(2, 18)
+    : "none";
   const fp = agenticSendFingerprint(
     owner,
     walletId,
@@ -386,6 +402,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     body.to,
     body.amount,
     scope,
+    hookParamsTag,
   );
   const idempotencyKey = sendKey(fp);
   const startedAt = Date.now();
