@@ -260,6 +260,11 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
                   <input value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} inputMode="numeric" placeholder="17" className={inputCls} style={inputStyle} />
                 </div>
               </div>
+              {extraWindows.length > 0 && (
+                <div className="text-[11px] text-amber-300/85">
+                  + {extraWindows.length} more time window{extraWindows.length > 1 ? "s" : ""} set via API ({extraWindows.map((w) => `${w.startHour}–${w.endHour}`).join(", ")} UTC). This dialog edits only the first; the rest are kept on save, so clearing the fields above does NOT remove all time restrictions.
+                </div>
+              )}
               <div>
                 <div className={labelCls}>Approval threshold (USD; ≥ this needs human approval)</div>
                 <input value={perCallApproval} onChange={(e) => setPerCallApproval(e.target.value)} inputMode="decimal" placeholder="100" className={inputCls} style={inputStyle} />

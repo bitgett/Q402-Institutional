@@ -264,12 +264,12 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // ── 1a-OFAC. Global sanctioned-address screen ────────────────────────────
   // /api/relay is the chokepoint for EVERY settlement path — agentic
   // send/batch, recurring payouts, direct SDK, MCP eoa/local, the viz.
-  // The ComplianceGate hook screens at the agentic entry points, but
-  // screening HERE is what makes OFAC truly global: a direct relay call
+  // Screening HERE is what makes OFAC truly global: a direct relay call
   // to a sanctioned recipient is blocked too, closing the
-  // "swap-the-endpoint" bypass. A confirmed hit → 451. A KV read error
-  // fails OPEN at this backstop (the entry points already fail closed)
-  // but pages ops, so a transient blip can't halt the entire rail.
+  // "swap-the-endpoint" bypass. FAIL CLOSED — a confirmed hit AND a KV
+  // read error both reject (451 / 503). The direct relay/recurring paths
+  // have no other compliance gate, so a transient inability to screen
+  // must pause settlement (client retries) rather than wave it through.
   try {
     if (await isSanctioned(to)) {
       return NextResponse.json(
@@ -279,9 +279,14 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     }
   } catch (e) {
     void sendOpsAlert(
-      `relay OFAC screen READ failed (failing OPEN) for recipient ${to.toLowerCase()} on ${chain}. ` +
-        `Check KV / the ofac:sanctioned set. Error: ${e instanceof Error ? e.message : String(e)}`,
+      `relay OFAC screen READ failed (failing CLOSED, 503) for recipient ${to.toLowerCase()} on ${chain}. ` +
+        `Settlements are pausing until KV / the ofac:sanctioned set recovers. ` +
+        `Error: ${e instanceof Error ? e.message : String(e)}`,
       "critical",
+    );
+    return NextResponse.json(
+      { error: "compliance_screen_unavailable", message: "Recipient compliance screening is temporarily unavailable. Retry shortly." },
+      { status: 503 },
     );
   }
 

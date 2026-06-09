@@ -196,14 +196,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let owner: string;
   if (isModeC) {
     const presented = body.apiKey!;
-    if (presented.startsWith("q402_test_")) {
+    // Reject BOTH sandbox prefixes (modern q402_test_ AND legacy
+    // q402_sandbox_) — matches send/bridge. A still-active legacy
+    // q402_sandbox_ key on a paid owner would otherwise reach this live
+    // batch route.
+    if (presented.startsWith("q402_test_") || presented.startsWith("q402_sandbox_")) {
       return NextResponse.json(
         { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet batches." },
         { status: 401 },
       );
     }
     const rec = await getApiKeyRecord(presented);
-    if (!rec || !rec.active) {
+    // Also reject isSandbox-flagged records (defense in depth beyond the
+    // prefix check) — a sandbox key must never settle real funds.
+    if (!rec || !rec.active || rec.isSandbox) {
       return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
     }
     if (typeof body.ownerAddress === "string" && body.ownerAddress.length > 0) {
@@ -332,12 +338,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     rows,
   );
   const key = batchKey(fp);
-  const settledMarkerKey = batchSettledKey(fp);
+  // Durable marker uses a SCOPE-LESS fingerprint (scope pinned to
+  // "settled") — written only on success, so the shadow-lock reason for
+  // scope-in-fp doesn't apply, and an API-key rotation between the
+  // original batch and a retry can't slip a fresh fingerprint past the
+  // replay guard.
+  const settledMarkerKey = batchSettledKey(
+    agenticBatchFingerprint(`${owner}:${walletId}:settled`, body.chain, body.token, rows),
+  );
 
   // Durable replay guard FIRST: a batch that already settled ≥1 row in a
   // prior request — even older than the 10-min TTL record — replays its
   // stored result instead of re-firing every row with fresh nonces.
-  const durable = await kv.get<BatchRecord>(settledMarkerKey).catch(() => null);
+  // FAIL CLOSED: if the marker read errors we can't prove the batch
+  // hasn't already settled, so reject (503) rather than risk re-firing.
+  let durable: BatchRecord | null;
+  try {
+    durable = await kv.get<BatchRecord>(settledMarkerKey);
+  } catch {
+    return NextResponse.json(
+      { error: "idempotency_unavailable", message: "Could not verify batch idempotency (storage). Retry shortly." },
+      { status: 503 },
+    );
+  }
   const replay = durable ?? (await kv.get<BatchRecord>(key));
   if (replay) {
     return NextResponse.json(
@@ -615,14 +638,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // because losing this marker is exactly the post-TTL double-settle the
   // marker exists to prevent.
   if (successful.length > 0) {
-    try {
-      await kv.set(settledMarkerKey, finalRecord);
-    } catch (e) {
+    let markerOk = false;
+    for (let attempt = 0; attempt < 3 && !markerOk; attempt++) {
+      try {
+        await kv.set(settledMarkerKey, finalRecord);
+        markerOk = true;
+      } catch {
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+      }
+    }
+    if (!markerOk) {
       void sendOpsAlert(
-        `agentic-wallet/batch DURABLE marker write failed for ${owner} ` +
+        `agentic-wallet/batch DURABLE marker write failed (after retries) for ${owner} ` +
           `(batchId=${batchId}, chain=${body.chain}, settled=${successful.length}/${results.length}). ` +
-          `A retry after the 10-min TTL could re-fire settled rows — verify before any replay. ` +
-          `Error: ${e instanceof Error ? e.message : String(e)}`,
+          `A retry after the 10-min TTL could re-fire settled rows — verify before any replay.`,
         "critical",
       );
     }
