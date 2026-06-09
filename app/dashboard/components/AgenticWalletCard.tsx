@@ -32,6 +32,7 @@ import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
 import { AgenticWalletBridgeModal } from "./AgenticWalletBridgeModal";
 import { AgenticWalletWithdrawModal, type WithdrawBucket } from "./AgenticWalletWithdrawModal";
 import { AgenticWalletRecurringSection } from "./AgenticWalletRecurringSection";
+import { AgenticWalletEarnSection } from "./AgenticWalletEarnSection";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
 import type { ChainKey } from "@/app/lib/relayer";
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
@@ -340,6 +341,15 @@ export function AgenticWalletCard({
             the user sees at a glance "I have $4 on BNB, $0 elsewhere"
             instead of "$4 total somewhere". */}
         <ChainCoverageGrid wallet={wallet.address} balance={balance} />
+
+        {/* Earn (Q402 Yield) — read-only positions + available APY. Sits
+            with the balance band so idle-stablecoin yield surfaces next
+            to where the user reads their holdings. Phase 0: no actions. */}
+        <AgenticWalletEarnSection
+          ownerAddress={address}
+          walletId={wallet.walletId}
+          signMessage={signMessage}
+        />
 
         {/* Primary actions — Send / Receive / Batch sit here as equals. */}
         <div className="relative flex flex-wrap gap-2 mt-5">
