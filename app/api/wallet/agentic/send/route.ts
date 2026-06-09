@@ -195,6 +195,25 @@ interface SettledMarker {
 }
 
 /**
+ * Write the durable settled marker with bounded retry. The settlement
+ * already landed on-chain, so a transient KV blip here must not be the
+ * reason a post-TTL retry double-fires. Returns false if all attempts
+ * fail (caller pages ops for manual reconciliation — there's nothing
+ * more we can do once KV is durably down at settlement time).
+ */
+async function writeSettledMarker(key: string, marker: SettledMarker): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await kv.set(key, marker);
+      return true;
+    } catch {
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    }
+  }
+  return false;
+}
+
+/**
  * Resolve owner from auth, given the (already-validated) intent fields.
  * The owner-sig path requires walletId in the body so it can bind to
  * the intent message; Mode C defaults walletId to the owner's default
@@ -428,17 +447,42 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     hookParamsTag,
   );
   const idempotencyKey = sendKey(fp);
-  const settledKey = sendSettledKey(fp);
+  // Durable settled marker uses a SCOPE-LESS fingerprint (scope segment
+  // pinned to "settled"). The 30-min idempotency record keeps the key
+  // scope so a Trial-key failure doesn't shadow-lock a Multichain retry,
+  // but the durable settled marker is written only on SUCCESS — so the
+  // shadow-lock concern doesn't apply, and dropping the scope means
+  // rotating the API key between the original send and a retry can't slip
+  // a fresh fingerprint past the replay guard.
+  const durableFp = agenticSendFingerprint(
+    owner,
+    walletId,
+    body.chain,
+    body.token,
+    body.to,
+    body.amount,
+    "settled",
+    hookParamsTag,
+  );
+  const settledKey = sendSettledKey(durableFp);
 
   // ── Durable settled-marker replay guard ────────────────────────────────
-  // Checked BEFORE the idempotency claim: if this exact fingerprint
-  // already produced an on-chain settlement in a prior request — even one
-  // older than the 30-min idempotency TTL — replay the stored result
-  // instead of re-firing. A fresh witness nonce would otherwise let the
-  // contract accept a duplicate. The read is best-effort (null on KV
-  // error); the SET NX claim below is the hard concurrency gate and also
-  // needs KV, so a KV outage fails the send there regardless.
-  const priorSettled = await kv.get<SettledMarker>(settledKey).catch(() => null);
+  // Checked BEFORE the idempotency claim: if this exact payment already
+  // produced an on-chain settlement in a prior request — even one older
+  // than the 30-min idempotency TTL — replay the stored result instead of
+  // re-firing (a fresh witness nonce would otherwise double-settle).
+  // FAIL CLOSED: if the marker read errors we cannot prove the payment
+  // hasn't already settled, so we reject (503) rather than risk a
+  // double-send. The client retries once KV recovers.
+  let priorSettled: SettledMarker | null;
+  try {
+    priorSettled = await kv.get<SettledMarker>(settledKey);
+  } catch {
+    return NextResponse.json(
+      { error: "idempotency_unavailable", message: "Could not verify payment idempotency (storage). Retry shortly." },
+      { status: 503 },
+    );
+  }
   if (priorSettled) {
     const isPartial = priorSettled.status === "partial";
     const isUncertain = priorSettled.status === "relay_unreachable_uncertain";
@@ -805,16 +849,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         legs: splitRecord.legs,
         settledAt: Date.now(),
       };
-      try {
-        await kv.set(settledKey, marker);
-      } catch (e) {
+      const ok = await writeSettledMarker(settledKey, marker);
+      if (!ok) {
         // Same as the single path: ≥1 leg is on-chain, so losing this
         // marker risks re-firing settled legs after the TTL. Page ops.
         void sendOpsAlert(
-          `agentic-wallet/send SPLIT durable marker write failed for ${owner} ` +
+          `agentic-wallet/send SPLIT durable marker write failed (after retries) for ${owner} ` +
             `(walletId=${walletId}, sendId=${sendId}, ${settledLegs.length} legs settled). ` +
-            `A retry after the TTL could re-fire settled legs — verify before replay. ` +
-            `Error: ${e instanceof Error ? e.message : String(e)}`,
+            `A retry after the TTL could re-fire settled legs — verify before replay.`,
           "critical",
         );
       }
@@ -1002,18 +1044,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       txHash: finalRecord.txHash,
       settledAt: Date.now(),
     };
-    try {
-      await kv.set(settledKey, marker);
-    } catch (e) {
-      // The durable marker is the post-TTL double-settle guard. Losing it
-      // silently is the exact failure it prevents, so page ops instead of
-      // swallowing — the 30-min idempotency record still covers the near
-      // term, but a retry after that could re-fire.
+    const ok = await writeSettledMarker(settledKey, marker);
+    if (!ok) {
+      // 3 retries failed — KV durably down at settlement time. The
+      // payment is on-chain but unrecorded; a post-TTL retry could
+      // re-fire. Nothing more we can do automatically — page ops.
       void sendOpsAlert(
-        `agentic-wallet/send DURABLE marker write failed for ${owner} ` +
+        `agentic-wallet/send DURABLE marker write failed (after retries) for ${owner} ` +
           `(walletId=${walletId}, sendId=${sendId}, txHash=${finalRecord.txHash ?? "(none)"}). ` +
-          `Settled on-chain; a retry after the 30-min TTL could re-fire — verify before replay. ` +
-          `Error: ${e instanceof Error ? e.message : String(e)}`,
+          `Settled on-chain; a retry after the 30-min TTL could re-fire — verify before replay.`,
         "critical",
       );
     }
