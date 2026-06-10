@@ -113,12 +113,20 @@ contract Q402PaymentImplementationBNBv2 {
     error AssetNotAllowed();
     error ApproveFailed();
 
-    // ─── v1: gasless ERC-20 transfer (preserved verbatim) ────────────────────
+    // ─── v1: gasless ERC-20 transfer ─────────────────────────────────────────
 
     function transferWithAuthorization(
         address owner, address facilitator, address token, address recipient,
         uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external {
+        // Match the DEPLOYED v1 transfer guards. The q402-avalanche source
+        // this draft was seeded from OMITTED these, but the live BNB impl
+        // enforces them — without them anyone could submit a self-signed
+        // witness and move a DIFFERENT wallet's funds delegated to this
+        // impl. (P0 from review. Reconcile against deployed bytecode before
+        // shipping; the Aave functions below already carry the same guards.)
+        if (msg.sender != facilitator) revert CallerNotFacilitator();
+        if (owner != address(this)) revert OwnerMismatch();
         if (block.timestamp > deadline) revert SignatureExpired();
         if (usedNonces[owner][nonce]) revert NonceAlreadyUsed();
 
