@@ -115,6 +115,71 @@ function rayRateToApy(rate: bigint): number {
   return (1 + apr / SECONDS_PER_YEAR) ** SECONDS_PER_YEAR - 1;
 }
 
+/** Read a reserve's live supply APY from the Pool. Throws on RPC error. */
+async function readReserveApy(
+  c: ReturnType<typeof client>,
+  cfg: ChainAaveCfg,
+  r: ReserveCfg,
+): Promise<number> {
+  const data = (await c.readContract({
+    address: cfg.pool,
+    abi: POOL_ABI,
+    functionName: "getReserveData",
+    args: [r.underlying],
+  })) as { currentLiquidityRate: bigint };
+  return rayRateToApy(data.currentLiquidityRate);
+}
+
+/** Read a wallet's aToken balance for a reserve. Throws on RPC error. */
+async function readReserveBalance(
+  c: ReturnType<typeof client>,
+  r: ReserveCfg,
+  wallet: Address,
+): Promise<bigint> {
+  return (await c.readContract({
+    address: r.aToken,
+    abi: ERC20_BAL_ABI,
+    functionName: "balanceOf",
+    args: [wallet],
+  })) as bigint;
+}
+
+function marketRow(chain: string, cfg: ChainAaveCfg, r: ReserveCfg, apy: number): YieldMarket {
+  return {
+    protocol: "aave",
+    chain,
+    asset: r.asset,
+    assetAddress: r.underlying,
+    positionToken: r.aToken,
+    marketAddress: cfg.pool,
+    supplyApy: apy,
+    label: `Aave V3 ${r.asset}`,
+  };
+}
+
+function positionRow(
+  chain: string,
+  cfg: ChainAaveCfg,
+  r: ReserveCfg,
+  balRaw: bigint,
+  apy: number,
+): YieldPosition {
+  return {
+    protocol: "aave",
+    chain,
+    asset: r.asset,
+    marketAddress: cfg.pool,
+    positionToken: r.aToken,
+    balance: formatUnits(balRaw, tokenDecimals(chain, r.asset)),
+    balanceRaw: balRaw.toString(),
+    // Principal tracking begins at Phase-1 deposit (KV aw:yield:*).
+    // Phase 0 read has no record → principal/accrued null.
+    principal: null,
+    accrued: null,
+    supplyApy: apy,
+  };
+}
+
 export const aaveAdapter: YieldAdapter = {
   protocol: "aave",
 
@@ -126,27 +191,26 @@ export const aaveAdapter: YieldAdapter = {
     for (const r of cfg.reserves) {
       let apy = 0;
       try {
-        const data = (await c.readContract({
-          address: cfg.pool,
-          abi: POOL_ABI,
-          functionName: "getReserveData",
-          args: [r.underlying],
-        })) as { currentLiquidityRate: bigint };
-        apy = rayRateToApy(data.currentLiquidityRate);
+        apy = await readReserveApy(c, cfg, r);
       } catch {
         // Struct shape can drift across Aave minor versions — APY is
         // best-effort; the market is still listable (apy 0 = "unknown").
       }
-      out.push({
-        protocol: "aave",
-        chain,
-        asset: r.asset,
-        assetAddress: r.underlying,
-        positionToken: r.aToken,
-        marketAddress: cfg.pool,
-        supplyApy: apy,
-        label: `Aave V3 ${r.asset}`,
-      });
+      out.push(marketRow(chain, cfg, r, apy));
+    }
+    return out;
+  },
+
+  // Strict: any RPC read error propagates so the caller can flag the
+  // market data as unavailable instead of publishing a phantom 0% APY.
+  async listMarketsStrict(chain: string): Promise<YieldMarket[]> {
+    const cfg = AAVE[chain];
+    if (!cfg) return [];
+    const c = client(chain);
+    const out: YieldMarket[] = [];
+    for (const r of cfg.reserves) {
+      const apy = await readReserveApy(c, cfg, r);
+      out.push(marketRow(chain, cfg, r, apy));
     }
     return out;
   },
@@ -158,15 +222,9 @@ export const aaveAdapter: YieldAdapter = {
     const wallet = walletAddress as Address;
     const positions: YieldPosition[] = [];
     for (const r of cfg.reserves) {
-      const dec = tokenDecimals(chain, r.asset);
       let balRaw = 0n;
       try {
-        balRaw = (await c.readContract({
-          address: r.aToken,
-          abi: ERC20_BAL_ABI,
-          functionName: "balanceOf",
-          args: [wallet],
-        })) as bigint;
+        balRaw = await readReserveBalance(c, r, wallet);
       } catch {
         continue; // RPC hiccup on this reserve — skip rather than fail all
       }
@@ -174,25 +232,27 @@ export const aaveAdapter: YieldAdapter = {
       // Live APY for context (best-effort, mirrors listMarkets).
       let apy = 0;
       try {
-        const data = (await c.readContract({
-          address: cfg.pool, abi: POOL_ABI, functionName: "getReserveData", args: [r.underlying],
-        })) as { currentLiquidityRate: bigint };
-        apy = rayRateToApy(data.currentLiquidityRate);
+        apy = await readReserveApy(c, cfg, r);
       } catch { /* best-effort */ }
-      positions.push({
-        protocol: "aave",
-        chain,
-        asset: r.asset,
-        marketAddress: cfg.pool,
-        positionToken: r.aToken,
-        balance: formatUnits(balRaw, dec),
-        balanceRaw: balRaw.toString(),
-        // Principal tracking begins at Phase-1 deposit (KV aw:yield:*).
-        // Phase 0 read has no record → principal/accrued null.
-        principal: null,
-        accrued: null,
-        supplyApy: apy,
-      });
+      positions.push(positionRow(chain, cfg, r, balRaw, apy));
+    }
+    return positions;
+  },
+
+  // Strict: any balance/APY RPC read error propagates so the caller can
+  // distinguish "couldn't read" from a genuine "no position". A real 0
+  // balance is still omitted (the position truly doesn't exist).
+  async getPositionsStrict(chain: string, walletAddress: string): Promise<YieldPosition[]> {
+    const cfg = AAVE[chain];
+    if (!cfg) return [];
+    const c = client(chain);
+    const wallet = walletAddress as Address;
+    const positions: YieldPosition[] = [];
+    for (const r of cfg.reserves) {
+      const balRaw = await readReserveBalance(c, r, wallet);
+      if (balRaw === 0n) continue; // no position — omit
+      const apy = await readReserveApy(c, cfg, r);
+      positions.push(positionRow(chain, cfg, r, balRaw, apy));
     }
     return positions;
   },

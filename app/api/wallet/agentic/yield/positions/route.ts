@@ -18,7 +18,7 @@ import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { getApiKeyRecord } from "@/app/lib/db";
 import { resolveWallet } from "@/app/lib/agentic-wallet";
-import { listAllPositions, yieldSupportedChains } from "@/app/lib/yield";
+import { listAllPositionsStrict, yieldSupportedChains, type YieldPosition } from "@/app/lib/yield";
 
 export const runtime = "nodejs";
 
@@ -40,10 +40,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const url = new URL(req.url);
+  // walletId is OPTIONAL: omit it to read your default wallet (mirrors
+  // /balance and the documented MCP q402_yield_positions contract).
   const walletId = url.searchParams.get("walletId");
-  if (!walletId) {
-    return NextResponse.json({ error: "walletId_required" }, { status: 400 });
-  }
 
   // Auth: Mode C apiKey (header) OR cached session sig.
   let owner: string;
@@ -63,25 +62,59 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     owner = auth;
   }
 
+  // walletId param if supplied, default wallet otherwise (resolveWallet
+  // falls back to the owner's default when walletId is null).
   const wallet = await resolveWallet(owner, walletId);
   if (!wallet) {
-    return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
+    return NextResponse.json(
+      {
+        error: "AGENTIC_WALLET_NOT_FOUND",
+        message: walletId
+          ? `No agentic wallet ${walletId} for this owner.`
+          : "No default agentic wallet for this owner — create one (POST /api/wallet/agentic) or pass an explicit walletId.",
+      },
+      { status: 404 },
+    );
   }
   const walletAddr = wallet.address.toLowerCase();
 
   const chainParam = url.searchParams.get("chain");
   const chains = chainParam ? [chainParam] : yieldSupportedChains();
 
-  const positions = (
-    await Promise.all(chains.map((c) => listAllPositions(c, walletAddr).catch(() => [])))
-  ).flat();
+  // Strict per-chain reads: a real "no position" (0 balance) reports as an
+  // empty list, but an RPC read FAILURE surfaces as an unavailable chain —
+  // so callers never mistake "couldn't read" for "nothing deposited".
+  const results = await Promise.all(
+    chains.map(async (c) => {
+      try {
+        return { chain: c, positions: await listAllPositionsStrict(c, walletAddr) };
+      } catch (e) {
+        console.error(`[yield/positions] read failed on ${c}:`, e);
+        return { chain: c, positions: null as YieldPosition[] | null };
+      }
+    }),
+  );
 
+  const positions: YieldPosition[] = results
+    .filter((r) => r.positions !== null)
+    .flatMap((r) => r.positions as YieldPosition[]);
+  const unavailableChains = results.filter((r) => r.positions === null).map((r) => r.chain);
   const totalUsd = positions.reduce((acc, p) => acc + Number(p.balance), 0);
 
-  return NextResponse.json({
+  const body = {
     walletId: walletAddr,
     positions,
     totalSuppliedUsd: totalUsd,
+    // Present only when at least one chain's read failed. When set, the
+    // position list / total cover ONLY the chains that read cleanly —
+    // treat the figures as partial, not as "no position" on the rest.
+    ...(unavailableChains.length > 0 ? { unavailable: true, unavailableChains } : {}),
     asOf: new Date().toISOString(),
-  });
+  };
+
+  // If EVERY requested chain failed, the payload would otherwise look like
+  // "no positions anywhere" — surface a 503 so the caller knows it's a read
+  // failure, not an empty wallet.
+  const allFailed = unavailableChains.length === chains.length && chains.length > 0;
+  return NextResponse.json(body, { status: allFailed ? 503 : 200 });
 }
