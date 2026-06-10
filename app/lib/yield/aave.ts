@@ -202,3 +202,26 @@ export const aaveAdapter: YieldAdapter = {
 export function aaveSupportedChains(): string[] {
   return Object.keys(AAVE);
 }
+
+/**
+ * Total redeemable Aave position value (USDC+USDT aTokens) in human units.
+ * THROWS on RPC failure so policy can fail closed — unlike getPositions,
+ * which degrades to a partial/empty list.
+ */
+export async function aaveTotalPositionValueStrict(chain: string, walletAddress: string): Promise<number> {
+  const cfg = AAVE[chain];
+  if (!cfg) return 0;
+  const c = client(chain);
+  const wallet = walletAddress as Address;
+  let total = 0;
+  for (const r of cfg.reserves) {
+    const raw = (await c.readContract({
+      address: r.aToken,
+      abi: ERC20_BAL_ABI,
+      functionName: "balanceOf",
+      args: [wallet],
+    })) as bigint;
+    total += Number(formatUnits(raw, tokenDecimals(chain, r.asset)));
+  }
+  return total;
+}

@@ -1,0 +1,259 @@
+/**
+ * Q402 Yield — shared deposit/withdraw handler.
+ *
+ * Orchestrates: auth (intent-bound OR Mode-C apiKey) → resolveWallet +
+ * decrypt key → YieldPolicy gate (Hooks) → idempotency claim → sign
+ * (yield/sign) → settle via relayer (yield/relay) → KV position update +
+ * Trust Receipt. Mirrors the Agent Wallet /send route's trust model.
+ *
+ * Fails closed: if the v2 impl isn't deployed (no YIELD_IMPL_<CHAIN>),
+ * signYieldAction throws and the route returns 503 — no funds move.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { kv } from "@vercel/kv";
+import { requireIntentAuth } from "@/app/lib/auth";
+import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { decryptPrivateKey, resolveWallet, isKeystoreReady } from "@/app/lib/agentic-wallet";
+import { getApiKeyRecord } from "@/app/lib/db";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
+import { isAgenticChainKey, type AgenticChainKey, type AgenticToken } from "@/app/lib/agentic-wallet-sign";
+import { signYieldAction, type YieldAction } from "./sign";
+import { settleYieldAction, yieldFacilitator } from "./relay";
+import { enforceYieldPolicy } from "./policy";
+import type { Hex } from "viem";
+
+interface YieldBody {
+  walletId?: string;
+  chain?: string;
+  token?: AgenticToken;
+  amount?: string;       // human decimal; "max" allowed for withdraw
+  ownerAddress?: string;
+  nonce?: string;        // challenge (intent auth)
+  signature?: string;
+  apiKey?: string;
+  /** Optional client-supplied key for durable (no-TTL) replay protection
+   *  across distinct same-amount requests. Without it, only the 30-min
+   *  rapid-retry claim applies. */
+  idempotencyKey?: string;
+}
+
+const IDEMPOTENCY_TTL_SEC = 30 * 60;
+
+function isPositiveDecimal(s: unknown): s is string {
+  return typeof s === "string" && /^\d+(\.\d+)?$/.test(s) && Number(s) > 0;
+}
+
+async function resolveOwner(body: YieldBody, action: YieldAction): Promise<string | NextResponse> {
+  // Owner-sig (intent-bound)
+  if (typeof body.signature === "string" && body.signature.length > 0) {
+    if (!body.walletId || typeof body.walletId !== "string") {
+      return NextResponse.json({ error: "INVALID_INTENT_FOR_AUTH" }, { status: 400 });
+    }
+    const result = await requireIntentAuth({
+      address: body.ownerAddress ?? null,
+      challenge: body.nonce ?? null,
+      signature: body.signature ?? null,
+      action: action === "supply" ? "agentic.yield_deposit" : "agentic.yield_withdraw",
+      intent: {
+        walletId: body.walletId.toLowerCase(),
+        chain: body.chain ?? "",
+        token: body.token ?? "",
+        amount: body.amount ?? "",
+      },
+    });
+    if (typeof result !== "string") {
+      return NextResponse.json({ error: result.error, code: result.code }, { status: result.status });
+    }
+    return result;
+  }
+
+  // Mode C — live apiKey only
+  if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
+    if (body.apiKey.startsWith("q402_test_") || body.apiKey.startsWith("q402_sandbox_")) {
+      return NextResponse.json({ error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey." }, { status: 401 });
+    }
+    const rec = await getApiKeyRecord(body.apiKey);
+    if (!rec || !rec.active || rec.isSandbox) {
+      return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
+    }
+    if (typeof body.ownerAddress === "string" && body.ownerAddress.length > 0
+      && rec.address.toLowerCase() !== body.ownerAddress.toLowerCase()) {
+      return NextResponse.json({ error: "OWNER_MISMATCH" }, { status: 403 });
+    }
+    return rec.address.toLowerCase();
+  }
+
+  return NextResponse.json({ error: "AUTH_REQUIRED", message: "Provide a signature or apiKey." }, { status: 401 });
+}
+
+export async function handleYieldAction(req: NextRequest, action: YieldAction): Promise<NextResponse> {
+  if (!(await rateLimit(getClientIP(req), `yield-${action}`, 30, 60))) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  let body: YieldBody;
+  try {
+    body = (await req.json()) as YieldBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!isAgenticChainKey(body.chain)) {
+    return NextResponse.json({ error: "INVALID_CHAIN" }, { status: 400 });
+  }
+  if (body.token !== "USDC" && body.token !== "USDT") {
+    return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
+  }
+  const isMaxWithdraw = action === "withdraw" && typeof body.amount === "string" && body.amount.trim().toLowerCase() === "max";
+  if (!isMaxWithdraw && !isPositiveDecimal(body.amount)) {
+    return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+  }
+  const chain = body.chain as AgenticChainKey;
+  const token = body.token as AgenticToken;
+  const amount = body.amount as string;
+
+  const owner = await resolveOwner(body, action);
+  if (owner instanceof NextResponse) return owner;
+
+  const ready = isKeystoreReady();
+  if (!ready.ok) {
+    return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
+  }
+
+  const wallet = await resolveWallet(owner, body.walletId ?? null);
+  if (!wallet) {
+    return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
+  }
+  // Soft-deleted (archived) wallets must not move funds — resolveWallet
+  // doesn't filter them, so re-check here like /send does.
+  if (wallet.deletedAt && Date.now() >= wallet.deletedAt) {
+    return NextResponse.json({ error: "AGENTIC_WALLET_ARCHIVED" }, { status: 410 });
+  }
+  const walletAddr = wallet.address.toLowerCase();
+
+  // YieldPolicy gate (Hooks) — max allocation, asset/protocol allowlist,
+  // etc. Fails closed on policy denial.
+  const policy = await enforceYieldPolicy({ owner, walletId: walletAddr, chain, asset: token, action, amount });
+  if (!policy.allow) {
+    return NextResponse.json({ error: "YIELD_POLICY_DENIED", code: policy.code, message: policy.reason }, { status: 403 });
+  }
+
+  // Facilitator must be the relayer (the v2 contract enforces
+  // msg.sender == facilitator). Resolve before signing.
+  const facilitator = yieldFacilitator();
+  if (!facilitator) {
+    return NextResponse.json({ error: "relayer_unavailable" }, { status: 503 });
+  }
+
+  // Durable (no-TTL) replay guard — only when the client supplies an
+  // idempotencyKey (so two legitimately-distinct same-amount deposits are
+  // not false-blocked). Read fail-closed: a storage error here must not let
+  // a possibly-already-settled action through.
+  const settledKey = body.idempotencyKey ? `aw:yield:settled:${walletAddr}:${body.idempotencyKey}` : null;
+  if (settledKey) {
+    let prior: { txHash?: string } | null;
+    try {
+      prior = await kv.get<{ txHash?: string }>(settledKey);
+    } catch {
+      return NextResponse.json({ error: "idempotency_unavailable" }, { status: 503 });
+    }
+    if (prior) {
+      return NextResponse.json({ status: "ok", idempotent: true, ...prior });
+    }
+  }
+
+  // Idempotency — dedupe rapid identical retries (each sign generates a
+  // fresh on-chain nonce, so without this a double-submit = double action).
+  const idemKey = `aw:yield:idem:${walletAddr}:${action}:${chain}:${token}:${amount}`;
+  const claimed = await kv.set(idemKey, { at: Date.now(), status: "pending" }, { nx: true, ex: IDEMPOTENCY_TTL_SEC });
+  if (!claimed) {
+    const prior = await kv.get<{ status: string; txHash?: string }>(idemKey);
+    return NextResponse.json(
+      { error: "duplicate_request", message: "An identical yield action was just submitted.", prior },
+      { status: 409 },
+    );
+  }
+
+  let privateKey: Hex;
+  try {
+    privateKey = decryptPrivateKey(wallet) as Hex;
+  } catch {
+    await kv.del(idemKey).catch(() => {});
+    return NextResponse.json({ error: "key_decrypt_failed" }, { status: 503 });
+  }
+
+  try {
+    const signed = await signYieldAction({ privateKey, chain, token, action, amount, facilitator });
+    const result = await settleYieldAction(signed);
+
+    // Broadcast-but-unconfirmed: the action MAY have settled. Do NOT release
+    // the claim (a retry could double it) — mark uncertain + alert ops.
+    if (result.uncertain) {
+      await kv.set(idemKey, { at: Date.now(), status: "uncertain", txHash: result.txHash }, { ex: IDEMPOTENCY_TTL_SEC }).catch(() => {});
+      await sendOpsAlert(
+        `Q402 Yield ${action} UNCERTAIN — wallet ${walletAddr} ${amount} ${token} on ${chain}, tx ${result.txHash} broadcast but receipt unconfirmed. Verify on-chain before any retry.`,
+      ).catch(() => {});
+      return NextResponse.json(
+        { error: "settlement_uncertain", txHash: result.txHash, message: "Broadcast but unconfirmed — do not retry; verify on-chain." },
+        { status: 502 },
+      );
+    }
+
+    if (!result.success) {
+      await kv.del(idemKey).catch(() => {});
+      return NextResponse.json({ error: "settlement_failed", message: result.error }, { status: 502 });
+    }
+
+    // Position tracking (best-effort): principal in human units.
+    await updateYieldPosition(walletAddr, chain, token, action, signed.amount).catch(() => {});
+
+    const receipt = {
+      action: action === "supply" ? "yield_deposit" : "yield_withdraw",
+      protocol: "aave",
+      chain,
+      asset: token,
+      amount: signed.amount,
+      pool: signed.pool,
+      txHash: result.txHash,
+      blockNumber: result.blockNumber ? String(result.blockNumber) : undefined,
+      at: new Date().toISOString(),
+    };
+    await kv.set(idemKey, { at: Date.now(), status: "settled", txHash: result.txHash }, { ex: IDEMPOTENCY_TTL_SEC }).catch(() => {});
+    // Durable marker (no TTL) for cross-window replay protection.
+    if (settledKey) {
+      await kv.set(settledKey, { txHash: result.txHash, action: receipt.action, amount: signed.amount, at: receipt.at }).catch(() => {});
+    }
+
+    return NextResponse.json({ status: "ok", ...receipt });
+  } catch (e) {
+    await kv.del(idemKey).catch(() => {});
+    const msg = e instanceof Error ? e.message : String(e);
+    // Deploy-gated: signYieldAction throws YIELD_IMPL_NOT_DEPLOYED until the
+    // audited v2 impl is live → surface as 503 (feature not yet enabled).
+    if (msg.includes("YIELD_IMPL_NOT_DEPLOYED") || msg.includes("YIELD_NO_POOL")) {
+      return NextResponse.json({ error: "yield_not_enabled", message: "Q402 Yield is not enabled on this chain yet." }, { status: 503 });
+    }
+    return NextResponse.json({ error: "yield_action_failed", message: msg }, { status: 500 });
+  }
+}
+
+/** Track supplied principal (human units) per wallet/chain/asset in KV. */
+async function updateYieldPosition(
+  walletId: string, chain: string, asset: string, action: YieldAction, amount: string,
+): Promise<void> {
+  if (amount === "max" && action === "withdraw") {
+    // Full withdraw — clear the tracked principal for this market.
+    const key = `aw:yield:${walletId}`;
+    const cur = (await kv.get<Record<string, number>>(key)) ?? {};
+    delete cur[`${chain}:${asset}`];
+    await kv.set(key, cur);
+    return;
+  }
+  const delta = Number(amount) * (action === "supply" ? 1 : -1);
+  const key = `aw:yield:${walletId}`;
+  const cur = (await kv.get<Record<string, number>>(key)) ?? {};
+  const field = `${chain}:${asset}`;
+  cur[field] = Math.max(0, (cur[field] ?? 0) + delta);
+  await kv.set(key, cur);
+}
