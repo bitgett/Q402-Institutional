@@ -535,6 +535,48 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   async function processRow(row: { to: string; amount: string }): Promise<BatchResultRow> {
     try {
+      // ── Q402 Hooks — beforeSettle, per row, BEFORE this row settles ───────
+      // Mirrors send/route.ts: beforeAuthorize gates (OFAC/SpendCap) ran up
+      // front for the whole batch, but beforeSettle hooks — ReputationGate in
+      // particular — read STORED per-wallet config and only run for the
+      // matching lifecycle. Without this dispatch a /batch row settles
+      // WITHOUT the beforeSettle gate, so an owner who enabled "only pay
+      // reputable counterparties" (incl. onUnknown:"deny") loses that
+      // guarantee the moment payments route through /batch instead of /send.
+      // A deny / require_approval here DROPS this row (it never settles) and
+      // is recorded as a failed result, consistent with the existing per-row
+      // failure handling — the batch's partial/failed (207/502) accounting,
+      // daily-cap refund of unsettled rows, and idempotency/durable markers
+      // all flow from `ok:false` rows unchanged. Batch carries no per-payment
+      // hook params (params:undefined), so stored per-wallet config applies.
+      const settleHook = await runHooks("beforeSettle", {
+        lifecycle: "beforeSettle",
+        owner,
+        walletId,
+        chain: body.chain as AgenticChainKey,
+        token: body.token as AgenticToken,
+        recipient: row.to.toLowerCase(),
+        amount: row.amount,
+        amountUsd: Number(row.amount),
+        source: "batch",
+        params: undefined,
+      });
+      if (settleHook.outcome.action !== "allow") {
+        // Anything other than a clean allow means this row must NOT settle as
+        // a plain single transfer:
+        //   - deny / require_approval → drop the row (recorded as a failed
+        //     result with the hook's stable code, e.g. REPUTATION_TOO_LOW).
+        //   - split → batch has no per-row fan-out surface; settling the full
+        //     amount to `row.to` would misdirect the split's funds, so we drop
+        //     the row instead of silently single-paying. (MultiPayeeSplit only
+        //     splits on explicit per-payment params, which batch never sends —
+        //     this is a defensive guard, not a reachable path today.)
+        const code =
+          settleHook.outcome.action === "split"
+            ? "SPLIT_NOT_SUPPORTED_IN_BATCH"
+            : settleHook.outcome.code;
+        return { to: row.to, amount: row.amount, ok: false, error: code };
+      }
       const signed = await signAgenticPayment({
         privateKey: pk as Hex,
         chain: body.chain as AgenticChainKey,

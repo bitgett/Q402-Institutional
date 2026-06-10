@@ -33,6 +33,20 @@
  * rail. An owner who needs a hard guarantee on the unverifiable case
  * sets `onUnknown: "deny"`, which is enforced deterministically (no RPC
  * dependency once we know the agentId is missing/mismatched).
+ *
+ * ── Config-read failures vs RPC failures (do NOT conflate) ──────────────
+ *
+ * failMode "open" covers the RPC-blip case AFTER we have read the owner's
+ * gate config. It must NOT extend to FAILING TO READ THE CONFIG ITSELF:
+ * if KV errors while we fetch `reputationGate`, we don't know whether the
+ * owner set `onUnknown: "deny"` (an explicit hard-block of unverifiable
+ * recipients). Treating a config-read error as "skip" (the failMode-open
+ * path the dispatcher takes on a shouldRun throw) would silently bypass
+ * that hard-block. So we deliberately do NOT let a KV error skip the
+ * hook: `shouldRun` returns true on a config-read error so `run()` is
+ * reached, and `run()` converts a config-read error into a distinct
+ * 503 deny (REPUTATION_CONFIG_UNAVAILABLE) rather than allowing. An
+ * ABSENT config (kv.get → null, no gate set) still skips, as it should.
  */
 
 import type { Hook, HookContext, HookOutcome } from "./types";
@@ -49,18 +63,47 @@ export const reputationGate: Hook = {
   failMode: "open",
 
   async shouldRun(ctx: HookContext): Promise<boolean> {
-    const cfg = await getWalletHookConfig(ctx.walletId);
+    // Distinguish "absent config" (skip — fine) from "KV error" (must NOT
+    // skip — a config-read failure on an owner-enabled hard-deny gate would
+    // otherwise fail-open). On an error we return true so run() is reached
+    // and can apply a CLOSED treatment for the config-read failure.
+    let cfg;
+    try {
+      cfg = await getWalletHookConfig(ctx.walletId);
+    } catch {
+      return true;
+    }
     return cfg?.reputationGate?.enabled === true;
   },
 
   async run(ctx: HookContext): Promise<HookOutcome> {
-    // shouldRun already confirmed the gate is enabled; re-read for the
-    // threshold + policy. (Two reads, but config is a single cached KV
-    // get and this keeps run() self-contained / unit-testable.)
-    const cfg = await getWalletHookConfig(ctx.walletId);
+    // shouldRun already confirmed the gate is enabled (or that the config
+    // read failed); re-read for the threshold + policy. (Two reads, but
+    // config is a single cached KV get and this keeps run() self-contained
+    // / unit-testable.)
+    //
+    // A config-read FAILURE here must fail CLOSED: we cannot tell whether
+    // the owner set onUnknown:"deny", so allowing would silently bypass an
+    // explicit hard-block. failMode:"open" only covers post-config RPC
+    // blips, so we surface a distinct 503 deny rather than throwing (a
+    // throw would resolve to allow under failMode:"open").
+    let cfg;
+    try {
+      cfg = await getWalletHookConfig(ctx.walletId);
+    } catch (e) {
+      return deny("REPUTATION_CONFIG_UNAVAILABLE", {
+        reason:
+          "Could not read the wallet's reputation-gate config; refusing to settle " +
+          "rather than risk bypassing an owner-configured hard deny.",
+        status: 503,
+        meta: { detail: e instanceof Error ? e.message.slice(0, 160) : "kv error" },
+      });
+    }
     const gate = cfg?.reputationGate;
     if (!gate || !gate.enabled) {
-      // Config changed between shouldRun and run — nothing to enforce.
+      // Config changed between shouldRun and run, OR shouldRun reached run()
+      // because of a transient KV error that has since cleared and now reads
+      // as absent/disabled — nothing to enforce.
       return { action: "allow" };
     }
 

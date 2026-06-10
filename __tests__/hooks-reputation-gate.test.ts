@@ -74,6 +74,34 @@ describe("ReputationGate.shouldRun", () => {
     enableGate(5);
     expect(await reputationGate.shouldRun(ctx())).toBe(true);
   });
+
+  // BUG 9: a KV error must NOT skip the hook (failMode:open would
+  // otherwise fail-open and bypass an owner's onUnknown:"deny"). On a
+  // config-read error shouldRun returns true so run() is reached.
+  it("true when the config read THROWS (KV error → run() must be reached)", async () => {
+    mockConfig.getWalletHookConfig.mockRejectedValue(new Error("kv down"));
+    expect(await reputationGate.shouldRun(ctx())).toBe(true);
+  });
+});
+
+describe("ReputationGate.run — config-read failure (BUG 9, fail-closed)", () => {
+  it("denies REPUTATION_CONFIG_UNAVAILABLE (503) when the config read throws", async () => {
+    mockConfig.getWalletHookConfig.mockRejectedValue(new Error("kv down"));
+    const r = await reputationGate.run(ctx());
+    expect(r).toMatchObject({ action: "deny", code: "REPUTATION_CONFIG_UNAVAILABLE", status: 503 });
+    // Must NOT touch the ERC-8004 reads — we never got far enough to know
+    // the recipient/agentId policy.
+    expect(mockErc8004.readAgent).not.toHaveBeenCalled();
+    expect(mockRep.readSummary).not.toHaveBeenCalled();
+  });
+
+  it("allows when the read recovers to absent/disabled by run() time (not a hard deny)", async () => {
+    // shouldRun saw a transient error → true; by run() the read succeeds
+    // and shows no gate configured. Nothing to enforce → allow.
+    mockConfig.getWalletHookConfig.mockResolvedValue(null);
+    const r = await reputationGate.run(ctx());
+    expect(r.action).toBe("allow");
+  });
 });
 
 describe("ReputationGate.run — happy path", () => {
