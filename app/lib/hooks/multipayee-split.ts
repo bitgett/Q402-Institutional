@@ -3,10 +3,15 @@
  *
  * Lifecycle: beforeSettle (transform).
  *
- * Turns one payment intent into an automatic N-way split — royalty /
+ * Turns one payment intent into an N-way split — royalty /
  * revenue-share / protocol-fee fan-out. The owner opts in per-wallet
- * (multiPayeeSplit.enabled) and supplies the legs either as a stored
- * default (config.defaultSplits) or per-payment (params.splits).
+ * (multiPayeeSplit.enabled), and the split legs are supplied EXPLICITLY
+ * per-payment (params.splits). A stored wallet default is NEVER
+ * auto-applied: `config.defaultSplits` is retained only for backward
+ * compatibility and is intentionally ignored here (see the FUND-SAFETY
+ * note in run() — silently redirecting a confirmed "pay 0xX" across other
+ * addresses is a consent violation). A split happens only when THIS
+ * payment names its legs.
  *
  * Returns a `split` outcome; the send route fans the single settlement
  * into one sub-settlement per leg. The daily reservation was charged

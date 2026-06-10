@@ -397,6 +397,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // human approval. Nothing claimed/charged yet at this point, so we
     // just surface the hold. The approval flow (approve → re-submit) is
     // out of v1 scope; the agent/UI handles the hold.
+    //
+    // Cross-lifecycle precedence (deny > require_approval): a beforeSettle
+    // gate (ReputationGate / ConditionalOracle) can HARD-deny a payment the
+    // beforeAuthorize layer only soft-held. Surfacing the soft 202 without
+    // consulting beforeSettle would tell the caller "needs approval" for a
+    // payment a settle-time gate would forbid outright. So we evaluate the
+    // beforeSettle gates now and let a DENY win over the require_approval.
+    // This is EVALUATION ONLY — nothing is reserved/charged yet, so a deny
+    // here needs no refund, and the canonical beforeSettle pass below (which
+    // also handles require_approval/split) still runs for the non-deny path.
+    const settleGate = await runHooks("beforeSettle", {
+      lifecycle: "beforeSettle",
+      owner,
+      walletId,
+      chain: body.chain,
+      token: body.token,
+      recipient: body.to.toLowerCase(),
+      amount: body.amount,
+      amountUsd: Number(body.amount),
+      source: "send",
+      params: trustedHookParams,
+    });
+    if (settleGate.outcome.action === "deny") {
+      const { code, reason, status, meta } = settleGate.outcome;
+      return NextResponse.json(
+        { error: code, message: reason, ...(meta ? { detail: meta } : {}) },
+        { status: status ?? 403 },
+      );
+    }
     const { code, reason, status, meta } = authHook.outcome;
     return NextResponse.json(
       { status: "approval_required", code, message: reason, ...(meta ? { detail: meta } : {}) },
@@ -745,6 +774,44 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           { status: status ?? (held ? 202 : 403) },
         );
       }
+
+      // Re-screen EACH leg through the beforeSettle gates too. The top-level
+      // beforeSettle pass ran against ctx.recipient = body.to — it never saw
+      // the leg addresses that actually receive funds, so ReputationGate /
+      // ConditionalOracle could pass on `to` while a leg recipient fails the
+      // gate. Mirror the per-leg beforeAuthorize above: a leg that fails the
+      // gate (deny OR hold) blocks the WHOLE split (all-or-nothing leg model),
+      // and nothing has fired yet so refundAndRelease. params is undefined so
+      // MultiPayeeSplit doesn't try to re-split a single leg — only the gate
+      // hooks evaluate against the leg recipient.
+      const legSettle = await runHooks("beforeSettle", {
+        lifecycle: "beforeSettle",
+        owner,
+        walletId,
+        chain: body.chain,
+        token: body.token,
+        recipient: leg.recipient.toLowerCase(),
+        amount: leg.amount,
+        amountUsd: Number(leg.amount),
+        source: "send",
+        params: undefined,
+      });
+      if (legSettle.outcome.action === "deny" || legSettle.outcome.action === "require_approval") {
+        await refundAndRelease();
+        const { code, reason, status, meta } = legSettle.outcome;
+        const held = legSettle.outcome.action === "require_approval";
+        return NextResponse.json(
+          {
+            ...(held ? { status: "approval_required" } : { error: code }),
+            code,
+            message: reason,
+            heldRecipient: leg.recipient.toLowerCase(),
+            split: true,
+            ...(meta ? { detail: meta } : {}),
+          },
+          { status: status ?? (held ? 202 : 403) },
+        );
+      }
     }
 
     const pkSplit = decryptPrivateKey(wallet);
@@ -867,6 +934,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       {
         sendId,
         status: splitStatus,
+        // Top-level txHash mirrors the durable-replay shape (the first
+        // settled leg's hash). Without it the fresh-split response and the
+        // post-TTL replay response would disagree — a client that keys off
+        // body.txHash would see a hash on replay but not on first settle.
+        // Per-leg hashes remain authoritative in legs[].
+        ...(settledLegs[0]?.txHash ? { txHash: settledLegs[0].txHash } : {}),
         split: true,
         legs: splitRecord.legs,
         settled: settledLegs.length,

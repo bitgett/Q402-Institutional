@@ -65,6 +65,78 @@ describe("validateWalletHookConfig", () => {
     };
     expect(() => validateWalletHookConfig(bad)).toThrow(/sum to 10000/);
   });
+
+  // ── BUG 11: strict shape — unknown/extra keys are rejected ──────────────
+  describe("strict shape — unknown keys rejected", () => {
+    it("rejects an unknown top-level key", () => {
+      const c = { reputationGate: { enabled: false, minScore: 1, onUnknown: "allow" }, bogusHook: { enabled: true } } as unknown as WalletHookConfig;
+      expect(() => validateWalletHookConfig(c)).toThrow(/unknown key: bogusHook/);
+    });
+
+    it("rejects an unknown key inside reputationGate", () => {
+      const c = { reputationGate: { enabled: true, minScore: 5, onUnknown: "deny", extra: 1 } } as unknown as WalletHookConfig;
+      expect(() => validateWalletHookConfig(c)).toThrow(/reputationGate has an unknown key: extra/);
+    });
+
+    it("rejects an unknown key inside spendCap", () => {
+      const c = { spendCap: { enabled: true, perCallApprovalUsd: 100, sneaky: true } } as unknown as WalletHookConfig;
+      expect(() => validateWalletHookConfig(c)).toThrow(/spendCap has an unknown key: sneaky/);
+    });
+
+    it("rejects an unknown key inside a spendCap window", () => {
+      const c = { spendCap: { enabled: true, allowedWindowsUtc: [{ startHour: 9, endHour: 17, tz: "UTC" }] } } as unknown as WalletHookConfig;
+      expect(() => validateWalletHookConfig(c)).toThrow(/window has an unknown key: tz/);
+    });
+
+    it("rejects an unknown key inside a multiPayeeSplit leg", () => {
+      const c = { multiPayeeSplit: { enabled: true, defaultSplits: [{ recipient: "0x" + "a".repeat(40), bps: 10000, label: "x" }] } } as unknown as WalletHookConfig;
+      expect(() => validateWalletHookConfig(c)).toThrow(/leg has an unknown key: label/);
+    });
+  });
+
+  // ── BUG 11: reputationGate.minScore must be >= 0 ────────────────────────
+  describe("reputationGate.minScore >= 0", () => {
+    it("accepts minScore = 0", () => {
+      const c: WalletHookConfig = { reputationGate: { enabled: true, minScore: 0, onUnknown: "deny" } };
+      expect(() => validateWalletHookConfig(c)).not.toThrow();
+    });
+    it("rejects a negative minScore", () => {
+      const c: WalletHookConfig = { reputationGate: { enabled: true, minScore: -1, onUnknown: "deny" } };
+      expect(() => validateWalletHookConfig(c)).toThrow(/minScore must be >= 0/);
+    });
+  });
+
+  // ── BUG 11: spendCap.enabled:true with no rules enforces nothing ────────
+  describe("spendCap requires at least one rule when enabled", () => {
+    it("rejects enabled:true with no allowedRecipients/windows/perCallApprovalUsd", () => {
+      const c: WalletHookConfig = { spendCap: { enabled: true } };
+      expect(() => validateWalletHookConfig(c)).toThrow(/no rule is set/);
+    });
+    it("accepts enabled:false with no rules (a disabled cap is fine)", () => {
+      const c: WalletHookConfig = { spendCap: { enabled: false } };
+      expect(() => validateWalletHookConfig(c)).not.toThrow();
+    });
+    it("accepts enabled:true with one rule (perCallApprovalUsd)", () => {
+      const c: WalletHookConfig = { spendCap: { enabled: true, perCallApprovalUsd: 100 } };
+      expect(() => validateWalletHookConfig(c)).not.toThrow();
+    });
+  });
+
+  // ── BUG 11: empty allowedRecipients (allow-all footgun) rejected ────────
+  describe("spendCap.allowedRecipients empty-when-present rejected", () => {
+    it("rejects an empty allowedRecipients array", () => {
+      const c: WalletHookConfig = { spendCap: { enabled: true, allowedRecipients: [] } };
+      expect(() => validateWalletHookConfig(c)).toThrow(/must be non-empty when present/);
+    });
+    it("accepts a non-empty allowedRecipients array", () => {
+      const c: WalletHookConfig = { spendCap: { enabled: true, allowedRecipients: ["0x" + "a".repeat(40)] } };
+      expect(() => validateWalletHookConfig(c)).not.toThrow();
+    });
+    it("accepts an omitted allowedRecipients (no whitelist) when another rule is set", () => {
+      const c: WalletHookConfig = { spendCap: { enabled: true, perCallApprovalUsd: 50 } };
+      expect(() => validateWalletHookConfig(c)).not.toThrow();
+    });
+  });
 });
 
 describe("assertSplitsSumTo10000", () => {
