@@ -54,9 +54,15 @@ export const multiPayeeSplit: Hook = {
     const ms = cfg?.multiPayeeSplit;
     if (!ms || !ms.enabled) return { action: "allow" };
 
-    // Per-payment legs override the stored default. No legs at all →
-    // nothing to split, settle as a normal single payment.
-    const splits: SplitSpec[] | undefined = ctx.params?.splits ?? ms.defaultSplits;
+    // FUND-SAFETY (P1): split ONLY on an EXPLICIT per-payment request.
+    // A wallet-level stored default split is NEVER auto-applied — silently
+    // redirecting a normal "pay 1 to 0xX" across other addresses is a
+    // consent violation (the caller confirmed 0xX, not the legs; the demo
+    // that surfaced this paid a named recipient but settled to three
+    // others). `ms.defaultSplits` is retained in config for backward
+    // compatibility but intentionally ignored here; the dashboard no longer
+    // lets you set one. Splits happen only when THIS payment names them.
+    const splits: SplitSpec[] | undefined = ctx.params?.splits;
     if (!splits || splits.length === 0) return { action: "allow" };
 
     // Single-leg "split": a no-op ONLY if the leg is the same recipient
