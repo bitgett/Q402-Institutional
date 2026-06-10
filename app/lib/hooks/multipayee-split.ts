@@ -51,12 +51,28 @@ export const multiPayeeSplit: Hook = {
 
   async shouldRun(ctx: HookContext): Promise<boolean> {
     const cfg = await getWalletHookConfig(ctx.walletId);
-    return cfg?.multiPayeeSplit?.enabled === true;
+    if (cfg?.multiPayeeSplit?.enabled === true) return true;
+    // Also run (to REJECT) when a payment explicitly requests a split but
+    // the wallet hasn't enabled Multi-Payee Split — otherwise the split is
+    // silently dropped and the full amount single-pays `to`.
+    return (ctx.params?.splits?.length ?? 0) > 0;
   },
 
   async run(ctx: HookContext): Promise<HookOutcome> {
     const cfg = await getWalletHookConfig(ctx.walletId);
     const ms = cfg?.multiPayeeSplit;
+
+    // Explicit split requested but Multi-Payee Split is OFF on this wallet:
+    // deny rather than silently single-pay the full amount to `to` (the
+    // caller asked for a split; honoring `to` only is a silent surprise).
+    if ((ctx.params?.splits?.length ?? 0) > 0 && !ms?.enabled) {
+      return {
+        action: "deny",
+        code: "MULTI_PAYEE_SPLIT_DISABLED",
+        reason: "This payment requested a split, but Multi-Payee Split is not enabled on this wallet. Enable it in Hooks, or remove the split.",
+        status: 400,
+      };
+    }
     if (!ms || !ms.enabled) return { action: "allow" };
 
     // FUND-SAFETY (P1): split ONLY on an EXPLICIT per-payment request.

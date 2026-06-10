@@ -117,6 +117,17 @@ describe("MultiPayeeSplit.run — explicit-only (P1 consent fix)", () => {
     const r = await multiPayeeSplit.run(explicitCtx("1", [{ recipient: A, bps: 10000 }]));
     expect(r).toMatchObject({ action: "deny", code: "SPLIT_SINGLE_LEG_MISMATCH" });
   });
+
+  it("DENIES an explicit split when Multi-Payee Split is DISABLED (no silent single-pay to `to`)", async () => {
+    mockConfig.getWalletHookConfig.mockResolvedValue({ multiPayeeSplit: { enabled: false } });
+    const r = await multiPayeeSplit.run(explicitCtx("1", [{ recipient: A, bps: 6000 }, { recipient: B, bps: 4000 }]));
+    expect(r).toMatchObject({ action: "deny", code: "MULTI_PAYEE_SPLIT_DISABLED" });
+  });
+
+  it("shouldRun is true for an explicit split even when disabled (so run() can reject)", async () => {
+    mockConfig.getWalletHookConfig.mockResolvedValue({ multiPayeeSplit: { enabled: false } });
+    expect(await multiPayeeSplit.shouldRun(explicitCtx("1", [{ recipient: A, bps: 6000 }, { recipient: B, bps: 4000 }]))).toBe(true);
+  });
 });
 
 describe("MultiPayeeSplit.run — exact-sum math (load-bearing)", () => {
