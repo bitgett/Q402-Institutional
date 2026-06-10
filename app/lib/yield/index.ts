@@ -25,7 +25,7 @@ export function yieldSupportedChains(): string[] {
   return Array.from(new Set([...aaveSupportedChains()]));
 }
 
-/** Live markets across all adapters for a chain (read). */
+/** Live markets across all adapters for a chain (read, best-effort). */
 export async function listAllMarkets(chain: string): Promise<YieldMarket[]> {
   const lists = await Promise.all(
     YIELD_ADAPTERS.map((a) => a.listMarkets(chain).catch(() => [] as YieldMarket[])),
@@ -33,10 +33,31 @@ export async function listAllMarkets(chain: string): Promise<YieldMarket[]> {
   return lists.flat();
 }
 
-/** A wallet's positions across all adapters for a chain (read). */
+/**
+ * Strict variant of {@link listAllMarkets}: THROWS if any adapter's RPC
+ * read fails, so a route can report the chain's market data as
+ * unavailable rather than as a phantom 0% APY. A chain with no markets
+ * still returns [] (not an error).
+ */
+export async function listAllMarketsStrict(chain: string): Promise<YieldMarket[]> {
+  const lists = await Promise.all(YIELD_ADAPTERS.map((a) => a.listMarketsStrict(chain)));
+  return lists.flat();
+}
+
+/** A wallet's positions across all adapters for a chain (read, best-effort). */
 export async function listAllPositions(chain: string, walletAddress: string): Promise<YieldPosition[]> {
   const lists = await Promise.all(
     YIELD_ADAPTERS.map((a) => a.getPositions(chain, walletAddress).catch(() => [] as YieldPosition[])),
   );
+  return lists.flat();
+}
+
+/**
+ * Strict variant of {@link listAllPositions}: THROWS if any adapter's RPC
+ * read fails, so a route can tell "couldn't read" from a genuine "no
+ * position". A wallet with no balances still returns [] (not an error).
+ */
+export async function listAllPositionsStrict(chain: string, walletAddress: string): Promise<YieldPosition[]> {
+  const lists = await Promise.all(YIELD_ADAPTERS.map((a) => a.getPositionsStrict(chain, walletAddress)));
   return lists.flat();
 }

@@ -81,8 +81,21 @@ export interface YieldAdapter {
   protocol: YieldProtocol;
   /** Markets this adapter offers on a given chain (read). */
   listMarkets(chain: string): Promise<YieldMarket[]>;
+  /**
+   * Strict variant of {@link listMarkets}: THROWS on an RPC read failure
+   * instead of degrading APY to 0. Lets callers tell "couldn't read the
+   * market" from a real 0% APY. A genuinely absent chain still returns [].
+   */
+  listMarketsStrict(chain: string): Promise<YieldMarket[]>;
   /** A wallet's positions on a given chain (read). */
   getPositions(chain: string, walletAddress: string): Promise<YieldPosition[]>;
+  /**
+   * Strict variant of {@link getPositions}: THROWS on an RPC read failure
+   * instead of skipping the reserve / returning an empty list. Lets
+   * callers tell "couldn't read" from a real "no position". A genuinely
+   * empty position (0 balance) still reports as [].
+   */
+  getPositionsStrict(chain: string, walletAddress: string): Promise<YieldPosition[]>;
   /** Build a supply/withdraw plan (Phase 1). */
   buildSupply?(chain: string, walletAddress: string, asset: "USDC" | "USDT", amount: string): Promise<YieldExecutionPlan>;
   buildWithdraw?(chain: string, walletAddress: string, asset: "USDC" | "USDT", amount: string): Promise<YieldExecutionPlan>;

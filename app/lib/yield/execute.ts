@@ -15,7 +15,7 @@ import { kv } from "@vercel/kv";
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { decryptPrivateKey, resolveWallet, isKeystoreReady } from "@/app/lib/agentic-wallet";
-import { getApiKeyRecord } from "@/app/lib/db";
+import { getApiKeyRecord, getSubscription, hasMultichainScope } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { isAgenticChainKey, type AgenticChainKey, type AgenticToken } from "@/app/lib/agentic-wallet-sign";
 import { signYieldAction, type YieldAction } from "./sign";
@@ -39,6 +39,25 @@ interface YieldBody {
 }
 
 const IDEMPOTENCY_TTL_SEC = 30 * 60;
+
+/**
+ * Write the durable (no-TTL) settled marker with bounded retry. The
+ * settlement already landed on-chain, so a transient KV blip here must not
+ * be the reason a post-TTL retry double-fires. Returns false if all attempts
+ * fail — the caller then pages ops AND keeps the short-lived claim alive so a
+ * near-term replay is still blocked. Mirrors send route's writeSettledMarker.
+ */
+async function writeYieldSettledMarker(key: string, marker: unknown): Promise<boolean> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await kv.set(key, marker);
+      return true;
+    } catch {
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    }
+  }
+  return false;
+}
 
 function isPositiveDecimal(s: unknown): s is string {
   return typeof s === "string" && /^\d+(\.\d+)?$/.test(s) && Number(s) > 0;
@@ -115,6 +134,70 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
 
   const owner = await resolveOwner(body, action);
   if (owner instanceof NextResponse) return owner;
+
+  // Subscription / entitlement gate — mirror EXACTLY what /api/wallet/
+  // agentic/send requires to authorize a BNB payment. Yield previously
+  // only checked the apiKey was active+live (Mode C) or that the owner
+  // signature verified (owner-sig) — neither confirmed the owner holds a
+  // live trial/subscription, so an active Trial key (or any owner sig)
+  // could move funds via Yield even when an equivalent BNB /send would be
+  // gated. We bind to the SAME tier rule /send applies for the chain.
+  const sub = await getSubscription(owner);
+  // (1) Multichain scope. Yield is BNB-only today so this never trips, but
+  // mirror /send's gate verbatim so the two routes can't drift. /send also
+  // exempts withdraw-to-owner-EOA; Yield never sends to the owner's EOA
+  // (funds go into Aave / come back into the Agent Wallet), so that
+  // exception does not apply here.
+  if (chain !== "bnb" && !hasMultichainScope(sub)) {
+    return NextResponse.json(
+      { error: "SUBSCRIPTION_REQUIRED", message: "Multichain access requires a paid subscription." },
+      { status: 402 },
+    );
+  }
+  // (2) Live-key entitlement — the BNB tier rule /send enforces. The owner
+  // must hold a live trial OR paid apiKey; a presented Mode-C apiKey must be
+  // the CURRENT trial or paid key (not a stale/rotated one), and a Trial key
+  // may only settle on BNB.
+  const presentedApiKey =
+    typeof body.apiKey === "string" && body.apiKey.length > 0 ? body.apiKey : undefined;
+  if (presentedApiKey) {
+    const isTrial = presentedApiKey === sub?.trialApiKey;
+    const isPaid = presentedApiKey === sub?.apiKey;
+    if (!isTrial && !isPaid) {
+      return NextResponse.json(
+        {
+          error: "STALE_API_KEY",
+          message:
+            "This apiKey is no longer the live trial or multichain key. " +
+            "Rotate to the current key in your dashboard and retry.",
+        },
+        { status: 401 },
+      );
+    }
+    if (isTrial && chain !== "bnb") {
+      return NextResponse.json(
+        {
+          error: "TRIAL_BNB_ONLY",
+          message:
+            "Trial apiKeys can only settle on BNB Chain. Present the " +
+            "Multichain key (or omit apiKey + sign the owner challenge) " +
+            "for non-BNB actions.",
+        },
+        { status: 402 },
+      );
+    }
+  } else {
+    // Owner-sig path: same effective gate /send applies — the owner must
+    // have a live trial (BNB) or paid apiKey provisioned, else there is no
+    // entitlement to settle.
+    const effectiveKey = chain === "bnb" ? sub?.trialApiKey || sub?.apiKey : sub?.apiKey;
+    if (!effectiveKey) {
+      return NextResponse.json(
+        { error: "NO_API_KEY", message: "Activate a Q402 trial or subscription before using Q402 Yield." },
+        { status: 402 },
+      );
+    }
+  }
 
   const ready = isKeystoreReady();
   if (!ready.ok) {
@@ -219,10 +302,42 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       blockNumber: result.blockNumber ? String(result.blockNumber) : undefined,
       at: new Date().toISOString(),
     };
+    // Keep the short-lived claim at full TTL so the same fingerprint is
+    // blocked from re-firing for the next 30 min (the near-term replay
+    // window). This is also our fallback guard if the durable marker write
+    // below fails.
     await kv.set(idemKey, { at: Date.now(), status: "settled", txHash: result.txHash }, { ex: IDEMPOTENCY_TTL_SEC }).catch(() => {});
-    // Durable marker (no TTL) for cross-window replay protection.
+
+    // Durable marker (no TTL) for cross-window replay protection. This must
+    // NOT fail silently: if the write fails after an on-chain settlement, a
+    // request lost after the 30-min claim TTL could re-execute the same
+    // deposit (the MCP doesn't always send an idempotencyKey). Bounded-retry,
+    // then — on durable failure — page ops (same mechanism as the uncertain
+    // path) and RE-EXTEND the short-lived claim so a near-term replay is
+    // still blocked while ops reconciles. Fail loud, not silent.
     if (settledKey) {
-      await kv.set(settledKey, { txHash: result.txHash, action: receipt.action, amount: signed.amount, at: receipt.at }).catch(() => {});
+      const ok = await writeYieldSettledMarker(settledKey, {
+        txHash: result.txHash,
+        action: receipt.action,
+        amount: signed.amount,
+        at: receipt.at,
+      });
+      if (!ok) {
+        // Re-extend the short-lived claim (the durable guard didn't land, so
+        // this 30-min window is the only thing standing between a lost
+        // response and a double-deposit). Best-effort — if KV is fully down
+        // even this may fail, but the ops alert below ensures a human reacts.
+        await kv
+          .set(idemKey, { at: Date.now(), status: "settled", txHash: result.txHash }, { ex: IDEMPOTENCY_TTL_SEC })
+          .catch(() => {});
+        await sendOpsAlert(
+          `Q402 Yield DURABLE marker write failed (after retries) — wallet ${walletAddr} ` +
+            `${signed.amount} ${token} ${action} on ${chain}, tx ${result.txHash}. ` +
+            `Settled on-chain but idempotency NOT durably recorded; a retry after the ` +
+            `30-min claim TTL could re-execute the same action — verify before replay.`,
+          "critical",
+        ).catch(() => {});
+      }
     }
 
     return NextResponse.json({ status: "ok", ...receipt });
