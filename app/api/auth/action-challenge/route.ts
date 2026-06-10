@@ -62,6 +62,12 @@ const ALLOWED_ACTIONS = new Set([
   // wallet popup. (Pre-existing — keys.rotate moved to intent-auth but
   // was never allowlisted.)
   "keys.rotate",
+  // Q402 Yield — intent { walletId, chain, token, amount }. Same missing-
+  // allowlist failure mode as hooks_config: without these, the dashboard
+  // Earn deposit/withdraw getActionAuth returns null and no wallet popup
+  // opens. Allowlisted at build time alongside the routes.
+  "agentic.yield_deposit",
+  "agentic.yield_withdraw",
   "agentic.restore",
   "agentic.recurring.create",
   "agentic.recurring.update",

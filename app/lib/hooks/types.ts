@@ -208,4 +208,26 @@ export interface WalletHookConfig {
     /** Amount (USD) at/above which the payment needs human approval. */
     perCallApprovalUsd?: number;
   };
+  /**
+   * Q402 Yield deposit guardrails. Enforced SERVER-SIDE in
+   * enforceYieldPolicy before any deposit ("supply") moves funds into a
+   * lending protocol. Withdrawals are never gated (returning funds is
+   * always allowed), so these fields only constrain deposits.
+   *
+   *   allowedAssets     — which stablecoins may be supplied. Absent/empty
+   *                       = the hard USDC/USDT floor only.
+   *   allowedProtocols  — which yield protocols may be used. This build is
+   *                       Aave-only; a list that excludes "aave" denies.
+   *   maxAllocationPct  — ceiling (0–100) on the share of the wallet's
+   *                       stablecoin holdings (liquid + already supplied)
+   *                       that may sit in yield after the deposit. Guards
+   *                       against over-allocating idle funds.
+   */
+  yieldPolicy?: {
+    enabled?: boolean;
+    allowedAssets?: ("USDC" | "USDT")[];
+    allowedProtocols?: ("aave" | "morpho")[];
+    /** 0–100. Max % of total stablecoins allowed in yield post-deposit. */
+    maxAllocationPct?: number;
+  };
 }

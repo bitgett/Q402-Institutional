@@ -119,6 +119,38 @@ export function validateWalletHookConfig(config: WalletHookConfig): void {
       }
     }
   }
+  if (config.yieldPolicy) {
+    const yp = config.yieldPolicy;
+    if (yp.enabled !== undefined && typeof yp.enabled !== "boolean") {
+      throw new Error("yieldPolicy.enabled must be boolean");
+    }
+    if (yp.allowedAssets !== undefined) {
+      if (!Array.isArray(yp.allowedAssets)) {
+        throw new Error("yieldPolicy.allowedAssets must be an array");
+      }
+      for (const a of yp.allowedAssets) {
+        if (a !== "USDC" && a !== "USDT") {
+          throw new Error(`yieldPolicy.allowedAssets has an unsupported asset: ${a}`);
+        }
+      }
+    }
+    if (yp.allowedProtocols !== undefined) {
+      if (!Array.isArray(yp.allowedProtocols)) {
+        throw new Error("yieldPolicy.allowedProtocols must be an array");
+      }
+      for (const p of yp.allowedProtocols) {
+        if (p !== "aave" && p !== "morpho") {
+          throw new Error(`yieldPolicy.allowedProtocols has an unsupported protocol: ${p}`);
+        }
+      }
+    }
+    if (yp.maxAllocationPct !== undefined) {
+      if (typeof yp.maxAllocationPct !== "number" || !Number.isFinite(yp.maxAllocationPct)
+        || yp.maxAllocationPct < 0 || yp.maxAllocationPct > 100) {
+        throw new Error("yieldPolicy.maxAllocationPct must be a number in [0, 100]");
+      }
+    }
+  }
 }
 
 /**

@@ -20,8 +20,8 @@
  *   GET /api/wallet/agentic/yield/reserves?chain=bnb   (public)
  */
 
-import { useEffect, useState } from "react";
-import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
+import { useCallback, useEffect, useState } from "react";
+import { getAuthCreds, getActionAuth, clearAuthCache } from "@/app/lib/auth-client";
 
 interface Position {
   protocol: string;
@@ -81,66 +81,67 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        // Positions — authed read with the cached session sig (no popup
-        // if a session already exists), exactly like the Hooks modal.
-        const creds = await getAuthCreds(ownerAddress, signMessage);
-        if (!creds) {
-          if (!cancelled) { setError("Sign in to load your Earn positions."); setLoading(false); }
-          return;
-        }
-        const qs = new URLSearchParams({
-          walletId,
-          address: ownerAddress,
-          nonce: creds.nonce,
-          signature: creds.signature,
-        });
-
-        // Run both reads in parallel: positions (authed) + public markets.
-        const [posRes, mktRes] = await Promise.all([
-          fetch(`/api/wallet/agentic/yield/positions?${qs.toString()}`),
-          fetch(`/api/wallet/agentic/yield/reserves?chain=bnb`),
-        ]);
-
-        if (cancelled) return;
-
-        if (posRes.status === 401) {
-          // Session sig expired — wipe it so the next surface mints a
-          // fresh nonce instead of looping on stale creds.
-          clearAuthCache(ownerAddress);
-          setError("Session expired — refresh to reload Earn.");
-          setLoading(false);
-          return;
-        }
-        if (posRes.ok) {
-          const data = (await posRes.json()) as PositionsPayload;
-          if (!cancelled) {
-            setPositions({
-              walletId: data.walletId,
-              positions: data.positions ?? [],
-              totalSuppliedUsd: data.totalSuppliedUsd ?? 0,
-              asOf: data.asOf,
-            });
-          }
-        } else {
-          const data = await posRes.json().catch(() => ({}));
-          if (!cancelled) setError(data.error ?? `Couldn't load Earn positions (HTTP ${posRes.status}).`);
-        }
-
-        if (mktRes.ok) {
-          const data = (await mktRes.json()) as { markets?: Market[] };
-          if (!cancelled) setMarkets(data.markets ?? []);
-        }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
+  // Load positions (authed) + public markets. Reused on mount and after a
+  // successful deposit/withdraw so the supplied total reflects the new
+  // on-chain state.
+  const loadPositions = useCallback(async () => {
+    try {
+      setError(null);
+      // Positions — authed read with the cached session sig (no popup
+      // if a session already exists), exactly like the Hooks modal.
+      const creds = await getAuthCreds(ownerAddress, signMessage);
+      if (!creds) {
+        setError("Sign in to load your Earn positions.");
+        setLoading(false);
+        return;
       }
-    })();
-    return () => { cancelled = true; };
+      const qs = new URLSearchParams({
+        walletId,
+        address: ownerAddress,
+        nonce: creds.nonce,
+        signature: creds.signature,
+      });
+
+      // Run both reads in parallel: positions (authed) + public markets.
+      const [posRes, mktRes] = await Promise.all([
+        fetch(`/api/wallet/agentic/yield/positions?${qs.toString()}`),
+        fetch(`/api/wallet/agentic/yield/reserves?chain=bnb`),
+      ]);
+
+      if (posRes.status === 401) {
+        // Session sig expired — wipe it so the next surface mints a
+        // fresh nonce instead of looping on stale creds.
+        clearAuthCache(ownerAddress);
+        setError("Session expired — refresh to reload Earn.");
+        setLoading(false);
+        return;
+      }
+      if (posRes.ok) {
+        const data = (await posRes.json()) as PositionsPayload;
+        setPositions({
+          walletId: data.walletId,
+          positions: data.positions ?? [],
+          totalSuppliedUsd: data.totalSuppliedUsd ?? 0,
+          asOf: data.asOf,
+        });
+      } else {
+        const data = await posRes.json().catch(() => ({}));
+        setError(data.error ?? `Couldn't load Earn positions (HTTP ${posRes.status}).`);
+      }
+
+      if (mktRes.ok) {
+        const data = (await mktRes.json()) as { markets?: Market[] };
+        setMarkets(data.markets ?? []);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [ownerAddress, walletId, signMessage]);
+
+  useEffect(() => {
+    void loadPositions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownerAddress, walletId]);
 
@@ -166,7 +167,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
         <div className="flex items-center gap-2">
           <span className={labelCls}>Earn · Q402 Yield</span>
           <span className="text-[9px] uppercase tracking-widest text-emerald-400/70 font-semibold">
-            Read-only
+            Aave V3
           </span>
         </div>
         {hasPositions && positions && (
@@ -213,8 +214,238 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
           <span className="text-emerald-300 font-medium">
             {bestApy !== null ? `~${pct(bestApy)}` : "yield"}
           </span>{" "}
-          on idle USDC / USDT via Aave —{" "}
-          <span className="text-white/40">coming soon</span>.
+          on idle USDC / USDT via Aave.
+        </div>
+      )}
+
+      {/* Deposit / Withdraw — gasless, owner session-sig auth. Hidden
+          loudly: if the v2 contract isn't deployed the first action gets a
+          503 yield_not_enabled and the controls collapse to "Coming soon"
+          instead of throwing at the user. */}
+      {!loading && (
+        <AgenticWalletEarnActions
+          ownerAddress={ownerAddress}
+          walletId={walletId}
+          signMessage={signMessage}
+          onChanged={() => { void loadPositions(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── AgenticWalletEarnActions ────────────────────────────────────────────────
+//
+// Deposit / Withdraw controls for one Agent Wallet's Aave V3 position.
+// Both writes are intent-bound: getActionAuth mints a single-use challenge
+// over the exact { walletId, chain, token, amount } tuple, the wallet signs
+// it, and the route rebuilds the same canonical bytes to verify. Mirrors
+// the Hooks modal's write path exactly.
+//
+// "Coming soon" state: the v2 yield contract isn't live on every chain yet.
+// The route returns 503 { error: "yield_not_enabled" }; we catch that, flip
+// the section to a disabled "coming soon" notice, and remember it for the
+// rest of the session so the controls don't keep prompting wallet popups
+// against a feature that can't settle.
+
+function AgenticWalletEarnActions({
+  ownerAddress,
+  walletId,
+  signMessage,
+  onChanged,
+}: {
+  ownerAddress: string;
+  walletId: string;
+  signMessage: (message: string) => Promise<string | null>;
+  onChanged: () => void;
+}) {
+  const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
+  const [token, setToken] = useState<"USDC" | "USDT">("USDC");
+  const [amount, setAmount] = useState("");
+  const [maxWithdraw, setMaxWithdraw] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<{ action: string; txHash: string } | null>(null);
+  // Flips to true once a route returns 503 yield_not_enabled — disables the
+  // controls for the rest of the session (the contract isn't deployed).
+  const [comingSoon, setComingSoon] = useState(false);
+
+  const action = mode === "deposit" ? "agentic.yield_deposit" : "agentic.yield_withdraw";
+  const endpoint =
+    mode === "deposit"
+      ? "/api/wallet/agentic/yield/deposit"
+      : "/api/wallet/agentic/yield/withdraw";
+
+  const isMax = mode === "withdraw" && maxWithdraw;
+  // amount string sent to BOTH the intent (signed) and the body — must match
+  // the server's canonical rebuild. "max" is only valid for withdraw.
+  const amountValue = isMax ? "max" : amount.trim();
+  const amountValid = isMax || (/^\d+(\.\d+)?$/.test(amountValue) && Number(amountValue) > 0);
+
+  async function submit() {
+    if (busy || comingSoon) return;
+    setErr(null);
+    setOkMsg(null);
+    if (!amountValid) {
+      setErr("Enter a positive amount.");
+      return;
+    }
+    setBusy(true);
+    try {
+      // Intent MUST be { walletId, chain, token, amount } as string values —
+      // the server's requireIntentAuth rebuilds this exact tuple.
+      const intent: Record<string, string> = {
+        walletId,
+        chain: "bnb",
+        token,
+        amount: amountValue,
+      };
+      const auth = await getActionAuth(ownerAddress, action, intent, signMessage);
+      if (!auth) {
+        setErr("Sign the Earn challenge in your wallet to authorize.");
+        return;
+      }
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerAddress,
+          nonce: auth.challenge,
+          signature: auth.signature,
+          walletId,
+          chain: "bnb",
+          token,
+          amount: amountValue,
+        }),
+      });
+      if (res.status === 401) {
+        clearAuthCache(ownerAddress);
+        setErr("Session expired — refresh and retry.");
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      // Deploy-gated: contract not live on this chain yet. Collapse the
+      // controls into a soft "coming soon" rather than erroring loudly.
+      if (res.status === 503 && data.error === "yield_not_enabled") {
+        setComingSoon(true);
+        return;
+      }
+      if (!res.ok) {
+        setErr(data.message ?? data.error ?? `Action failed (HTTP ${res.status}).`);
+        return;
+      }
+      setOkMsg({ action: mode === "deposit" ? "Deposited" : "Withdrew", txHash: String(data.txHash ?? "") });
+      setAmount("");
+      setMaxWithdraw(false);
+      onChanged();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const labelCls = "text-[10px] text-white/65 uppercase tracking-widest font-medium";
+  const inputStyle = { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" } as const;
+
+  if (comingSoon) {
+    return (
+      <div className="mt-3 pt-3 border-t" style={{ borderColor: "rgba(74,222,128,0.12)" }}>
+        <div className="text-[11.5px] text-white/45">
+          Deposit / Withdraw —{" "}
+          <span className="text-emerald-300/70 font-medium">coming soon</span>. Q402 Yield isn&apos;t
+          enabled on this chain yet.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "rgba(74,222,128,0.12)" }}>
+      {/* Deposit / Withdraw tab toggle */}
+      <div className="flex items-center gap-1.5">
+        {(["deposit", "withdraw"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => { setMode(m); setErr(null); setOkMsg(null); }}
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition-colors"
+            style={
+              mode === m
+                ? { background: "rgba(74,222,128,0.14)", color: "#86efac", border: "1px solid rgba(74,222,128,0.3)" }
+                : { background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.07)" }
+            }
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-stretch gap-1.5">
+        {/* Amount */}
+        <div className="flex-1">
+          <input
+            value={isMax ? "" : amount}
+            onChange={(e) => setAmount(e.target.value)}
+            disabled={busy || isMax}
+            inputMode="decimal"
+            placeholder={isMax ? "max (full position)" : "0.00"}
+            aria-label="Amount"
+            className="w-full rounded-md border px-2.5 py-1.5 text-[12.5px] font-mono text-white placeholder-white/25 disabled:opacity-50"
+            style={inputStyle}
+          />
+        </div>
+        {/* Token select */}
+        <select
+          value={token}
+          onChange={(e) => setToken(e.target.value === "USDT" ? "USDT" : "USDC")}
+          disabled={busy}
+          aria-label="Token"
+          className="rounded-md border px-2 py-1.5 text-[12px] font-mono text-white disabled:opacity-50"
+          style={inputStyle}
+        >
+          <option value="USDC" style={{ background: "#0F1929", color: "#EAF2EC" }}>USDC</option>
+          <option value="USDT" style={{ background: "#0F1929", color: "#EAF2EC" }}>USDT</option>
+        </select>
+        {/* Submit */}
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy || !amountValid}
+          className="px-3 py-1.5 rounded-md text-[12px] font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed capitalize"
+        >
+          {busy ? "…" : mode}
+        </button>
+      </div>
+
+      {/* Max toggle — withdraw only */}
+      {mode === "withdraw" && (
+        <label className={`flex items-center gap-1.5 cursor-pointer ${labelCls} normal-case`}>
+          <input
+            type="checkbox"
+            checked={maxWithdraw}
+            onChange={(e) => { setMaxWithdraw(e.target.checked); setErr(null); }}
+            disabled={busy}
+            className="accent-emerald-400 w-3.5 h-3.5"
+          />
+          <span className="text-[11px] text-white/55 tracking-normal normal-case">Withdraw full position (max)</span>
+        </label>
+      )}
+
+      {err && <div className="text-[11px] text-red-300/85">{err}</div>}
+      {okMsg && (
+        <div className="text-[11px] text-emerald-300/90">
+          {okMsg.action}.{" "}
+          {okMsg.txHash ? (
+            <a
+              href={`https://bscscan.com/tx/${okMsg.txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline"
+            >
+              {okMsg.txHash.slice(0, 10)}…{okMsg.txHash.slice(-6)} ↗
+            </a>
+          ) : null}
         </div>
       )}
     </div>
