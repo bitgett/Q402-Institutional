@@ -106,8 +106,9 @@ contract Q402PaymentImplementationBNBv2 {
     error NonceAlreadyUsed();
     error TransferFailed();
     error InvalidSignatureLength();
-    error CallerNotFacilitator();
+    error UnauthorizedFacilitator();
     error OwnerMismatch();
+    error InvalidOwner();
     error BadAmount();
     error PoolNotAllowed();
     error AssetNotAllowed();
@@ -119,13 +120,13 @@ contract Q402PaymentImplementationBNBv2 {
         address owner, address facilitator, address token, address recipient,
         uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external {
-        // Match the DEPLOYED v1 transfer guards. The q402-avalanche source
-        // this draft was seeded from OMITTED these, but the live BNB impl
-        // enforces them — without them anyone could submit a self-signed
-        // witness and move a DIFFERENT wallet's funds delegated to this
-        // impl. (P0 from review. Reconcile against deployed bytecode before
-        // shipping; the Aave functions below already carry the same guards.)
-        if (msg.sender != facilitator) revert CallerNotFacilitator();
+        // Transfer path is the DEPLOYED v1 guard set, verified line-for-line
+        // against BscScan-verified 0x6cF4aD62C208b6494a55a1494D497713ba013dFa
+        // (Q402PaymentImplementationBNB): facilitator-only, zero-owner reject,
+        // owner==address(this) binding, deadline, nonce. Only the Aave
+        // functions below are new in v2.
+        if (msg.sender != facilitator) revert UnauthorizedFacilitator();
+        if (owner == address(0)) revert InvalidOwner();
         if (owner != address(this)) revert OwnerMismatch();
         if (block.timestamp > deadline) revert SignatureExpired();
         if (usedNonces[owner][nonce]) revert NonceAlreadyUsed();
@@ -155,7 +156,7 @@ contract Q402PaymentImplementationBNBv2 {
         address owner, address facilitator, address pool, address asset,
         uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external nonReentrant {
-        if (msg.sender != facilitator)               revert CallerNotFacilitator();
+        if (msg.sender != facilitator)               revert UnauthorizedFacilitator();
         if (owner != address(this))                  revert OwnerMismatch();
         if (block.timestamp > deadline)              revert SignatureExpired();
         if (amount == 0 || amount == type(uint256).max) revert BadAmount();
@@ -190,7 +191,7 @@ contract Q402PaymentImplementationBNBv2 {
         address owner, address facilitator, address pool, address asset,
         uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external nonReentrant returns (uint256 withdrawn) {
-        if (msg.sender != facilitator)  revert CallerNotFacilitator();
+        if (msg.sender != facilitator)  revert UnauthorizedFacilitator();
         if (owner != address(this))     revert OwnerMismatch();
         if (block.timestamp > deadline) revert SignatureExpired();
         if (amount == 0)                revert BadAmount();   // max IS allowed (withdraw-all)
@@ -253,11 +254,11 @@ contract Q402PaymentImplementationBNBv2 {
             v := byte(0, calldataload(add(sig.offset, 64)))
         }
         if (v < 27) v += 27;
-        require(v == 27 || v == 28, "Q402: invalid v");
-        // reject high-s malleable signatures
-        require(uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0, "Q402: bad s");
+        if (v != 27 && v != 28) revert InvalidSignature();
+        // reject high-s malleable signatures (same bound as deployed v1)
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) revert InvalidSignature();
         address signer = ecrecover(digest, v, r, s);
-        require(signer != address(0), "Q402: zero signer");
+        if (signer == address(0)) revert InvalidSignature();
         return signer;
     }
 }
