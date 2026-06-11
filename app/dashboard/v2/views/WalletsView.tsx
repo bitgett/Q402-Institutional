@@ -60,6 +60,8 @@ import { AgenticWalletBridgeModal } from "@/app/dashboard/components/AgenticWall
 import { AgenticWalletLimitsModal } from "@/app/dashboard/components/AgenticWalletLimitsModal";
 import { AgenticWalletHooksModal } from "@/app/dashboard/components/AgenticWalletHooksModal";
 import { AgenticWalletAgentModal } from "@/app/dashboard/components/AgenticWalletAgentModal";
+import { AgenticWalletWithdrawModal, type WithdrawBucket } from "@/app/dashboard/components/AgenticWalletWithdrawModal";
+import { AgenticWalletDangerZone } from "@/app/dashboard/components/AgenticWalletDangerZone";
 import type { WalletHookConfig } from "@/app/lib/hooks/types";
 
 export interface WalletsViewProps {
@@ -333,6 +335,10 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
   const [limitsOpen, setLimitsOpen] = useState(false);
   const [hooksOpen, setHooksOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
+  // Withdraw / sweep — the picker opens, then a chosen bucket hands off
+  // to the reused SendModal (the exact old-Card sweep flow).
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawBucket, setWithdrawBucket] = useState<WithdrawBucket | null>(null);
   const [copied, setCopied] = useState(false);
 
   const addr = ownerAddress;
@@ -854,6 +860,16 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                     Bridge{!demoMode && !multichainActive && " (Paid)"}
                     <small style={styles.actionSmall}>CCIP</small>
                   </button>
+                  <button
+                    type="button"
+                    disabled={demoMode || archived}
+                    onClick={() => setWithdrawOpen(true)}
+                    title={demoMode ? "Connect your wallet" : "Sweep a chain/token bucket back to your wallet"}
+                    style={{ ...styles.action, ...(demoMode || archived ? styles.actionDisabled : null) }}
+                  >
+                    Withdraw
+                    <small style={styles.actionSmall}>Sweep out</small>
+                  </button>
                 </div>
 
                 {/* MCP command bar */}
@@ -1020,7 +1036,31 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   </div>
                 </section>
               </div>
+
+              {/* Danger zone — export key / archive / restore. Only ever
+                  acts on a REAL connected wallet (never a demo wallet);
+                  brings its own red styling, which we intentionally keep
+                  red (danger should not read as the yellow accent). In
+                  demo mode the block below renders a muted hint instead. */}
+              {!demoMode && activeWallet && (
+                <div style={styles.dangerZone}>
+                  <AgenticWalletDangerZone
+                    wallet={activeWallet}
+                    address={addr!}
+                    signMessage={signMessage}
+                    onChanged={afterWrite}
+                    balanceUsd={balances[activeWallet.walletId]?.totalUsd ?? null}
+                    onRequestBalanceRefresh={() => afterWrite()}
+                  />
+                </div>
+              )}
             </>
+          )}
+
+          {demoMode && (
+            <div style={styles.dangerHint}>
+              Connect your wallet to manage / export / archive this wallet.
+            </div>
           )}
         </Surface>
 
@@ -1251,6 +1291,40 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
           }}
         />
       )}
+      {activeWallet && withdrawOpen && (
+        <AgenticWalletWithdrawModal
+          walletAddress={activeWallet.address}
+          walletId={activeWallet.walletId}
+          ownerAddress={addr ?? activeWallet.ownerAddr}
+          signMessage={signMessage}
+          perTxMaxUsd={activeWallet.perTxMaxUsd}
+          onClose={() => setWithdrawOpen(false)}
+          onPickBucket={(bucket) => {
+            setWithdrawOpen(false);
+            setWithdrawBucket(bucket);
+          }}
+        />
+      )}
+      {activeWallet && withdrawBucket && (
+        <AgenticWalletSendModal
+          walletAddress={activeWallet.address}
+          walletId={activeWallet.walletId}
+          ownerAddress={addr ?? activeWallet.ownerAddr}
+          signMessage={signMessage}
+          prefillTo={addr ?? activeWallet.ownerAddr}
+          prefillChain={withdrawBucket.chain}
+          prefillToken={withdrawBucket.token}
+          prefillAmount={withdrawBucket.amount}
+          titleOverride={`Withdraw ${withdrawBucket.token} on ${withdrawBucket.chain}`}
+          perTxMaxUsd={activeWallet.perTxMaxUsd}
+          dailyLimitUsd={activeWallet.dailyLimitUsd}
+          onSent={() => {
+            setWithdrawBucket(null);
+            afterWrite();
+          }}
+          onClose={() => setWithdrawBucket(null)}
+        />
+      )}
     </V2AccentScope>
   );
 }
@@ -1422,7 +1496,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   actions: {
     display: "grid",
-    gridTemplateColumns: "1.45fr 1fr 1fr 1fr",
+    gridTemplateColumns: "1.45fr 1fr 1fr 1fr 1fr",
     gap: 8,
     marginTop: 20,
     position: "relative",
@@ -1603,5 +1677,15 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     padding: 0,
     textAlign: "left",
+  },
+  // Danger zone wrapper — small top margin so the reused (red) DangerZone
+  // sits at the bottom of the console without bleeding into the content
+  // above. Its own red styling is intentionally preserved.
+  dangerZone: { margin: "0 25px 23px" },
+  dangerHint: {
+    margin: "0 25px 23px",
+    color: v2.muted,
+    fontSize: fs.label,
+    lineHeight: 1.6,
   },
 };
