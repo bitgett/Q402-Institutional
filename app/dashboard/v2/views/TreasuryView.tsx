@@ -172,11 +172,11 @@ const DEMO_ACTIVITY: Array<{ chain: string; amount: number; date: string }> = [
 
 // ── Context sub-nav (scroll-spy) ─────────────────────────────────────────────
 const SECTIONS = [
-  { id: "overview", label: "Capital overview" },
-  { id: "gastank",  label: "Gas Tank" },
-  { id: "yield",    label: "Q402 Yield" },
-  { id: "bridge",   label: "CCIP Bridge" },
-  { id: "deposits", label: "Deposits" },
+  { id: "overview", label: "Capital overview", hint: "Stablecoins · yield · gas" },
+  { id: "gastank",  label: "Gas Tank",         hint: "Relayer gas across chains" },
+  { id: "yield",    label: "Q402 Yield",       hint: "Earn on idle stablecoins" },
+  { id: "bridge",   label: "CCIP Bridge",      hint: "Cross-chain via Chainlink" },
+  { id: "deposits", label: "Deposits",         hint: "Top up per network" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -416,21 +416,22 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                 <button
                   key={s.id}
                   type="button"
+                  className="v2-trans"
                   onClick={() => scrollTo(s.id)}
                   style={{
-                    border: 0,
+                    width: "100%",
                     textAlign: "left",
-                    background: on ? "var(--v2-accent-soft)" : "transparent",
-                    color: on ? v2.yellow : v2.muted,
-                    padding: "9px 11px",
-                    borderRadius: 9,
-                    fontSize: fs.body,
-                    fontWeight: on ? 600 : 400,
+                    border: on ? `1px solid ${v2.line}` : "1px solid transparent",
+                    background: on ? "rgba(247,202,22,.07)" : "transparent",
+                    borderRadius: 10,
+                    padding: "10px 13px",
                     cursor: "pointer",
-                    borderLeft: on ? `2px solid ${v2.yellow}` : "2px solid transparent",
                   }}
                 >
-                  {s.label}
+                  <div style={{ fontSize: fs.body, fontWeight: on ? 700 : 500, color: on ? v2.yellow : v2.text }}>
+                    {s.label}
+                  </div>
+                  <div style={{ fontSize: fs.label, color: v2.muted2, marginTop: 2 }}>{s.hint}</div>
                 </button>
               );
             })}
