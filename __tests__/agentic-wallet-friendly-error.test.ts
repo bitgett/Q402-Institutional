@@ -32,7 +32,7 @@ describe("friendlyError", () => {
     const fe = friendlyError(402, { error: "Insufficient gas tank on eth. Deposit native tokens to your gas tank." });
     expect(fe.headline).toMatch(/Gas Tank is empty on eth/);
     expect(fe.headline).not.toMatch(/Multichain subscription/);
-    expect(fe.next?.href).toBe("#gas-tank");
+    expect(fe.next?.href).toBe("/dashboard?view=treasury");
   });
 
   it("maps the relay's generic 400 to an Agent-Wallet-balance hint instead of a bare HTTP code", () => {
