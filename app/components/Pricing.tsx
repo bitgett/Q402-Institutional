@@ -171,7 +171,7 @@ export default function Pricing() {
         <div className="mt-8 rounded-2xl border border-white/8 px-8 py-6 flex flex-col md:flex-row items-center justify-between gap-4" style={{ background: "linear-gradient(135deg, rgba(74,229,74,0.04) 0%, rgba(255,255,255,0.01) 100%)" }}>
           <div>
             <p className="text-sm font-semibold text-white/80">Running AI agents at scale?</p>
-            <p className="text-xs text-white/35 mt-0.5">Unlimited TX, Gas Tank pre-pay, all 10 chains. Built for autonomous agent pipelines.</p>
+            <p className="text-xs text-white/35 mt-0.5">High-volume sponsored-TX quota + your own pre-funded Gas Tank for multichain gas, all 10 chains. Built for autonomous agent pipelines.</p>
           </div>
           <a href="/agents" className="flex-shrink-0 border border-green-400/40 text-green-400 hover:bg-green-400/10 text-sm font-semibold px-5 py-2.5 rounded-full transition-all whitespace-nowrap">
             Agent Plan →

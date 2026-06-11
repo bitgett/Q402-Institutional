@@ -52,6 +52,15 @@ const mockKv = vi.hoisted(() => ({
     return 1;
   }),
   get: vi.fn(async (key: string) => kvStrStore.get(key) ?? null),
+  // Lua compare-and-delete used by releaseWalletChainLock — only deletes when
+  // the stored token matches ARGV[1] (the caller's lease).
+  eval: vi.fn(async (_script: string, keys: string[], args: string[]) => {
+    if (kvStrStore.get(keys[0]) === args[0]) {
+      kvStrStore.delete(keys[0]);
+      return 1;
+    }
+    return 0;
+  }),
 }));
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
 
@@ -293,29 +302,45 @@ describe("chargeYieldOpBudget — daily yield-op cap", () => {
 });
 
 // ── FIX 3 — per-wallet+chain settle lock (cap-race + 7702 nonce-race) ──────
-describe("acquireWalletChainLock — serialises one wallet+chain", () => {
+describe("acquireWalletChainLock — serialises one wallet+chain (safe-lease)", () => {
   const WALLET_A = "0x" + "d".repeat(40);
   const WALLET_B = "0x" + "e".repeat(40);
 
-  it("grants the lock once, then refuses a concurrent holder", async () => {
-    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
-    // Second acquire while held → false (SET NX miss).
-    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(false);
+  it("grants a token once, then refuses a concurrent holder", async () => {
+    const tok = await acquireWalletChainLock(WALLET_A, "bnb");
+    expect(typeof tok).toBe("string");
+    // Second acquire while held → null (SET NX miss).
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBeNull();
   });
 
-  it("re-grants after release", async () => {
-    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
-    await releaseWalletChainLock(WALLET_A, "bnb");
-    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
+  it("re-grants after a token-matched release", async () => {
+    const tok = await acquireWalletChainLock(WALLET_A, "bnb");
+    expect(tok).not.toBeNull();
+    await releaseWalletChainLock(WALLET_A, "bnb", tok);
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).not.toBeNull();
+  });
+
+  it("ABA-safe: a stale token release does NOT drop the fresh holder's lock", async () => {
+    // Holder A acquires, then (simulating TTL expiry) the key is cleared and
+    // holder B takes a fresh lease. A's release with its OLD token must NOT
+    // delete B's lock — compare-and-del refuses the mismatched token.
+    const tokA = await acquireWalletChainLock(WALLET_A, "bnb");
+    kvStrStore.delete("aw:wc-lock:" + WALLET_A.toLowerCase() + ":bnb"); // TTL expiry
+    const tokB = await acquireWalletChainLock(WALLET_A, "bnb");
+    expect(tokB).not.toBeNull();
+    expect(tokB).not.toBe(tokA);
+    await releaseWalletChainLock(WALLET_A, "bnb", tokA); // stale — must no-op
+    // B's lock still held → a new acquire is refused.
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBeNull();
   });
 
   it("is scoped per chain — same wallet, different chain, both lock", async () => {
-    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
-    expect(await acquireWalletChainLock(WALLET_A, "eth")).toBe(true);
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).not.toBeNull();
+    expect(await acquireWalletChainLock(WALLET_A, "eth")).not.toBeNull();
   });
 
   it("is scoped per wallet — different wallets don't contend", async () => {
-    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
-    expect(await acquireWalletChainLock(WALLET_B, "bnb")).toBe(true);
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).not.toBeNull();
+    expect(await acquireWalletChainLock(WALLET_B, "bnb")).not.toBeNull();
   });
 });
