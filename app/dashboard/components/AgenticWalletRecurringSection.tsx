@@ -274,7 +274,7 @@ export function AgenticWalletRecurringSection({
             </div>
           </div>
           <div className="text-[11.5px] text-white/82 leading-snug">
-            Schedule weekly payouts, monthly subscriptions, or treasury sweeps. Your AI fires each one with a cancel window first.
+            Payouts, subscriptions, or treasury sweeps — your AI fires each with a cancel window first.
           </div>
         </div>
         <button

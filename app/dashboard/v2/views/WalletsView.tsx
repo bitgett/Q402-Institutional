@@ -129,6 +129,12 @@ function fmtUsd(n: number | null | undefined): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Plan name for the hero badge — "enterprise_flex" reads as "Enterprise". */
+function planLabel(plan: string): string {
+  const key = plan === "enterprise_flex" ? "enterprise" : plan;
+  return key ? key.charAt(0).toUpperCase() + key.slice(1) : "";
+}
+
 function agentIdFromTag(tag: string | null | undefined): string | null {
   if (typeof tag !== "string" || tag.length === 0) return null;
   const candidate = tag.includes(":") ? tag.split(":").pop() ?? "" : tag;
@@ -1037,6 +1043,11 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           : "Trial · BNB"}
                       </span>
                       {agentNum && <span style={styles.badge}>ERC-8004 #{agentNum}</span>}
+                      {(identity.subscription?.amountUSD ?? 0) > 0 && (
+                        <span style={{ ...styles.badge, ...styles.badgePlan }}>
+                          {planLabel(identity.plan)} Plan · ${identity.subscription?.amountUSD} paid
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div style={styles.heroBal}>
@@ -1977,6 +1988,12 @@ const styles: Record<string, React.CSSProperties> = {
     color: v2.yellow,
     borderColor: "rgba(247,202,22,.30)",
     background: "rgba(247,202,22,.08)",
+  },
+  badgePlan: {
+    color: v2.yellow,
+    fontWeight: 700,
+    borderColor: "rgba(247,202,22,.35)",
+    background: "rgba(247,202,22,.10)",
   },
   heroBal: { textAlign: "right", zIndex: 1, flexShrink: 0 },
   heroBalLabel: {
