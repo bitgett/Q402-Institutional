@@ -58,7 +58,7 @@ export function friendlyError(status: number, body: BackendError): FriendlyError
       headline:
         `Your Gas Tank is empty on ${chain}. Paid plans pay relay gas from the Gas Tank; ` +
         `trial-tier gas sponsorship covers BNB only.`,
-      next: { label: "Top up Gas Tank", href: "#gas-tank" },
+      next: { label: "Top up Gas Tank", href: "/dashboard?view=treasury" },
     };
   }
 
@@ -97,7 +97,7 @@ export function friendlyError(status: number, body: BackendError): FriendlyError
       headline:
         "Your Agent Wallet's EIP-7702 delegation is blocking native funds. Clear it from the " +
         "bridge modal before retrying.",
-      next: { label: "Clear delegation", href: "/dashboard#clear-delegation" },
+      next: { label: "Clear delegation", href: "/dashboard?view=wallets" },
     };
   }
   if (code === "AGENT_WALLET_NOT_DELEGATED") {
@@ -126,7 +126,7 @@ export function friendlyError(status: number, body: BackendError): FriendlyError
       // resolve when the anchor lives on the parent dashboard, not
       // inside the modal viewport. The bridge modal's onClose hook
       // fires when a CTA navigates away.
-      next: { label: "Top up Gas Tank", href: "/dashboard#gas-tank" },
+      next: { label: "Top up Gas Tank", href: "/dashboard?view=treasury" },
     };
   }
   if (code === "AUTOFUND_DEBIT_FAILED") {

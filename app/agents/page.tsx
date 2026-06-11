@@ -10,7 +10,7 @@
  *
  * No pricing tier on this page; the trial promise (2,000 sponsored TX on
  * BNB Chain) appears in the proof row, and the page funnels into the
- * dashboard's Agent tab.
+ * dashboard's Wallets view.
  */
 
 import { useEffect, useState } from "react";

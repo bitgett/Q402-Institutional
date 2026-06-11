@@ -328,7 +328,7 @@ const result = await q402.pay({
 
             <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2b · Multichain key — full 10-chain payment</h3>
             <CodeBlock lang="javascript" code={`// Multichain keys work across all supported chains. Each chain needs
-// a funded Gas Tank — deposit at /dashboard → Gas Tank.
+// a funded Gas Tank — deposit at /dashboard → Treasury.
 const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
   chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective" | "monad" | "scroll" | "arbitrum"

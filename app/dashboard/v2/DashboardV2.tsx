@@ -33,7 +33,15 @@ import DashboardBanners from "./DashboardBanners";
 
 export default function DashboardV2() {
   const { address, signMessage } = useWallet();
-  const [view, setView] = useState<V2ViewId>("wallets");
+  // Initial view is deep-linkable via ?view= (e.g. friendly-error CTAs that
+  // point at the Treasury gas tank or the Wallets clear-delegation action).
+  const [view, setView] = useState<V2ViewId>(() => {
+    if (typeof window === "undefined") return "wallets";
+    const v = new URLSearchParams(window.location.search).get("view");
+    return (["wallets", "activity", "treasury", "developer"] as const).includes(v as V2ViewId)
+      ? (v as V2ViewId)
+      : "wallets";
+  });
   // KEY IA DECISION: scope is shell-level state, threaded to every view.
   const [scope, setScope] = useState<Scope>("multichain");
 

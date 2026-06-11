@@ -349,7 +349,7 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
           // GASTANK_ADDRESS (0x10fb…747a), NOT the facilitator
           // (RELAYER_ADDRESS) — the previous copy could send users
           // to the wrong address and lose their LINK.
-          deposit: `Top up LINK on ${src} via the dashboard Bridge Gas Tank flow (https://q402.quackai.ai/dashboard → Agent → Bridge Gas Tank).`,
+          deposit: `Top up LINK on ${src} via the dashboard Bridge Gas Tank flow (https://q402.quackai.ai/dashboard → Treasury → CCIP Bridge).`,
         };
         await finaliseClaim("failed", 402, body);
         return NextResponse.json(body, { status: 402 });
