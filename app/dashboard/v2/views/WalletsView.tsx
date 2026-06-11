@@ -1145,7 +1145,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
               {!demoMode && activeWallet && (
                 <details className="v2-manage" style={styles.manageDetails}>
                   <summary className="v2-manage-summary" style={styles.manageSummary}>
-                    <span>Wallet management</span>
+                    <span style={{ flex: 1 }}>Wallet management</span>
                     <span style={{ color: v2.muted2, fontSize: fs.label }}>
                       Export key · Archive · Restore
                     </span>
