@@ -29,6 +29,7 @@ import { WalletsView } from "./views/WalletsView";
 import { ActivityView } from "./views/ActivityView";
 import { TreasuryView } from "./views/TreasuryView";
 import { DeveloperView } from "./views/DeveloperView";
+import DashboardBanners from "./DashboardBanners";
 
 export default function DashboardV2() {
   const { address, signMessage } = useWallet();
@@ -139,8 +140,15 @@ export default function DashboardV2() {
           </div>
         </header>
 
-        {/* ── View router ──────────────────────────────────────────── */}
-        {/* key={view} re-mounts on switch so the enter animation replays. */}
+        {/* Banners slot — top-of-shell mount point for the expiry / quota /
+            plan lifecycle banners, driven by the dashboard identity context
+            (useDashboardIdentity → isExpired, daysLeft, quota, plan). Renders
+            ABOVE the view router without disturbing the sticky topbar; the
+            component itself returns null when there's nothing to warn about,
+            so the slot adds no empty bar. */}
+        <DashboardBanners />
+
+        {/* View router. key={view} re-mounts on switch so the enter animation replays. */}
         <div key={view} className="v2-view-enter">
           {view === "wallets" && <WalletsView {...viewProps} />}
           {view === "activity" && <ActivityView {...viewProps} />}

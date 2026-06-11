@@ -36,6 +36,16 @@ const wrongWalletSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "WrongWalletHardBlock.tsx"),
   "utf8",
 );
+// v2 settlement ledger — the tx-history fetch moved here from page.tsx when
+// the dashboard adopted the v2 shell (DashboardV2). page.tsx now renders
+// <DashboardV2/> (which mounts ActivityView) ONLY after the State G early
+// return, so a mismatched wallet never reaches this fetch. We assert the
+// fetch keys strictly off the owner address threaded down from that gated
+// mount — the same no-leak invariant, enforced at the new boundary.
+const activityViewSource = readFileSync(
+  resolve(ROOT, "app", "dashboard", "v2", "views", "ActivityView.tsx"),
+  "utf8",
+);
 
 describe("dashboard — 4-state machine early returns", () => {
   it("imports the State D + State G components", () => {
@@ -66,18 +76,15 @@ describe("dashboard — 4-state machine early returns", () => {
 });
 
 describe("dashboard — data fetch gating (no leak from mismatched wallets)", () => {
-  it("provision + tx useEffects wait for authChecked (no race with /api/auth/me)", () => {
+  it("provision useEffect waits for authChecked (no race with /api/auth/me)", () => {
     // The /api/auth/me fetch resolves async on mount. If provision fires
     // before that, a localStorage-rehydrated wallet can pull its own
     // subscription milliseconds before we learn the session is bound to
     // a DIFFERENT wallet. State G would then replace the rendered output
-    // but the KV read already happened on the wrong wallet. Gating both
-    // useEffects on authChecked closes the window.
+    // but the KV read already happened on the wrong wallet. Gating the
+    // provision useEffect on authChecked closes the window.
     expect(dashboardSource).toMatch(
       /if\s*\(\s*!authChecked\s*\)\s*return;[\s\S]+?provision/,
-    );
-    expect(dashboardSource).toMatch(
-      /if\s*\(\s*!authChecked\s*\)\s*return;[\s\S]+?fetchTxs/,
     );
   });
 
@@ -93,13 +100,33 @@ describe("dashboard — data fetch gating (no leak from mismatched wallets)", ()
     );
   });
 
-  it("transactions useEffect refuses to run when wallet doesn't match bound", () => {
-    const txBlock = dashboardSource.match(
-      /useEffect\(\(\)\s*=>\s*\{[^]*?fetchTxs/,
+  it("renders <DashboardV2/> only AFTER the State G hard-block early return", () => {
+    // The tx-history (and all other multichain) fetches moved into the v2
+    // views, which only mount when page.tsx renders <DashboardV2/>. That
+    // render lives at the BOTTOM of the component, strictly after the State G
+    // `!walletMatches` early return — so a mismatched wallet is hard-blocked
+    // before DashboardV2 (and ActivityView's tx fetch) ever mounts. This
+    // ordering IS the no-leak guard now; assert it can't be reordered.
+    // Match the actual render JSX (`<DashboardV2 />`, with the space before
+    // the self-close) — NOT the `<DashboardV2/>` mention in the file's
+    // docstring, which appears earlier.
+    const gReturnIdx = dashboardSource.indexOf("<WrongWalletHardBlock\n");
+    const v2RenderIdx = dashboardSource.indexOf("<DashboardV2 />");
+    expect(gReturnIdx).toBeGreaterThan(-1);
+    expect(v2RenderIdx).toBeGreaterThan(-1);
+    expect(v2RenderIdx).toBeGreaterThan(gReturnIdx);
+  });
+
+  it("ActivityView tx fetch keys strictly off the gated owner address", () => {
+    // ActivityView (mounted only post-guard via DashboardV2) must auth + fetch
+    // /api/transactions using the ownerAddress prop it receives — never a
+    // separately-derived or browser-probed address. Threading the gated
+    // address through is what preserves the legacy wallet-match guarantee.
+    expect(activityViewSource).toMatch(
+      /\/api\/transactions\?address=\$\{ownerAddress\}/,
     );
-    expect(txBlock).toBeTruthy();
-    expect(txBlock![0]).toMatch(
-      /emailSession\.address[\s\S]+?address\.toLowerCase\(\)\s*!==\s*emailSession\.address\.toLowerCase\(\)/,
+    expect(activityViewSource).toMatch(
+      /getAuthCreds\(\s*ownerAddress\s*,\s*signMessage\s*\)/,
     );
   });
 

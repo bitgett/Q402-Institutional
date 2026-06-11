@@ -1,13 +1,14 @@
 /**
- * /dashboard/v2 — V2 dashboard route.
+ * /dashboard/v2 — legacy redirect.
  *
- * Standalone route so the V2 dashboard ships behind a distinct URL without
- * touching the existing /dashboard (app/dashboard/page.tsx). DashboardV2 is
- * a client component; this server entry just mounts it.
+ * The v2 dashboard now renders at /dashboard itself (app/dashboard/page.tsx
+ * mounts <DashboardV2/> inside the identity provider). This route is kept only
+ * so the old /dashboard/v2 URL still resolves — it permanently forwards to
+ * /dashboard, which carries the auth/identity state machine the v2 shell needs.
  */
 
-import DashboardV2 from "./DashboardV2";
+import { redirect } from "next/navigation";
 
 export default function DashboardV2Page() {
-  return <DashboardV2 />;
+  redirect("/dashboard");
 }

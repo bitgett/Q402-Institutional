@@ -27,6 +27,12 @@ const trialActivateSource = readLF(resolve(ROOT, "app", "api", "trial", "activat
 const provisionSource    = readLF(resolve(ROOT, "app", "api", "keys", "provision",    "route.ts"));
 const dashboardSource    = readLF(resolve(ROOT, "app", "dashboard", "page.tsx"));
 const transactionsSource = readLF(resolve(ROOT, "app", "api", "transactions",         "route.ts"));
+// v2 Developer view — after the v2-shell adoption, the bridged trial KEY +
+// EXPIRY are surfaced by the provision endpoint (server-side bridge into
+// trialApiKey / trialExpiresAt) and read here, rather than via a client-side
+// boundEmailTrial?.apiKey fallback in page.tsx. page.tsx still consumes the
+// bridge for CREDIT scoping + the auto-flip active-trial signal.
+const developerViewSource = readLF(resolve(ROOT, "app", "dashboard", "v2", "views", "DeveloperView.tsx"));
 
 describe("wallet_email_link write — both bind paths populate the bridge", () => {
   it("/api/auth/wallet-bind invokes writeWalletEmailBridge BEFORE pairSessionWithWallet", () => {
@@ -213,19 +219,29 @@ describe("dashboard — boundEmailTrial fallback consumed in trial scope", () =>
     expect(dashboardSource).toMatch(/provData\.boundEmailTrial/);
   });
 
-  it("trialApiKey falls back to boundEmailTrial.apiKey when no own/email trial", () => {
-    expect(dashboardSource).toMatch(/boundEmailTrial\?\.apiKey/);
+  it("bridged trial KEY is surfaced via the provision endpoint's trialApiKey, read by the v2 Developer view", () => {
+    // Post v2-shell: the client no longer derives a boundEmailTrial?.apiKey
+    // fallback string. Instead the provision endpoint bridges the pseudo's
+    // trial key into its `trialApiKey` field (server-side), and the v2
+    // DeveloperView reads exactly that — so a wallet-only login of a bound
+    // user still sees the trial key.
+    expect(provisionSource).toMatch(/trialApiKey/);
+    expect(developerViewSource).toMatch(/prov\?\.trialApiKey/);
   });
 
   it("trialCredits falls back to boundEmailTrial.credits (preserves 0 when no bridge)", () => {
     expect(dashboardSource).toMatch(/boundEmailTrial\?\.credits\s*\?\?\s*0/);
   });
 
-  it("Transactions trial-scope filter includes bridged keys (history visibility)", () => {
-    const keySetBlock = dashboardSource.match(/trialKeySet\s*=\s*new Set[\s\S]+?\]\.filter/);
-    expect(keySetBlock).toBeTruthy();
-    expect(keySetBlock![0]).toMatch(/boundEmailTrial\?\.apiKey/);
-    expect(keySetBlock![0]).toMatch(/boundEmailTrial\?\.sandboxApiKey/);
+  it("page.tsx mirrors the bridged credits + keys from the provision response", () => {
+    // The bridge is still consumed client-side for CREDIT scoping. page.tsx
+    // reads provData.boundEmailTrial and pulls the bridged trial key strings
+    // (trialApiKey / trialSandboxApiKey) into the boundEmailTrial state so the
+    // scoped credit derivation can fall back to them.
+    const mirrorBlock = dashboardSource.match(/const bet = provData\.boundEmailTrial[\s\S]+?setBoundEmailTrial\(\{[\s\S]+?\}\);/);
+    expect(mirrorBlock).toBeTruthy();
+    expect(mirrorBlock![0]).toMatch(/provData\.trialApiKey/);
+    expect(mirrorBlock![0]).toMatch(/provData\.trialSandboxApiKey/);
   });
 
   it("auto-flip treats a bridged trial as an active-trial signal", () => {
@@ -233,7 +249,12 @@ describe("dashboard — boundEmailTrial fallback consumed in trial scope", () =>
     expect(dashboardSource).toMatch(/walletHasTrialSignal\s*\|\|\s*emailHasTrialSignal\s*\|\|\s*bridgedTrialSignal/);
   });
 
-  it("days-left chip falls back to bridged expiry when own/email expiry is missing", () => {
-    expect(dashboardSource).toMatch(/boundEmailTrial\?\.trialExpiresAt/);
+  it("days-left chip surfaces the bridged trial expiry via the provision endpoint, read by the v2 Developer view", () => {
+    // The bridged expiry is bridged into the provision response's
+    // trialExpiresAt (server-side) and the v2 DeveloperView computes its
+    // trial days-left from prov.trialExpiresAt — no client-side
+    // boundEmailTrial?.trialExpiresAt fallback needed anymore.
+    expect(provisionSource).toMatch(/trialExpiresAt/);
+    expect(developerViewSource).toMatch(/prov\.trialExpiresAt/);
   });
 });
