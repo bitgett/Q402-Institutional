@@ -186,14 +186,20 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   // subscription block).
   if (action === "supply") {
   const sub = await getSubscription(owner);
-  // (1) Multichain scope. Yield is BNB-only today so this never trips, but
-  // mirror /send's gate verbatim so the two routes can't drift. /send also
-  // exempts withdraw-to-owner-EOA; Yield never sends to the owner's EOA
-  // (funds go into Aave / come back into the Agent Wallet), so that
-  // exception does not apply here.
-  if (chain !== "bnb" && !hasMultichainScope(sub)) {
+  // PRODUCT DECISION: Q402 Yield is a PAID feature — Trial accounts cannot
+  // deposit. This also settles the "who pays Trial-yield gas" question
+  // (nobody — Trial can't deposit). Require a paid Multichain subscription
+  // to SUPPLY. WITHDRAW is exempt from this whole gate (above), so a user
+  // who deposited while paid can ALWAYS recover funds even after downgrade
+  // or expiry.
+  if (!hasMultichainScope(sub)) {
     return NextResponse.json(
-      { error: "SUBSCRIPTION_REQUIRED", message: "Multichain access requires a paid subscription." },
+      {
+        error: "YIELD_REQUIRES_PAID",
+        message:
+          "Q402 Yield deposits require a paid Multichain plan. Upgrade at /payment. " +
+          "(Withdrawals are always allowed.)",
+      },
       { status: 402 },
     );
   }
