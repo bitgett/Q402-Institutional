@@ -57,6 +57,31 @@ import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 const MCP_VERSION = "v0.8.19";
 const MCP_INSTALL = "npx -y @quackai/q402-mcp";
 
+/**
+ * DEMO — sample dataset shown when no wallet is connected (or the signed
+ * provision read hasn't landed yet). It lets the full Developer surface read
+ * as "complete at a glance" instead of a wall of "Connect wallet" locks.
+ *
+ * The key VALUES are obviously masked samples (the •••• middle is fabricated,
+ * not a truncated real secret): a curious user cannot reconstruct a working
+ * key from them, and the Preview chip + disabled Copy buttons make the demo
+ * status explicit. Real provisioned keys always win the moment they load.
+ */
+const DEMO = {
+  /** Multichain live key — masked sample, never a real secret. */
+  multichainKey: "q402_live_804685527••••",
+  /** Trial live key — masked sample, never a real secret. */
+  trialKey: "q402_live_4479df8••••",
+  multichainSub: "10 EVM chains · paid Gas Tank scope",
+  trialSub: "2,000 sponsored TX · 30-day trial · 1,847 left · 14d left",
+  webhookSub: "Signed POST after each settlement",
+  /** Sandbox key shown inside the MCP config JSON (safe-to-paste tier). */
+  sandboxKey: "q402_test_demo0000••••",
+} as const;
+
+/** Tooltip shown on Copy controls while the view is in demo (preview) mode. */
+const DEMO_COPY_TOOLTIP = "Connect your wallet";
+
 export interface DeveloperViewProps {
   /** Connected owner address (null until wallet connects). */
   ownerAddress: string | null;
@@ -182,8 +207,13 @@ function useDeveloperData(
   const sandboxKey =
     prov?.multichainSandboxApiKey ?? prov?.sandboxApiKey ?? "";
 
+  // True once a signed provision read has actually landed. Until then (no
+  // wallet, or auth/fetch still in flight) the view renders the DEMO dataset.
+  const dataLoaded = prov !== null;
+
   return {
     loading,
+    dataLoaded,
     multichainKey,
     trialKey,
     hasPaid,
@@ -208,18 +238,23 @@ function CopyButton({
   value,
   label = "Copy",
   disabled,
+  disabledTooltip,
 }: {
   value: string;
   label?: string;
   disabled?: boolean;
+  /** Native tooltip shown when the control is disabled (e.g. demo mode). */
+  disabledTooltip?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const isOff = disabled || !value;
   return (
     <button
       type="button"
-      disabled={disabled || !value}
+      disabled={isOff}
+      title={isOff ? disabledTooltip : undefined}
       onClick={() => {
-        if (!value) return;
+        if (isOff || !value) return;
         navigator.clipboard.writeText(value);
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
@@ -230,8 +265,8 @@ function CopyButton({
         background: "none",
         color: copied ? v2.mint : v2.yellow,
         fontSize: 9,
-        cursor: disabled || !value ? "default" : "pointer",
-        opacity: disabled || !value ? 0.4 : 1,
+        cursor: isOff ? (disabledTooltip ? "help" : "default") : "pointer",
+        opacity: isOff ? 0.4 : 1,
         padding: 0,
         textAlign: "left",
       }}
@@ -298,6 +333,7 @@ function KeyCard({
   active,
   locked,
   lockedNote,
+  demo,
 }: {
   eyebrow: string;
   apiKey: string;
@@ -307,6 +343,11 @@ function KeyCard({
   active: boolean;
   locked?: boolean;
   lockedNote?: string;
+  /**
+   * Demo (preview) mode — `apiKey` is a pre-masked sample, so show it as the
+   * key value (not a locked note) but keep Copy disabled with a tooltip.
+   */
+  demo?: boolean;
 }) {
   return (
     <div
@@ -355,7 +396,11 @@ function KeyCard({
         }}
       >
         <span style={{ overflowWrap: "anywhere" }}>
-          {locked ? (lockedNote ?? "Locked") : maskKey(apiKey)}
+          {demo
+            ? apiKey /* pre-masked sample — shown verbatim, never re-masked */
+            : locked
+              ? (lockedNote ?? "Locked")
+              : maskKey(apiKey)}
         </span>
         <span style={{ color: tagColor, fontSize: 8, fontWeight: 700, flexShrink: 0 }}>
           {tag}
@@ -364,7 +409,16 @@ function KeyCard({
 
       <div style={{ color: v2.muted, fontSize: 9, marginTop: 8 }}>{sub}</div>
 
-      <CopyButton value={locked ? "" : apiKey} label="Copy key" disabled={locked} />
+      {demo ? (
+        <CopyButton
+          value=""
+          label="Copy key"
+          disabled
+          disabledTooltip={DEMO_COPY_TOOLTIP}
+        />
+      ) : (
+        <CopyButton value={locked ? "" : apiKey} label="Copy key" disabled={locked} />
+      )}
     </div>
   );
 }
@@ -427,7 +481,14 @@ function buildMcpConfig(sandboxKey: string): string {
 }`;
 }
 
-function McpSetupCard({ sandboxKey }: { sandboxKey: string }) {
+function McpSetupCard({
+  sandboxKey,
+  demo,
+}: {
+  sandboxKey: string;
+  /** Demo (preview) mode — disable copy actions with a connect tooltip. */
+  demo?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const [jsonCopied, setJsonCopied] = useState(false);
   const config = useMemo(() => buildMcpConfig(sandboxKey), [sandboxKey]);
@@ -466,7 +527,10 @@ function McpSetupCard({ sandboxKey }: { sandboxKey: string }) {
       <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 13 }}>
         <button
           type="button"
+          disabled={demo}
+          title={demo ? DEMO_COPY_TOOLTIP : undefined}
           onClick={() => {
+            if (demo) return;
             navigator.clipboard.writeText(MCP_INSTALL);
             setCopied(true);
             setTimeout(() => setCopied(false), 1600);
@@ -476,7 +540,8 @@ function McpSetupCard({ sandboxKey }: { sandboxKey: string }) {
             background: "none",
             color: copied ? v2.mint : v2.yellow,
             fontSize: 9,
-            cursor: "pointer",
+            cursor: demo ? "help" : "pointer",
+            opacity: demo ? 0.4 : 1,
             padding: 0,
           }}
         >
@@ -523,7 +588,10 @@ function McpSetupCard({ sandboxKey }: { sandboxKey: string }) {
         </div>
         <button
           type="button"
+          disabled={demo}
+          title={demo ? DEMO_COPY_TOOLTIP : undefined}
           onClick={() => {
+            if (demo) return;
             navigator.clipboard.writeText(config);
             setJsonCopied(true);
             setTimeout(() => setJsonCopied(false), 1600);
@@ -538,7 +606,8 @@ function McpSetupCard({ sandboxKey }: { sandboxKey: string }) {
             fontSize: 8,
             padding: "3px 7px",
             borderRadius: 6,
-            cursor: "pointer",
+            cursor: demo ? "help" : "pointer",
+            opacity: demo ? 0.55 : 1,
           }}
         >
           {jsonCopied ? "Copied!" : "Copy"}
@@ -805,7 +874,16 @@ function WebhookConfig({
 // preview (no relay) exactly as in v1 — same 1.8s fake settle + masked key.
 type PgToken = "USDC" | "USDT" | "RLUSD";
 
-function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean }) {
+function Playground({
+  apiKey,
+  trialView,
+  demo,
+}: {
+  apiKey: string;
+  trialView: boolean;
+  /** Demo (preview) mode — `apiKey` is a pre-masked sample; disable Copy. */
+  demo?: boolean;
+}) {
   const [chain, setChain] = useState(trialView ? "bnb" : "avax");
   const [token, setToken] = useState<PgToken>("USDC");
   const [to, setTo] = useState("");
@@ -1013,10 +1091,17 @@ function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean 
             color: v2.muted,
           }}
         >
-          <span style={{ flex: 1, overflowWrap: "anywhere" }}>{maskKey(apiKey)}</span>
+          <span style={{ flex: 1, overflowWrap: "anywhere" }}>
+            {demo ? apiKey /* pre-masked sample */ : maskKey(apiKey)}
+          </span>
           <button
             type="button"
-            onClick={() => apiKey && navigator.clipboard.writeText(apiKey)}
+            disabled={demo || !apiKey}
+            title={demo ? DEMO_COPY_TOOLTIP : undefined}
+            onClick={() => {
+              if (demo || !apiKey) return;
+              navigator.clipboard.writeText(apiKey);
+            }}
             style={{
               border: 0,
               background: "none",
@@ -1024,7 +1109,8 @@ function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean 
               fontSize: 8,
               letterSpacing: ".12em",
               textTransform: "uppercase",
-              cursor: apiKey ? "pointer" : "default",
+              cursor: demo ? "help" : apiKey ? "pointer" : "default",
+              opacity: demo || !apiKey ? 0.5 : 1,
             }}
           >
             Copy
@@ -1068,6 +1154,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
   const [activeSection, setActiveSection] = useState<SectionId>("credentials");
   const {
     loading,
+    dataLoaded,
     multichainKey,
     trialKey,
     hasPaid,
@@ -1079,6 +1166,16 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
     setWebhookUrl,
     credsRef,
   } = useDeveloperData(ownerAddress, signMessage);
+
+  // Demo (preview) mode: no wallet connected, OR a wallet is connected but the
+  // signed provision read hasn't landed yet. In this mode the whole surface
+  // renders the DEMO dataset so it reads as complete at a glance, with Copy
+  // controls disabled (tooltip: "Connect your wallet"). The moment real data
+  // loads, `dataLoaded` flips and the connected/real path below takes over.
+  const demoMode = !ownerAddress || !dataLoaded;
+
+  // Sandbox key fed to the MCP card: real one when loaded, else demo sample.
+  const mcpSandboxKey = demoMode ? DEMO.sandboxKey : sandboxKey;
 
   // Section anchors for the context-rail scroll-spy nav.
   const refs: Record<SectionId, React.RefObject<HTMLDivElement | null>> = {
@@ -1098,7 +1195,13 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
   // Playground feeds off the scope-active key (trial vs multichain), matching
   // the v1 dashboard's Playground apiKey + trialView props.
   const trialView = scope === "trial";
-  const playgroundKey = trialView ? trialKey : multichainKey;
+  const playgroundKey = demoMode
+    ? trialView
+      ? DEMO.trialKey
+      : DEMO.multichainKey
+    : trialView
+      ? trialKey
+      : multichainKey;
 
   return (
     <V2AccentScope style={{ paddingTop: 17 }}>
@@ -1113,8 +1216,46 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
         <ContextRail active={activeSection} onSelect={scrollTo} />
 
         <main className="v2-view-main" style={{ ...glass(19), padding: 21 }}>
-          <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
-            Developer access
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
+              Developer access
+            </div>
+            {demoMode && (
+              <span
+                title="Showing sample data — connect your wallet for live keys"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 8.5,
+                  fontWeight: 700,
+                  letterSpacing: ".08em",
+                  color: v2.yellow,
+                  background: "rgba(247,202,22,.08)",
+                  border: "1px solid rgba(247,202,22,.30)",
+                  borderRadius: 7,
+                  padding: "3px 8px",
+                }}
+              >
+                <span
+                  style={{
+                    width: 5,
+                    height: 5,
+                    borderRadius: "50%",
+                    background: v2.yellow,
+                    display: "inline-block",
+                  }}
+                />
+                Preview · connect your wallet for live data
+              </span>
+            )}
           </div>
           <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
             Scoped credentials and AI-client integration without mixing product
@@ -1134,11 +1275,12 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
             >
               <KeyCard
                 eyebrow="Multichain API Key"
-                apiKey={multichainKey}
+                apiKey={demoMode ? DEMO.multichainKey : multichainKey}
                 tag="LIVE"
                 tagColor={v2.mint}
-                sub="10 EVM chains · paid Gas Tank scope"
+                sub={demoMode ? DEMO.multichainSub : "10 EVM chains · paid Gas Tank scope"}
                 active={scope === "multichain"}
+                demo={demoMode}
                 locked={!hasPaid || !multichainKey}
                 lockedNote={
                   ownerAddress ? "Upgrade to unlock" : "Connect wallet"
@@ -1146,20 +1288,25 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
               />
               <KeyCard
                 eyebrow="Trial API Key"
-                apiKey={trialKey}
+                apiKey={demoMode ? DEMO.trialKey : trialKey}
                 tag="BNB"
                 tagColor={v2.yellow}
-                sub={`2,000 sponsored TX · 30-day trial${
-                  isTrialActive ? ` · ${trialCredits.toLocaleString()} left` : ""
-                }${trialDaysLeft != null ? ` · ${trialDaysLeft}d left` : ""}`}
+                sub={
+                  demoMode
+                    ? DEMO.trialSub
+                    : `2,000 sponsored TX · 30-day trial${
+                        isTrialActive ? ` · ${trialCredits.toLocaleString()} left` : ""
+                      }${trialDaysLeft != null ? ` · ${trialDaysLeft}d left` : ""}`
+                }
                 active={scope === "trial"}
+                demo={demoMode}
                 locked={!trialKey}
                 lockedNote={
                   ownerAddress ? "Start a trial to unlock" : "Connect wallet"
                 }
               />
               <WebhookStatusCard
-                configured={!!webhookUrl}
+                configured={demoMode ? false : !!webhookUrl}
                 onConfigure={() => scrollTo("webhook")}
               />
             </div>
@@ -1167,7 +1314,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
 
           {/* ── MCP setup ───────────────────────────────────────────── */}
           <div ref={refs.mcp} style={{ scrollMarginTop: 80 }}>
-            <McpSetupCard sandboxKey={sandboxKey} />
+            <McpSetupCard sandboxKey={mcpSandboxKey} demo={demoMode} />
           </div>
 
           {/* ── Webhook config ──────────────────────────────────────── */}
@@ -1183,7 +1330,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
 
           {/* ── API playground ──────────────────────────────────────── */}
           <div ref={refs.playground} style={{ scrollMarginTop: 80 }}>
-            <Playground apiKey={playgroundKey} trialView={trialView} />
+            <Playground apiKey={playgroundKey} trialView={trialView} demo={demoMode} />
           </div>
 
           {/* ── Documentation ───────────────────────────────────────── */}

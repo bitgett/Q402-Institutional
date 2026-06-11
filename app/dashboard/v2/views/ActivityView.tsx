@@ -73,6 +73,14 @@ interface RelayedTx {
   receiptId?: string;
   source?: "recurring" | "send" | "batch" | "api";
   ruleId?: string;
+  /**
+   * Demo-only presentation overrides (set only on DEMO rows; absent on real
+   * relayed txs). Let the in-file preview data render richer kinds/sub-lines
+   * and non-"Settled" statuses without touching the live data path.
+   */
+  _demoKind?: string;
+  _demoSub?: string;
+  _demoStatus?: { kind: "success" | "pending" | "failed"; label: string };
 }
 
 /** Mirrors app/lib/ccip-bridge-runner.ts BridgeHistoryRecord (render subset). */
@@ -148,6 +156,161 @@ function fmtDate(iso: string | number): string {
 function shortHash(h: string): string {
   return h ? `${h.slice(0, 8)}…${h.slice(-6)}` : "—";
 }
+
+// ── DEMO data ────────────────────────────────────────────────────────────────
+/**
+ * Preview rows shown when no wallet is connected (or before live data loads)
+ * so the ledger reads as complete at first glance instead of an empty
+ * "connect a wallet" state. Replaced wholesale the moment real settlements
+ * arrive for a connected owner. The `apiKey` deliberately matches the demo
+ * key set (DEMO_KEYS) so scope filtering keeps every preview row visible.
+ */
+const DEMO_KEY = "q402_demo_preview";
+const DEMO_KEYS = new Set<string>([DEMO_KEY]);
+
+const DEMO_WALLET_OPS = "0x662f9a3D0c1b4e5f8a7c2d9e0f1a2b3c4d5e623c";
+const DEMO_WALLET_PAYOUTS = "0x4D9b21cFa07e3b18d54a09cE7b1F2a3C4d5E6f70";
+const DEMO_WALLET_DEPOSITS = "0x8aE0c41Bf3D29a07C1b54e09ce7B1f2a3c4d5e6f";
+
+const DEMO_TO = "0x1F0a3b9C2d7e4f5061728394a5b6c7d8e9f0a1b2";
+
+const DEMO_WALLETS: WalletRow[] = [
+  { address: DEMO_WALLET_OPS, walletId: "wal_ops", label: "Operations" },
+  { address: DEMO_WALLET_PAYOUTS, walletId: "wal_payouts", label: "Creator payouts" },
+  { address: DEMO_WALLET_DEPOSITS, walletId: "wal_deposits", label: "Treasury deposits" },
+];
+
+const DEMO_TXS: RelayedTx[] = [
+  {
+    apiKey: DEMO_KEY,
+    address: DEMO_WALLET_OPS,
+    chain: "bnb",
+    fromUser: DEMO_WALLET_OPS,
+    toUser: DEMO_TO,
+    tokenAmount: "1.00",
+    tokenSymbol: "USDT",
+    gasCostNative: 0.00012,
+    relayTxHash: "0x4f28a1c39b7e0d52f6a4c8b1e93d70a25c6f8b14e0d2a73591c4be07f2389a16",
+    relayedAt: new Date().toISOString(),
+    receiptId: "rct_4f28a1c3",
+    source: "api",
+    _demoKind: "Payment",
+    _demoSub: "just now",
+    _demoStatus: { kind: "success", label: "Settled" },
+  },
+  {
+    apiKey: DEMO_KEY,
+    address: DEMO_WALLET_PAYOUTS,
+    chain: "bnb",
+    fromUser: DEMO_WALLET_PAYOUTS,
+    toUser: DEMO_TO,
+    tokenAmount: "120.00",
+    tokenSymbol: "USDT",
+    gasCostNative: 0.0003,
+    relayTxHash: "0x9c1d70b3e6a48f0259c7b1e83d04a96f2b5c8d71e0a23f6491cbe7052a8d39f4",
+    relayedAt: new Date(Date.now() - 36 * 3600_000).toISOString(),
+    source: "recurring",
+    ruleId: "rule_payout_weekly",
+    _demoKind: "Contributor payout",
+    _demoSub: "Recurring · next Jul 7",
+    _demoStatus: { kind: "pending", label: "Scheduled" },
+  },
+  {
+    apiKey: DEMO_KEY,
+    address: DEMO_WALLET_DEPOSITS,
+    chain: "eth",
+    fromUser: DEMO_WALLET_DEPOSITS,
+    toUser: DEMO_TO,
+    tokenAmount: "200.00",
+    tokenSymbol: "USDC",
+    gasCostNative: 0.0019,
+    relayTxHash: "0x2a7f0c91d4b3e6058a1c7b2e94d35a07f6c8b21d3e0a49f7591cbe6048d2a73f",
+    relayedAt: new Date(Date.now() - 5 * 3600_000).toISOString(),
+    receiptId: "rct_2a7f0c91",
+    source: "api",
+    _demoKind: "Deposit received",
+    _demoSub: "Ethereum · USDC",
+    _demoStatus: { kind: "success", label: "Confirmed" },
+  },
+  {
+    apiKey: DEMO_KEY,
+    address: DEMO_WALLET_OPS,
+    chain: "bnb",
+    fromUser: DEMO_WALLET_OPS,
+    toUser: DEMO_TO,
+    tokenAmount: "48.50",
+    tokenSymbol: "USDT",
+    gasCostNative: 0.00011,
+    relayTxHash: "0x7b3e0a49f7591cbe6048d2a73f2a7f0c91d4b3e6058a1c7b2e94d35a07f6c8b2",
+    relayedAt: new Date(Date.now() - 26 * 3600_000).toISOString(),
+    source: "send",
+    _demoKind: "Vendor invoice",
+    _demoSub: "Manual send",
+    _demoStatus: { kind: "success", label: "Settled" },
+  },
+  {
+    apiKey: DEMO_KEY,
+    address: DEMO_WALLET_OPS,
+    chain: "avax",
+    fromUser: DEMO_WALLET_OPS,
+    toUser: DEMO_TO,
+    tokenAmount: "15.00",
+    tokenSymbol: "USDC",
+    gasCostNative: 0.004,
+    relayTxHash: "0x1c4be07f2389a164f28a1c39b7e0d52f6a4c8b1e93d70a25c6f8b14e0d2a7359",
+    relayedAt: new Date(Date.now() - 50 * 3600_000).toISOString(),
+    source: "batch",
+    _demoKind: "Batch payout",
+    _demoSub: "Batch send · 6 recipients",
+    _demoStatus: { kind: "success", label: "Settled" },
+  },
+  {
+    apiKey: DEMO_KEY,
+    address: DEMO_WALLET_PAYOUTS,
+    chain: "stable",
+    fromUser: DEMO_WALLET_PAYOUTS,
+    toUser: DEMO_TO,
+    tokenAmount: "75.00",
+    tokenSymbol: "USDT0",
+    gasCostNative: 0.0,
+    relayTxHash: "0x39f4b5c8d71e0a23f6491cbe7052a8d9c1d70b3e6a48f0259c7b1e83d04a96f2",
+    relayedAt: new Date(Date.now() - 72 * 3600_000).toISOString(),
+    receiptId: "rct_39f4b5c8",
+    source: "api",
+    _demoKind: "Subscription charge",
+    _demoSub: "Stable · USDT0",
+    _demoStatus: { kind: "success", label: "Settled" },
+  },
+];
+
+const DEMO_BRIDGES: BridgeRecord[] = [
+  {
+    messageId: "0xccip0001a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5",
+    txHash: "0x6d2a73591c4be07f2389a164f28a1c39b7e0d52f6a4c8b1e93d70a25c6f8b14e",
+    owner: DEMO_WALLET_OPS,
+    walletId: "wal_ops",
+    src: "eth",
+    dst: "avax",
+    amount: "25000000", // 25 USDC (6-dec)
+    feeToken: "LINK",
+    feeWhole: 0.0421,
+    initiatedAt: Date.now() - 4 * 3600_000,
+    status: "success",
+  },
+  {
+    messageId: "0xccip0002b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6",
+    txHash: "0x8b14e0d2a73591c4be07f2389a164f28a1c39b7e0d52f6a4c8b1e93d70a25c6f",
+    owner: DEMO_WALLET_OPS,
+    walletId: "wal_ops",
+    src: "avax",
+    dst: "bnb",
+    amount: "60000000", // 60 USDC (6-dec)
+    feeToken: "LINK",
+    feeWhole: 0.0388,
+    initiatedAt: Date.now() - 1 * 3600_000,
+    status: "processing",
+  },
+];
 
 // ── view ─────────────────────────────────────────────────────────────────────
 export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewProps) {
@@ -294,15 +457,30 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
     };
   }, [ownerAddress, loadProvision, loadTxs, loadBridges, loadWallets]);
 
+  // ── Demo fallback ─────────────────────────────────────────────────────────
+  // When no wallet is connected, OR a connected owner hasn't surfaced any real
+  // rows yet (still loading / genuinely empty), fall back to in-file DEMO data
+  // so the SAME layout/table renders fully populated instead of an empty
+  // "connect a wallet" placeholder. The moment a connected owner has real
+  // settlements or bridges, the live data wins and demo mode switches off.
+  const hasRealData = txs.length > 0 || bridges.length > 0;
+  const demoMode = !ownerAddress || (!hasRealData && !loading && !err);
+
+  // Source the table inputs from demo or live data behind one switch so the
+  // downstream scope/rail/filter pipeline is identical for both paths.
+  const srcTxs = demoMode ? DEMO_TXS : txs;
+  const srcBridges = demoMode ? DEMO_BRIDGES : bridges;
+  const srcWallets = demoMode ? DEMO_WALLETS : wallets;
+
   // ── Derived: scope + rail-tab + filter chips ─────────────────────────────
-  const scopeKeys = scope === "trial" ? trialKeys : paidKeys;
+  const scopeKeys = demoMode ? DEMO_KEYS : scope === "trial" ? trialKeys : paidKeys;
 
   // Scope-filtered settlements (trial vs multichain key set), mirroring
   // page.tsx scopedTxsAllSources. If the scope key set is empty (no
   // provisioned keys for this scope yet) nothing matches — same as v1.
   const scopedTxs = useMemo(
-    () => txs.filter((tx) => scopeKeys.has(tx.apiKey)),
-    [txs, scopeKeys],
+    () => srcTxs.filter((tx) => scopeKeys.has(tx.apiKey)),
+    [srcTxs, scopeKeys],
   );
 
   // Chains present across the scoped settlements + bridges (for chips).
@@ -328,7 +506,7 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
     const selectedWalletAddr =
       walletFilter === "all"
         ? null
-        : wallets.find((w) => w.walletId === walletFilter)?.address.toLowerCase() ?? null;
+        : srcWallets.find((w) => w.walletId === walletFilter)?.address.toLowerCase() ?? null;
     return [...railTxs]
       .filter((tx) => {
         if (selectedWalletAddr && tx.fromUser.toLowerCase() !== selectedWalletAddr) return false;
@@ -336,18 +514,18 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
         return true;
       })
       .reverse();
-  }, [railTxs, walletFilter, chainFilter, wallets]);
+  }, [railTxs, walletFilter, chainFilter, srcWallets]);
 
   // Bridge rows respect the wallet + chain filter (chain matches src or dst).
   const visibleBridges = useMemo(() => {
-    if (walletFilter === "all" && chainFilter === "all") return bridges;
-    return bridges.filter((b) => {
+    if (walletFilter === "all" && chainFilter === "all") return srcBridges;
+    return srcBridges.filter((b) => {
       if (walletFilter !== "all" && b.walletId.toLowerCase() !== walletFilter.toLowerCase())
         return false;
       if (chainFilter !== "all" && b.src !== chainFilter && b.dst !== chainFilter) return false;
       return true;
     });
-  }, [bridges, walletFilter, chainFilter]);
+  }, [srcBridges, walletFilter, chainFilter]);
 
   const showBridge = tab === "bridge";
   const totalInView = showBridge ? visibleBridges.length : visibleTxs.length;
@@ -408,11 +586,11 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
               lineHeight: 1.5,
             }}
           >
-            Scope <span style={{ color: v2.yellow }}>{scope}</span> ·{" "}
+            Scope <span style={{ color: v2.yellow }}>{demoMode ? "preview" : scope}</span> ·{" "}
             <span style={{ color: v2.muted }}>{scopedTxs.length}</span> settlements
-            {bridges.length > 0 && (
+            {srcBridges.length > 0 && (
               <>
-                {" "}· <span style={{ color: v2.muted }}>{bridges.length}</span> bridges
+                {" "}· <span style={{ color: v2.muted }}>{srcBridges.length}</span> bridges
               </>
             )}
           </div>
@@ -430,12 +608,28 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
             }}
           >
             <div>
-              <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
-                Settlement activity
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
+                  Settlement activity
+                </div>
+                {demoMode && <PreviewChip />}
               </div>
               <div style={{ color: v2.muted, fontSize: 10, marginTop: 4, maxWidth: 460 }}>
-                Manual, scheduled, and cross-chain execution. Filtered to the{" "}
-                <span style={{ color: v2.yellow }}>{scope}</span> key scope.
+                {demoMode ? (
+                  <>Manual, scheduled, and cross-chain execution. Showing example settlements.</>
+                ) : (
+                  <>
+                    Manual, scheduled, and cross-chain execution. Filtered to the{" "}
+                    <span style={{ color: v2.yellow }}>{scope}</span> key scope.
+                  </>
+                )}
               </div>
             </div>
             <div style={{ color: v2.muted, fontSize: 9, fontFamily: displayFont }}>
@@ -459,7 +653,7 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
               active={walletFilter === "all"}
               onClick={() => setWalletFilter("all")}
             />
-            {wallets.map((w) => (
+            {srcWallets.map((w) => (
               <FilterChip
                 key={w.walletId}
                 label={w.label?.trim() || shortAddr(w.address)}
@@ -489,13 +683,15 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
           </div>
 
           {/* ── Table ─────────────────────────────────────────────── */}
+          {/* Demo mode renders the populated table directly (no connect/empty
+              placeholder). Live errors still surface; live loading only shows a
+              spinner when there is no demo fallback to display (i.e. never,
+              since demoMode covers the !ownerAddress and empty cases). */}
           <div style={{ marginTop: 12 }}>
-            {!ownerAddress ? (
-              <Empty text="Connect a wallet to load settlement activity." />
-            ) : loading ? (
-              <Empty text="Loading activity…" />
-            ) : err ? (
+            {!demoMode && err ? (
               <Empty text={err} tone="red" />
+            ) : !demoMode && loading ? (
+              <Empty text="Loading activity…" />
             ) : showBridge ? (
               <BridgeTable bridges={visibleBridges} />
             ) : (
@@ -585,10 +781,10 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
               <Tr key={`${tx.relayTxHash}-${i}`}>
                 <Td>
                   <div style={{ fontSize: 11.5, color: v2.text, fontWeight: 500 }}>
-                    {settlementKind(tx)}
+                    {tx._demoKind ?? settlementKind(tx)}
                   </div>
                   <div style={{ fontSize: 9, color: v2.muted2, marginTop: 2 }}>
-                    {fmtDate(tx.relayedAt)} ·{" "}
+                    {tx._demoSub ?? fmtDate(tx.relayedAt)} ·{" "}
                     {hasExplorer ? (
                       <a
                         href={txUrl}
@@ -652,7 +848,10 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                   </span>
                 </Td>
                 <Td>
-                  <StatusPill kind="success" label="Settled" />
+                  <StatusPill
+                    kind={tx._demoStatus?.kind ?? "success"}
+                    label={tx._demoStatus?.label ?? "Settled"}
+                  />
                 </Td>
                 <Td align="right">
                   <span style={{ fontSize: 12, fontWeight: 600, fontFamily: displayFont }}>
@@ -818,6 +1017,32 @@ function StatusPill({ kind, label }: { kind: "success" | "pending" | "failed"; l
     >
       <span style={{ width: 5, height: 5, borderRadius: 999, background: color }} />
       {label}
+    </span>
+  );
+}
+
+// ── Preview chip ─────────────────────────────────────────────────────────────
+/** Shown only in demo mode, beside the view title — signals example data. */
+function PreviewChip() {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: ".02em",
+        color: v2.yellow,
+        background: "rgba(247,202,22,.10)",
+        border: "1px solid rgba(247,202,22,.30)",
+        padding: "4px 9px",
+        borderRadius: 999,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span style={{ width: 5, height: 5, borderRadius: 999, background: v2.yellow }} />
+      Preview · connect your wallet for live data
     </span>
   );
 }

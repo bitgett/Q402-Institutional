@@ -134,6 +134,41 @@ function fmtUsd(n: number): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// ── DEMO dataset ─────────────────────────────────────────────────────────────
+//
+// Rendered when NO wallet is connected (or live data hasn't landed yet) so the
+// Treasury view reads as a complete, populated surface at first glance instead
+// of a "connect a wallet" empty state. The numbers are realistic placeholders;
+// the moment a wallet connects + real reads resolve, the live data path takes
+// over (see `demoMode` below) and these are never shown.
+//
+// Top-card totals are kept internally consistent: the per-row Gas Tank USD
+// figures ($8.14 + $7.82 + $2.46) sum to the Gas Tank card total ($18.42).
+const DEMO = {
+  gasTankUsd: 18.42,
+  /** Yield card meta — Q402 Yield is $0.00 with the best available APY shown. */
+  yieldUsd: 0,
+  yieldApy: "4.12%",
+  /** Bridge card — 3 LINK fee lanes, no live LINK balance. */
+  bridgeLanes: 3,
+  bridgeLaneLabels: ["Ethereum", "Avalanche", "Arbitrum"] as const,
+  /** Per-network rows: USD-denominated wallet (native gas) + Gas Tank. */
+  rows: {
+    bnb:      { walletUsd: 184.2, gasTankUsd: 8.14 },
+    eth:      { walletUsd: 75.0,  gasTankUsd: 7.82 },
+    arbitrum: { walletUsd: 40.8,  gasTankUsd: 2.46 },
+  } as Record<string, { walletUsd: number; gasTankUsd: number }>,
+} as const;
+const DEMO_ROW_KEYS = ["bnb", "eth", "arbitrum"] as const;
+
+// Sample Gas Tank activity for the demo surface so the "Tank activity" feed
+// reads as populated rather than empty when no wallet is connected.
+const DEMO_ACTIVITY: Array<{ chain: string; amount: number; date: string }> = [
+  { chain: "bnb", amount: 0.25, date: "Jun 9" },
+  { chain: "eth", amount: 0.02, date: "Jun 6" },
+  { chain: "arbitrum", amount: 0.015, date: "Jun 2" },
+];
+
 // ── Context sub-nav (scroll-spy) ─────────────────────────────────────────────
 const SECTIONS = [
   { id: "overview", label: "Capital overview" },
@@ -321,6 +356,44 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
     [isMultichain],
   );
 
+  // ── Demo mode ──────────────────────────────────────────────────────────
+  // Show the fully-populated DEMO surface (instead of an empty "connect a
+  // wallet" state) when there is no connected owner OR live reads haven't
+  // produced any gas-tank balance / price data yet. Falling back at the data
+  // level means the SAME layout renders in both modes; only the source of the
+  // numbers differs. The instant a wallet connects and real balances/prices
+  // land, `demoMode` flips false and the live path is unchanged.
+  const hasLiveTankData =
+    totalGasUsd > 0 || Object.keys(userGasBalance).length > 0 || Object.keys(tokenPrices).length > 0;
+  const demoMode = !ownerAddress || (!tankLoading && !hasLiveTankData);
+
+  // Card + table values, sourced from DEMO when in demo mode so the existing
+  // layout populates without any "connect" placeholder branch.
+  const gasTankUsdDisplay = demoMode ? DEMO.gasTankUsd : totalGasUsd;
+  const totalLinkDisplay = demoMode ? 0 : totalLink;
+  const linkUsdDisplay = demoMode ? 0 : linkUsd;
+  const fundedCountDisplay = demoMode ? DEMO_ROW_KEYS.length : fundedChainCount;
+  const networkCountDisplay = demoMode ? DEMO_ROW_KEYS.length : visibleChains.length;
+
+  // Per-network rows: in demo mode use the DEMO row set; otherwise the live
+  // scope-gated chain list. `demo` carries USD figures; `live` reads the same
+  // balance/price/EOA state as before.
+  const tableRows = useMemo(() => {
+    if (demoMode) {
+      return DEMO_ROW_KEYS.map((key) => {
+        const meta = CHAIN_META.find((c) => c.key === key)!;
+        return { meta, demo: DEMO.rows[key] };
+      });
+    }
+    return visibleChains.map((meta) => ({ meta, demo: null as null | { walletUsd: number; gasTankUsd: number } }));
+  }, [demoMode, visibleChains]);
+
+  // In demo mode the deposit/manage actions are inert (no wallet to sign with):
+  // disable them and show a "Connect your wallet" hint rather than opening a
+  // modal that would crash on a null owner.
+  const actionsDisabled = demoMode;
+  const connectHint = "Connect your wallet";
+
   return (
     <V2AccentScope style={{ paddingTop: 17 }}>
       <div
@@ -382,13 +455,40 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
         <div ref={mainRef} style={{ minWidth: 0 }}>
           {/* Title */}
           <div id="treasury-overview" style={{ scrollMarginTop: 84 }}>
-            <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
-              Capital operations
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
+                Capital operations
+              </div>
+              {demoMode && (
+                <span
+                  title="Showing sample data — connect your wallet for live balances"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 5,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    letterSpacing: ".06em",
+                    textTransform: "uppercase",
+                    color: v2.yellow,
+                    padding: "4px 9px",
+                    borderRadius: 999,
+                    border: `1px solid var(--v2-accent-line)`,
+                    background: "var(--v2-accent-fill)",
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    style={{ width: 5, height: 5, borderRadius: "50%", background: v2.yellow }}
+                  />
+                  Preview · connect your wallet for live data
+                </span>
+              )}
             </div>
             <div style={{ color: v2.muted, fontSize: 11, marginTop: 4, marginBottom: 16 }}>
               Gas Tank, Q402 Yield, and CCIP liquidity across{" "}
               {isMultichain ? "10 networks" : "BNB Chain (trial)"}.
-              {!ownerAddress && " Connect a wallet to load balances."}
+              {demoMode && " Sample figures shown — connect a wallet to load live balances."}
             </div>
           </div>
 
@@ -413,14 +513,14 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     marginTop: 8,
                   }}
                 >
-                  {tankLoading ? (
+                  {tankLoading && !demoMode ? (
                     <span style={{ color: v2.muted2, fontSize: 18 }}>Loading…</span>
                   ) : (
-                    fmtUsd(totalGasUsd)
+                    fmtUsd(gasTankUsdDisplay)
                   )}
                 </div>
                 <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
-                  Sponsors gas on relayed payments.
+                  {demoMode ? "Healthy across active chains." : "Sponsors gas on relayed payments."}
                 </div>
                 {/* health bar — funded vs total chains */}
                 <div
@@ -435,7 +535,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   <div
                     style={{
                       height: "100%",
-                      width: `${(fundedChainCount / visibleChains.length) * 100}%`,
+                      width: `${networkCountDisplay > 0 ? (fundedCountDisplay / networkCountDisplay) * 100 : 0}%`,
                       background: v2.yellow,
                       borderRadius: 3,
                       transition: "width .4s",
@@ -443,7 +543,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   />
                 </div>
                 <div style={{ color: v2.muted2, fontSize: 9, marginTop: 6 }}>
-                  {fundedChainCount} / {visibleChains.length} networks funded
+                  {fundedCountDisplay} / {networkCountDisplay} networks funded
                 </div>
                 <button
                   type="button"
@@ -471,7 +571,11 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
               <div id="treasury-yield" style={{ scrollMarginTop: 84 }}>
                 <SectionHead
                   title="Q402 Yield"
-                  meta={<span style={{ color: v2.mint }}>Aave V3</span>}
+                  meta={
+                    <span style={{ color: v2.mint }}>
+                      Aave V3{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
+                    </span>
+                  }
                 />
                 {ownerAddress && agentWallet ? (
                   // AgenticWalletEarnSection owns its own fetch + deposit/withdraw
@@ -482,11 +586,45 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     walletId={agentWallet.walletId}
                     signMessage={signMessage}
                   />
+                ) : demoMode ? (
+                  // Demo: show a populated, $0.00 supplied position with the best
+                  // available APY so the card reads complete without a wallet.
+                  <>
+                    <div
+                      style={{
+                        font: `600 27px ${displayFont}`,
+                        color: v2.mint,
+                        letterSpacing: "-.04em",
+                        marginTop: 8,
+                      }}
+                    >
+                      {fmtUsd(DEMO.yieldUsd)}
+                    </div>
+                    <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
+                      Supplied to Aave V3 · best {DEMO.yieldApy} APY
+                    </div>
+                    <div
+                      title={connectHint}
+                      style={{
+                        marginTop: 13,
+                        width: "100%",
+                        textAlign: "center",
+                        border: `1px solid ${v2.line}`,
+                        background: "rgba(255,255,255,.03)",
+                        color: v2.muted2,
+                        padding: "8px 0",
+                        borderRadius: 9,
+                        fontSize: 11,
+                        fontWeight: 600,
+                        cursor: "not-allowed",
+                      }}
+                    >
+                      Supply USDC / USDT
+                    </div>
+                  </>
                 ) : (
                   <div style={{ color: v2.muted, fontSize: 11, lineHeight: 1.6, marginTop: 8 }}>
-                    {ownerAddress
-                      ? "Create an Agent Wallet to supply idle USDC / USDT and earn Aave V3 yield."
-                      : "Connect a wallet to view supplied positions + APY."}
+                    Create an Agent Wallet to supply idle USDC / USDT and earn Aave V3 yield.
                   </div>
                 )}
               </div>
@@ -496,21 +634,39 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             <Surface radius={15} style={{ padding: 17 }}>
               <div id="treasury-bridge" style={{ scrollMarginTop: 84 }}>
                 <Eyebrow>CCIP Bridge</Eyebrow>
-                <div
-                  style={{
-                    font: `600 27px ${displayFont}`,
-                    color: v2.cyan,
-                    letterSpacing: "-.04em",
-                    marginTop: 8,
-                  }}
-                >
-                  {totalLink.toLocaleString("en-US", { maximumFractionDigits: 4 })}
-                  <span style={{ fontSize: 13, color: v2.muted, marginLeft: 5, fontWeight: 400 }}>
-                    LINK
-                  </span>
-                </div>
+                {demoMode ? (
+                  <div
+                    style={{
+                      font: `600 27px ${displayFont}`,
+                      color: v2.cyan,
+                      letterSpacing: "-.04em",
+                      marginTop: 8,
+                    }}
+                  >
+                    {DEMO.bridgeLanes}
+                    <span style={{ fontSize: 13, color: v2.muted, marginLeft: 5, fontWeight: 400 }}>
+                      lanes
+                    </span>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      font: `600 27px ${displayFont}`,
+                      color: v2.cyan,
+                      letterSpacing: "-.04em",
+                      marginTop: 8,
+                    }}
+                  >
+                    {totalLinkDisplay.toLocaleString("en-US", { maximumFractionDigits: 4 })}
+                    <span style={{ fontSize: 13, color: v2.muted, marginLeft: 5, fontWeight: 400 }}>
+                      LINK
+                    </span>
+                  </div>
+                )}
                 <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
-                  {fmtUsd(linkUsd)} · fee bucket for 3 lanes (eth · avax · arbitrum)
+                  {demoMode
+                    ? `${DEMO.bridgeLaneLabels.join(" · ")}`
+                    : `${fmtUsd(linkUsdDisplay)} · fee bucket for 3 lanes (eth · avax · arbitrum)`}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 11 }}>
                   {LINK_CHAINS.map((k) => (
@@ -524,8 +680,8 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                       }}
                     >
                       <span>{LINK_TOKEN[k].label}</span>
-                      <span style={{ font: `500 10px ${displayFont}`, color: v2.text }}>
-                        {(linkBalances[k] ?? 0).toFixed(4)} LINK
+                      <span style={{ font: `500 10px ${displayFont}`, color: demoMode ? v2.muted : v2.text }}>
+                        {demoMode ? "Ready" : `${(linkBalances[k] ?? 0).toFixed(4)} LINK`}
                       </span>
                     </div>
                   ))}
@@ -533,42 +689,49 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                 <div style={{ display: "flex", gap: 7, marginTop: 13 }}>
                   <button
                     type="button"
+                    disabled={actionsDisabled}
                     onClick={() => setLinkModalOpen(true)}
+                    title={actionsDisabled ? connectHint : undefined}
                     style={{
                       flex: 1,
                       border: `1px solid ${v2.line}`,
                       background: "rgba(255,255,255,.03)",
-                      color: v2.text,
+                      color: actionsDisabled ? v2.muted2 : v2.text,
                       padding: "8px 0",
                       borderRadius: 9,
                       fontSize: 10,
                       fontWeight: 600,
-                      cursor: "pointer",
+                      cursor: actionsDisabled ? "not-allowed" : "pointer",
                     }}
                   >
                     Deposit LINK
                   </button>
                   <button
                     type="button"
-                    disabled={!isMultichain || !ownerAddress || !agentWallet}
+                    disabled={actionsDisabled || !isMultichain || !ownerAddress || !agentWallet}
                     onClick={() => setBridgeOpen(true)}
                     title={
-                      !isMultichain
-                        ? "Cross-chain bridging needs the Multichain scope"
-                        : !agentWallet
-                          ? "Create an Agent Wallet to bridge"
-                          : undefined
+                      actionsDisabled
+                        ? connectHint
+                        : !isMultichain
+                          ? "Cross-chain bridging needs the Multichain scope"
+                          : !agentWallet
+                            ? "Create an Agent Wallet to bridge"
+                            : undefined
                     }
                     style={{
                       flex: 1,
                       border: 0,
-                      background: isMultichain && agentWallet ? v2.yellow : "rgba(255,255,255,.05)",
-                      color: isMultichain && agentWallet ? v2.actionText : v2.muted2,
+                      background:
+                        !actionsDisabled && isMultichain && agentWallet ? v2.yellow : "rgba(255,255,255,.05)",
+                      color:
+                        !actionsDisabled && isMultichain && agentWallet ? v2.actionText : v2.muted2,
                       padding: "8px 0",
                       borderRadius: 9,
                       fontSize: 10,
                       fontWeight: 700,
-                      cursor: isMultichain && agentWallet ? "pointer" : "not-allowed",
+                      cursor:
+                        !actionsDisabled && isMultichain && agentWallet ? "pointer" : "not-allowed",
                     }}
                   >
                     Open bridge
@@ -585,9 +748,11 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                 <SectionHead
                   title="Networks"
                   meta={
-                    isMultichain
-                      ? `${CHAIN_META.length} networks · deposit to fund gas`
-                      : "Trial · BNB Chain only"
+                    demoMode
+                      ? `${DEMO_ROW_KEYS.length} active networks · sample data`
+                      : isMultichain
+                        ? `${CHAIN_META.length} networks · deposit to fund gas`
+                        : "Trial · BNB Chain only"
                   }
                 />
               </div>
@@ -602,11 +767,16 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleChains.map((c) => {
-                    const gas = userGasBalance[c.key] ?? 0;
-                    const gasUsd = gas * (tokenPrices[c.key] ?? 0);
-                    const eoa = walletBalances[c.key] ?? 0;
-                    const funded = gas > 0;
+                  {tableRows.map(({ meta: c, demo }) => {
+                    // Demo rows carry USD figures directly; live rows compute the
+                    // same way as before from balance/price/EOA state.
+                    const gas = demo ? 0 : userGasBalance[c.key] ?? 0;
+                    const liveGasUsd = gas * (tokenPrices[c.key] ?? 0);
+                    const gasTankUsd = demo ? demo.gasTankUsd : liveGasUsd;
+                    const eoa = demo ? 0 : walletBalances[c.key] ?? 0;
+                    const walletUsd = demo ? demo.walletUsd : eoa;
+                    // "Ready" in demo mode (state column), FUNDED/EMPTY when live.
+                    const funded = demo ? true : gas > 0;
                     const explorerKey = c.key as Parameters<typeof explorerAddressUrl>[0];
                     return (
                       <tr
@@ -638,17 +808,31 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                           </div>
                         </Td>
                         <Td>
-                          <span style={{ font: `400 11px ${displayFont}`, color: eoa > 0 ? v2.text : v2.muted2 }}>
-                            {eoa > 0 ? `${eoa.toFixed(4)} ${c.token}` : "—"}
-                          </span>
+                          {demo ? (
+                            <span style={{ font: `400 11px ${displayFont}`, color: v2.text }}>
+                              {fmtUsd(walletUsd)}
+                            </span>
+                          ) : (
+                            <span style={{ font: `400 11px ${displayFont}`, color: eoa > 0 ? v2.text : v2.muted2 }}>
+                              {eoa > 0 ? `${eoa.toFixed(4)} ${c.token}` : "—"}
+                            </span>
+                          )}
                         </Td>
                         <Td>
-                          <span style={{ font: `400 11px ${displayFont}`, color: funded ? v2.text : v2.muted2 }}>
-                            {gas.toFixed(4)} {c.token}
-                          </span>
-                          <span style={{ color: v2.muted2, fontSize: 9, marginLeft: 6 }}>
-                            {gasUsd >= 0.01 ? fmtUsd(gasUsd) : ""}
-                          </span>
+                          {demo ? (
+                            <span style={{ font: `400 11px ${displayFont}`, color: v2.text }}>
+                              {fmtUsd(gasTankUsd)}
+                            </span>
+                          ) : (
+                            <>
+                              <span style={{ font: `400 11px ${displayFont}`, color: funded ? v2.text : v2.muted2 }}>
+                                {gas.toFixed(4)} {c.token}
+                              </span>
+                              <span style={{ color: v2.muted2, fontSize: 9, marginLeft: 6 }}>
+                                {gasTankUsd >= 0.01 ? fmtUsd(gasTankUsd) : ""}
+                              </span>
+                            </>
+                          )}
                         </Td>
                         <Td>
                           <span
@@ -662,27 +846,31 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                               background: funded ? "rgba(85,230,165,.10)" : "rgba(255,255,255,.04)",
                             }}
                           >
-                            {funded ? "FUNDED" : "EMPTY"}
+                            {demo ? "READY" : funded ? "FUNDED" : "EMPTY"}
                           </span>
                         </Td>
                         <Td style={{ textAlign: "right", paddingRight: 17 }}>
                           <button
                             type="button"
-                            onClick={() => setDepositChain(c)}
-                            disabled={!ownerAddress}
+                            onClick={() => {
+                              if (!actionsDisabled) setDepositChain(c);
+                            }}
+                            disabled={actionsDisabled}
+                            title={actionsDisabled ? connectHint : undefined}
                             style={{
-                              border: `1px solid ${funded ? "var(--v2-accent-line)" : v2.line}`,
-                              background: funded ? "var(--v2-accent-fill)" : "rgba(255,255,255,.03)",
-                              color: funded ? v2.yellow : v2.muted,
+                              border: `1px solid ${funded && !actionsDisabled ? "var(--v2-accent-line)" : v2.line}`,
+                              background:
+                                funded && !actionsDisabled ? "var(--v2-accent-fill)" : "rgba(255,255,255,.03)",
+                              color: funded && !actionsDisabled ? v2.yellow : v2.muted,
                               padding: "6px 11px",
                               borderRadius: 8,
                               fontSize: 10,
                               fontWeight: 600,
-                              cursor: ownerAddress ? "pointer" : "not-allowed",
-                              opacity: ownerAddress ? 1 : 0.4,
+                              cursor: actionsDisabled ? "not-allowed" : "pointer",
+                              opacity: actionsDisabled ? 0.5 : 1,
                             }}
                           >
-                            {funded ? "Top up" : "Deposit"}
+                            {actionsDisabled ? "Deposit" : funded ? "Top up" : "Deposit"}
                           </button>
                         </Td>
                       </tr>
@@ -694,7 +882,31 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
               {/* Tank activity (deposit history) */}
               <div style={{ padding: "13px 17px", borderTop: `1px solid ${v2.line}` }}>
                 <Eyebrow style={{ marginBottom: 9 }}>Tank activity</Eyebrow>
-                {gasDeposits.length === 0 ? (
+                {demoMode ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {DEMO_ACTIVITY.map((d, i) => {
+                      const meta = CHAIN_META.find((c) => c.key === d.chain);
+                      return (
+                        <div
+                          key={`demo-${i}`}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            fontSize: 10,
+                          }}
+                        >
+                          <span style={{ color: v2.muted }}>
+                            Deposit · {meta?.name ?? d.chain} · {d.date}
+                          </span>
+                          <span style={{ font: `500 10px ${displayFont}`, color: v2.mint }}>
+                            +{d.amount.toFixed(4)} {meta?.token ?? d.chain.toUpperCase()}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : gasDeposits.length === 0 ? (
                   <div style={{ color: v2.muted2, fontSize: 10, textAlign: "center", padding: "10px 0" }}>
                     No deposits yet
                   </div>

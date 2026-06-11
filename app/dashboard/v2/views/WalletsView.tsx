@@ -206,6 +206,99 @@ function policyRowsFromConfig(cfg: WalletHookConfig | null): PolicyRow[] {
   ];
 }
 
+// ── DEMO data ───────────────────────────────────────────────────────────────
+//
+// When no wallet is connected (or live data hasn't resolved a real active
+// wallet yet) the whole console renders against this sample set so the
+// dashboard looks finished at first glance. Connecting a wallet swaps in live
+// data at the data level — the layout below never branches on demo vs live.
+// Values mirror the q402-agentic-wallet-concept/dashboard-v2.html mockup.
+
+const DEMO = {
+  wallets: [
+    {
+      walletId: "0x3c528161f34ddeab0b71aede21ae42535e140abe",
+      address: "0x3C528161f34ddEAB0b71Aede21ae42535E140abE",
+      label: "Operations",
+      balanceUsd: 300.0,
+      erc8004: "114376",
+      note: "Default wallet",
+    },
+    {
+      walletId: "0x662f210e81ebee1d96b8b49256b9ddd9d5a7623c",
+      address: "0x662f210e81ebee1d96b8b49256b9ddd9d5a7623c",
+      label: "Creator payouts",
+      balanceUsd: 84.2,
+      erc8004: null as string | null,
+      note: "2 recurring rules",
+    },
+  ],
+  /** Active = Operations. Capital allocation 62/23/15. */
+  allocation: [
+    { chain: "bnb", pct: 62 },
+    { chain: "eth", pct: 23 },
+    { chain: "arbitrum", pct: 15 },
+  ],
+  activity: [
+    {
+      id: "demo-1",
+      direction: "out" as const,
+      title: "Payment to 0x662f…623c",
+      meta: "BNB · USDT · Trust Receipt ready",
+      amount: "−$1.00",
+      status: "Settled",
+    },
+    {
+      id: "demo-2",
+      direction: "out" as const,
+      title: "Monthly contributor payout",
+      meta: "Next Jul 7 09:00 UTC",
+      amount: "$120.00",
+      status: "Scheduled",
+    },
+    {
+      id: "demo-3",
+      direction: "in" as const,
+      title: "Deposit received",
+      meta: "Ethereum · USDC",
+      amount: "+$200.00",
+      status: "Confirmed",
+    },
+    {
+      id: "demo-4",
+      direction: "out" as const,
+      title: "Ethereum → Avalanche",
+      meta: "CCIP",
+      amount: "$25.00",
+      status: "Delivered",
+    },
+  ],
+  policy: {
+    score: 82,
+    rows: [
+      { key: "compliance", label: "Compliance gate", detail: "Sanction screening · always on", on: true },
+      { key: "spend-approval", label: "Spend approval", detail: "Human review at $50+", on: true },
+      { key: "yield-alloc", label: "Yield allocation", detail: "Max 35% in yield", on: true },
+      { key: "allowlist", label: "Recipient allowlist", detail: "No restriction", on: false },
+    ] as PolicyRow[],
+  },
+  automation: [
+    {
+      id: "demo-auto-1",
+      label: "Contributor payout",
+      detail: "Monthly · day 7 · $120 USDT · 3 recipients · BNB",
+      status: "ACTIVE" as const,
+    },
+    {
+      id: "demo-auto-2",
+      label: "Treasury rebalance",
+      detail: "Bridge when Ethereum > $500",
+      status: "READY" as const,
+    },
+  ],
+  guardrails: { perTxMaxUsd: 200, dailyLimitUsd: 500 },
+} as const;
+
 export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewProps) {
   // ── Wallet list (same contract as AgenticWalletTab) ──────────────────────
   const [wallets, setWallets] = useState<AgenticWalletPublic[] | undefined>(undefined);
@@ -497,7 +590,76 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
   }, [reload, fetchBalance, activeWallet, loadHooks]);
 
   const archived = activeWallet?.deletedAt != null;
-  const agentNum = agentIdFromTag(activeWallet?.erc8004AgentId);
+
+  // ── Demo fallback ─────────────────────────────────────────────────────────
+  //
+  // The console must look complete before any wallet connects. Demo mode is
+  // ON whenever we don't yet have a real active wallet to drive the view:
+  //   - no connected owner (ownerAddress === null), OR
+  //   - connected but the wallet list / active wallet hasn't resolved yet.
+  // The MOMENT a real active wallet exists, every variable below resolves to
+  // live data and the connected path is 100% intact (demoMode === false).
+  const demoMode = activeWallet == null;
+
+  // View variables the layout reads. In live mode they are the real values;
+  // in demo mode they are substituted from DEMO so the SAME layout renders
+  // fully populated. No layout branch depends on demoMode.
+  const railWallets: Array<{
+    walletId: string;
+    address: string;
+    label: string | null;
+    balanceUsd: number | null;
+    note: string;
+    archived: boolean;
+    isDefault: boolean;
+  }> = demoMode
+    ? DEMO.wallets.map((w, i) => ({
+        walletId: w.walletId,
+        address: w.address,
+        label: w.label,
+        balanceUsd: w.balanceUsd,
+        note: w.note,
+        archived: false,
+        isDefault: i === 0,
+      }))
+    : (wallets ?? []).map((w, i) => ({
+        walletId: w.walletId,
+        address: w.address,
+        label: w.label,
+        balanceUsd: balances[w.walletId]?.totalUsd ?? null,
+        note: w.deletedAt != null
+          ? "Archived"
+          : w.erc8004AgentId
+            ? `ERC-8004 · #${agentIdFromTag(w.erc8004AgentId) ?? "?"}`
+            : i === 0
+              ? "Default wallet"
+              : "Managed wallet",
+        archived: w.deletedAt != null,
+        isDefault: w.walletId === wallets?.[0]?.walletId,
+      }));
+
+  // Active-wallet view model (identity + balance).
+  const vmLabel = demoMode ? DEMO.wallets[0].label : (activeWallet?.label ?? "Agent wallet");
+  const vmAddress = demoMode ? DEMO.wallets[0].address : (activeWallet?.address ?? "");
+  const vmTotalUsd = demoMode ? DEMO.wallets[0].balanceUsd : activeBalance?.totalUsd;
+  const agentNum = demoMode ? DEMO.wallets[0].erc8004 : agentIdFromTag(activeWallet?.erc8004AgentId);
+
+  // Capital allocation segments.
+  const vmAlloc = demoMode
+    ? {
+        total: DEMO.wallets[0].balanceUsd,
+        segs: DEMO.allocation.map((a) => ({ chain: a.chain, usd: 0, pct: a.pct })),
+      }
+    : allocation;
+
+  // Policy view model.
+  const vmPolicyRows = demoMode ? DEMO.policy.rows : policyRows;
+  const vmProtectionsActive = vmPolicyRows.filter((r) => r.on).length;
+  const vmPolicyScore = demoMode ? DEMO.policy.score : policyScore;
+
+  // Guardrails.
+  const vmPerTx = demoMode ? DEMO.guardrails.perTxMaxUsd : activeWallet?.perTxMaxUsd ?? null;
+  const vmDaily = demoMode ? DEMO.guardrails.dailyLimitUsd : activeWallet?.dailyLimitUsd ?? null;
 
   return (
     <V2AccentScope style={{ paddingTop: 17 }}>
@@ -506,25 +668,21 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
         <Surface className="v2-wallet-rail" style={styles.rail}>
           <Eyebrow>Agent wallets</Eyebrow>
 
-          {wallets === undefined ? (
-            <div style={{ color: v2.muted, fontSize: 10, marginTop: 14 }}>
-              {addr ? "Loading wallets…" : "Connect a wallet to load."}
-            </div>
-          ) : wallets.length === 0 ? (
+          {railWallets.length === 0 ? (
             <div style={{ color: v2.muted, fontSize: 10, marginTop: 14, lineHeight: 1.5 }}>
               No Agent Wallets yet. Create your first sandboxed AI spending
               wallet — your MetaMask stays untouched.
             </div>
           ) : (
-            wallets.map((w) => {
-              const isActive = w.walletId === (activeWallet?.walletId ?? activeId);
-              const bal = balances[w.walletId];
-              const isArchived = w.deletedAt != null;
+            railWallets.map((w) => {
+              const isActive = demoMode
+                ? w.isDefault
+                : w.walletId === (activeWallet?.walletId ?? activeId);
               return (
                 <button
                   key={w.walletId}
                   type="button"
-                  onClick={() => setActiveId(w.walletId)}
+                  onClick={() => !demoMode && setActiveId(w.walletId)}
                   style={{ ...styles.walletItem, ...(isActive ? styles.walletItemActive : null) }}
                   title={w.address}
                 >
@@ -532,21 +690,13 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {w.label ?? "Agent wallet"}
                     </span>
-                    {!isArchived && <span style={styles.dot} />}
+                    {!w.archived && <span style={styles.dot} />}
                   </div>
                   <div style={styles.addr}>{shortAddr(w.address)}</div>
                   <div style={styles.walletBal}>
-                    {bal ? fmtUsd(bal.totalUsd) : "$—"}
+                    {w.balanceUsd != null ? fmtUsd(w.balanceUsd) : "$—"}
                   </div>
-                  <div style={styles.walletNote}>
-                    {isArchived
-                      ? "Archived"
-                      : w.erc8004AgentId
-                        ? `ERC-8004 · #${agentIdFromTag(w.erc8004AgentId) ?? "?"}`
-                        : w.walletId === (wallets[0]?.walletId)
-                          ? "Default wallet"
-                          : "Managed wallet"}
-                  </div>
+                  <div style={styles.walletNote}>{w.note}</div>
                 </button>
               );
             })
@@ -558,11 +708,13 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
             disabled={creating || capReached || !addr}
             style={{ ...styles.newWallet, opacity: creating || capReached || !addr ? 0.4 : 1 }}
             title={
-              capReached
-                ? hasMultichainScope
-                  ? `Cap reached (${activeCount}/${meta.max}). Archive one to create a new wallet.`
-                  : `Trial cap (${meta.trialCap}). Upgrade to Multichain for up to ${meta.max}.`
-                : "Create a new Agent Wallet"
+              !addr
+                ? "Connect your wallet"
+                : capReached
+                  ? hasMultichainScope
+                    ? `Cap reached (${activeCount}/${meta.max}). Archive one to create a new wallet.`
+                    : `Trial cap (${meta.trialCap}). Upgrade to Multichain for up to ${meta.max}.`
+                  : "Create a new Agent Wallet"
             }
           >
             {creating ? "Creating…" : "＋ New wallet"}
@@ -587,30 +739,40 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
             <div style={styles.errorBanner}>{error}</div>
           )}
 
-          {activeWallet ? (
+          {(demoMode || activeWallet) && (
             <>
               {/* Hero */}
               <div style={styles.hero}>
                 <div style={styles.heroGlow} aria-hidden />
+
+                {demoMode && (
+                  <div style={styles.previewChip} title="Sample data — connect your wallet to load live balances and activity">
+                    <span style={styles.previewDot} />
+                    Preview · connect your wallet for live data
+                  </div>
+                )}
+
                 <div style={styles.identity}>
                   <div style={{ minWidth: 0 }}>
                     <Eyebrow>Agent Wallet</Eyebrow>
-                    <h1 style={styles.heroH1}>{activeWallet.label ?? "Agent wallet"}</h1>
+                    <h1 style={styles.heroH1}>{vmLabel}</h1>
                     <button
                       type="button"
-                      onClick={copyActiveAddress}
-                      style={styles.address}
-                      title="Copy address"
+                      onClick={demoMode ? undefined : copyActiveAddress}
+                      style={{ ...styles.address, ...(demoMode ? { cursor: "default" } : null) }}
+                      title={demoMode ? "Sample address" : "Copy address"}
                     >
-                      <span style={{ overflowWrap: "anywhere" }}>{activeWallet.address}</span>
-                      <span style={{ color: v2.yellow, marginLeft: 6 }}>{copied ? "copied ✓" : "copy"}</span>
+                      <span style={{ overflowWrap: "anywhere" }}>{vmAddress}</span>
+                      {!demoMode && (
+                        <span style={{ color: v2.yellow, marginLeft: 6 }}>{copied ? "copied ✓" : "copy"}</span>
+                      )}
                     </button>
                     <div style={styles.badges}>
                       <span style={{ ...styles.badge, ...styles.badgeGreen }}>
                         {archived ? "Archived" : "Ready to spend"}
                       </span>
                       <span style={styles.badge}>
-                        {multichainActive ? "Multichain · 10 chains" : "Trial · BNB"}
+                        {demoMode || multichainActive ? "Multichain · 10 chains" : "Trial · BNB"}
                       </span>
                       {agentNum && <span style={styles.badge}>ERC-8004 #{agentNum}</span>}
                     </div>
@@ -618,69 +780,78 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   <div style={styles.heroBal}>
                     <span style={styles.heroBalLabel}>Total portfolio</span>
                     <strong style={styles.heroBalValue}>
-                      {activeBalanceLoading && !activeBalance ? "…" : fmtUsd(activeBalance?.totalUsd)}
+                      {!demoMode && activeBalanceLoading && !activeBalance ? "…" : fmtUsd(vmTotalUsd)}
                     </strong>
                     <button
                       type="button"
-                      onClick={() => fetchBalance(activeWallet, { active: true, force: true })}
-                      disabled={activeBalanceLoading}
+                      onClick={() => activeWallet && fetchBalance(activeWallet, { active: true, force: true })}
+                      disabled={demoMode || activeBalanceLoading}
                       style={styles.refreshLink}
                     >
-                      {activeBalanceLoading ? "Refreshing…" : "Updated · refresh ↻"}
+                      {demoMode ? "Sample data" : activeBalanceLoading ? "Refreshing…" : "Updated · refresh ↻"}
                     </button>
                   </div>
                 </div>
 
-                {/* Actions — each opens the EXISTING modal */}
+                {/* Actions — each opens the EXISTING modal. In demo mode there
+                    is no wallet to act on, so they are disabled with a
+                    "Connect your wallet" hint rather than opening a modal that
+                    would dereference a null wallet. */}
                 <div style={styles.actions}>
                   <button
                     type="button"
-                    disabled={archived}
+                    disabled={demoMode || archived}
                     onClick={() => setSendOpen(true)}
-                    style={{ ...styles.action, ...styles.actionPrimary, ...(archived ? styles.actionDisabled : null) }}
+                    title={demoMode ? "Connect your wallet" : undefined}
+                    style={{ ...styles.action, ...styles.actionPrimary, ...(demoMode || archived ? styles.actionDisabled : null) }}
                   >
                     Send payment
                     <small style={styles.actionSmall}>USDC / USDT</small>
                   </button>
                   <button
                     type="button"
-                    disabled={archived}
+                    disabled={demoMode || archived}
                     onClick={() => setReceiveOpen(true)}
-                    style={{ ...styles.action, ...(archived ? styles.actionDisabled : null) }}
+                    title={demoMode ? "Connect your wallet" : undefined}
+                    style={{ ...styles.action, ...(demoMode || archived ? styles.actionDisabled : null) }}
                   >
                     Receive
                     <small style={styles.actionSmall}>Show address</small>
                   </button>
                   <button
                     type="button"
-                    disabled={archived || !multichainActive}
+                    disabled={demoMode || archived || !multichainActive}
                     onClick={() => setBatchOpen(true)}
                     title={
-                      multichainActive
-                        ? undefined
-                        : hasMultichainScope
-                          ? "Switch the top-bar scope to Multichain to batch across chains."
-                          : "Batch sends require an active Multichain subscription."
+                      demoMode
+                        ? "Connect your wallet"
+                        : multichainActive
+                          ? undefined
+                          : hasMultichainScope
+                            ? "Switch the top-bar scope to Multichain to batch across chains."
+                            : "Batch sends require an active Multichain subscription."
                     }
-                    style={{ ...styles.action, ...(archived || !multichainActive ? styles.actionDisabled : null) }}
+                    style={{ ...styles.action, ...(demoMode || archived || !multichainActive ? styles.actionDisabled : null) }}
                   >
-                    Batch{!multichainActive && " (Paid)"}
+                    Batch{!demoMode && !multichainActive && " (Paid)"}
                     <small style={styles.actionSmall}>Up to 20</small>
                   </button>
                   <button
                     type="button"
-                    disabled={archived || !multichainActive}
+                    disabled={demoMode || archived || !multichainActive}
                     onClick={() => setBridgeOpen(true)}
                     title={
-                      multichainActive
-                        ? "Cross-chain USDC via Chainlink CCIP."
-                        : hasMultichainScope
-                          ? "Switch the top-bar scope to Multichain to bridge across chains."
-                          : "Bridging requires an active Multichain subscription."
+                      demoMode
+                        ? "Connect your wallet"
+                        : multichainActive
+                          ? "Cross-chain USDC via Chainlink CCIP."
+                          : hasMultichainScope
+                            ? "Switch the top-bar scope to Multichain to bridge across chains."
+                            : "Bridging requires an active Multichain subscription."
                     }
-                    style={{ ...styles.action, ...(archived || !multichainActive ? styles.actionDisabled : null) }}
+                    style={{ ...styles.action, ...(demoMode || archived || !multichainActive ? styles.actionDisabled : null) }}
                   >
-                    Bridge{!multichainActive && " (Paid)"}
+                    Bridge{!demoMode && !multichainActive && " (Paid)"}
                     <small style={styles.actionSmall}>CCIP</small>
                   </button>
                 </div>
@@ -715,11 +886,11 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                             <div style={styles.sub}>Available to agents</div>
                           </div>
                         </div>
-                        <div style={{ font: `600 16px ${displayFont}` }}>{fmtUsd(allocation.total)}</div>
+                        <div style={{ font: `600 16px ${displayFont}` }}>{fmtUsd(vmAlloc.total)}</div>
                       </div>
                       <div style={styles.chainbar}>
-                        {allocation.segs.length > 0 ? (
-                          allocation.segs.map((s, i) => (
+                        {vmAlloc.segs.length > 0 ? (
+                          vmAlloc.segs.map((s, i) => (
                             <i
                               key={s.chain}
                               style={{
@@ -734,8 +905,8 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         )}
                       </div>
                       <div style={styles.chains}>
-                        {allocation.segs.length > 0 ? (
-                          allocation.segs.map((s) => (
+                        {vmAlloc.segs.length > 0 ? (
+                          vmAlloc.segs.map((s) => (
                             <span key={s.chain}>
                               <b style={{ color: "#d6dce5" }}>{Math.round(s.pct)}%</b>{" "}
                               {CHAIN_LABEL[s.chain] ?? s.chain}
@@ -751,31 +922,68 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         its own deposit/withdraw modal). It carries its own
                         bordered card + a `mt-4` top margin; neutralise that
                         margin so it top-aligns with the allocation card. The
-                        surrounding V2AccentScope re-skins its emerald → yellow. */}
-                    <div style={{ marginTop: -16 }}>
-                      <AgenticWalletEarnSection
-                        ownerAddress={addr ?? activeWallet.ownerAddr}
-                        walletId={activeWallet.walletId}
-                        signMessage={signMessage}
-                      />
-                    </div>
+                        surrounding V2AccentScope re-skins its emerald → yellow.
+                        In demo mode there is no wallet/owner to authenticate the
+                        Earn section's reads, so we render a static demo card
+                        instead of mounting it (which would sign-prompt / 401). */}
+                    {demoMode || !activeWallet ? (
+                      <div style={{ ...subCard(13), padding: 14 }}>
+                        <div style={styles.assetTop}>
+                          <div style={styles.token}>
+                            <span style={{ ...styles.coin, background: v2.yellow, color: v2.actionText }}>%</span>
+                            <div>
+                              Yield (Earn)
+                              <div style={styles.sub}>Aave · auto-allocated</div>
+                            </div>
+                          </div>
+                          <div style={{ font: `600 16px ${displayFont}` }}>$0.00</div>
+                        </div>
+                        <div style={{ color: v2.muted, fontSize: 8, marginTop: 13, lineHeight: 1.5 }}>
+                          Idle stablecoins can earn up to 35% allocation in Aave.
+                          Connect your wallet to enable Earn.
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: -16 }}>
+                        <AgenticWalletEarnSection
+                          ownerAddress={addr ?? activeWallet.ownerAddr}
+                          walletId={activeWallet.walletId}
+                          signMessage={signMessage}
+                        />
+                      </div>
+                    )}
                   </div>
                 </section>
 
-                {/* Recent activity — real settlements scoped to this wallet */}
+                {/* Recent activity — real settlements scoped to this wallet
+                    (or DEMO.activity in demo mode). */}
                 <section>
                   <SectionHead
                     title="Recent activity"
                     action={<LinkButton>View all</LinkButton>}
                   />
                   <div style={styles.rows}>
-                    {recentForActive.length === 0 ? (
+                    {demoMode ? (
+                      DEMO.activity.map((t) => (
+                        <div key={t.id} style={styles.row}>
+                          <div style={styles.rowIcon}>{t.direction === "out" ? "↗" : "↓"}</div>
+                          <div style={{ minWidth: 0 }}>
+                            <strong style={{ fontSize: 10 }}>{t.title}</strong>
+                            <span style={styles.rowSpan}>{t.meta}</span>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={styles.rowValue}>{t.amount}</div>
+                            <span style={{ ...styles.rowStatus, color: v2.mint }}>{t.status}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : recentForActive.length === 0 ? (
                       <div style={{ color: v2.muted, fontSize: 10, padding: "12px 0" }}>
                         No settlements yet for this wallet.
                       </div>
                     ) : (
                       recentForActive.map((t) => {
-                        const out = t.fromUser?.toLowerCase() === activeWallet.address.toLowerCase();
+                        const out = t.fromUser?.toLowerCase() === activeWallet!.address.toLowerCase();
                         const amt = Number(t.tokenAmount);
                         const counter = out ? t.toUser : t.fromUser;
                         return (
@@ -813,22 +1021,12 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                 </section>
               </div>
             </>
-          ) : wallets && wallets.length === 0 ? (
-            <div style={{ padding: 40, color: v2.muted, fontSize: 12, textAlign: "center" }}>
-              Create your first Agent Wallet from the rail to begin. A
-              sandboxed wallet your AI can spend from — bounded by the caps
-              and policies you set on the right.
-            </div>
-          ) : (
-            <div style={{ padding: 40, color: v2.muted, fontSize: 12, textAlign: "center" }}>
-              {addr ? "Loading wallet console…" : "Connect a wallet to view the console."}
-            </div>
           )}
         </Surface>
 
         {/* ── Col 3 · Right rail ──────────────────────────────────────── */}
         <aside className="v2-right" style={styles.right}>
-          {/* Payment policy — real Hooks config */}
+          {/* Payment policy — real Hooks config (or DEMO.policy in demo mode) */}
           <Surface style={styles.sideCard}>
             <SectionHead
               title="Payment policy"
@@ -842,28 +1040,28 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
               <div
                 style={{
                   ...styles.ring,
-                  background: `conic-gradient(${v2.mint} 0 ${policyScore}%, ${v2.ringTrack} ${policyScore}%)`,
+                  background: `conic-gradient(${v2.mint} 0 ${vmPolicyScore}%, ${v2.ringTrack} ${vmPolicyScore}%)`,
                 }}
               >
                 <span style={styles.ringInner} aria-hidden />
-                <b style={styles.ringNum}>{activeWallet ? policyScore : "—"}</b>
+                <b style={styles.ringNum}>{vmPolicyScore}</b>
               </div>
               <div>
                 <strong style={{ fontSize: 12 }}>
-                  {protectionsActive >= 3 ? "Strong guardrails" : protectionsActive >= 1 ? "Some guardrails" : "Minimal guardrails"}
+                  {vmProtectionsActive >= 3 ? "Strong guardrails" : vmProtectionsActive >= 1 ? "Some guardrails" : "Minimal guardrails"}
                 </strong>
                 <span style={{ display: "block", color: v2.muted, fontSize: 9, marginTop: 3 }}>
-                  {protectionsActive} protection{protectionsActive === 1 ? "" : "s"} active
+                  {vmProtectionsActive} protection{vmProtectionsActive === 1 ? "" : "s"} active
                 </span>
               </div>
             </div>
-            {policyRows.map((p) => (
+            {vmPolicyRows.map((p) => (
               <button
                 key={p.key}
                 type="button"
                 onClick={() => activeWallet && !archived && setHooksOpen(true)}
                 style={styles.policy}
-                title="Edit policies in Hooks"
+                title={demoMode ? "Connect your wallet" : "Edit policies in Hooks"}
               >
                 <div style={{ textAlign: "left" }}>
                   {p.label}
@@ -886,8 +1084,37 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                 top margin; pull it up so it sits flush under the head. The
                 Automation card respects the user's scope view for new-schedule
                 gating (recurring is a paid Multichain feature). */}
-            <div style={{ padding: "0 12px 12px", marginTop: -20 }}>
-              {activeWallet ? (
+            <div style={{ padding: "0 12px 12px", marginTop: demoMode ? 12 : -20 }}>
+              {demoMode || !activeWallet ? (
+                // Demo: render sample automation rules (no auth/data fetch).
+                <div style={{ display: "grid", gap: 8 }}>
+                  {DEMO.automation.map((a) => (
+                    <div key={a.id} style={{ ...subCard(11), padding: "10px 12px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <strong style={{ fontSize: 10 }}>{a.label}</strong>
+                        <span
+                          style={{
+                            ...styles.autoBadge,
+                            ...(a.status === "ACTIVE" ? styles.autoBadgeActive : null),
+                          }}
+                        >
+                          {a.status}
+                        </span>
+                      </div>
+                      <span style={{ display: "block", color: v2.muted, fontSize: 8, marginTop: 4 }}>
+                        {a.detail}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
                 <AgenticWalletRecurringSection
                   walletId={activeWallet.walletId}
                   ownerAddress={addr ?? activeWallet.ownerAddr}
@@ -896,10 +1123,6 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   hasMultichainScope={multichainActive}
                   walletArchived={archived}
                 />
-              ) : (
-                <div style={{ color: v2.muted, fontSize: 9, padding: "8px 4px" }}>
-                  Select a wallet to manage schedules.
-                </div>
               )}
             </div>
           </Surface>
@@ -918,17 +1141,17 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
               <div style={styles.limit}>
                 <span style={{ display: "block", color: v2.muted, fontSize: 8 }}>Per payment</span>
                 <b style={styles.limitVal}>
-                  {activeWallet?.perTxMaxUsd != null ? `$${activeWallet.perTxMaxUsd}` : "No cap"}
+                  {vmPerTx != null ? `$${vmPerTx}` : "No cap"}
                 </b>
               </div>
               <div style={styles.limit}>
                 <span style={{ display: "block", color: v2.muted, fontSize: 8 }}>Daily limit</span>
                 <b style={styles.limitVal}>
-                  {activeWallet?.dailyLimitUsd != null ? `$${activeWallet.dailyLimitUsd}` : "No cap"}
+                  {vmDaily != null ? `$${vmDaily}` : "No cap"}
                 </b>
               </div>
             </div>
-            {!agentNum && activeWallet && !archived && (
+            {!demoMode && !agentNum && activeWallet && !archived && (
               <button type="button" onClick={() => setAgentOpen(true)} style={styles.agentLink}>
                 ◉ Register this wallet on ERC-8004 →
               </button>
@@ -1111,6 +1334,30 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "24px 25px 21px",
     borderBottom: `1px solid ${v2.line}`,
     position: "relative",
+  },
+  previewChip: {
+    position: "relative",
+    zIndex: 1,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 14,
+    padding: "5px 10px",
+    borderRadius: 99,
+    border: "1px solid rgba(247,202,22,.3)",
+    background: "rgba(247,202,22,.08)",
+    color: v2.yellow,
+    fontSize: 9,
+    fontWeight: 600,
+    letterSpacing: ".01em",
+  },
+  previewDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: v2.yellow,
+    boxShadow: `0 0 8px ${v2.yellow}`,
+    flexShrink: 0,
   },
   heroGlow: {
     position: "absolute",
@@ -1327,6 +1574,21 @@ const styles: Record<string, React.CSSProperties> = {
     transition: ".2s",
   },
   toggleKnobOn: { transform: "translateX(13px)", background: v2.mint },
+  autoBadge: {
+    padding: "3px 7px",
+    borderRadius: 99,
+    border: `1px solid ${v2.line}`,
+    color: v2.muted,
+    fontSize: 7,
+    fontWeight: 700,
+    letterSpacing: ".06em",
+    flexShrink: 0,
+  },
+  autoBadgeActive: {
+    color: v2.mint,
+    borderColor: "rgba(85,230,165,.25)",
+    background: "rgba(85,230,165,.06)",
+  },
   limitsCard: { borderColor: "rgba(247,202,22,.18)", background: "rgba(247,202,22,.03)" },
   limitGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginTop: 11 },
   limit: { padding: 9, borderRadius: 9, background: "rgba(0,0,0,.14)" },

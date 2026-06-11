@@ -115,7 +115,12 @@ export default function DashboardV2() {
             }}
           >
             <BrandMark />
-            Q402
+            <span style={{ color: v2.yellow }}>Q402</span>
+            <span
+              style={{ color: "rgba(255,255,255,0.32)", fontSize: 11, fontWeight: 300, letterSpacing: 0, marginLeft: 1, fontFamily: bodyFont }}
+            >
+              by Quack AI
+            </span>
           </div>
 
           <TopNav active={view} onChange={setView} />
