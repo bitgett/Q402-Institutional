@@ -338,8 +338,11 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   // Serialising here also serialises a concurrent /send (once /send adopts
   // the same lock) + yield on one wallet. Lock contention surfaces as 409
   // so the caller retries after the in-flight action finishes.
-  const lockAcquired = await acquireWalletChainLock(walletAddr, chain);
-  if (!lockAcquired) {
+  // SAFE-LEASE: acquire returns a unique token (or null on contention). The
+  // token is required at release so a stale holder whose TTL expired can't
+  // ABA-delete a fresh holder's lock.
+  const lockToken = await acquireWalletChainLock(walletAddr, chain);
+  if (!lockToken) {
     return NextResponse.json(
       {
         error: "WALLET_BUSY",
@@ -349,12 +352,13 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     );
   }
   // Single release point for every path below the lock. Idempotent + best-
-  // effort (the TTL is the backstop if KV is down).
+  // effort (the TTL is the backstop if KV is down). Compare-and-del with our
+  // token so we only ever release the lease we actually hold.
   let lockReleased = false;
   const releaseLock = async () => {
     if (lockReleased) return;
     lockReleased = true;
-    await releaseWalletChainLock(walletAddr, chain);
+    await releaseWalletChainLock(walletAddr, chain, lockToken);
   };
 
   // Request fingerprint for content-bound idempotency (FIX 4). Hoisted (with

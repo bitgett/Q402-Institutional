@@ -14,6 +14,8 @@ const mockKv = vi.hoisted(() => ({
   incrbyfloat: vi.fn(),
   incrby: vi.fn(),
   expire: vi.fn(),
+  scan: vi.fn(),
+  eval: vi.fn(),
 }));
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
@@ -98,6 +100,27 @@ beforeEach(() => {
   mockKv.lrange.mockImplementation((key: string, _start: number, _end: number) =>
     Promise.resolve(listStore.get(key) ?? []),
   );
+  // Cursor-style SCAN over BOTH stores. `match` arrives as a `prefix*` glob;
+  // we only support the trailing-`*` prefix form the lib uses. Returns the
+  // whole match set in one page (cursor "0") — enough for the test scale.
+  mockKv.scan.mockImplementation(
+    (_cursor: string | number, opts: { match: string; count: number }) => {
+      const prefix = opts.match.endsWith("*") ? opts.match.slice(0, -1) : opts.match;
+      const hits = [
+        ...store.keys(),
+        ...listStore.keys(),
+      ].filter((k) => k.startsWith(prefix));
+      return Promise.resolve(["0", hits] as [string, string[]]);
+    },
+  );
+  // Lua compare-and-delete (releaseWalletChainLock) — del only on token match.
+  mockKv.eval.mockImplementation((_script: string, keys: string[], args: string[]) => {
+    if (store.get(keys[0]) === args[0]) {
+      store.delete(keys[0]);
+      return Promise.resolve(1);
+    }
+    return Promise.resolve(0);
+  });
 });
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -353,6 +376,58 @@ describe("hardDeleteAgenticWallet", () => {
     await hardDeleteAgenticWallet(TEST_OWNER, a.address);
     expect(store.has(`aw:list:${TEST_OWNER.toLowerCase()}`)).toBe(false);
     expect(store.has(`aw:default:${TEST_OWNER.toLowerCase()}`)).toBe(false);
+  });
+
+  it("sweeps THIS wallet's derived KV (hooks, yield, balance, spend, idem, lock)", async () => {
+    const a = await makeWallet();
+    const id = a.address.toLowerCase();
+    const owner = TEST_OWNER.toLowerCase();
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Seed every derived family this wallet can own.
+    const derived = [
+      `aw:hooks:${id}`,
+      `aw:yield:${id}`,
+      `aw:balance:${owner}:${id}`,
+      `aw:daily-spend-c:${owner}:${id}:${today}`,
+      `aw:yield:settled:${id}:somekey`,
+      `aw:yield:idem:${id}:supply:bnb:USDC:100`,
+      `aw:wc-lock:${id}:bnb`,
+    ];
+    for (const k of derived) store.set(k, "x");
+
+    await hardDeleteAgenticWallet(TEST_OWNER, a.address);
+
+    for (const k of derived) {
+      expect(store.has(k)).toBe(false);
+    }
+  });
+
+  it("never touches ANOTHER wallet's derived KV", async () => {
+    const a = await makeWallet();
+    const b = await makeWallet();
+    const idA = a.address.toLowerCase();
+    const idB = b.address.toLowerCase();
+    const owner = TEST_OWNER.toLowerCase();
+
+    // B's derived keys (and B's prefix-sharing idem markers).
+    const bKeys = [
+      `aw:hooks:${idB}`,
+      `aw:yield:${idB}`,
+      `aw:balance:${owner}:${idB}`,
+      `aw:yield:settled:${idB}:k`,
+      `aw:wc-lock:${idB}:bnb`,
+    ];
+    for (const k of bKeys) store.set(k, "x");
+    store.set(`aw:hooks:${idA}`, "x");
+
+    await hardDeleteAgenticWallet(TEST_OWNER, a.address);
+
+    // A's derived gone, every B key intact.
+    expect(store.has(`aw:hooks:${idA}`)).toBe(false);
+    for (const k of bKeys) {
+      expect(store.has(k)).toBe(true);
+    }
   });
 });
 
