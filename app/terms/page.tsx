@@ -131,12 +131,21 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-white font-semibold text-base mb-3">10. No Custody / Non-Custodial</h2>
+            <h2 className="text-white font-semibold text-base mb-3">10. Custody</h2>
+            <p className="mb-3">
+              Personal connected wallets are non-custodial. When you connect a personal wallet
+              (MetaMask / OKX), Q402 does not hold, control, or have access to its key or its funds.
+              Token transfers from a connected wallet occur directly between the end-user&apos;s wallet
+              and the recipient via EIP-7702 delegation. The relay only sponsors gas and broadcasts
+              the user-signed authorization; it cannot redirect funds. Q402 is not a money
+              transmitter, payment processor, or financial institution.
+            </p>
             <p>
-              Q402 is a non-custodial relay protocol. Q402 does not hold, control, or have access to
-              customer or end-user funds. All token transfers occur directly between the end-user&apos;s
-              wallet and the recipient via EIP-7702 delegation. Q402 is not a money transmitter, payment
-              processor, or financial institution.
+              Agent Wallets (Mode C) are managed. For Agent Wallets, Q402 generates and custodies an
+              AES-256-GCM-encrypted private key on your behalf so the service can sign and sponsor
+              transactions for autonomous agents. You may export or archive that key at any time;
+              Q402 is not a money transmitter, payment processor, or financial institution, and
+              custody of an Agent Wallet key does not create any fiduciary or banking relationship.
             </p>
           </section>
 

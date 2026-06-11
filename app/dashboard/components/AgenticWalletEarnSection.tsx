@@ -39,6 +39,11 @@ interface PositionsPayload {
   positions: Position[];
   totalSuppliedUsd: number;
   asOf: string;
+  // Set by the route when one or more chains' on-chain reads failed this
+  // cycle. When present, `positions`/`totalSuppliedUsd` cover ONLY the
+  // chains that read cleanly — the figures are PARTIAL, not authoritative.
+  unavailable?: boolean;
+  unavailableChains?: string[];
 }
 
 interface Market {
@@ -52,6 +57,21 @@ interface Props {
   ownerAddress: string;
   walletId: string;
   signMessage: (message: string) => Promise<string | null>;
+}
+
+// Human chain label for the partial-read notice. Yield is BNB-only today;
+// the map mirrors the dashboard's CHAIN_LABEL convention so added chains
+// read cleanly (uppercased key as the fallback for anything unmapped).
+const CHAIN_LABEL: Record<string, string> = {
+  bnb: "BNB Chain",
+  base: "Base",
+  arbitrum: "Arbitrum",
+  ethereum: "Ethereum",
+  avalanche: "Avalanche",
+  scroll: "Scroll",
+};
+function chainLabel(c: string): string {
+  return CHAIN_LABEL[c] ?? c.toUpperCase();
 }
 
 function pct(fraction: number): string {
@@ -123,7 +143,20 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
           positions: data.positions ?? [],
           totalSuppliedUsd: data.totalSuppliedUsd ?? 0,
           asOf: data.asOf,
+          unavailable: data.unavailable === true || (data.unavailableChains?.length ?? 0) > 0,
+          unavailableChains: data.unavailableChains ?? [],
         });
+      } else if (posRes.status === 503) {
+        // Every requested chain's read failed — the route 503s so we don't
+        // render an empty wallet as "no positions". Treat as a read failure,
+        // not a confirmed-empty wallet.
+        const data = await posRes.json().catch(() => ({}) as Partial<PositionsPayload>);
+        const chains = data.unavailableChains ?? [];
+        setError(
+          `Couldn't read your Earn positions${
+            chains.length ? ` on ${chains.map(chainLabel).join(", ")}` : ""
+          } — RPC unavailable. Refresh to retry; this is not a confirmed empty position.`,
+        );
       } else {
         const data = await posRes.json().catch(() => ({}));
         setError(data.error ?? `Couldn't load Earn positions (HTTP ${posRes.status}).`);
@@ -146,6 +179,13 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
   }, [ownerAddress, walletId]);
 
   const hasPositions = (positions?.positions.length ?? 0) > 0;
+
+  // Partial read: at least one chain's on-chain balances couldn't be read, so
+  // the position list + total cover only the chains that read cleanly. Surface
+  // this loudly — a partial sum must not be presented as the authoritative
+  // total (mirrors the AgenticWalletCard "RPC failed" notice).
+  const unreadableChains = positions?.unavailableChains ?? [];
+  const partialRead = (positions?.unavailable ?? false) && unreadableChains.length > 0;
 
   // Best available supply APY across markets, for the teaser line.
   // Guard the empty/all-non-finite case: Math.max() of [] is -Infinity,
@@ -172,7 +212,8 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
         </div>
         {hasPositions && positions && (
           <div className="text-[11px] text-emerald-300 font-mono">
-            {formatUsd(positions.totalSuppliedUsd)} supplied
+            {formatUsd(positions.totalSuppliedUsd)}
+            {partialRead ? "+ supplied" : " supplied"}
           </div>
         )}
       </div>
@@ -215,6 +256,17 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
             {bestApy !== null ? `~${pct(bestApy)}` : "yield"}
           </span>{" "}
           on idle USDC / USDT via Aave.
+        </div>
+      )}
+
+      {/* Partial read — some chains' on-chain balances couldn't be read this
+          cycle, so the list + total above are incomplete. Surface it instead
+          of passing a partial sum off as the full total. */}
+      {!loading && !error && partialRead && (
+        <div className="text-[11px] text-amber-300/80 mt-2 pt-2 border-t" style={{ borderColor: "rgba(74,222,128,0.12)" }}>
+          Couldn&apos;t read {unreadableChains.length} chain
+          {unreadableChains.length === 1 ? "" : "s"} ({unreadableChains.map(chainLabel).join(", ")}) —
+          total may be incomplete. Refresh to retry.
         </div>
       )}
 
