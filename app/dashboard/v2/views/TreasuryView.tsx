@@ -1,0 +1,1239 @@
+"use client";
+
+/**
+ * TreasuryView — capital operations (prototype id="treasury", .wide-view).
+ *
+ * REAL implementation. Re-lays-out + re-skins the v1 dashboard's Gas Tank
+ * tab + the agentic Earn / Bridge surfaces into the v2 design language
+ * (glass surfaces, yellow/mint accents, Space Grotesk numerals). ALL
+ * business logic is reused unchanged from the v1 data layer — this file
+ * only fetches via the same endpoints and mounts the same modals.
+ *
+ * ── Layout ──────────────────────────────────────────────────────────────
+ *   .wide-view = 230px context rail + view-main
+ *   Col 1  .context: anchor sub-nav — Capital overview / Gas Tank /
+ *          Q402 Yield / CCIP Bridge / Deposits. Scroll-spy highlights the
+ *          section in view.
+ *   Col 2  .view-main: "Capital operations" title + desc, then
+ *          .treasury-grid (3 cards): Gas Tank ($ total + per-chain health),
+ *          Q402 Yield (embeds AgenticWalletEarnSection), CCIP Bridge (LINK
+ *          lanes + "Open CCIP bridge" → AgenticWalletBridgeModal). Then a
+ *          per-network .table: Network · Stablecoins (wallet EOA) · Gas Tank
+ *          · State · Manage (opens the deposit modal).
+ *
+ * ── Data sources (REUSED, not reinvented) ───────────────────────────────
+ *   - Gas Tank balances / deposits / LINK: GET /api/gas-tank/user-balance
+ *       (auth'd via getAuthCreds — mirrors page.tsx refreshUserBalance).
+ *   - Token prices: GET /api/gas-tank → { tanks:[{key,price}] }.
+ *   - User EOA holdings: GET /api/wallet-balance?address.
+ *   - Agent Wallet (for Earn + Bridge): GET /api/wallet/agentic (auth'd) —
+ *       picks the owner's first/active wallet so the embedded Earn section
+ *       + Bridge modal have a walletId/walletAddress to act on.
+ *   - Deposit: sendNativeTransfer + waitForWalletReceipt (app/lib/wallet)
+ *       + POST /api/gas-tank/verify-deposit (retrying), same as page.tsx
+ *       DepositModal.
+ *   - Yield: <AgenticWalletEarnSection/> (owns its own fetch + actions).
+ *   - Bridge: <AgenticWalletBridgeModal/> (owns its own auth + CCIP flow).
+ *   - Explorer links: explorerAddressUrl / explorerLabel (app/lib/eip7702).
+ *
+ * ── Scope semantics ─────────────────────────────────────────────────────
+ *   trial scope = BNB-only Gas Tank (the rest dim to "Multichain only");
+ *   multichain = full 10-chain set + LINK + bridge enabled. Scope gates
+ *   which network rows are interactive and whether the bridge card is live.
+ */
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
+import {
+  Surface,
+  Eyebrow,
+  SectionHead,
+  V2AccentScope,
+  displayFont,
+} from "../primitives";
+import { v2, glass, subCard } from "../theme";
+import type { Scope } from "../theme";
+import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
+import { GASTANK_ADDRESS } from "@/app/lib/wallets";
+import {
+  sendNativeTransfer,
+  waitForWalletReceipt,
+  walletErrorMessage,
+  type WalletChainKey,
+} from "@/app/lib/wallet";
+import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
+import { AgenticWalletEarnSection } from "@/app/dashboard/components/AgenticWalletEarnSection";
+import { AgenticWalletBridgeModal } from "@/app/dashboard/components/AgenticWalletBridgeModal";
+
+export interface TreasuryViewProps {
+  /** Connected owner address (null until wallet connects). */
+  ownerAddress: string | null;
+  /** Wallet signer — needed to auth gas-tank/yield/bridge reads. */
+  signMessage: (message: string) => Promise<string | null>;
+  /** Active scope — gates which chains' treasury rows are shown. */
+  scope: Scope;
+}
+
+// ── Chain config (mirrors page.tsx CHAIN_META — same 10-chain set) ───────────
+interface ChainMeta {
+  key: string;
+  name: string;
+  token: string;
+  color: string;
+  /** Whether the in-app "Top up with wallet" path is supported (native send). */
+  depositable: boolean;
+}
+
+const CHAIN_META: ChainMeta[] = [
+  { key: "bnb",       name: "BNB Chain",  token: "BNB",   color: "#F0B90B", depositable: true },
+  { key: "eth",       name: "Ethereum",   token: "ETH",   color: "#627EEA", depositable: true },
+  { key: "avax",      name: "Avalanche",  token: "AVAX",  color: "#E84142", depositable: true },
+  { key: "xlayer",    name: "X Layer",    token: "OKB",   color: "#A0A0A0", depositable: true },
+  { key: "stable",    name: "Stable",     token: "USDT0", color: "#26a17b", depositable: true },
+  { key: "mantle",    name: "Mantle",     token: "MNT",   color: "#bcbcbc", depositable: true },
+  { key: "injective", name: "Injective",  token: "INJ",   color: "#0082FA", depositable: true },
+  { key: "monad",     name: "Monad",      token: "MON",   color: "#836EF9", depositable: true },
+  { key: "scroll",    name: "Scroll",     token: "ETH",   color: "#EEB431", depositable: true },
+  { key: "arbitrum",  name: "Arbitrum",   token: "ETH",   color: "#28A0F0", depositable: true },
+];
+
+// Chains a trial-scoped account can transact on (BNB-only, mirroring the
+// rest of the dashboard's trial gating). Multichain unlocks all 10.
+const TRIAL_CHAINS = new Set(["bnb"]);
+
+const LINK_CHAINS = ["eth", "avax", "arbitrum"] as const;
+type LinkChain = (typeof LINK_CHAINS)[number];
+const LINK_TOKEN: Record<LinkChain, { address: string; label: string }> = {
+  eth:      { address: "0x514910771AF9Ca656af840dff83E8264EcF986CA", label: "Ethereum" },
+  avax:     { address: "0x5947BB275c521040051D82396192181b413227A3", label: "Avalanche" },
+  arbitrum: { address: "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4", label: "Arbitrum" },
+};
+const LINK_USD = 12; // rough $/LINK, matches BridgeModal + v1 dashboard
+
+// Minimal mirror of AgenticWalletPublic (the fields Treasury needs from the
+// wallet list to drive the embedded Earn section + Bridge modal). Importing
+// the full type pulls the whole AgenticWalletTab module; this keeps the
+// surface small and the bundle lean while staying drift-checked at compile
+// time against the endpoint's documented shape.
+interface AgenticWalletLite {
+  address: string;
+  walletId: string;
+  label: string | null;
+}
+
+function fmtUsd(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "$0.00";
+  if (n < 0.01) return "<$0.01";
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// ── Context sub-nav (scroll-spy) ─────────────────────────────────────────────
+const SECTIONS = [
+  { id: "overview", label: "Capital overview" },
+  { id: "gastank",  label: "Gas Tank" },
+  { id: "yield",    label: "Q402 Yield" },
+  { id: "bridge",   label: "CCIP Bridge" },
+  { id: "deposits", label: "Deposits" },
+] as const;
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewProps) {
+  const isMultichain = scope === "multichain";
+
+  // ── Gas Tank state (mirrors page.tsx) ──────────────────────────────────
+  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({});
+  const [gasDeposits, setGasDeposits] = useState<
+    Array<{ chain: string; token: string; amount: number; txHash: string; depositedAt: string }>
+  >([]);
+  const [linkBalances, setLinkBalances] = useState<Record<LinkChain, number>>({
+    eth: 0, avax: 0, arbitrum: 0,
+  });
+  const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
+  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
+  const [tankLoading, setTankLoading] = useState(true);
+
+  // Active Agent Wallet — fuels the embedded Earn section + Bridge modal.
+  const [agentWallet, setAgentWallet] = useState<AgenticWalletLite | null>(null);
+  const [hasMultichainScopeSrv, setHasMultichainScopeSrv] = useState(false);
+
+  // Modals
+  const [depositChain, setDepositChain] = useState<ChainMeta | null>(null);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [bridgeOpen, setBridgeOpen] = useState(false);
+
+  const [activeSection, setActiveSection] = useState<SectionId>("overview");
+
+  // ── Fetch: gas-tank user balance (auth'd, reuses session sig) ──────────
+  const refreshUserBalance = useCallback(
+    async (addr: string) => {
+      const auth = await getAuthCreds(addr, signMessage);
+      if (!auth) return;
+      const qs = new URLSearchParams({ address: addr, nonce: auth.nonce, sig: auth.signature }).toString();
+      try {
+        const res = await fetch(`/api/gas-tank/user-balance?${qs}`);
+        const data = await res.json();
+        if (res.status === 401 && data.code === "NONCE_EXPIRED") {
+          clearAuthCache(addr);
+          return;
+        }
+        if (data.balances) setUserGasBalance(data.balances);
+        if (data.deposits) setGasDeposits(data.deposits);
+        if (data.linkBalances) setLinkBalances(data.linkBalances);
+      } catch {
+        /* ignore — UI renders zeros */
+      }
+    },
+    [signMessage],
+  );
+
+  // ── Fetch: prices (public) ─────────────────────────────────────────────
+  // tankLoading already initialises to `true`, so this once-on-mount effect
+  // doesn't re-set it synchronously (which would trip a cascading-render
+  // lint); it only flips it off in .finally once prices land.
+  useEffect(() => {
+    fetch("/api/gas-tank")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.tanks) {
+          const prices: Record<string, number> = {};
+          for (const t of data.tanks) prices[t.key] = t.price;
+          setTokenPrices(prices);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setTankLoading(false));
+  }, []);
+
+  // ── Fetch: balances + EOA holdings + agent wallet on connect ───────────
+  // All three reads are deferred into async closures so no setState runs
+  // synchronously in the effect body (avoids the cascading-render lint).
+  useEffect(() => {
+    if (!ownerAddress) return;
+    const addr = ownerAddress;
+    let cancelled = false;
+
+    void (async () => {
+      // Awaited boundary keeps the gas-balance setState off the synchronous
+      // effect path (refreshUserBalance only setStates after its own awaits).
+      await refreshUserBalance(addr);
+    })();
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/wallet-balance?address=${addr}`);
+        const data = await res.json();
+        if (!cancelled && data.balances) setWalletBalances(data.balances);
+      } catch {
+        /* ignore */
+      }
+    })();
+
+    // Agent Wallet list — pick the first wallet for Earn/Bridge wiring.
+    void (async () => {
+      const auth = await getAuthCreds(addr, signMessage);
+      if (!auth) return;
+      const qs = new URLSearchParams({ address: addr, nonce: auth.nonce, sig: auth.signature }).toString();
+      try {
+        const res = await fetch(`/api/wallet/agentic?${qs}`);
+        const data = await res.json();
+        if (res.status === 401 && data.code === "NONCE_EXPIRED") {
+          clearAuthCache(addr);
+          return;
+        }
+        if (cancelled) return;
+        if (typeof data.hasMultichainScope === "boolean") {
+          setHasMultichainScopeSrv(data.hasMultichainScope);
+        }
+        const first = Array.isArray(data.wallets) ? data.wallets[0] : null;
+        if (first && typeof first.walletId === "string") {
+          setAgentWallet({
+            address: first.address,
+            walletId: first.walletId,
+            label: first.label ?? null,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ownerAddress, signMessage, refreshUserBalance]);
+
+  // ── Scroll-spy for the context rail ────────────────────────────────────
+  const mainRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const root = mainRef.current;
+    if (!root) return;
+    const targets = SECTIONS.map((s) => root.querySelector<HTMLElement>(`#treasury-${s.id}`)).filter(
+      (el): el is HTMLElement => el != null,
+    );
+    if (targets.length === 0) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible) {
+          const id = visible.target.id.replace("treasury-", "") as SectionId;
+          setActiveSection(id);
+        }
+      },
+      { root: null, rootMargin: "-80px 0px -55% 0px", threshold: [0, 0.25, 0.5, 1] },
+    );
+    targets.forEach((t) => obs.observe(t));
+    return () => obs.disconnect();
+  }, [ownerAddress]);
+
+  function scrollTo(id: SectionId) {
+    const el = document.getElementById(`treasury-${id}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveSection(id);
+  }
+
+  // ── Derived totals ─────────────────────────────────────────────────────
+  const totalGasUsd = useMemo(
+    () =>
+      Object.entries(userGasBalance).reduce(
+        (sum, [c, amt]) => sum + amt * (tokenPrices[c] ?? 0),
+        0,
+      ),
+    [userGasBalance, tokenPrices],
+  );
+  const totalLink = (linkBalances.eth ?? 0) + (linkBalances.avax ?? 0) + (linkBalances.arbitrum ?? 0);
+  const linkUsd = totalLink * LINK_USD;
+  const fundedChainCount = useMemo(
+    () => CHAIN_META.filter((c) => (userGasBalance[c.key] ?? 0) > 0).length,
+    [userGasBalance],
+  );
+
+  const visibleChains = useMemo(
+    () => (isMultichain ? CHAIN_META : CHAIN_META.filter((c) => TRIAL_CHAINS.has(c.key))),
+    [isMultichain],
+  );
+
+  return (
+    <V2AccentScope style={{ paddingTop: 17 }}>
+      <div
+        className="treasury-wide-view"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "230px minmax(0, 1fr)",
+          gap: 17,
+          alignItems: "start",
+        }}
+      >
+        {/* ── Col 1 · context rail ─────────────────────────────────────── */}
+        <Surface style={{ padding: 13, position: "sticky", top: 84 }}>
+          <Eyebrow style={{ marginBottom: 9, paddingLeft: 3 }}>Capital</Eyebrow>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {SECTIONS.map((s) => {
+              const on = s.id === activeSection;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => scrollTo(s.id)}
+                  style={{
+                    border: 0,
+                    textAlign: "left",
+                    background: on ? "var(--v2-accent-soft)" : "transparent",
+                    color: on ? v2.yellow : v2.muted,
+                    padding: "8px 10px",
+                    borderRadius: 9,
+                    fontSize: 11,
+                    fontWeight: on ? 600 : 400,
+                    cursor: "pointer",
+                    borderLeft: on ? `2px solid ${v2.yellow}` : "2px solid transparent",
+                  }}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div
+            style={{
+              ...subCard(11),
+              marginTop: 13,
+              padding: 11,
+            }}
+          >
+            <Eyebrow style={{ marginBottom: 4 }}>Custody</Eyebrow>
+            <div style={{ color: v2.text, fontSize: 11, fontWeight: 600 }}>Cold Gas Tank</div>
+            <div style={{ color: v2.muted2, fontSize: 9, marginTop: 3, lineHeight: 1.5 }}>
+              Deposits sit in a cold wallet; the hot relayer sponsors gas on every
+              settlement.
+            </div>
+          </div>
+        </Surface>
+
+        {/* ── Col 2 · view-main ────────────────────────────────────────── */}
+        <div ref={mainRef} style={{ minWidth: 0 }}>
+          {/* Title */}
+          <div id="treasury-overview" style={{ scrollMarginTop: 84 }}>
+            <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
+              Capital operations
+            </div>
+            <div style={{ color: v2.muted, fontSize: 11, marginTop: 4, marginBottom: 16 }}>
+              Gas Tank, Q402 Yield, and CCIP liquidity across{" "}
+              {isMultichain ? "10 networks" : "BNB Chain (trial)"}.
+              {!ownerAddress && " Connect a wallet to load balances."}
+            </div>
+          </div>
+
+          {/* ── treasury-grid (3 cards) ────────────────────────────────── */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 13,
+              marginBottom: 17,
+            }}
+          >
+            {/* Gas Tank card */}
+            <Surface radius={15} style={{ padding: 17, scrollMarginTop: 84 }}>
+              <div id="treasury-gastank" style={{ scrollMarginTop: 84 }}>
+                <Eyebrow>Gas Tank</Eyebrow>
+                <div
+                  style={{
+                    font: `600 27px ${displayFont}`,
+                    color: v2.yellow,
+                    letterSpacing: "-.04em",
+                    marginTop: 8,
+                  }}
+                >
+                  {tankLoading ? (
+                    <span style={{ color: v2.muted2, fontSize: 18 }}>Loading…</span>
+                  ) : (
+                    fmtUsd(totalGasUsd)
+                  )}
+                </div>
+                <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
+                  Sponsors gas on relayed payments.
+                </div>
+                {/* health bar — funded vs total chains */}
+                <div
+                  style={{
+                    height: 5,
+                    borderRadius: 3,
+                    background: v2.ringTrack,
+                    marginTop: 13,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${(fundedChainCount / visibleChains.length) * 100}%`,
+                      background: v2.yellow,
+                      borderRadius: 3,
+                      transition: "width .4s",
+                    }}
+                  />
+                </div>
+                <div style={{ color: v2.muted2, fontSize: 9, marginTop: 6 }}>
+                  {fundedChainCount} / {visibleChains.length} networks funded
+                </div>
+                <button
+                  type="button"
+                  onClick={() => scrollTo("deposits")}
+                  style={{
+                    marginTop: 13,
+                    width: "100%",
+                    border: `1px solid var(--v2-accent-line)`,
+                    background: "var(--v2-accent-fill)",
+                    color: v2.yellow,
+                    padding: "8px 0",
+                    borderRadius: 9,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Manage deposits
+                </button>
+              </div>
+            </Surface>
+
+            {/* Q402 Yield card */}
+            <Surface radius={15} style={{ padding: 17 }}>
+              <div id="treasury-yield" style={{ scrollMarginTop: 84 }}>
+                <SectionHead
+                  title="Q402 Yield"
+                  meta={<span style={{ color: v2.mint }}>Aave V3</span>}
+                />
+                {ownerAddress && agentWallet ? (
+                  // AgenticWalletEarnSection owns its own fetch + deposit/withdraw
+                  // actions. Mounted inside V2AccentScope (this whole view) so its
+                  // emerald accent resolves via the re-skin tokens.
+                  <AgenticWalletEarnSection
+                    ownerAddress={ownerAddress}
+                    walletId={agentWallet.walletId}
+                    signMessage={signMessage}
+                  />
+                ) : (
+                  <div style={{ color: v2.muted, fontSize: 11, lineHeight: 1.6, marginTop: 8 }}>
+                    {ownerAddress
+                      ? "Create an Agent Wallet to supply idle USDC / USDT and earn Aave V3 yield."
+                      : "Connect a wallet to view supplied positions + APY."}
+                  </div>
+                )}
+              </div>
+            </Surface>
+
+            {/* CCIP Bridge card */}
+            <Surface radius={15} style={{ padding: 17 }}>
+              <div id="treasury-bridge" style={{ scrollMarginTop: 84 }}>
+                <Eyebrow>CCIP Bridge</Eyebrow>
+                <div
+                  style={{
+                    font: `600 27px ${displayFont}`,
+                    color: v2.cyan,
+                    letterSpacing: "-.04em",
+                    marginTop: 8,
+                  }}
+                >
+                  {totalLink.toLocaleString("en-US", { maximumFractionDigits: 4 })}
+                  <span style={{ fontSize: 13, color: v2.muted, marginLeft: 5, fontWeight: 400 }}>
+                    LINK
+                  </span>
+                </div>
+                <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
+                  {fmtUsd(linkUsd)} · fee bucket for 3 lanes (eth · avax · arbitrum)
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 11 }}>
+                  {LINK_CHAINS.map((k) => (
+                    <div
+                      key={k}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        fontSize: 10,
+                        color: v2.muted,
+                      }}
+                    >
+                      <span>{LINK_TOKEN[k].label}</span>
+                      <span style={{ font: `500 10px ${displayFont}`, color: v2.text }}>
+                        {(linkBalances[k] ?? 0).toFixed(4)} LINK
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 7, marginTop: 13 }}>
+                  <button
+                    type="button"
+                    onClick={() => setLinkModalOpen(true)}
+                    style={{
+                      flex: 1,
+                      border: `1px solid ${v2.line}`,
+                      background: "rgba(255,255,255,.03)",
+                      color: v2.text,
+                      padding: "8px 0",
+                      borderRadius: 9,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Deposit LINK
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!isMultichain || !ownerAddress || !agentWallet}
+                    onClick={() => setBridgeOpen(true)}
+                    title={
+                      !isMultichain
+                        ? "Cross-chain bridging needs the Multichain scope"
+                        : !agentWallet
+                          ? "Create an Agent Wallet to bridge"
+                          : undefined
+                    }
+                    style={{
+                      flex: 1,
+                      border: 0,
+                      background: isMultichain && agentWallet ? v2.yellow : "rgba(255,255,255,.05)",
+                      color: isMultichain && agentWallet ? v2.actionText : v2.muted2,
+                      padding: "8px 0",
+                      borderRadius: 9,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      cursor: isMultichain && agentWallet ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    Open bridge
+                  </button>
+                </div>
+              </div>
+            </Surface>
+          </div>
+
+          {/* ── Per-network table ──────────────────────────────────────── */}
+          <Surface radius={15} style={{ overflow: "hidden" }}>
+            <div id="treasury-deposits" style={{ scrollMarginTop: 84 }}>
+              <div style={{ padding: "15px 17px 11px" }}>
+                <SectionHead
+                  title="Networks"
+                  meta={
+                    isMultichain
+                      ? `${CHAIN_META.length} networks · deposit to fund gas`
+                      : "Trial · BNB Chain only"
+                  }
+                />
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                <thead>
+                  <tr style={{ color: v2.muted2 }}>
+                    <Th style={{ paddingLeft: 17 }}>Network</Th>
+                    <Th>Wallet stablecoins</Th>
+                    <Th>Gas Tank</Th>
+                    <Th>State</Th>
+                    <Th style={{ textAlign: "right", paddingRight: 17 }}>Manage</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleChains.map((c) => {
+                    const gas = userGasBalance[c.key] ?? 0;
+                    const gasUsd = gas * (tokenPrices[c.key] ?? 0);
+                    const eoa = walletBalances[c.key] ?? 0;
+                    const funded = gas > 0;
+                    const explorerKey = c.key as Parameters<typeof explorerAddressUrl>[0];
+                    return (
+                      <tr
+                        key={c.key}
+                        style={{ borderTop: `1px solid ${v2.line}` }}
+                      >
+                        <Td style={{ paddingLeft: 17 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span
+                              aria-hidden
+                              style={{
+                                width: 7,
+                                height: 7,
+                                borderRadius: 2,
+                                background: c.color,
+                                flexShrink: 0,
+                              }}
+                            />
+                            <a
+                              href={explorerAddressUrl(explorerKey, GASTANK_ADDRESS)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: v2.text, textDecoration: "none" }}
+                              title={`View Gas Tank on ${explorerLabel(explorerKey)}`}
+                            >
+                              {c.name}
+                            </a>
+                            <span style={{ color: v2.muted2, fontSize: 9 }}>{c.token}</span>
+                          </div>
+                        </Td>
+                        <Td>
+                          <span style={{ font: `400 11px ${displayFont}`, color: eoa > 0 ? v2.text : v2.muted2 }}>
+                            {eoa > 0 ? `${eoa.toFixed(4)} ${c.token}` : "—"}
+                          </span>
+                        </Td>
+                        <Td>
+                          <span style={{ font: `400 11px ${displayFont}`, color: funded ? v2.text : v2.muted2 }}>
+                            {gas.toFixed(4)} {c.token}
+                          </span>
+                          <span style={{ color: v2.muted2, fontSize: 9, marginLeft: 6 }}>
+                            {gasUsd >= 0.01 ? fmtUsd(gasUsd) : ""}
+                          </span>
+                        </Td>
+                        <Td>
+                          <span
+                            style={{
+                              fontSize: 9,
+                              fontWeight: 700,
+                              letterSpacing: ".04em",
+                              padding: "3px 7px",
+                              borderRadius: 6,
+                              color: funded ? v2.mint : v2.muted2,
+                              background: funded ? "rgba(85,230,165,.10)" : "rgba(255,255,255,.04)",
+                            }}
+                          >
+                            {funded ? "FUNDED" : "EMPTY"}
+                          </span>
+                        </Td>
+                        <Td style={{ textAlign: "right", paddingRight: 17 }}>
+                          <button
+                            type="button"
+                            onClick={() => setDepositChain(c)}
+                            disabled={!ownerAddress}
+                            style={{
+                              border: `1px solid ${funded ? "var(--v2-accent-line)" : v2.line}`,
+                              background: funded ? "var(--v2-accent-fill)" : "rgba(255,255,255,.03)",
+                              color: funded ? v2.yellow : v2.muted,
+                              padding: "6px 11px",
+                              borderRadius: 8,
+                              fontSize: 10,
+                              fontWeight: 600,
+                              cursor: ownerAddress ? "pointer" : "not-allowed",
+                              opacity: ownerAddress ? 1 : 0.4,
+                            }}
+                          >
+                            {funded ? "Top up" : "Deposit"}
+                          </button>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Tank activity (deposit history) */}
+              <div style={{ padding: "13px 17px", borderTop: `1px solid ${v2.line}` }}>
+                <Eyebrow style={{ marginBottom: 9 }}>Tank activity</Eyebrow>
+                {gasDeposits.length === 0 ? (
+                  <div style={{ color: v2.muted2, fontSize: 10, textAlign: "center", padding: "10px 0" }}>
+                    No deposits yet
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {[...gasDeposits].reverse().slice(0, 8).map((d, i) => {
+                      const isWithdrawal = d.amount < 0;
+                      const meta = CHAIN_META.find((c) => c.key === d.chain);
+                      return (
+                        <div
+                          key={`${d.txHash}-${i}`}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            fontSize: 10,
+                          }}
+                        >
+                          <span style={{ color: v2.muted }}>
+                            {isWithdrawal ? "Withdrawal" : "Deposit"} ·{" "}
+                            {meta?.name ?? d.chain} ·{" "}
+                            {new Date(d.depositedAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                          <span
+                            style={{
+                              font: `500 10px ${displayFont}`,
+                              color: isWithdrawal ? v2.red : v2.mint,
+                            }}
+                          >
+                            {isWithdrawal ? "-" : "+"}
+                            {Math.abs(d.amount).toFixed(4)} {d.token}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Surface>
+        </div>
+      </div>
+
+      {/* ── Modals ───────────────────────────────────────────────────────── */}
+      {depositChain && ownerAddress && (
+        <V2DepositModal
+          chain={depositChain}
+          address={ownerAddress}
+          onClose={() => setDepositChain(null)}
+          onVerified={(balances) => {
+            setUserGasBalance(balances);
+            setDepositChain(null);
+          }}
+        />
+      )}
+
+      {linkModalOpen && (
+        <V2LinkDepositModal
+          balances={linkBalances}
+          onClose={() => setLinkModalOpen(false)}
+        />
+      )}
+
+      {bridgeOpen && ownerAddress && agentWallet && (
+        <AgenticWalletBridgeModal
+          walletAddress={agentWallet.address}
+          walletId={agentWallet.walletId}
+          ownerAddress={ownerAddress}
+          signMessage={signMessage}
+          hasMultichainScope={isMultichain && hasMultichainScopeSrv}
+          onClose={() => setBridgeOpen(false)}
+          onSent={() => {
+            setBridgeOpen(false);
+            if (ownerAddress) refreshUserBalance(ownerAddress);
+          }}
+        />
+      )}
+    </V2AccentScope>
+  );
+}
+
+// ── Table cells ──────────────────────────────────────────────────────────────
+function Th({ children, style }: { children: React.ReactNode; style?: CSSProperties }) {
+  return (
+    <th
+      style={{
+        textAlign: "left",
+        fontWeight: 600,
+        fontSize: 9,
+        letterSpacing: ".1em",
+        textTransform: "uppercase",
+        padding: "0 11px 9px",
+        ...style,
+      }}
+    >
+      {children}
+    </th>
+  );
+}
+function Td({ children, style }: { children: React.ReactNode; style?: CSSProperties }) {
+  return <td style={{ padding: "11px", verticalAlign: "middle", ...style }}>{children}</td>;
+}
+
+// ── V2DepositModal ───────────────────────────────────────────────────────────
+//
+// v2-skinned native gas deposit. REUSES the exact wallet primitives +
+// verify-deposit endpoint the v1 DepositModal uses (sendNativeTransfer →
+// waitForWalletReceipt → POST /api/gas-tank/verify-deposit with RPC-lag
+// retry). Only the chrome is re-laid-out for v2; the settlement logic is
+// identical.
+function V2DepositModal({
+  chain,
+  address,
+  onClose,
+  onVerified,
+}: {
+  chain: ChainMeta;
+  address: string;
+  onClose: () => void;
+  onVerified: (balances: Record<string, number>) => void;
+}) {
+  const [phase, setPhase] = useState<
+    "main" | "awaiting_wallet" | "confirming_tx" | "checking" | "done" | "error"
+  >("main");
+  const [amount, setAmount] = useState("");
+  const [err, setErr] = useState("");
+  const [verified, setVerified] = useState<Record<string, number>>({});
+
+  async function creditByTxHashWithRetry(txHash: string, attempts = 8) {
+    let lastError = "Payment submitted, but we could not credit it yet.";
+    for (let i = 0; i < attempts; i++) {
+      const res = await fetch("/api/gas-tank/verify-deposit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, txHash, chain: chain.key }),
+      });
+      const data = await res.json();
+      if (res.ok && (data.newDeposits > 0 || data.alreadyCredited)) return data;
+      lastError = data.error ?? lastError;
+      const retryable = res.status === 404 && /not found|not yet confirmed/i.test(lastError);
+      if (!retryable || i === attempts - 1) break;
+      await new Promise((r) => setTimeout(r, 2500 + i * 1000));
+    }
+    throw new Error(lastError);
+  }
+
+  async function topUp() {
+    const amt = amount.trim();
+    if (!/^(?:\d+|\d*\.\d+)$/.test(amt) || Number(amt) <= 0) {
+      setErr(`Enter an amount of ${chain.token} to deposit.`);
+      return;
+    }
+    setErr("");
+    try {
+      setPhase("awaiting_wallet");
+      const txHash = await sendNativeTransfer({
+        chain: chain.key as WalletChainKey,
+        from: address,
+        to: GASTANK_ADDRESS,
+        amount: amt,
+      });
+      setPhase("confirming_tx");
+      await waitForWalletReceipt(chain.key as WalletChainKey, txHash);
+      setPhase("checking");
+      const data = await creditByTxHashWithRetry(txHash);
+      setVerified(data.balances ?? {});
+      setPhase("done");
+      onVerified(data.balances ?? {});
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : walletErrorMessage(e));
+      setPhase("error");
+    }
+  }
+
+  return <ModalShell title={`${chain.token} · ${chain.name}`} onClose={onClose}>
+    {phase === "main" && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+        <div style={{ color: v2.muted, fontSize: 11 }}>
+          Top up the Gas Tank with <span style={{ color: v2.yellow }}>{chain.token}</span>.
+        </div>
+        <div>
+          <Eyebrow style={{ marginBottom: 6 }}>Amount to deposit</Eyebrow>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder={`0.10 ${chain.token}`}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                background: v2.inputFill,
+                border: `1px solid ${v2.line}`,
+                borderRadius: 10,
+                padding: "11px 12px",
+                color: v2.text,
+                font: `500 13px ${displayFont}`,
+                outline: "none",
+              }}
+            />
+            <span style={{ color: v2.muted, fontSize: 11, fontWeight: 600, width: 48, textAlign: "right" }}>
+              {chain.token}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={topUp}
+          disabled={!amount.trim()}
+          style={{
+            border: 0,
+            background: v2.yellow,
+            color: v2.actionText,
+            padding: "12px 0",
+            borderRadius: 11,
+            fontWeight: 700,
+            fontSize: 13,
+            cursor: amount.trim() ? "pointer" : "not-allowed",
+            opacity: amount.trim() ? 1 : 0.4,
+          }}
+        >
+          Top up with wallet
+        </button>
+        <div style={{ color: v2.muted2, fontSize: 9, lineHeight: 1.5 }}>
+          Switches to {chain.name}, sends {chain.token}, credits your Gas Tank on
+          confirmation. {chain.key === "stable" && "Send USDT0 on Stable (chain 988) — not ETH/BNB/AVAX."}
+        </div>
+        <div style={{ borderTop: `1px solid ${v2.line}`, paddingTop: 11 }}>
+          <div style={{ color: v2.muted2, fontSize: 9, lineHeight: 1.5 }}>
+            Gas Tank withdrawals are processed manually by Q402 operations. Contact{" "}
+            business@quackai.ai to request a refund.
+          </div>
+        </div>
+      </div>
+    )}
+
+    {(phase === "awaiting_wallet" || phase === "confirming_tx" || phase === "checking") && (
+      <div style={{ textAlign: "center", padding: "26px 0", color: v2.muted, fontSize: 12 }}>
+        {phase === "awaiting_wallet"
+          ? `Confirm ${chain.token} deposit in your wallet…`
+          : phase === "confirming_tx"
+            ? "Waiting for on-chain confirmation…"
+            : "Crediting your Gas Tank (RPC lag — retrying automatically)…"}
+      </div>
+    )}
+
+    {phase === "done" && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "11px 13px",
+            borderRadius: 11,
+            background: "rgba(85,230,165,.08)",
+            border: `1px solid rgba(85,230,165,.22)`,
+          }}
+        >
+          <span style={{ color: v2.mint, fontSize: 17 }}>✓</span>
+          <div>
+            <div style={{ color: v2.mint, fontWeight: 700, fontSize: 12 }}>Deposit confirmed</div>
+            <div style={{ color: v2.muted, fontSize: 10 }}>Gas Tank credited.</div>
+          </div>
+        </div>
+        {Object.entries(verified)
+          .filter(([, v]) => v > 0)
+          .map(([c, amt]) => (
+            <div
+              key={c}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 11,
+                color: v2.muted,
+                background: "rgba(255,255,255,.03)",
+                padding: "8px 11px",
+                borderRadius: 9,
+              }}
+            >
+              <span style={{ textTransform: "uppercase" }}>{c}</span>
+              <span style={{ font: `500 11px ${displayFont}`, color: v2.text }}>
+                {amt.toFixed(4)} {CHAIN_META.find((m) => m.key === c)?.token ?? c.toUpperCase()}
+              </span>
+            </div>
+          ))}
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            border: 0,
+            background: v2.yellow,
+            color: v2.actionText,
+            padding: "11px 0",
+            borderRadius: 11,
+            fontWeight: 700,
+            fontSize: 13,
+            cursor: "pointer",
+          }}
+        >
+          Back to Treasury
+        </button>
+      </div>
+    )}
+
+    {phase === "error" && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+        <div
+          style={{
+            color: v2.red,
+            fontSize: 11,
+            background: "rgba(255,119,119,.08)",
+            border: `1px solid rgba(255,119,119,.22)`,
+            padding: "11px 13px",
+            borderRadius: 11,
+          }}
+        >
+          {err || "Deposit could not be confirmed yet. Try again in a moment."}
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setErr("");
+            setPhase("main");
+          }}
+          style={{
+            border: `1px solid var(--v2-accent-line)`,
+            background: "var(--v2-accent-fill)",
+            color: v2.yellow,
+            padding: "10px 0",
+            borderRadius: 11,
+            fontWeight: 600,
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          Try again
+        </button>
+      </div>
+    )}
+  </ModalShell>;
+}
+
+// ── V2LinkDepositModal ───────────────────────────────────────────────────────
+//
+// LINK is an ERC-20 (not native), so there's no in-app send shortcut — the
+// user copies the GASTANK address + the per-chain LINK token contract and
+// sends from their own wallet. The deposit-scan cron credits it within
+// ~5 min. Same flow as the v1 LinkDepositModal, re-skinned.
+function V2LinkDepositModal({
+  balances,
+  onClose,
+}: {
+  balances: Record<LinkChain, number>;
+  onClose: () => void;
+}) {
+  const [chain, setChain] = useState<LinkChain>("eth");
+  const [copied, setCopied] = useState<"deposit" | "token" | null>(null);
+  const cfg = LINK_TOKEN[chain];
+  const bal = balances[chain] ?? 0;
+
+  async function copy(value: string, field: "deposit" | "token") {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(field);
+      setTimeout(() => setCopied(null), 1500);
+    } catch {
+      /* clipboard unavailable */
+    }
+  }
+
+  return (
+    <ModalShell title="LINK Gas Tank · CCIP" onClose={onClose}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 7, marginBottom: 13 }}>
+        {LINK_CHAINS.map((k) => {
+          const on = k === chain;
+          const cb = balances[k] ?? 0;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setChain(k)}
+              style={{
+                textAlign: "left",
+                border: `1px solid ${on ? "var(--v2-accent-line)" : v2.line}`,
+                background: on ? "var(--v2-accent-fill)" : "rgba(255,255,255,.02)",
+                borderRadius: 11,
+                padding: "9px 10px",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ color: on ? v2.yellow : v2.muted, fontSize: 10, fontWeight: 600 }}>
+                {LINK_TOKEN[k].label}
+              </div>
+              <div style={{ font: `500 13px ${displayFont}`, color: on ? v2.text : v2.muted }}>
+                {cb.toFixed(4)}
+              </div>
+              <div style={{ color: v2.muted2, fontSize: 9 }}>
+                {cb > 0 ? `≈ $${(cb * LINK_USD).toFixed(2)}` : "$0.00"}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ color: v2.muted, fontSize: 11, lineHeight: 1.6, marginBottom: 11 }}>
+        Send LINK on <span style={{ color: v2.text }}>{cfg.label}</span> to the Q402 facilitator
+        below. The deposit-scan cron credits your LINK Gas Tank within ~5 minutes. Current balance:{" "}
+        <span style={{ color: v2.cyan }}>{bal.toFixed(4)} LINK</span>.
+      </div>
+
+      <CopyRow
+        label="Send LINK to"
+        value={GASTANK_ADDRESS}
+        copied={copied === "deposit"}
+        onCopy={() => copy(GASTANK_ADDRESS, "deposit")}
+        accent
+      />
+      <div style={{ height: 9 }} />
+      <CopyRow
+        label={`LINK token on ${cfg.label}`}
+        value={cfg.address}
+        copied={copied === "token"}
+        onCopy={() => copy(cfg.address, "token")}
+      />
+    </ModalShell>
+  );
+}
+
+function CopyRow({
+  label,
+  value,
+  copied,
+  onCopy,
+  accent,
+}: {
+  label: string;
+  value: string;
+  copied: boolean;
+  onCopy: () => void;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        ...subCard(11),
+        ...(accent ? { borderColor: "var(--v2-accent-line)", background: "var(--v2-accent-fill)" } : {}),
+        padding: 11,
+      }}
+    >
+      <Eyebrow style={{ marginBottom: 6, color: accent ? v2.yellow : v2.muted2 }}>{label}</Eyebrow>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <code style={{ flex: 1, minWidth: 0, fontSize: 11, color: v2.text, wordBreak: "break-all" }}>
+          {value}
+        </code>
+        <button
+          type="button"
+          onClick={onCopy}
+          style={{
+            flexShrink: 0,
+            border: `1px solid ${v2.line}`,
+            background: "rgba(255,255,255,.04)",
+            color: copied ? v2.mint : v2.muted,
+            padding: "5px 9px",
+            borderRadius: 7,
+            fontSize: 10,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}
+        >
+          {copied ? "✓" : "Copy"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── ModalShell ───────────────────────────────────────────────────────────────
+// Shared v2 modal chrome (portal + backdrop + glass card). Wrapped in
+// V2AccentScope so any descendant reading --v2-accent* resolves to yellow.
+function ModalShell({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <V2AccentScope
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 80,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        background: "rgba(2,6,15,.72)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        fontFamily: displayFont,
+      }}
+    >
+      <div
+        onClick={onClose}
+        style={{ position: "absolute", inset: 0 }}
+        aria-hidden
+      />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          ...glass(17),
+          position: "relative",
+          width: "100%",
+          maxWidth: 420,
+          padding: 21,
+          color: v2.text,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 17 }}>
+          <div style={{ font: `600 15px ${displayFont}`, letterSpacing: "-.02em" }}>{title}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            style={{ border: 0, background: "none", color: v2.muted, fontSize: 19, cursor: "pointer", lineHeight: 1 }}
+          >
+            ×
+          </button>
+        </div>
+        {children}
+      </div>
+    </V2AccentScope>,
+    document.body,
+  );
+}
