@@ -23,6 +23,7 @@ import {
 } from "@/app/lib/agentic-wallet-friendly-error";
 import { useModalEscape } from "./useModalEscape";
 import { ThemedSelect } from "./ThemedSelect";
+import { HexagonIcon } from "../v2/logos";
 
 interface Props {
   walletAddress: string;
@@ -260,7 +261,7 @@ export function AgenticWalletSendModal({
     >
       <div
         className="w-full max-w-md rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
+        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,.30)" }}
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
@@ -293,7 +294,9 @@ export function AgenticWalletSendModal({
                 {held.code ? ` (${held.code})` : ""}
               </div>
               <div className="text-[11px] mt-2 text-white/55 leading-relaxed">
-                No funds moved. To send it, open ⬡ Hooks and adjust the policy
+                No funds moved. To send it, open{" "}
+                <span className="inline-flex items-center gap-1 align-text-bottom"><HexagonIcon size={12} /> Hooks</span>{" "}
+                and adjust the policy
                 that held it — e.g. raise the Spend Cap approval threshold above
                 this amount, or turn Spend Cap off — then try again.
               </div>
@@ -337,17 +340,17 @@ export function AgenticWalletSendModal({
             <div
               className="rounded-md border px-3 py-2.5 text-[11.5px] leading-relaxed"
               style={{
-                background: "rgba(74,222,128,0.05)",
-                borderColor: "rgba(74,222,128,0.18)",
+                background: "rgba(247,202,22,.06)",
+                borderColor: "rgba(247,202,22,.30)",
                 color: "rgba(226,232,240,0.78)",
               }}
             >
-              Sending from your <span className="text-emerald-300">Agent Wallet</span>,
+              Sending from your <span style={{ color: "#f9d64a" }}>Agent Wallet</span>,
               not your MetaMask. Only the stablecoin moves from your Agent Wallet balance.
-              <div className="mt-1.5 pt-1.5 border-t border-emerald-300/15 text-white/55">
-                Gas: <span className="text-emerald-200">Trial</span> = Q402 sponsors{" "}
-                <span className="text-emerald-200">BNB Chain only</span>.{" "}
-                <span className="text-emerald-200">Multichain</span> = relay gas debits
+              <div className="mt-1.5 pt-1.5 border-t text-white/55" style={{ borderColor: "rgba(247,202,22,.15)" }}>
+                Gas: <span style={{ color: "#f9d64a" }}>Trial</span> = Q402 sponsors{" "}
+                <span style={{ color: "#f9d64a" }}>BNB Chain only</span>.{" "}
+                <span style={{ color: "#f9d64a" }}>Multichain</span> = relay gas debits
                 from your Gas Tank on the selected chain. Top up via the Gas Tank tab.
               </div>
             </div>

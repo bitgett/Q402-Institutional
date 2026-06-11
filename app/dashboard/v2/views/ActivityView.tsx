@@ -45,7 +45,7 @@ import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
 import { Surface, Eyebrow, V2AccentScope, displayFont, shortAddr } from "../primitives";
-import { v2, fs } from "../theme";
+import { v2, fs, V2_ACCENT_SOFT, V2_ACCENT_LINE, V2_ACCENT_FILL } from "../theme";
 import type { Scope } from "../theme";
 
 export interface ActivityViewProps {
@@ -120,7 +120,7 @@ const CHAIN_META: Record<string, { name: string; color: string }> = {
   bnb: { name: "BNB Chain", color: "#F0B90B" },
   eth: { name: "Ethereum", color: "#627EEA" },
   avax: { name: "Avalanche", color: "#E84142" },
-  xlayer: { name: "X Layer", color: "#8993a6" },
+  xlayer: { name: "X Layer", color: "#bcc6d6" },
   stable: { name: "Stable", color: v2.mint },
   mantle: { name: "Mantle", color: "#FFFFFF" },
   injective: { name: "Injective", color: "#0082FA" },
@@ -555,7 +555,7 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
                   style={{
                     textAlign: "left",
                     border: active ? `1px solid ${v2.line}` : "1px solid transparent",
-                    background: active ? "rgba(247,202,22,.06)" : "transparent",
+                    background: active ? V2_ACCENT_FILL : "transparent",
                     borderRadius: 10,
                     padding: "11px 13px",
                     cursor: "pointer",
@@ -620,6 +620,7 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
                   Settlement activity
                 </div>
                 {demoMode && <PreviewChip />}
+                {demoMode && <ScopeChip label={scope === "trial" ? "Trial · BNB" : "Multichain · 10 chains"} />}
               </div>
               <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, maxWidth: 460, lineHeight: 1.5 }}>
                 {demoMode ? (
@@ -724,8 +725,8 @@ function FilterChip({
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        border: `1px solid ${active ? "rgba(247,202,22,.30)" : v2.line}`,
-        background: active ? "rgba(247,202,22,.10)" : "rgba(255,255,255,.02)",
+        border: `1px solid ${active ? V2_ACCENT_LINE : v2.line}`,
+        background: active ? V2_ACCENT_SOFT : "rgba(255,255,255,.02)",
         color: active ? v2.yellow : v2.muted,
         fontSize: fs.label,
         fontWeight: active ? 700 : 500,
@@ -819,7 +820,7 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                 </Td>
                 <Td>
                   <span
-                    style={{ fontSize: fs.body, color: v2.muted, fontFamily: displayFont }}
+                    style={{ fontSize: fs.base, color: v2.muted, fontFamily: displayFont }}
                     title={`${tx.fromUser} → ${tx.toUser}`}
                   >
                     {shortAddr(tx.fromUser)}
@@ -981,7 +982,7 @@ function Th({ children, align = "left" }: { children: React.ReactNode; align?: "
         textTransform: "uppercase",
         fontWeight: 700,
         color: v2.muted2,
-        padding: "0 12px 11px",
+        padding: "0 13px 12px",
       }}
     >
       {children}
@@ -995,7 +996,7 @@ function Td({
   children: React.ReactNode;
   align?: "left" | "right";
 }) {
-  return <td style={{ textAlign: align, padding: "14px 12px", verticalAlign: "middle" }}>{children}</td>;
+  return <td style={{ textAlign: align, padding: "14px 13px", verticalAlign: "middle" }}>{children}</td>;
 }
 
 function StatusPill({ kind, label }: { kind: "success" | "pending" | "failed"; label: string }) {
@@ -1034,8 +1035,8 @@ function PreviewChip() {
         fontWeight: 700,
         letterSpacing: ".02em",
         color: v2.yellow,
-        background: "rgba(247,202,22,.10)",
-        border: "1px solid rgba(247,202,22,.30)",
+        background: V2_ACCENT_SOFT,
+        border: `1px solid ${V2_ACCENT_LINE}`,
         padding: "5px 10px",
         borderRadius: 999,
         whiteSpace: "nowrap",
@@ -1043,6 +1044,36 @@ function PreviewChip() {
     >
       <span style={{ width: 5, height: 5, borderRadius: 999, background: v2.yellow }} />
       Preview · connect your wallet for live data
+    </span>
+  );
+}
+
+// ── Scope chip ───────────────────────────────────────────────────────────────
+/**
+ * Shown only in demo mode beside the PreviewChip — a neutral glass badge that
+ * surfaces the active key scope (mirrors the hero scope badge in WalletsView).
+ * Stays neutral (not yellow/mint): scope is informational status, and yellow is
+ * already claimed by the adjacent Preview action chip.
+ */
+function ScopeChip({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: fs.label,
+        fontWeight: 600,
+        letterSpacing: ".01em",
+        color: "#adb7c7",
+        background: "rgba(255,255,255,.02)",
+        border: `1px solid ${v2.line}`,
+        padding: "5px 10px",
+        borderRadius: 999,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
     </span>
   );
 }

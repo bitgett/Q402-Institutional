@@ -51,6 +51,7 @@ import {
   displayFont,
 } from "../primitives";
 import { v2, glass, subCard, fs, type Scope } from "../theme";
+import { CheckIcon, XIcon } from "../logos";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 
 /** Published @quackai/q402-mcp version surfaced on the MCP setup card. */
@@ -251,6 +252,7 @@ function CopyButton({
   return (
     <button
       type="button"
+      className="v2-trans"
       disabled={isOff}
       title={isOff ? disabledTooltip : undefined}
       onClick={() => {
@@ -265,13 +267,115 @@ function CopyButton({
         background: "none",
         color: copied ? v2.mint : v2.yellow,
         fontSize: fs.label,
+        fontWeight: 600,
         cursor: isOff ? (disabledTooltip ? "help" : "default") : "pointer",
         opacity: isOff ? 0.4 : 1,
         padding: 0,
         textAlign: "left",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        transform: copied ? "scale(1.08)" : "scale(1)",
+        transformOrigin: "left center",
       }}
     >
-      {copied ? "Copied!" : label}
+      {copied ? (
+        <>
+          <CheckIcon size={13} color={v2.mint} />
+          Copied
+        </>
+      ) : (
+        label
+      )}
+    </button>
+  );
+}
+
+/**
+ * MetaLabel — small uppercase metadata caption for code/config blocks so they
+ * read as read-only artifacts (not editable inputs). Optional accent suffix.
+ */
+function MetaLabel({
+  children,
+  accent,
+}: {
+  children: React.ReactNode;
+  accent?: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        fontSize: fs.micro,
+        letterSpacing: ".14em",
+        textTransform: "uppercase",
+        fontWeight: 700,
+        color: v2.muted2,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      {children}
+      {accent}
+    </div>
+  );
+}
+
+/** Dashed border treatment marking a block as a read-only code/config artifact. */
+const CODE_BLOCK_BORDER = "1px dashed rgba(255,255,255,.10)";
+
+/** Inline copy control for code-block flex headers (icon + label, scale feedback). */
+function InlineCopy({
+  value,
+  label = "Copy",
+  disabled,
+  disabledTooltip,
+}: {
+  value: string;
+  label?: string;
+  disabled?: boolean;
+  disabledTooltip?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const isOff = disabled || !value;
+  return (
+    <button
+      type="button"
+      className="v2-trans"
+      disabled={isOff}
+      title={isOff ? disabledTooltip : undefined}
+      onClick={() => {
+        if (isOff || !value) return;
+        navigator.clipboard.writeText(value);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      }}
+      style={{
+        border: 0,
+        background: copied ? "rgba(85,230,165,.10)" : "rgba(255,255,255,.05)",
+        color: copied ? v2.mint : v2.muted,
+        fontSize: fs.micro,
+        fontWeight: 700,
+        letterSpacing: ".08em",
+        textTransform: "uppercase",
+        padding: "4px 9px",
+        borderRadius: 6,
+        cursor: isOff ? (disabledTooltip ? "help" : "default") : "pointer",
+        opacity: isOff ? 0.45 : 1,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        transform: copied ? "scale(1.08)" : "scale(1)",
+      }}
+    >
+      {copied ? (
+        <>
+          <CheckIcon size={12} color={v2.mint} />
+          Copied
+        </>
+      ) : (
+        label
+      )}
     </button>
   );
 }
@@ -295,22 +399,27 @@ function ContextRail({
 }) {
   return (
     <aside className="v2-context" style={{ ...glass(19), padding: 15, height: "fit-content" }}>
-      <Eyebrow style={{ margin: "2px 9px 9px" }}>Developer</Eyebrow>
+      <Eyebrow style={{ margin: "2px 9px 11px" }}>Developer</Eyebrow>
       {SECTIONS.map((s) => {
         const isActive = s.id === active;
         return (
           <button
             key={s.id}
             type="button"
+            className="v2-trans"
             onClick={() => onSelect(s.id)}
             style={{
               width: "100%",
               border: 0,
-              background: isActive ? "rgba(255,255,255,.05)" : "none",
-              color: isActive ? v2.text : v2.muted,
+              borderLeft: isActive
+                ? `3px solid ${v2.yellow}`
+                : "1px solid transparent",
+              background: isActive ? "rgba(247,202,22,.07)" : "none",
+              color: isActive ? v2.yellow : v2.muted,
+              fontWeight: isActive ? 600 : 400,
               textAlign: "left",
-              padding: 11,
-              borderRadius: 9,
+              padding: "10px 11px 10px 12px",
+              borderRadius: "0 9px 9px 0",
               fontSize: fs.body,
               cursor: "pointer",
             }}
@@ -351,13 +460,22 @@ function KeyCard({
 }) {
   return (
     <div
+      className="v2-lift"
       style={{
-        ...glass(13),
-        padding: 16,
-        borderColor: active ? "rgba(247,202,22,.45)" : v2.line,
+        ...glass(15),
+        flex: 1,
+        minWidth: 0,
+        minHeight: 240,
+        padding: 19,
+        display: "flex",
+        flexDirection: "column",
+        opacity: active ? 1 : 0.72,
+        borderColor: active ? "rgba(245,202,22,.45)" : v2.line,
+        // Layered glow on the active scope's key — yellow ring + soft halo +
+        // deep drop so it reads as the hero of the surface.
         boxShadow: active
-          ? "0 0 0 1px rgba(247,202,22,.30), 0 24px 80px rgba(0,0,0,.23)"
-          : glass(13).boxShadow,
+          ? "0 0 0 2px rgba(245,202,22,.45), 0 0 24px rgba(245,202,22,.15), 0 24px 80px rgba(0,0,0,.34)"
+          : glass(15).boxShadow,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -372,7 +490,7 @@ function KeyCard({
               color: v2.actionText,
               background: v2.yellow,
               borderRadius: 6,
-              padding: "3px 7px",
+              padding: "3px 8px",
             }}
           >
             Active scope
@@ -382,13 +500,13 @@ function KeyCard({
 
       <div
         style={{
-          marginTop: 12,
-          padding: 13,
+          marginTop: 14,
+          padding: "15px 15px",
           border: `1px solid ${v2.line}`,
-          borderRadius: 10,
+          borderRadius: 11,
           background: v2.inputFill,
           color: locked ? v2.muted2 : "#aab5c4",
-          font: `500 ${fs.body}px ${displayFont}`,
+          font: `500 ${fs.base}px ${displayFont}`,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -407,24 +525,26 @@ function KeyCard({
         </span>
       </div>
 
-      <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 9 }}>{sub}</div>
+      <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 11, lineHeight: 1.6 }}>{sub}</div>
 
-      {demo ? (
-        <CopyButton
-          value=""
-          label="Copy key"
-          disabled
-          disabledTooltip={DEMO_COPY_TOOLTIP}
-        />
-      ) : (
-        <CopyButton value={locked ? "" : apiKey} label="Copy key" disabled={locked} />
-      )}
+      <div style={{ marginTop: "auto" }}>
+        {demo ? (
+          <CopyButton
+            value=""
+            label="Copy key"
+            disabled
+            disabledTooltip={DEMO_COPY_TOOLTIP}
+          />
+        ) : (
+          <CopyButton value={locked ? "" : apiKey} label="Copy key" disabled={locked} />
+        )}
+      </div>
     </div>
   );
 }
 
 // ── Webhook status card (in the grid) ────────────────────────────────────────
-function WebhookStatusCard({
+function WebhookStatusRow({
   configured,
   onConfigure,
 }: {
@@ -432,29 +552,53 @@ function WebhookStatusCard({
   onConfigure: () => void;
 }) {
   return (
-    <div style={{ ...glass(13), padding: 16 }}>
-      <Eyebrow>Webhook</Eyebrow>
-      <div
+    <div
+      className="v2-lift"
+      style={{
+        ...glass(13),
+        padding: "14px 18px",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        flexWrap: "wrap",
+      }}
+    >
+      <Eyebrow style={{ flexShrink: 0 }}>Webhook</Eyebrow>
+      <span
         style={{
-          font: `600 ${fs.title}px ${displayFont}`,
-          marginTop: 12,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          font: `600 ${fs.base}px ${displayFont}`,
           color: configured ? v2.mint : v2.text,
         }}
       >
+        <span
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: configured ? v2.mint : v2.muted2,
+            boxShadow: configured ? `0 0 8px ${v2.mint}` : "none",
+            display: "inline-block",
+          }}
+        />
         {configured ? "Configured" : "Not configured"}
-      </div>
-      <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 9 }}>
+      </span>
+      <span style={{ color: v2.muted, fontSize: fs.label }}>
         Signed POST after each settlement
-      </div>
+      </span>
       <button
         type="button"
+        className="v2-trans"
         onClick={onConfigure}
         style={{
-          marginTop: 15,
+          marginLeft: "auto",
           border: 0,
           background: "none",
           color: v2.yellow,
           fontSize: fs.label,
+          fontWeight: 600,
           cursor: "pointer",
           padding: 0,
         }}
@@ -489,11 +633,30 @@ function McpSetupCard({
   /** Demo (preview) mode — disable copy actions with a connect tooltip. */
   demo?: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
-  const [jsonCopied, setJsonCopied] = useState(false);
   const config = useMemo(() => buildMcpConfig(sandboxKey), [sandboxKey]);
+
+  // Shared chrome for the read-only code/config artifacts: dashed border +
+  // a flex header (metadata label on the left, inline Copy on the right).
+  const codeBlock: React.CSSProperties = {
+    padding: 14,
+    border: CODE_BLOCK_BORDER,
+    borderRadius: 11,
+    background: v2.inputFill,
+    color: "#aeb8c6",
+    font: `500 ${fs.body}px/1.6 ${displayFont}`,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-all",
+  };
+  const blockHeader: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 7,
+  };
+
   return (
-    <div style={{ ...glass(13), padding: 16, marginTop: 12 }}>
+    <div className="v2-lift" style={{ ...glass(15), padding: 19, marginTop: 12 }}>
       <SectionHead
         title={
           <div>
@@ -509,112 +672,54 @@ function McpSetupCard({
           </span>
         }
       />
-      <div
-        style={{
-          marginTop: 12,
-          padding: 14,
-          border: `1px solid ${v2.line}`,
-          borderRadius: 10,
-          background: v2.inputFill,
-          color: "#aeb8c6",
-          font: `500 ${fs.body}px/1.6 ${displayFont}`,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-all",
-        }}
-      >
-        {MCP_INSTALL}
+
+      {/* Install command — read-only artifact (dashed) with header copy. */}
+      <div style={{ marginTop: 14 }}>
+        <div style={blockHeader}>
+          <MetaLabel>Install command</MetaLabel>
+          <InlineCopy
+            value={MCP_INSTALL}
+            label="Copy"
+            disabled={demo}
+            disabledTooltip={DEMO_COPY_TOOLTIP}
+          />
+        </div>
+        <div style={codeBlock}>{MCP_INSTALL}</div>
       </div>
-      <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 14 }}>
-        <button
-          type="button"
-          disabled={demo}
-          title={demo ? DEMO_COPY_TOOLTIP : undefined}
-          onClick={() => {
-            if (demo) return;
-            navigator.clipboard.writeText(MCP_INSTALL);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1600);
-          }}
-          style={{
-            border: 0,
-            background: "none",
-            color: copied ? v2.mint : v2.yellow,
-            fontSize: fs.label,
-            cursor: demo ? "help" : "pointer",
-            opacity: demo ? 0.4 : 1,
-            padding: 0,
-          }}
-        >
-          {copied ? "Copied!" : "Copy install"}
-        </button>
+
+      <div style={{ marginTop: 12 }}>
         <a
           href="/claude"
-          style={{ color: v2.muted, fontSize: fs.label, textDecoration: "none" }}
+          className="v2-trans"
+          style={{ color: v2.cyan, fontSize: fs.label, fontWeight: 600, textDecoration: "none" }}
         >
           Full guide →
         </a>
       </div>
 
       {/* Config JSON pre-filled with the sandbox key (safe to paste). */}
-      <div
-        style={{
-          marginTop: 14,
-          fontSize: fs.label,
-          letterSpacing: ".14em",
-          textTransform: "uppercase",
-          fontWeight: 700,
-          color: v2.muted2,
-        }}
-      >
-        Or paste this config{" "}
-        <span style={{ color: "rgba(247,202,22,.7)", textTransform: "none", letterSpacing: 0 }}>
-          (sandbox key)
-        </span>
-      </div>
-      <div style={{ position: "relative", marginTop: 6 }}>
-        <div
-          style={{
-            padding: 14,
-            border: `1px solid ${v2.line}`,
-            borderRadius: 10,
-            background: v2.inputFill,
-            color: "#aeb8c6",
-            font: `500 ${fs.body}px/1.6 ${displayFont}`,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-all",
-          }}
-        >
-          {config}
+      <div style={{ marginTop: 16 }}>
+        <div style={blockHeader}>
+          <MetaLabel
+            accent={
+              <span style={{ color: "rgba(245,202,22,.8)", textTransform: "none", letterSpacing: 0, fontWeight: 600 }}>
+                — sandbox key
+              </span>
+            }
+          >
+            Claude config
+          </MetaLabel>
+          <InlineCopy
+            value={config}
+            label="Copy"
+            disabled={demo}
+            disabledTooltip={DEMO_COPY_TOOLTIP}
+          />
         </div>
-        <button
-          type="button"
-          disabled={demo}
-          title={demo ? DEMO_COPY_TOOLTIP : undefined}
-          onClick={() => {
-            if (demo) return;
-            navigator.clipboard.writeText(config);
-            setJsonCopied(true);
-            setTimeout(() => setJsonCopied(false), 1600);
-          }}
-          style={{
-            position: "absolute",
-            top: 9,
-            right: 9,
-            border: 0,
-            background: "rgba(255,255,255,.05)",
-            color: jsonCopied ? v2.mint : v2.muted,
-            fontSize: fs.label,
-            padding: "4px 8px",
-            borderRadius: 6,
-            cursor: demo ? "help" : "pointer",
-            opacity: demo ? 0.55 : 1,
-          }}
-        >
-          {jsonCopied ? "Copied!" : "Copy"}
-        </button>
+        <div style={codeBlock}>{config}</div>
       </div>
 
-      <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 12, lineHeight: 1.6 }}>
+      <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 13, lineHeight: 1.6 }}>
         Safe to paste anywhere, then ask your AI &ldquo;Set up Q402&rdquo; —{" "}
         <code style={{ color: v2.muted }}>q402_doctor</code> writes{" "}
         <code style={{ color: v2.muted }}>~/.q402/mcp.env</code> with your live
@@ -737,8 +842,32 @@ function WebhookConfig({
     outline: "none",
   };
 
+  // Configure-zone state: saved (webhook live) reads mint; an edited-but-not-
+  // yet-saved URL reads yellow ("unsaved"); idle reads neutral glass.
+  const saved = !!webhookUrl;
+  const unsaved = !!urlInput && urlInput !== webhookUrl;
+  const zoneBorder = unsaved
+    ? "rgba(245,202,22,.45)"
+    : saved
+      ? "rgba(85,230,165,.35)"
+      : v2.line;
+  const zoneShadow = unsaved
+    ? "0 0 22px rgba(245,202,22,.10), 0 24px 80px rgba(0,0,0,.23)"
+    : saved
+      ? "0 0 22px rgba(85,230,165,.08), 0 24px 80px rgba(0,0,0,.23)"
+      : glass(15).boxShadow;
+
   return (
-    <Surface style={{ padding: 18, marginTop: 12 }} radius={13}>
+    <Surface
+      className="v2-trans"
+      style={{
+        padding: 19,
+        marginTop: 12,
+        borderColor: zoneBorder,
+        boxShadow: zoneShadow,
+      }}
+      radius={15}
+    >
       <SectionHead
         title="Webhook"
         meta={
@@ -747,10 +876,24 @@ function WebhookConfig({
           </span>
         }
       />
-      <div style={{ color: v2.muted, fontSize: fs.label, marginBottom: 12 }}>
+      <div
+        style={{
+          color: v2.muted,
+          fontSize: fs.label,
+          marginBottom: 13,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+        }}
+      >
         Signed POST after every relay.
-        {webhookUrl && (
-          <span style={{ color: v2.mint, marginLeft: 6 }}>· Active</span>
+        {saved && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: v2.mint }}>
+            · <CheckIcon size={12} color={v2.mint} /> Active
+          </span>
+        )}
+        {unsaved && !saved && (
+          <span style={{ color: v2.yellow }}>· Unsaved changes</span>
         )}
       </div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -762,11 +905,12 @@ function WebhookConfig({
         />
         <button
           type="button"
+          className="v2-trans"
           onClick={saveWebhook}
           disabled={saving || !urlInput}
           style={{
-            border: `1px solid rgba(247,202,22,.30)`,
-            background: "rgba(247,202,22,.10)",
+            border: `1px solid rgba(245,202,22,.30)`,
+            background: "rgba(245,202,22,.10)",
             color: v2.yellow,
             borderRadius: 10,
             padding: "0 18px",
@@ -813,6 +957,7 @@ function WebhookConfig({
           </div>
           <button
             type="button"
+            className="v2-trans"
             onClick={() => {
               navigator.clipboard.writeText(secret);
               setSecretCopied(true);
@@ -824,19 +969,32 @@ function WebhookConfig({
               background: "none",
               color: secretCopied ? v2.mint : v2.muted,
               fontSize: fs.label,
+              fontWeight: 600,
               cursor: "pointer",
               padding: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              transform: secretCopied ? "scale(1.08)" : "scale(1)",
+              transformOrigin: "left center",
             }}
           >
-            {secretCopied ? "Copied!" : "Copy secret"}
+            {secretCopied ? (
+              <>
+                <CheckIcon size={13} color={v2.mint} /> Copied
+              </>
+            ) : (
+              "Copy secret"
+            )}
           </button>
         </div>
       )}
 
       {webhookUrl && (
-        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
           <button
             type="button"
+            className="v2-trans v2-press"
             onClick={testWebhook}
             disabled={testing}
             style={{
@@ -846,25 +1004,52 @@ function WebhookConfig({
               borderRadius: 8,
               padding: "8px 14px",
               fontSize: fs.label,
+              fontWeight: 600,
               cursor: testing ? "default" : "pointer",
               opacity: testing ? 0.4 : 1,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            {testing ? "Sending…" : "▶ Test"}
+            {testing ? (
+              "Sending…"
+            ) : (
+              <>
+                <PlayGlyph color={v2.muted} /> Test
+              </>
+            )}
           </button>
           {testResult && (
             <span
               style={{
                 fontSize: fs.label,
                 color: testResult.ok ? v2.mint : v2.red,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
               }}
             >
-              {testResult.ok ? "✓" : "✗"} {testResult.msg}
+              {testResult.ok ? (
+                <CheckIcon size={13} color={v2.mint} />
+              ) : (
+                <XIcon size={13} color={v2.red} />
+              )}
+              {testResult.msg}
             </span>
           )}
         </div>
       )}
     </Surface>
+  );
+}
+
+/** Small filled triangle "run/test" glyph (replaces the ▶ text mark). */
+function PlayGlyph({ size = 11, color }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden style={{ flexShrink: 0 }}>
+      <path d="M3 2.2 9.5 6 3 9.8Z" fill={color ?? "currentColor"} />
+    </svg>
   );
 }
 
@@ -890,6 +1075,7 @@ function Playground({
   const [amount, setAmount] = useState("5");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<null | { hash: string }>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
 
   // Per-chain token availability mirrors the v1 playground / relay allowlist.
   const availableTokens: PgToken[] = useMemo(() => {
@@ -941,8 +1127,29 @@ function Playground({
   };
 
   return (
-    <Surface style={{ padding: 18, marginTop: 12 }} radius={13}>
-      <SectionHead title="API playground" meta={trialView ? "Trial · BNB-only" : "Multichain"} />
+    <Surface className="v2-lift" style={{ padding: 19, marginTop: 12 }} radius={15}>
+      <SectionHead
+        title="API playground"
+        meta={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <span
+              style={{
+                fontSize: fs.micro,
+                letterSpacing: ".1em",
+                textTransform: "uppercase",
+                fontWeight: 700,
+                color: v2.muted2,
+                border: `1px solid ${v2.line}`,
+                borderRadius: 6,
+                padding: "2px 7px",
+              }}
+            >
+              Sandbox
+            </span>
+            {trialView ? "Trial · BNB-only" : "Multichain"}
+          </span>
+        }
+      />
       <div
         style={{
           display: "grid",
@@ -957,22 +1164,24 @@ function Playground({
             onChange={(e) => setChain(e.target.value)}
             style={{ ...field, cursor: "pointer", appearance: "none" }}
           >
+            {/* Native <option> text cannot host an SVG icon, so supported
+                chains carry a textual "· live" cue instead of a ✓ glyph. */}
             {trialView ? (
               <option value="bnb" style={{ background: v2.panel }}>
-                BNB Chain ✓ (trial)
+                BNB Chain · trial
               </option>
             ) : (
               <>
-                <option value="avax" style={{ background: v2.panel }}>Avalanche ✓</option>
-                <option value="bnb" style={{ background: v2.panel }}>BNB Chain ✓</option>
-                <option value="eth" style={{ background: v2.panel }}>Ethereum ✓</option>
-                <option value="xlayer" style={{ background: v2.panel }}>X Layer ✓</option>
-                <option value="stable" style={{ background: v2.panel }}>Stable ✓</option>
-                <option value="mantle" style={{ background: v2.panel }}>Mantle ✓</option>
-                <option value="injective" style={{ background: v2.panel }}>Injective ✓</option>
-                <option value="monad" style={{ background: v2.panel }}>Monad ✓</option>
-                <option value="scroll" style={{ background: v2.panel }}>Scroll ✓</option>
-                <option value="arbitrum" style={{ background: v2.panel }}>Arbitrum ✓</option>
+                <option value="avax" style={{ background: v2.panel }}>Avalanche · live</option>
+                <option value="bnb" style={{ background: v2.panel }}>BNB Chain · live</option>
+                <option value="eth" style={{ background: v2.panel }}>Ethereum · live</option>
+                <option value="xlayer" style={{ background: v2.panel }}>X Layer · live</option>
+                <option value="stable" style={{ background: v2.panel }}>Stable · live</option>
+                <option value="mantle" style={{ background: v2.panel }}>Mantle · live</option>
+                <option value="injective" style={{ background: v2.panel }}>Injective · live</option>
+                <option value="monad" style={{ background: v2.panel }}>Monad · live</option>
+                <option value="scroll" style={{ background: v2.panel }}>Scroll · live</option>
+                <option value="arbitrum" style={{ background: v2.panel }}>Arbitrum · live</option>
               </>
             )}
           </select>
@@ -1012,54 +1221,88 @@ function Playground({
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: 12,
-          background: v2.inputFill,
-          border: `1px solid ${v2.line}`,
-          borderRadius: 10,
-          padding: 14,
-          font: `500 ${fs.body}px/1.7 ${displayFont}`,
-          color: v2.muted,
-          whiteSpace: "pre-wrap",
-        }}
-      >
-        {`const tx = await q402.pay({\n  to: "${to}",\n  amount: "${amount}",\n  token: "${token}"\n});`}
+      <div style={{ marginTop: 14 }}>
+        <div
+          style={{
+            fontSize: fs.micro,
+            letterSpacing: ".14em",
+            textTransform: "uppercase",
+            fontWeight: 700,
+            color: v2.muted2,
+            marginBottom: 7,
+          }}
+        >
+          Request preview
+        </div>
+        <div
+          style={{
+            background: v2.inputFill,
+            border: CODE_BLOCK_BORDER,
+            borderRadius: 11,
+            padding: 14,
+            font: `500 ${fs.body}px/1.7 ${displayFont}`,
+            color: v2.muted,
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {`const tx = await q402.pay({\n  to: "${to}",\n  amount: "${amount}",\n  token: "${token}"\n});`}
+        </div>
       </div>
 
       <button
         type="button"
+        className="v2-trans v2-press"
         onClick={simulate}
         disabled={loading}
         style={{
-          marginTop: 12,
+          marginTop: 14,
+          minHeight: 44,
           border: 0,
           background: v2.yellow,
           color: v2.actionText,
           fontWeight: 700,
           fontSize: fs.body,
-          padding: "11px 20px",
-          borderRadius: 10,
+          padding: "0 22px",
+          borderRadius: 11,
           cursor: loading ? "default" : "pointer",
           opacity: loading ? 0.6 : 1,
+          boxShadow: loading ? "none" : "0 0 24px rgba(245,202,22,.2)",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
         }}
       >
-        {loading ? "Sending…" : "▶ Run simulation"}
+        {loading ? (
+          "Sending…"
+        ) : (
+          <>
+            <PlayGlyph size={12} color={v2.actionText} /> Run simulation
+          </>
+        )}
       </button>
 
       {result && (
         <div
           style={{
             marginTop: 12,
-            ...subCard(10, 0.0),
+            ...subCard(11, 0.0),
             background: "rgba(85,230,165,.05)",
             borderColor: "rgba(85,230,165,.20)",
             padding: 14,
             font: `500 ${fs.body}px/1.7 ${displayFont}`,
           }}
         >
-          <div style={{ color: v2.mint, fontWeight: 700, marginBottom: 6 }}>
-            ✓ Simulated
+          <div
+            style={{
+              color: v2.mint,
+              fontWeight: 700,
+              marginBottom: 6,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+          >
+            <CheckIcon size={14} color={v2.mint} /> Simulated
           </div>
           <div style={{ color: v2.muted }}>
             hash: <span style={{ color: "#f0a35e" }}>{result.hash}</span>
@@ -1096,24 +1339,38 @@ function Playground({
           </span>
           <button
             type="button"
+            className="v2-trans"
             disabled={demo || !apiKey}
             title={demo ? DEMO_COPY_TOOLTIP : undefined}
             onClick={() => {
               if (demo || !apiKey) return;
               navigator.clipboard.writeText(apiKey);
+              setKeyCopied(true);
+              setTimeout(() => setKeyCopied(false), 1600);
             }}
             style={{
               border: 0,
               background: "none",
-              color: v2.muted2,
+              color: keyCopied ? v2.mint : v2.muted2,
               fontSize: fs.label,
+              fontWeight: 600,
               letterSpacing: ".12em",
               textTransform: "uppercase",
               cursor: demo ? "help" : apiKey ? "pointer" : "default",
               opacity: demo || !apiKey ? 0.5 : 1,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              transform: keyCopied ? "scale(1.08)" : "scale(1)",
             }}
           >
-            Copy
+            {keyCopied ? (
+              <>
+                <CheckIcon size={12} color={v2.mint} /> Copied
+              </>
+            ) : (
+              "Copy"
+            )}
           </button>
         </div>
       </div>
@@ -1124,11 +1381,15 @@ function Playground({
 // ── Documentation card ───────────────────────────────────────────────────────
 function DocsCard() {
   return (
-    <Surface style={{ padding: 18, marginTop: 12 }} radius={13}>
+    <Surface className="v2-lift" style={{ padding: 19, marginTop: 12 }} radius={15}>
       <SectionHead
         title="Documentation"
         action={
-          <a href="/docs" style={{ color: v2.yellow, fontSize: fs.label, textDecoration: "none" }}>
+          <a
+            href="/docs"
+            className="v2-trans"
+            style={{ color: v2.cyan, fontSize: fs.label, fontWeight: 600, textDecoration: "none" }}
+          >
             Open docs →
           </a>
         }
@@ -1136,11 +1397,11 @@ function DocsCard() {
       <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.7 }}>
         API reference, gas-pool model, per-chain witness scheme, and the SDK
         integration guide live at{" "}
-        <a href="/docs" style={{ color: v2.yellow, textDecoration: "none" }}>
+        <a href="/docs" className="v2-trans" style={{ color: v2.cyan, textDecoration: "none" }}>
           /docs
         </a>
         . MCP-specific walkthrough at{" "}
-        <a href="/docs#claude-mcp" style={{ color: v2.yellow, textDecoration: "none" }}>
+        <a href="/docs#claude-mcp" className="v2-trans" style={{ color: v2.cyan, textDecoration: "none" }}>
           /docs#claude-mcp
         </a>
         .
@@ -1203,59 +1464,29 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
       ? trialKey
       : multichainKey;
 
+  // Each scrollable section gets a staggered entrance. `i` drives the
+  // animationDelay so the surface assembles top-to-bottom on mount.
+  const section = (i: number): React.CSSProperties => ({
+    scrollMarginTop: 80,
+    animation: "v2-enter .34s cubic-bezier(.22,.61,.36,1) both",
+    animationDelay: `${i * 0.08}s`,
+  });
+
   return (
-    <V2AccentScope style={{ paddingTop: 17 }}>
+    <V2AccentScope className="v2-view-enter" style={{ paddingTop: 17 }}>
       <div
         className="v2-view-shell"
         style={{
           display: "grid",
           gridTemplateColumns: "230px minmax(0,1fr)",
-          gap: 16,
+          gap: 18,
         }}
       >
         <ContextRail active={activeSection} onSelect={scrollTo} />
 
         <main className="v2-view-main" style={{ ...glass(19), padding: 21 }}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em" }}>
-              Developer access
-            </div>
-            {demoMode && (
-              <span
-                title="Showing sample data — connect your wallet for live keys"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  fontSize: fs.label,
-                  fontWeight: 700,
-                  letterSpacing: ".08em",
-                  color: v2.yellow,
-                  background: "rgba(247,202,22,.08)",
-                  border: "1px solid rgba(247,202,22,.30)",
-                  borderRadius: 7,
-                  padding: "4px 9px",
-                }}
-              >
-                <span
-                  style={{
-                    width: 5,
-                    height: 5,
-                    borderRadius: "50%",
-                    background: v2.yellow,
-                    display: "inline-block",
-                  }}
-                />
-                Preview · connect your wallet for live data
-              </span>
-            )}
+          <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em" }}>
+            Developer access
           </div>
           <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6 }}>
             Scoped credentials and AI-client integration without mixing product
@@ -1263,14 +1494,81 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
             {loading && <span style={{ color: v2.muted2 }}> · Loading…</span>}
           </div>
 
-          {/* ── Credentials: BOTH keys side by side + webhook status ──── */}
-          <div ref={refs.credentials} style={{ scrollMarginTop: 80 }}>
+          {/* ── Demo banner — full-width, animated, with a connect CTA ──── */}
+          {demoMode && (
+            <div
+              className="animate-glow"
+              style={{
+                marginTop: 16,
+                display: "flex",
+                alignItems: "center",
+                gap: 13,
+                flexWrap: "wrap",
+                padding: "13px 16px",
+                borderRadius: 13,
+                border: "1px solid rgba(245,202,22,.30)",
+                background:
+                  "linear-gradient(100deg, rgba(245,202,22,.10), rgba(245,202,22,.03))",
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: v2.yellow,
+                  boxShadow: `0 0 10px ${v2.yellow}`,
+                  flexShrink: 0,
+                }}
+              />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    color: v2.yellow,
+                    fontWeight: 700,
+                    fontSize: fs.base,
+                    letterSpacing: "-.01em",
+                  }}
+                >
+                  Preview mode — showing sample data
+                </div>
+                <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 2 }}>
+                  Connect your wallet to provision live keys, configure webhooks,
+                  and run real settlements.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="v2-trans v2-press"
+                onClick={() =>
+                  window.scrollTo({ top: 0, behavior: "smooth" })
+                }
+                style={{
+                  flexShrink: 0,
+                  border: 0,
+                  background: v2.yellow,
+                  color: v2.actionText,
+                  fontWeight: 700,
+                  fontSize: fs.label,
+                  padding: "9px 16px",
+                  borderRadius: 9,
+                  cursor: "pointer",
+                  boxShadow: "0 0 20px rgba(245,202,22,.22)",
+                }}
+              >
+                Connect your wallet →
+              </button>
+            </div>
+          )}
+
+          {/* ── Credentials: BOTH keys as a 2-col hero row, webhook below ── */}
+          <div ref={refs.credentials} style={section(0)}>
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(230px,1fr))",
-                gap: 11,
-                marginTop: 17,
+                display: "flex",
+                gap: 14,
+                marginTop: 18,
+                flexWrap: "wrap",
               }}
             >
               <KeyCard
@@ -1305,7 +1603,9 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                   ownerAddress ? "Start a trial to unlock" : "Connect wallet"
                 }
               />
-              <WebhookStatusCard
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <WebhookStatusRow
                 configured={demoMode ? false : !!webhookUrl}
                 onConfigure={() => scrollTo("webhook")}
               />
@@ -1313,12 +1613,12 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
           </div>
 
           {/* ── MCP setup ───────────────────────────────────────────── */}
-          <div ref={refs.mcp} style={{ scrollMarginTop: 80 }}>
+          <div ref={refs.mcp} style={section(1)}>
             <McpSetupCard sandboxKey={mcpSandboxKey} demo={demoMode} />
           </div>
 
           {/* ── Webhook config ──────────────────────────────────────── */}
-          <div ref={refs.webhook} style={{ scrollMarginTop: 80 }}>
+          <div ref={refs.webhook} style={section(2)}>
             <WebhookConfig
               address={ownerAddress}
               signMessage={signMessage}
@@ -1329,12 +1629,12 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
           </div>
 
           {/* ── API playground ──────────────────────────────────────── */}
-          <div ref={refs.playground} style={{ scrollMarginTop: 80 }}>
+          <div ref={refs.playground} style={section(3)}>
             <Playground apiKey={playgroundKey} trialView={trialView} demo={demoMode} />
           </div>
 
           {/* ── Documentation ───────────────────────────────────────── */}
-          <div ref={refs.docs} style={{ scrollMarginTop: 80 }}>
+          <div ref={refs.docs} style={section(4)}>
             <DocsCard />
           </div>
         </main>

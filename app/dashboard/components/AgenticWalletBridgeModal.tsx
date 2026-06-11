@@ -25,7 +25,7 @@
  *      then the server submits ccipSend (and a one-time USDC approve if
  *      the Sender's allowance is unset). We surface both tx hashes.
  *   6. After submit we poll /api/ccip/confirm every ~12s for up to ~6
- *      minutes to flip "Bridging…" → "Delivered ✓".
+ *      minutes to flip "Bridging…" → "Delivered".
  */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
@@ -696,11 +696,11 @@ export function AgenticWalletBridgeModal({
               <div
                 className="rounded-xl border p-3 space-y-2"
                 style={{
-                  background: "rgba(74,222,128,0.04)",
-                  borderColor: "rgba(74,222,128,0.18)",
+                  background: "rgba(247,202,22,.06)",
+                  borderColor: "rgba(247,202,22,.30)",
                 }}
               >
-                <div className="text-[10px] uppercase tracking-widest text-emerald-300/85 font-semibold">
+                <div className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: "#f9d64a" }}>
                   CCIP fee quote
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-[12px]">
@@ -861,8 +861,8 @@ function BridgeResult({
   dstMeta: ChainMeta;
 }) {
   const statusLabel =
-    confirmStatus === "delivered" ? "Delivered ✓"
-    : confirmStatus === "failed"  ? "Failed ✗"
+    confirmStatus === "delivered" ? "Delivered"
+    : confirmStatus === "failed"  ? "Failed"
     : confirmStatus === "unknown" ? "Still in flight — check CCIP Explorer ↗"
     : "Bridging…";
   const statusTone =
