@@ -35,6 +35,7 @@ import {
   type AgenticWalletRecord,
 } from "@/app/lib/agentic-wallet";
 import { fetchAgenticBalances } from "@/app/lib/agentic-wallet-balance";
+import { aaveTotalPositionValueStrict } from "@/app/lib/yield/aave";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { requireCronAuth } from "@/app/lib/cron-auth";
 
@@ -187,6 +188,38 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         "critical",
       );
       skipped.push({ key, reason: "chain_unreachable", balanceUsd });
+      continue;
+    }
+
+    // ── Q402 Yield (Aave V3) position check ───────────────────────────
+    // A wallet that supplied ALL its stablecoins to Aave shows a $0 token
+    // balance above but still holds aTokens. Destroying its encrypted key
+    // would strand those funds FOREVER. fetchAgenticBalances only reads
+    // USDC/USDT balanceOf — not aTokens — so check the Yield position
+    // explicitly. Yield is BNB-only today. Fail closed: a throw (RPC down)
+    // OR a position >= dust defers the delete + pages ops.
+    let yieldUsd: number | null = null;
+    try {
+      yieldUsd = await aaveTotalPositionValueStrict("bnb", record.address);
+    } catch (e) {
+      console.error(`[agentic-wallet-gc] yield position check failed for ${record.address}:`, e);
+      void sendOpsAlert(
+        `agentic-wallet-gc: could not verify Q402 Yield (Aave V3) position for ${record.address} ` +
+          `(owner ${record.ownerAddr}). Hard-delete deferred — destroying the key with funds in Aave ` +
+          `would strand them. Investigate before retrying.`,
+        "critical",
+      );
+      skipped.push({ key, reason: "yield_check_failed", balanceUsd });
+      continue;
+    }
+    if (yieldUsd >= DUST_THRESHOLD_USD) {
+      void sendOpsAlert(
+        `agentic-wallet-gc: HOLDING WALLET — refusing to hard-delete ${record.address} ` +
+          `(owner ${record.ownerAddr}). Q402 Yield (Aave V3) position ≈ $${yieldUsd.toFixed(2)} still supplied — ` +
+          `destroying the key would strand it. Have the user (or ops) withdraw from Yield before delete.`,
+        "critical",
+      );
+      skipped.push({ key, reason: "yield_above_dust", balanceUsd });
       continue;
     }
 
