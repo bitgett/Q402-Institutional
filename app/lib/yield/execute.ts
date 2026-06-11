@@ -175,6 +175,16 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   // live trial/subscription, so an active Trial key (or any owner sig)
   // could move funds via Yield even when an equivalent BNB /send would be
   // gated. We bind to the SAME tier rule /send applies for the chain.
+  // FUND-SAFETY (P0): WITHDRAW must ALWAYS be allowed. Recovering your own
+  // funds from Aave can never be blocked by a subscription/key entitlement,
+  // trial/paid EXPIRY, or drained CREDITS — otherwise an expired account's
+  // funds would be locked in Aave forever. The policy already permits
+  // withdraw unconditionally; mirror that here. The whole entitlement +
+  // expiry + credit gate below therefore applies to SUPPLY (deposit) only.
+  // Withdraw is still owner-authenticated (intent-bound) above and still
+  // passes the per-owner daily op-budget rail (a generous gas cap, NOT a
+  // subscription block).
+  if (action === "supply") {
   const sub = await getSubscription(owner);
   // (1) Multichain scope. Yield is BNB-only today so this never trips, but
   // mirror /send's gate verbatim so the two routes can't drift. /send also
@@ -291,6 +301,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       );
     }
   }
+  } // end SUPPLY-only entitlement/expiry/credit gate — withdraw is exempt
 
   const ready = isKeystoreReady();
   if (!ready.ok) {
