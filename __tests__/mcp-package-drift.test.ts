@@ -294,12 +294,21 @@ describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)"
       fetchWithRetry(rawUrlForPath(want, ".codex-plugin/plugin.json")).then(r => r.ok ? r.text() : null),
     ]);
 
-    // src/version.ts — double-quoted constant in current source, but the
-    // regex tolerates single quotes too so a future Prettier flip doesn't
-    // silently downgrade this assertion to "couldn't extract → skip".
+    // src/version.ts — historically a literal `PACKAGE_VERSION = "x.y.z"`,
+    // but 0.8.17+ DERIVES it from package.json (`import pkg from
+    // "../package.json"; export const PACKAGE_VERSION = pkg.version`) so the
+    // runtime banner can never drift from the published version again.
+    // Accept either form: a literal must equal `want`; the derive form is
+    // consistent by construction (package.json itself is asserted below), so
+    // we just verify it really imports + reads pkg.version.
     expect(versionTs, "src/version.ts must be fetchable at the npm-tagged commit").not.toBeNull();
     const versionTsMatch = versionTs!.match(/PACKAGE_VERSION\s*=\s*["']([^"']+)["']/);
-    expect(versionTsMatch?.[1], "src/version.ts PACKAGE_VERSION").toBe(want);
+    if (versionTsMatch) {
+      expect(versionTsMatch[1], "src/version.ts PACKAGE_VERSION literal").toBe(want);
+    } else {
+      expect(versionTs, "src/version.ts must pin a literal OR derive PACKAGE_VERSION from package.json").toMatch(/PACKAGE_VERSION\s*=\s*pkg\.version/);
+      expect(versionTs, "src/version.ts must import package.json to derive the version").toMatch(/import\s+pkg\s+from\s+["']\.\.\/package\.json["']/);
+    }
 
     // package.json — root version field.
     expect(pkgJson, "package.json must be fetchable").not.toBeNull();
