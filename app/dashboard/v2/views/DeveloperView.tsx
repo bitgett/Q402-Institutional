@@ -253,7 +253,7 @@ function ContextRail({
   onSelect: (id: SectionId) => void;
 }) {
   return (
-    <aside style={{ ...glass(19), padding: 15, height: "fit-content" }}>
+    <aside className="v2-context" style={{ ...glass(19), padding: 15, height: "fit-content" }}>
       <Eyebrow style={{ margin: "2px 9px 9px" }}>Developer</Eyebrow>
       {SECTIONS.map((s) => {
         const isActive = s.id === active;
@@ -1096,6 +1096,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
   return (
     <V2AccentScope style={{ paddingTop: 17 }}>
       <div
+        className="v2-view-shell"
         style={{
           display: "grid",
           gridTemplateColumns: "230px minmax(0,1fr)",
@@ -1104,7 +1105,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
       >
         <ContextRail active={activeSection} onSelect={scrollTo} />
 
-        <main style={{ ...glass(19), padding: 21 }}>
+        <main className="v2-view-main" style={{ ...glass(19), padding: 21 }}>
           <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
             Developer access
           </div>

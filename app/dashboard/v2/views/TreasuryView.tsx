@@ -324,7 +324,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
   return (
     <V2AccentScope style={{ paddingTop: 17 }}>
       <div
-        className="treasury-wide-view"
+        className="treasury-wide-view v2-view-shell"
         style={{
           display: "grid",
           gridTemplateColumns: "230px minmax(0, 1fr)",
@@ -333,7 +333,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
         }}
       >
         {/* ── Col 1 · context rail ─────────────────────────────────────── */}
-        <Surface style={{ padding: 13, position: "sticky", top: 84 }}>
+        <Surface className="v2-context" style={{ padding: 13, position: "sticky", top: 84 }}>
           <Eyebrow style={{ marginBottom: 9, paddingLeft: 3 }}>Capital</Eyebrow>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {SECTIONS.map((s) => {

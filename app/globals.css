@@ -208,3 +208,49 @@ html { scroll-behavior: smooth; }
    emits these as color: rgb(... / .85); re-point the common ones. */
 .v2-accent-scope [class*="text-emerald-300/"],
 .v2-accent-scope [class*="text-emerald-400/"] { color: var(--v2-y-300); }
+.v2-accent-scope [class*="text-emerald-200/"] { color: var(--v2-y-200); }
+
+/* ════════════════════ V2 ELEVATION — motion · a11y · responsive · reskin completion ════════════════════
+   Hand-polish layer on top of the Workflow foundation: motion (feels alive),
+   keyboard a11y (focus rings), responsive (collapse the 3-col workspace +
+   wide-view shells on tablet/mobile — inline grids overridden via stable
+   .v2-* hooks), and the emerald→yellow re-skin finished for the alpha-tinted
+   utility tiers the class-only map missed. */
+
+/* re-skin completion: alpha-tinted emerald bg/border/ring → yellow */
+.v2-accent-scope [class*="bg-emerald-300/"],
+.v2-accent-scope [class*="bg-emerald-400/"] { background-color: rgba(247,202,22,.10); }
+.v2-accent-scope [class*="bg-emerald-500/"] { background-color: rgba(247,202,22,.16); }
+.v2-accent-scope [class*="border-emerald-300/"],
+.v2-accent-scope [class*="border-emerald-400/"],
+.v2-accent-scope [class*="border-emerald-500/"] { border-color: rgba(247,202,22,.30); }
+.v2-accent-scope [class*="ring-emerald-"] { --tw-ring-color: rgba(247,202,22,.35); }
+.v2-accent-scope .text-emerald-100 { color: #fbe9a8; }
+
+/* motion: view enter, smooth transitions, hover lift, press */
+@keyframes v2-enter { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+.v2-view-enter { animation: v2-enter .34s cubic-bezier(.22,.61,.36,1) both; }
+.v2-trans, .v2-lift, .v2-press { transition: transform .14s ease, background-color .18s ease, border-color .18s ease, box-shadow .22s ease, color .15s ease; }
+.v2-lift:hover { transform: translateY(-2px); box-shadow: 0 30px 90px rgba(0,0,0,.34); }
+.v2-press:active { transform: scale(.985); }
+@media (prefers-reduced-motion: reduce) {
+  .v2-view-enter { animation: none; }
+  .v2-lift:hover, .v2-press:active { transform: none; }
+}
+
+/* a11y: visible yellow focus ring inside the v2 surface */
+.v2-app :focus-visible { outline: 2px solid rgba(247,202,22,.72); outline-offset: 2px; border-radius: 9px; }
+
+/* responsive: collapse columns (!important beats the inline grid) */
+@media (max-width: 1080px) {
+  .v2-workspace { grid-template-columns: 200px minmax(0,1fr) !important; }
+  .v2-view-shell { grid-template-columns: 200px minmax(0,1fr) !important; }
+  .v2-right { grid-column: 1 / -1 !important; display: grid !important; grid-template-columns: repeat(3,1fr) !important; gap: 12px; }
+}
+@media (max-width: 760px) {
+  .v2-topbar { height: auto !important; flex-wrap: wrap !important; row-gap: 9px !important; padding: 10px 0 !important; }
+  .v2-workspace, .v2-view-shell { display: block !important; }
+  .v2-wallet-rail, .v2-context { display: none !important; }
+  .v2-right { display: block !important; }
+  .v2-console, .v2-view-main, .v2-side-card { width: 100% !important; margin-bottom: 12px; }
+}
