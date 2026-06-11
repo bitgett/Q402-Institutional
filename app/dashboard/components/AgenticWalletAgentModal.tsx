@@ -30,6 +30,7 @@ import {
   brandIconUrl,
 } from "@/app/lib/agent-brand";
 import { useModalEscape } from "./useModalEscape";
+import { CheckIcon } from "../v2/logos";
 
 interface Props {
   walletAddress: string;
@@ -399,7 +400,7 @@ export function AgenticWalletAgentModal({
     >
       <div
         className="w-full max-w-md rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.25)" }}
+        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,0.25)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
@@ -424,8 +425,8 @@ export function AgenticWalletAgentModal({
         <div
           className="rounded-md border px-3 py-2 flex items-center gap-2 text-[11px]"
           style={{
-            background: "rgba(74,222,128,0.04)",
-            borderColor: "rgba(74,222,128,0.18)",
+            background: "rgba(247,202,22,0.04)",
+            borderColor: "rgba(247,202,22,0.18)",
           }}
         >
           <span className="text-white/40 uppercase tracking-widest text-[9.5px] font-semibold">
@@ -475,7 +476,7 @@ export function AgenticWalletAgentModal({
             {/* Preview — what 8004scan will index after the mint settles. */}
             <div
               className="rounded-md border px-3 py-2.5 text-[11px] leading-relaxed space-y-1.5"
-              style={{ background: "rgba(74,222,128,0.04)", borderColor: "rgba(74,222,128,0.18)" }}
+              style={{ background: "rgba(247,202,22,0.04)", borderColor: "rgba(247,202,22,0.18)" }}
             >
               <div className="text-[9.5px] uppercase tracking-widest text-emerald-400/85 font-semibold">
                 Preview on 8004scan
@@ -489,7 +490,7 @@ export function AgenticWalletAgentModal({
 
             <div
               className="rounded-md border px-3 py-2.5 text-[11.5px] leading-relaxed"
-              style={{ background: "rgba(74,222,128,0.05)", borderColor: "rgba(74,222,128,0.18)", color: "rgba(226,232,240,0.78)" }}
+              style={{ background: "rgba(247,202,22,0.05)", borderColor: "rgba(247,202,22,0.18)", color: "rgba(226,232,240,0.78)" }}
             >
               You&apos;ll sign one transaction with your MetaMask to mint the agent NFT.
               The NFT goes to your owner EOA; the Agent Wallet address gets declared
@@ -641,12 +642,12 @@ export function AgenticWalletAgentModal({
 }
 
 function StageLine({ label, state }: { label: string; state: "pending" | "active" | "done" }) {
-  const icon = state === "done" ? "✓" : state === "active" ? "…" : "○";
+  const icon = state === "done" ? <CheckIcon size={12} /> : state === "active" ? "…" : "○";
   const color =
     state === "done"
-      ? "rgba(134,239,172,0.85)"
+      ? "rgba(247,202,22,0.85)"
       : state === "active"
-        ? "#86efac"
+        ? "#f9d64a"
         : "rgba(255,255,255,0.30)";
   return (
     <div className="flex items-center gap-2">

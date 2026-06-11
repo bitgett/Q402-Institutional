@@ -27,8 +27,8 @@ export const v2 = {
   panel2: "#101e32",
   line: "rgba(255,255,255,.085)",
   text: "#f2f0e8",
-  muted: "#8993a6",
-  muted2: "#616d81",
+  muted: "#9BA8BD", // lightened from #8993a6 for WCAG AA on glass surfaces
+  muted2: "#616d81", // low-contrast — ONLY use at >=16px (fails AA below that)
   yellow: "#F5C518", // canonical Q402 brand gold (matches Q402-logo.svg + landing nav)
   mint: "#55e6a5",
   cyan: "#58c7f4",
@@ -82,6 +82,41 @@ export const V2_ACCENT_TEXT = "#f9d64a"; // selected-row text (lighter than base
 /** Emerald defaults the shared modals fall back to outside a v2 scope. */
 export const OFFBRANCH_ACCENT = "#4ade80";
 export const OFFBRANCH_ACCENT_TEXT = "#86efac";
+
+/**
+ * Geometry tokens — corner radii, card insets (padding), and rail/column
+ * widths the v2 surface reuses. Centralized so spacing stays consistent and a
+ * future density change is a one-file edit. All values in px.
+ */
+export const v2Radius = {
+  surface: 19, // outer frosted .surface panels (matches glass() default)
+  card: 15, // primary content cards
+  subCard: 13, // inner sub-cards (matches subCard() default)
+  tight: 11, // compact cells / inline cards
+  chip: 8, // pills / chips / small badges
+} as const;
+
+export const v2Insets = {
+  primaryCard: 16, // padding inside primary content cards
+  assetCard: 14, // padding inside asset / token rows
+  miniCard: 12, // padding inside compact mini-cards
+  modal: 20, // padding inside modal bodies
+  heroV: 24, // vertical padding of the hero balance block
+  heroH: 25, // horizontal padding of the hero balance block
+} as const;
+
+export const v2Columns = {
+  railLeft: 230, // left nav rail width
+  railRight: 300, // right context rail width
+  consoleMin: 560, // min width of the center console column
+  gridGap: 18, // gap between rail/console columns
+} as const;
+
+/**
+ * Gas-tank coin chip gradient — the literal the WalletsView gas chip uses
+ * today (deep navy slate). Surfaced so the value lives in one place.
+ */
+export const gasTankCoinGradient = "linear-gradient(135deg,#2c3c57,#172234)";
 
 /**
  * glass(radius) — the canonical .surface treatment as inline-style props.

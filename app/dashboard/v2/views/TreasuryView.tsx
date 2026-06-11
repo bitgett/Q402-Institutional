@@ -60,7 +60,7 @@ import {
 } from "../primitives";
 import { v2, glass, subCard, fs } from "../theme";
 import type { Scope } from "../theme";
-import { ChainIcon, TokenIcon, Q402Mark } from "../logos";
+import { ChainIcon, TokenIcon, Q402Mark, GasTankIcon, CheckIcon } from "../logos";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { GASTANK_ADDRESS } from "@/app/lib/wallets";
 import {
@@ -402,7 +402,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
         style={{
           display: "grid",
           gridTemplateColumns: "230px minmax(0, 1fr)",
-          gap: 17,
+          gap: 18,
           alignItems: "start",
         }}
       >
@@ -460,31 +460,8 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
               <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em" }}>
                 Capital operations
               </div>
-              {demoMode && (
-                <span
-                  title="Showing sample data — connect your wallet for live balances"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    fontSize: fs.micro,
-                    fontWeight: 700,
-                    letterSpacing: ".06em",
-                    textTransform: "uppercase",
-                    color: v2.yellow,
-                    padding: "5px 10px",
-                    borderRadius: 999,
-                    border: `1px solid var(--v2-accent-line)`,
-                    background: "var(--v2-accent-fill)",
-                  }}
-                >
-                  <span
-                    aria-hidden
-                    style={{ width: 5, height: 5, borderRadius: "50%", background: v2.yellow }}
-                  />
-                  Preview · connect your wallet for live data
-                </span>
-              )}
+              <ScopeChipBadge isMultichain={isMultichain} />
+              {demoMode && <PreviewChip />}
             </div>
             <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, marginBottom: 18 }}>
               Gas Tank, Q402 Yield, and CCIP liquidity across{" "}
@@ -505,7 +482,17 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             {/* Gas Tank card */}
             <Surface radius={15} style={{ padding: 19, scrollMarginTop: 84 }}>
               <div id="treasury-gastank" style={{ scrollMarginTop: 84 }}>
-                <Eyebrow style={{ fontSize: fs.label }}>Gas Tank</Eyebrow>
+                <Eyebrow
+                  style={{
+                    fontSize: fs.label,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <GasTankIcon size={14} color={v2.yellow} />
+                  Gas Tank
+                </Eyebrow>
                 <div
                   style={{
                     font: `600 ${fs.hero}px ${displayFont}`,
@@ -751,7 +738,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
           {/* ── Per-network table ──────────────────────────────────────── */}
           <Surface radius={15} style={{ overflow: "hidden" }}>
             <div id="treasury-deposits" style={{ scrollMarginTop: 84 }}>
-              <div style={{ padding: "17px 19px 13px" }}>
+              <div style={{ padding: "19px 19px 13px" }}>
                 <SectionHead
                   title="Networks"
                   meta={
@@ -840,8 +827,11 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                               letterSpacing: ".04em",
                               padding: "4px 8px",
                               borderRadius: 6,
-                              color: funded ? v2.mint : v2.muted2,
-                              background: funded ? "rgba(85,230,165,.10)" : "rgba(255,255,255,.04)",
+                              color: funded ? v2.yellow : v2.muted2,
+                              border: funded
+                                ? "1px solid rgba(247,202,22,.30)"
+                                : "1px solid transparent",
+                              background: funded ? "rgba(247,202,22,.08)" : "rgba(255,255,255,.04)",
                             }}
                           >
                             {demo ? "READY" : funded ? "FUNDED" : "EMPTY"}
@@ -989,6 +979,58 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
   );
 }
 
+// ── Title-area chips ─────────────────────────────────────────────────────────
+/** Shown only in demo mode, beside the view title — signals example data.
+ *  Mirrors the shared PreviewChip pattern used by Wallets/Activity views. */
+function PreviewChip() {
+  return (
+    <span
+      title="Sample data — connect your wallet to load live balances"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: fs.label,
+        fontWeight: 700,
+        letterSpacing: ".02em",
+        color: v2.yellow,
+        background: "rgba(247,202,22,.10)",
+        border: "1px solid rgba(247,202,22,.30)",
+        padding: "5px 10px",
+        borderRadius: 999,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span aria-hidden style={{ width: 5, height: 5, borderRadius: 999, background: v2.yellow }} />
+      Preview · connect your wallet for live data
+    </span>
+  );
+}
+
+/** Active scope badge beside the title — Multichain · 10 chains / Trial · BNB,
+ *  matching the WalletsView hero scope badge. */
+function ScopeChipBadge({ isMultichain }: { isMultichain: boolean }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        fontSize: fs.label,
+        fontWeight: 600,
+        letterSpacing: ".02em",
+        color: v2.muted,
+        background: "rgba(255,255,255,.04)",
+        border: `1px solid ${v2.line}`,
+        padding: "5px 10px",
+        borderRadius: 999,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {isMultichain ? "Multichain · 10 chains" : "Trial · BNB"}
+    </span>
+  );
+}
+
 // ── Table cells ──────────────────────────────────────────────────────────────
 function Th({ children, style }: { children: React.ReactNode; style?: CSSProperties }) {
   return (
@@ -999,7 +1041,7 @@ function Th({ children, style }: { children: React.ReactNode; style?: CSSPropert
         fontSize: fs.label,
         letterSpacing: ".1em",
         textTransform: "uppercase",
-        padding: "0 13px 11px",
+        padding: "0 13px 12px",
         ...style,
       }}
     >
@@ -1008,7 +1050,7 @@ function Th({ children, style }: { children: React.ReactNode; style?: CSSPropert
   );
 }
 function Td({ children, style }: { children: React.ReactNode; style?: CSSProperties }) {
-  return <td style={{ padding: "13px", verticalAlign: "middle", ...style }}>{children}</td>;
+  return <td style={{ padding: "14px 13px", verticalAlign: "middle", ...style }}>{children}</td>;
 }
 
 // ── V2DepositModal ───────────────────────────────────────────────────────────
@@ -1167,7 +1209,7 @@ function V2DepositModal({
             border: `1px solid rgba(85,230,165,.22)`,
           }}
         >
-          <span style={{ color: v2.mint, fontSize: fs.title }}>✓</span>
+          <CheckIcon size={fs.title} color={v2.mint} />
           <div>
             <div style={{ color: v2.mint, fontWeight: 700, fontSize: fs.base }}>Deposit confirmed</div>
             <div style={{ color: v2.muted, fontSize: fs.body }}>Gas Tank credited.</div>
@@ -1368,6 +1410,9 @@ function CopyRow({
           onClick={onCopy}
           style={{
             flexShrink: 0,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
             border: `1px solid ${v2.line}`,
             background: "rgba(255,255,255,.04)",
             color: copied ? v2.mint : v2.muted,
@@ -1378,7 +1423,14 @@ function CopyRow({
             cursor: "pointer",
           }}
         >
-          {copied ? "✓" : "Copy"}
+          {copied ? (
+            <>
+              <CheckIcon size={13} color={v2.mint} />
+              Copied!
+            </>
+          ) : (
+            "Copy"
+          )}
         </button>
       </div>
     </div>

@@ -17,6 +17,7 @@
  */
 
 import { useState } from "react";
+import { GearIcon } from "../v2/logos";
 
 interface Props {
   onCreate: () => void;
@@ -106,7 +107,7 @@ function PreviewCard({ onCreate, creating }: { onCreate: () => void; creating: b
         <span className="text-white/55">⇣ Receive</span>
         <span className="text-white/55">⇉ Batch send</span>
         <span className="text-white/55">↩ Withdraw</span>
-        <span className="text-white/55">⚙ Spending limits</span>
+        <span className="inline-flex items-center gap-1.5 text-white/55"><GearIcon size={13} /> Spending limits</span>
         <span className="ml-auto text-white/50 text-[10.5px] uppercase tracking-[0.18em]">
           available after activation
         </span>

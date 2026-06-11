@@ -36,6 +36,7 @@ import { AgenticWalletEarnSection } from "./AgenticWalletEarnSection";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
 import type { ChainKey } from "@/app/lib/relayer";
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
+import { GearIcon, HexagonIcon, AgentBadgeIcon } from "../v2/logos";
 
 interface TokenSlice {
   usd: number;
@@ -405,27 +406,27 @@ export function AgenticWalletCard({
             type="button"
             disabled={archived}
             onClick={() => setLimitsOpen(true)}
-            className="text-white/75 hover:text-emerald-300 transition-colors disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 text-white/75 hover:text-emerald-300 transition-colors disabled:opacity-40"
           >
-            ⚙ Spending limits
+            <GearIcon size={13} /> Spending limits
           </button>
           <button
             type="button"
             disabled={archived}
             onClick={() => setHooksOpen(true)}
-            className="text-white/75 hover:text-emerald-300 transition-colors disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 text-white/75 hover:text-emerald-300 transition-colors disabled:opacity-40"
           >
-            ⬡ Hooks
+            <HexagonIcon size={13} /> Hooks
           </button>
           {wallet.erc8004AgentId ? (
             <a
               href={wallet.reputation?.scan8004Url ?? agentScanUrl(wallet.erc8004AgentId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-emerald-300/85 hover:text-emerald-200 transition-colors"
+              className="inline-flex items-center gap-1.5 text-emerald-300/85 hover:text-emerald-200 transition-colors"
               title="View on 8004scan"
             >
-              ◉ Agent #{(agentIdFromTag(wallet.erc8004AgentId) ?? "?")}
+              <AgentBadgeIcon size={13} /> Agent #{(agentIdFromTag(wallet.erc8004AgentId) ?? "?")}
               {wallet.reputation && wallet.reputation.total.feedbackCount > 0 ? (
                 <>
                   {" · "}
@@ -448,9 +449,9 @@ export function AgenticWalletCard({
               type="button"
               disabled={archived}
               onClick={() => setAgentOpen(true)}
-              className="text-white/80 hover:text-emerald-300 transition-colors disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 text-white/80 hover:text-emerald-300 transition-colors disabled:opacity-40"
             >
-              ◉ Register on 8004scan
+              <AgentBadgeIcon size={13} /> Register on 8004scan
             </button>
           )}
         </div>

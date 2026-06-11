@@ -45,9 +45,9 @@ import {
   displayFont,
   shortAddr,
 } from "../primitives";
-import { v2, subCard, fs } from "../theme";
+import { v2, subCard, fs, gasTankCoinGradient } from "../theme";
 import type { Scope } from "../theme";
-import { ChainIcon, TokenIcon, StablePair, Q402Mark } from "../logos";
+import { ChainIcon, TokenIcon, StablePair, Q402Mark, SparkIcon, AgentBadgeIcon, GasTankIcon } from "../logos";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -139,6 +139,28 @@ function agentIdFromTag(tag: string | null | undefined): string | null {
  *  which carries the bulk of settlements and is the safe default. */
 function asChainKey(chain: string): ChainKey {
   return (CHAIN_KEYS as readonly string[]).includes(chain) ? (chain as ChainKey) : "bnb";
+}
+
+// Lightweight inline-hover helper: subtle bg (and optional border) on enter,
+// cleared on leave. Skips disabled/active elements via the `skip` guard so we
+// don't fight the active-item styling. Returns event handlers to spread.
+function hoverBg(
+  bg = "rgba(255,255,255,.035)",
+  border?: string,
+  skip?: () => boolean,
+) {
+  return {
+    onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+      if (skip?.()) return;
+      e.currentTarget.style.backgroundColor = bg;
+      if (border) e.currentTarget.style.borderColor = border;
+    },
+    onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+      if (skip?.()) return;
+      e.currentTarget.style.backgroundColor = "";
+      if (border) e.currentTarget.style.borderColor = "";
+    },
+  };
 }
 
 function relativeTime(iso: string): string {
@@ -542,6 +564,20 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
     void loadHooks();
   }, [loadHooks]);
 
+  // Switching the active wallet must not leave a modal open over the wrong
+  // wallet — every open modal / picker / bucket resets when activeId changes.
+  useEffect(() => {
+    setSendOpen(false);
+    setReceiveOpen(false);
+    setBatchOpen(false);
+    setBridgeOpen(false);
+    setWithdrawOpen(false);
+    setWithdrawBucket(null);
+    setLimitsOpen(false);
+    setHooksOpen(false);
+    setAgentOpen(false);
+  }, [activeId]);
+
   // ── Derived view models ──────────────────────────────────────────────────
   const activeBalance = activeWallet ? balances[activeWallet.walletId] ?? null : null;
 
@@ -739,6 +775,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   key={w.walletId}
                   type="button"
                   onClick={() => !demoMode && setActiveId(w.walletId)}
+                  {...hoverBg("rgba(255,255,255,.03)", "rgba(255,255,255,.10)", () => isActive)}
                   style={{ ...styles.walletItem, ...(isActive ? styles.walletItemActive : null) }}
                   title={w.address}
                 >
@@ -784,7 +821,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
           <div style={styles.railFoot}>
             <div style={styles.mode}>
-              <strong style={{ display: "block", color: v2.mint, fontSize: fs.body }}>
+              <strong style={{ display: "block", color: v2.yellow, fontSize: fs.body }}>
                 Mode C · Managed
               </strong>
               <span style={{ display: "block", color: v2.muted, fontSize: fs.label, lineHeight: 1.5, marginTop: 5 }}>
@@ -826,7 +863,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                     >
                       <span style={{ overflowWrap: "anywhere" }}>{vmAddress}</span>
                       {!demoMode && (
-                        <span style={{ color: v2.yellow, marginLeft: 6 }}>{copied ? "copied ✓" : "copy"}</span>
+                        <span style={{ color: copied ? v2.mint : v2.yellow, marginLeft: 6 }}>{copied ? "Copied!" : "copy"}</span>
                       )}
                     </button>
                     <div style={styles.badges}>
@@ -834,7 +871,9 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         {archived ? "Archived" : "Ready to spend"}
                       </span>
                       <span style={styles.badge}>
-                        {demoMode || multichainActive ? "Multichain · 10 chains" : "Trial · BNB"}
+                        {(demoMode ? scope === "multichain" : multichainActive)
+                          ? "Multichain · 10 chains"
+                          : "Trial · BNB"}
                       </span>
                       {agentNum && <span style={styles.badge}>ERC-8004 #{agentNum}</span>}
                     </div>
@@ -929,8 +968,13 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                 </div>
 
                 {/* MCP command bar */}
-                <div style={styles.command}>
-                  <div style={{ color: v2.yellow, fontSize: 19 }}>✦</div>
+                <div
+                  style={styles.command}
+                  {...hoverBg("rgba(247,202,22,.04)", "rgba(247,202,22,.34)")}
+                >
+                  <div style={{ color: v2.yellow, display: "grid", placeItems: "center" }}>
+                    <SparkIcon size={19} />
+                  </div>
                   <div style={{ minWidth: 0 }}>
                     <strong style={{ display: "block", fontSize: fs.body }}>Tell this wallet what to do</strong>
                     <span style={{ display: "block", color: v2.muted, fontSize: fs.label, marginTop: 3 }}>
@@ -1015,7 +1059,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         </div>
                       </div>
                     ) : (
-                      <div style={{ marginTop: -16 }}>
+                      <div style={{ ...subCard(13), padding: 14 }}>
                         <AgenticWalletEarnSection
                           ownerAddress={addr ?? activeWallet.ownerAddr}
                           walletId={activeWallet.walletId}
@@ -1031,13 +1075,8 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   <div style={{ ...subCard(13), padding: 14, marginTop: 11 }}>
                     <div style={styles.assetTop}>
                       <div style={styles.token}>
-                        <span style={{ ...styles.coin, background: "linear-gradient(135deg,#2c3c57,#172234)" }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#cfe0ff" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                            <path d="M4.5 21V5.5A2.5 2.5 0 0 1 7 3h2.5A2.5 2.5 0 0 1 12 5.5V21" />
-                            <path d="M3 21h10.5" />
-                            <path d="M6.5 8.5h3" />
-                            <path d="M12 10.5h2A1.5 1.5 0 0 1 15.5 12v4.5a1.5 1.5 0 0 0 3 0V9l-2.5-2.5" />
-                          </svg>
+                        <span style={{ ...styles.coin, background: gasTankCoinGradient, color: "#cfe0ff" }}>
+                          <GasTankIcon size={16} />
                         </span>
                         <div>
                           Gas Tank
@@ -1075,7 +1114,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   <div style={styles.rows}>
                     {demoMode ? (
                       DEMO.activity.map((t) => (
-                        <div key={t.id} style={styles.row}>
+                        <div key={t.id} style={styles.row} {...hoverBg("rgba(255,255,255,.03)")}>
                           <div style={styles.rowIcon}>{t.direction === "out" ? "↗" : "↓"}</div>
                           <div style={{ minWidth: 0 }}>
                             <strong style={{ fontSize: fs.base }}>{t.title}</strong>
@@ -1100,7 +1139,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         const amt = Number(t.tokenAmount);
                         const counter = out ? t.toUser : t.fromUser;
                         return (
-                          <div key={t.relayTxHash} style={styles.row}>
+                          <div key={t.relayTxHash} style={styles.row} {...hoverBg("rgba(255,255,255,.03)")}>
                             <div style={styles.rowIcon}>{out ? "↗" : "↓"}</div>
                             <div style={{ minWidth: 0 }}>
                               <strong style={{ fontSize: fs.base }}>
@@ -1208,6 +1247,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                 key={p.key}
                 type="button"
                 onClick={() => activeWallet && !archived && setHooksOpen(true)}
+                {...hoverBg("rgba(255,255,255,.03)")}
                 style={styles.policy}
                 title={demoMode ? "Connect your wallet" : "Edit policies in Hooks"}
               >
@@ -1224,45 +1264,44 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
           {/* Automation — reuse the shipped Recurring section (real rules +
               its own create / pause / cancel modal). Wrapped in a side card. */}
-          <Surface style={{ ...styles.sideCard, padding: 0, overflow: "hidden" }}>
-            <div style={{ padding: 16, paddingBottom: 0 }}>
-              <SectionHead title="Automation" meta="Recurring & conditional" />
-            </div>
-            {/* The Recurring section carries its own bordered card + a `mt-5`
-                top margin; pull it up so it sits flush under the head. The
-                Automation card respects the user's scope view for new-schedule
-                gating (recurring is a paid Multichain feature). */}
-            <div style={{ padding: "0 12px 12px", marginTop: demoMode ? 12 : -20 }}>
-              {demoMode || !activeWallet ? (
-                // Demo: render sample automation rules (no auth/data fetch).
-                <div style={{ display: "grid", gap: 8 }}>
-                  {DEMO.automation.map((a) => (
-                    <div key={a.id} style={{ ...subCard(11), padding: "10px 12px" }}>
-                      <div
+          <Surface style={styles.sideCard}>
+            <SectionHead title="Automation" meta="Recurring & conditional" />
+            {/* V2 owns the section chrome: the reused Recurring section renders
+                content-only (no outer card / top-margin), so the parent wraps
+                it in a subCard(13) box that owns the border / bg / padding.
+                The Automation card respects the user's scope view for
+                new-schedule gating (recurring is a paid Multichain feature). */}
+            {demoMode || !activeWallet ? (
+              // Demo: render sample automation rules (no auth/data fetch).
+              <div style={{ display: "grid", gap: 8, marginTop: 13 }}>
+                {DEMO.automation.map((a) => (
+                  <div key={a.id} style={{ ...subCard(11), padding: "10px 12px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <strong style={{ fontSize: fs.base }}>{a.label}</strong>
+                      <span
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 8,
+                          ...styles.autoBadge,
+                          ...(a.status === "ACTIVE" ? styles.autoBadgeActive : null),
                         }}
                       >
-                        <strong style={{ fontSize: fs.base }}>{a.label}</strong>
-                        <span
-                          style={{
-                            ...styles.autoBadge,
-                            ...(a.status === "ACTIVE" ? styles.autoBadgeActive : null),
-                          }}
-                        >
-                          {a.status}
-                        </span>
-                      </div>
-                      <span style={{ display: "block", color: v2.muted, fontSize: fs.label, marginTop: 5 }}>
-                        {a.detail}
+                        {a.status}
                       </span>
                     </div>
-                  ))}
-                </div>
-              ) : (
+                    <span style={{ display: "block", color: v2.muted, fontSize: fs.label, marginTop: 5 }}>
+                      {a.detail}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ ...subCard(13), padding: 14, marginTop: 13 }}>
                 <AgenticWalletRecurringSection
                   walletId={activeWallet.walletId}
                   ownerAddress={addr ?? activeWallet.ownerAddr}
@@ -1271,8 +1310,8 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   hasMultichainScope={multichainActive}
                   walletArchived={archived}
                 />
-              )}
-            </div>
+              </div>
+            )}
           </Surface>
 
           {/* Spending guardrails — native per-tx / daily caps → Limits modal */}
@@ -1301,7 +1340,8 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
             </div>
             {!demoMode && !agentNum && activeWallet && !archived && (
               <button type="button" onClick={() => setAgentOpen(true)} style={styles.agentLink}>
-                ◉ Register this wallet on ERC-8004 →
+                <AgentBadgeIcon size={14} />
+                Register this wallet on ERC-8004 →
               </button>
             )}
           </Surface>
@@ -1459,6 +1499,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: v2.text,
     width: "100%",
     display: "block",
+    transition: "background-color .15s ease, border-color .16s ease",
   },
   walletItemActive: {
     borderColor: "rgba(247,202,22,.45)",
@@ -1514,8 +1555,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   railFoot: { marginTop: "auto", paddingTop: 18 },
   mode: {
-    border: "1px solid rgba(85,230,165,.15)",
-    background: "rgba(85,230,165,.05)",
+    border: "1px solid rgba(247,202,22,.30)",
+    background: "rgba(247,202,22,.08)",
     padding: 12,
     borderRadius: 13,
   },
@@ -1599,9 +1640,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: fs.micro,
   },
   badgeGreen: {
-    color: v2.mint,
-    borderColor: "rgba(85,230,165,.2)",
-    background: "rgba(85,230,165,.05)",
+    color: v2.yellow,
+    borderColor: "rgba(247,202,22,.30)",
+    background: "rgba(247,202,22,.08)",
   },
   heroBal: { textAlign: "right", zIndex: 1, flexShrink: 0 },
   heroBalLabel: {
@@ -1645,8 +1686,8 @@ const styles: Record<string, React.CSSProperties> = {
     color: v2.actionText,
     fontWeight: 700,
   },
-  actionDisabled: { opacity: 0.4, cursor: "not-allowed" },
-  actionSmall: { display: "block", fontSize: fs.micro, opacity: 0.55, marginTop: 3 },
+  actionDisabled: { opacity: 0.5, cursor: "not-allowed", background: "rgba(255,255,255,.015)" },
+  actionSmall: { display: "block", fontSize: fs.label, opacity: 0.7, marginTop: 3 },
   command: {
     marginTop: 11,
     padding: "10px 11px 10px 14px",
@@ -1659,6 +1700,7 @@ const styles: Record<string, React.CSSProperties> = {
     background: "linear-gradient(90deg, rgba(247,202,22,.055), rgba(255,255,255,.015))",
     position: "relative",
     zIndex: 1,
+    transition: "background-color .15s ease, border-color .16s ease",
   },
   commandBtn: {
     border: "1px solid rgba(247,202,22,.3)",
@@ -1703,8 +1745,11 @@ const styles: Record<string, React.CSSProperties> = {
     gridTemplateColumns: "31px minmax(0,1fr) auto",
     gap: 11,
     alignItems: "center",
-    padding: "11px 0",
+    padding: "11px 8px",
+    margin: "0 -8px",
     borderBottom: "1px solid rgba(255,255,255,.05)",
+    borderRadius: 8,
+    transition: "background-color .15s ease",
   },
   rowIcon: {
     width: 31,
@@ -1756,6 +1801,8 @@ const styles: Record<string, React.CSSProperties> = {
     borderTopColor: "rgba(255,255,255,.055)",
     color: v2.text,
     cursor: "pointer",
+    transition: "background-color .15s ease",
+    borderRadius: 8,
   },
   toggle: {
     width: 30,
@@ -1766,16 +1813,16 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     display: "block",
   },
-  toggleOn: { background: "rgba(85,230,165,.27)" },
+  toggleOn: { background: "rgba(247,202,22,.27)" },
   toggleKnob: {
     display: "block",
     width: 11,
     height: 11,
     borderRadius: "50%",
     background: v2.toggleKnob,
-    transition: ".2s",
+    transition: "transform .2s ease",
   },
-  toggleKnobOn: { transform: "translateX(13px)", background: v2.mint },
+  toggleKnobOn: { transform: "translateX(13px)", background: v2.yellow },
   autoBadge: {
     padding: "4px 8px",
     borderRadius: 99,
@@ -1787,9 +1834,9 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
   },
   autoBadgeActive: {
-    color: v2.mint,
-    borderColor: "rgba(85,230,165,.25)",
-    background: "rgba(85,230,165,.06)",
+    color: v2.yellow,
+    borderColor: "rgba(247,202,22,.30)",
+    background: "rgba(247,202,22,.08)",
   },
   limitsCard: { borderColor: "rgba(247,202,22,.18)", background: "rgba(247,202,22,.03)" },
   limitGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginTop: 11 },
@@ -1804,6 +1851,9 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     padding: 0,
     textAlign: "left",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
   },
   // Collapsed "Wallet management" disclosure — keeps the destructive
   // DangerZone tucked at the foot of the console, opened on demand.

@@ -256,7 +256,7 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
     >
       <div
         className="w-full max-w-lg rounded-2xl border p-6 space-y-4 max-h-[88vh] overflow-y-auto"
-        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
+        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,.30)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">

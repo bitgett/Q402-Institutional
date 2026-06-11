@@ -120,7 +120,7 @@ export function AgenticWalletLimitsModal({
     >
       <div
         className="w-full max-w-md rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
+        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,.30)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">

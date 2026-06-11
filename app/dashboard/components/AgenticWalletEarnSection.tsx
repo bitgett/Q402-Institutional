@@ -159,10 +159,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
   const labelCls = "text-[10px] text-white/80 uppercase tracking-widest font-medium";
 
   return (
-    <div
-      className="relative mt-4 rounded-xl border p-3"
-      style={{ background: "rgba(255,255,255,0.017)", borderColor: "rgba(255,255,255,0.085)" }}
-    >
+    <div className="relative">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className={labelCls}>Earn · Q402 Yield</span>

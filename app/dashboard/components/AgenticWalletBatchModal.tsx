@@ -198,7 +198,7 @@ export function AgenticWalletBatchModal({
     >
       <div
         className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
+        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,.30)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
@@ -231,8 +231,8 @@ export function AgenticWalletBatchModal({
                   key={`${r.to}-${i}`}
                   className="rounded-md border px-3 py-2 text-[12px] flex items-center justify-between gap-2"
                   style={{
-                    background: r.ok ? "rgba(74,222,128,0.05)" : "rgba(248,113,113,0.05)",
-                    borderColor: r.ok ? "rgba(74,222,128,0.20)" : "rgba(248,113,113,0.25)",
+                    background: r.ok ? "rgba(85,230,165,0.06)" : "rgba(248,113,113,0.05)",
+                    borderColor: r.ok ? "rgba(85,230,165,0.22)" : "rgba(248,113,113,0.25)",
                   }}
                 >
                   <div className="font-mono text-white/75 truncate">

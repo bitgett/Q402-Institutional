@@ -240,7 +240,7 @@ export function AgenticWalletExportModal({
                 disabled={!show}
                 className="flex-1 px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40"
               >
-                {copied ? "copied ✓" : "Copy"}
+                {copied ? "Copied!" : "Copy"}
               </button>
             </div>
             <div className="text-[11px] text-white/45 text-center">

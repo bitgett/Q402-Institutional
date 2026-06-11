@@ -10,9 +10,10 @@
  * the rules list. No separate notification surface, no popup.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { getActionAuth } from "@/app/lib/auth-client";
+import { TimerIcon } from "../v2/logos";
 import { AgenticWalletRecurringModal } from "./AgenticWalletRecurringModal";
 
 interface RuleView {
@@ -136,7 +137,7 @@ function formatFrequency(f: string): string {
   return f;
 }
 
-function formatNextRun(rule: RuleView): string {
+function formatNextRun(rule: RuleView): ReactNode {
   if (rule.status === "cancelled") return "Cancelled";
   if (rule.status === "fired-cap-exceeded") return "Stopped — fix and resume";
   if (rule.status === "paused") return "Paused by you";
@@ -150,7 +151,12 @@ function formatNextRun(rule: RuleView): string {
     const fireAt = rule.pendingFireAt + rule.cancelWindowHours * 60 * 60 * 1000;
     const remainingMs = fireAt - now;
     const remainingHrs = Math.max(0, Math.floor(remainingMs / (60 * 60 * 1000)));
-    return `⏱ Fires in ${remainingHrs}h · ${d.toUTCString().slice(5, 22)} UTC`;
+    return (
+      <span className="inline-flex items-center gap-1">
+        <TimerIcon size={12} />
+        Fires in {remainingHrs}h · {d.toUTCString().slice(5, 22)} UTC
+      </span>
+    );
   }
   if (diff < 24 * 60 * 60 * 1000) {
     const hrs = Math.max(0, Math.floor(diff / (60 * 60 * 1000)));
@@ -258,13 +264,7 @@ export function AgenticWalletRecurringSection({
   const visibleRules = rules.filter((r) => r.status !== "cancelled");
 
   return (
-    <div
-      className="mt-5 rounded-xl border p-4"
-      style={{
-        background: "rgba(255,255,255,0.017)",
-        borderColor: "rgba(255,255,255,0.085)",
-      }}
-    >
+    <div>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
