@@ -157,3 +157,54 @@ html { scroll-behavior: smooth; }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-deep); }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Dashboard V2 — accent re-skin scope.
+
+   The reused Agent Wallet modals (app/dashboard/components/Agentic*.tsx)
+   hard-code an EMERALD accent through Tailwind utility classes
+   (text/bg/border/accent/ring-emerald-{200..500}) plus a handful of inline
+   rgba(74,222,128,…) literals. v2 is YELLOW-branded.
+
+   <V2AccentScope> (app/dashboard/v2/primitives.tsx) tags its subtree with
+   `.v2-accent-scope`; the rules below re-map the emerald utility classes to
+   the v2 yellow brand ONLY inside that scope. The shared modals' emerald
+   defaults are untouched when rendered outside a v2 scope (the existing
+   /dashboard), so this is additive — no modal source is edited.
+
+   Specificity: Tailwind utilities are single-class (0,1,0); prefixing with
+   `.v2-accent-scope ` raises us to (0,2,0) so these win without !important
+   for color/background/border. accent-color + ring need the var path. ──── */
+.v2-accent-scope {
+  /* v2 yellow tiers, mirroring the emerald shade ramp the modals use. */
+  --v2-y-200: #fbe28a; /* emerald-200 → light text */
+  --v2-y-300: #f9d64a; /* emerald-300 → primary accent text/link */
+  --v2-y-400: #f7ca16; /* emerald-400 → solid fills / icons */
+  --v2-y-500: #e0b40a; /* emerald-500 → deeper fill */
+}
+/* Text */
+.v2-accent-scope .text-emerald-200 { color: var(--v2-y-200); }
+.v2-accent-scope .text-emerald-300 { color: var(--v2-y-300); }
+.v2-accent-scope .text-emerald-400 { color: var(--v2-y-400); }
+.v2-accent-scope .text-emerald-500 { color: var(--v2-y-500); }
+.v2-accent-scope .text-emerald-950 { color: #1b1500; }
+/* Backgrounds (buttons / chips). Solid fills get dark text for contrast. */
+.v2-accent-scope .bg-emerald-300 { background-color: var(--v2-y-300); }
+.v2-accent-scope .bg-emerald-400 { background-color: var(--v2-y-400); }
+.v2-accent-scope .bg-emerald-500 { background-color: var(--v2-y-500); }
+.v2-accent-scope .hover\:bg-emerald-300:hover { background-color: var(--v2-y-300); }
+.v2-accent-scope .hover\:bg-emerald-400:hover { background-color: var(--v2-y-400); }
+/* Solid-yellow buttons in the modals pair bg-emerald-400 with
+   text-slate-900 — already dark, so they stay legible. */
+/* Borders */
+.v2-accent-scope .border-emerald-300 { border-color: var(--v2-y-300); }
+.v2-accent-scope .border-emerald-400 { border-color: var(--v2-y-400); }
+/* Hover text */
+.v2-accent-scope .hover\:text-emerald-200:hover { color: var(--v2-y-200); }
+.v2-accent-scope .hover\:text-emerald-300:hover { color: var(--v2-y-300); }
+/* Form control accent (checkboxes / radios) */
+.v2-accent-scope .accent-emerald-400 { accent-color: var(--v2-y-400); }
+/* Alpha-tinted emerald text variants (e.g. text-emerald-400/85). Tailwind
+   emits these as color: rgb(... / .85); re-point the common ones. */
+.v2-accent-scope [class*="text-emerald-300/"],
+.v2-accent-scope [class*="text-emerald-400/"] { color: var(--v2-y-300); }
