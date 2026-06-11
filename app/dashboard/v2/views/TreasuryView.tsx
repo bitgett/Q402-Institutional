@@ -60,6 +60,7 @@ import {
 } from "../primitives";
 import { v2, glass, subCard, fs } from "../theme";
 import type { Scope } from "../theme";
+import { ChainIcon, TokenIcon } from "../logos";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { GASTANK_ADDRESS } from "@/app/lib/wallets";
 import {
@@ -570,7 +571,12 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             <Surface radius={15} style={{ padding: 19 }}>
               <div id="treasury-yield" style={{ scrollMarginTop: 84 }}>
                 <SectionHead
-                  title="Q402 Yield"
+                  title={
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <TokenIcon src="/aave.svg" size={20} />
+                      Q402 Yield
+                    </span>
+                  }
                   meta={
                     <span style={{ color: v2.mint }}>
                       Aave V3{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
@@ -784,17 +790,8 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                         style={{ borderTop: `1px solid ${v2.line}` }}
                       >
                         <Td style={{ paddingLeft: 17 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span
-                              aria-hidden
-                              style={{
-                                width: 7,
-                                height: 7,
-                                borderRadius: 2,
-                                background: c.color,
-                                flexShrink: 0,
-                              }}
-                            />
+                          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                            <ChainIcon chain={c.key} size={18} color={c.color} />
                             <a
                               href={explorerAddressUrl(explorerKey, GASTANK_ADDRESS)}
                               target="_blank"

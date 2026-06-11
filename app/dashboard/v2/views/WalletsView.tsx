@@ -35,7 +35,7 @@
  * multichain = 10 chains / live key. It does not change layout structure.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Surface,
   V2AccentScope,
@@ -47,6 +47,7 @@ import {
 } from "../primitives";
 import { v2, subCard, fs } from "../theme";
 import type { Scope } from "../theme";
+import { ChainIcon, TokenIcon, StablePair } from "../logos";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -118,51 +119,7 @@ const CHAIN_LABEL: Record<string, string> = {
 // Allocation-bar segment colours, in prototype order (yellow / cyan / violet …).
 const SEG_COLORS = [v2.yellow, v2.cyan, v2.chartViolet, v2.mint, "#c98bff", "#ff9d6b"];
 
-// Per-chain brand logos (public/). Falls back to a colored dot when absent.
-const CHAIN_LOGO: Record<string, string> = {
-  bnb: "/bnb.png",
-  eth: "/eth.png",
-  avax: "/avax.png",
-  arbitrum: "/arbitrum.png",
-  xlayer: "/xlayer.png",
-  scroll: "/scroll.png",
-  mantle: "/mantle.png",
-  injective: "/injective.png",
-  monad: "/monad.png",
-  stable: "/stable.jpg",
-};
-
-/** Round chain logo with a colored-dot fallback for unmapped chains. */
-function ChainIcon({ chain, size = 16, color }: { chain: string; size?: number; color?: string }) {
-  const src = CHAIN_LOGO[chain];
-  if (!src) {
-    return (
-      <span style={{ width: size, height: size, borderRadius: "50%", background: color ?? v2.muted2, flexShrink: 0, display: "inline-block" }} />
-    );
-  }
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt="" width={size} height={size} style={{ borderRadius: "50%", flexShrink: 0, objectFit: "cover", display: "block", background: "#0c1626" }} />
-  );
-}
-
-/** Round token logo (USDT/USDC/Aave) from public/ SVGs. */
-function TokenIcon({ src, size = 27, style }: { src: string; size?: number; style?: CSSProperties }) {
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt="" width={size} height={size} style={{ borderRadius: "50%", flexShrink: 0, display: "block", ...style }} />
-  );
-}
-
-/** Overlapping USDT + USDC pair — the "Stablecoins" chip. */
-function StablePair({ size = 27 }: { size?: number }) {
-  return (
-    <div style={{ display: "flex", flexShrink: 0, alignItems: "center" }}>
-      <TokenIcon src="/usdt.svg" size={size} style={{ boxShadow: "0 0 0 2px #0c1626" }} />
-      <TokenIcon src="/usdc.svg" size={size} style={{ marginLeft: -size * 0.38, boxShadow: "0 0 0 2px #0c1626" }} />
-    </div>
-  );
-}
+// Brand-logo primitives (chains + tokens) — shared with the other v2 views.
 
 function fmtUsd(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "$—";
@@ -291,6 +248,7 @@ const DEMO = {
     {
       id: "demo-1",
       direction: "out" as const,
+      chain: "bnb",
       title: "Payment to 0x662f…623c",
       meta: "BNB · USDT · Trust Receipt ready",
       amount: "−$1.00",
@@ -299,6 +257,7 @@ const DEMO = {
     {
       id: "demo-2",
       direction: "out" as const,
+      chain: "bnb",
       title: "Monthly contributor payout",
       meta: "Next Jul 7 09:00 UTC",
       amount: "$120.00",
@@ -307,6 +266,7 @@ const DEMO = {
     {
       id: "demo-3",
       direction: "in" as const,
+      chain: "eth",
       title: "Deposit received",
       meta: "Ethereum · USDC",
       amount: "+$200.00",
@@ -315,6 +275,7 @@ const DEMO = {
     {
       id: "demo-4",
       direction: "out" as const,
+      chain: "avax",
       title: "Ethereum → Avalanche",
       meta: "CCIP",
       amount: "$25.00",
@@ -892,7 +853,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                     is no wallet to act on, so they are disabled with a
                     "Connect your wallet" hint rather than opening a modal that
                     would dereference a null wallet. */}
-                <div style={styles.actions}>
+                <div className="v2-actions" style={styles.actions}>
                   <button
                     type="button"
                     disabled={demoMode || archived}
@@ -1107,7 +1068,10 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           <div style={styles.rowIcon}>{t.direction === "out" ? "↗" : "↓"}</div>
                           <div style={{ minWidth: 0 }}>
                             <strong style={{ fontSize: fs.base }}>{t.title}</strong>
-                            <span style={styles.rowSpan}>{t.meta}</span>
+                            <span style={{ ...styles.rowSpan, display: "flex", alignItems: "center", gap: 5 }}>
+                              <ChainIcon chain={t.chain} size={13} />
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.meta}</span>
+                            </span>
                           </div>
                           <div style={{ textAlign: "right" }}>
                             <div style={styles.rowValue}>{t.amount}</div>
@@ -1131,10 +1095,13 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                               <strong style={{ fontSize: fs.base }}>
                                 {out ? "Payment to" : "Received from"} {shortAddr(counter ?? "")}
                               </strong>
-                              <span style={styles.rowSpan}>
-                                {(CHAIN_LABEL[t.chain] ?? t.chain)} · {t.tokenSymbol}
-                                {t.source === "recurring" ? " · recurring" : ""}
-                                {t.receiptId ? " · Trust Receipt ready" : ""}
+                              <span style={{ ...styles.rowSpan, display: "flex", alignItems: "center", gap: 5 }}>
+                                <ChainIcon chain={asChainKey(t.chain)} size={13} />
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {(CHAIN_LABEL[t.chain] ?? t.chain)} · {t.tokenSymbol}
+                                  {t.source === "recurring" ? " · recurring" : ""}
+                                  {t.receiptId ? " · Trust Receipt ready" : ""}
+                                </span>
                               </span>
                             </div>
                             <div style={{ textAlign: "right" }}>
