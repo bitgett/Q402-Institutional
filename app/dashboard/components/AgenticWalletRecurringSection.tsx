@@ -261,8 +261,8 @@ export function AgenticWalletRecurringSection({
     <div
       className="mt-5 rounded-xl border p-4"
       style={{
-        background: "linear-gradient(135deg, rgba(74,222,128,0.04) 0%, rgba(74,222,128,0.01) 100%)",
-        borderColor: "rgba(74,222,128,0.22)",
+        background: "rgba(255,255,255,0.017)",
+        borderColor: "rgba(255,255,255,0.085)",
       }}
     >
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -273,7 +273,7 @@ export function AgenticWalletRecurringSection({
               Recurring payments
             </div>
           </div>
-          <div className="text-[11.5px] text-white/75 leading-snug">
+          <div className="text-[11.5px] text-white/82 leading-snug">
             Schedule weekly payouts, monthly subscriptions, or treasury sweeps. Your AI fires each one with a cancel window first.
           </div>
         </div>
@@ -283,9 +283,9 @@ export function AgenticWalletRecurringSection({
           disabled={walletArchived || !hasMultichainScope}
           className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           style={{
-            background: "rgba(74,222,128,0.15)",
-            color: "#86efac",
-            border: "1px solid rgba(74,222,128,0.40)",
+            background: "rgba(247,202,22,0.14)",
+            color: "#f9d64a",
+            border: "1px solid rgba(247,202,22,0.38)",
           }}
           title={
             walletArchived
@@ -312,9 +312,9 @@ export function AgenticWalletRecurringSection({
       {!loading && !error && visibleRules.length === 0 && (
         <div
           className="mt-3 pt-3 border-t"
-          style={{ borderColor: "rgba(74,222,128,0.16)" }}
+          style={{ borderColor: "rgba(255,255,255,0.08)" }}
         >
-          <div className="text-[12px] text-white/70 mb-2">
+          <div className="text-[12px] text-white/82 mb-2">
             No schedules yet — try one of these patterns:
           </div>
           {/* Vertical list — one pattern per row (icon chip + title + copy).
@@ -337,13 +337,13 @@ export function AgenticWalletRecurringSection({
               >
                 <span
                   className="grid place-items-center rounded-md shrink-0"
-                  style={{ width: 28, height: 28, background: "rgba(74,222,128,0.10)" }}
+                  style={{ width: 28, height: 28, background: "rgba(247,202,22,0.10)" }}
                 >
                   <Icon className="w-4 h-4 text-emerald-300" />
                 </span>
                 <div className="min-w-0">
                   <div className="text-[12.5px] text-white/95 font-medium leading-tight">{title}</div>
-                  <div className="text-[11px] text-white/55 leading-snug">{copy}</div>
+                  <div className="text-[11px] text-white/72 leading-snug">{copy}</div>
                 </div>
               </div>
             ))}
@@ -551,7 +551,7 @@ function RuleRow({
           {firesOpen && (
             <div
               className="mt-2 rounded-md border p-2.5 space-y-1.5"
-              style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(74,222,128,0.18)" }}
+              style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.09)" }}
             >
               <div className="flex items-center justify-between gap-2 mb-1">
                 <div className="text-[10.5px] uppercase tracking-[0.18em] text-emerald-300 font-semibold">

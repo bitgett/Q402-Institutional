@@ -47,7 +47,7 @@ import {
 } from "../primitives";
 import { v2, subCard, fs } from "../theme";
 import type { Scope } from "../theme";
-import { ChainIcon, TokenIcon, StablePair } from "../logos";
+import { ChainIcon, TokenIcon, StablePair, Q402Mark } from "../logos";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -743,10 +743,16 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   title={w.address}
                 >
                   <div style={styles.walletName}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: isActive ? v2.text : "#9aa4b2" }}>
                       {w.label ?? "Agent wallet"}
                     </span>
-                    {!w.archived && <span style={styles.dot} />}
+                    {isActive ? (
+                      <span style={styles.viewingBadge}>
+                        <span style={styles.viewDot} /> Viewing
+                      </span>
+                    ) : w.archived ? (
+                      <span style={styles.archBadge}>Archived</span>
+                    ) : null}
                   </div>
                   <div style={styles.addr}>{shortAddr(w.address)}</div>
                   <div style={styles.walletBal}>
@@ -993,10 +999,12 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                       <div style={{ ...subCard(13), padding: 14 }}>
                         <div style={styles.assetTop}>
                           <div style={styles.token}>
-                            <TokenIcon src="/aave.svg" size={27} />
+                            <Q402Mark size={27} />
                             <div>
                               Q402 Yield
-                              <div style={styles.sub}>Aave V3 · ~2.33% APY · paid plans</div>
+                              <div style={{ ...styles.sub, display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                <TokenIcon src="/aave.svg" size={13} /> Aave V3 · ~2.33% APY · paid plans
+                              </div>
                             </div>
                           </div>
                           <div style={{ font: `600 19px ${displayFont}` }}>$0.00</div>
@@ -1024,8 +1032,11 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                     <div style={styles.assetTop}>
                       <div style={styles.token}>
                         <span style={{ ...styles.coin, background: "linear-gradient(135deg,#2c3c57,#172234)" }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-                            <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" fill="#cfe0ff" />
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#cfe0ff" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                            <path d="M4.5 21V5.5A2.5 2.5 0 0 1 7 3h2.5A2.5 2.5 0 0 1 12 5.5V21" />
+                            <path d="M3 21h10.5" />
+                            <path d="M6.5 8.5h3" />
+                            <path d="M12 10.5h2A1.5 1.5 0 0 1 15.5 12v4.5a1.5 1.5 0 0 0 3 0V9l-2.5-2.5" />
                           </svg>
                         </span>
                         <div>
@@ -1450,8 +1461,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: "block",
   },
   walletItemActive: {
-    borderColor: "rgba(247,202,22,.27)",
-    background: "linear-gradient(135deg, rgba(247,202,22,.09), rgba(247,202,22,.018))",
+    borderColor: "rgba(247,202,22,.45)",
+    background: "linear-gradient(135deg, rgba(247,202,22,.13), rgba(247,202,22,.03))",
   },
   walletName: {
     display: "flex",
@@ -1461,13 +1472,32 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: fs.cardTitle,
     fontWeight: 650,
   },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: "50%",
-    background: v2.mint,
-    boxShadow: `0 0 10px ${v2.mint}`,
+  viewingBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
     flexShrink: 0,
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: ".07em",
+    textTransform: "uppercase",
+    color: v2.yellow,
+  },
+  viewDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: v2.yellow,
+    boxShadow: `0 0 8px ${v2.yellow}`,
+    flexShrink: 0,
+  },
+  archBadge: {
+    flexShrink: 0,
+    fontSize: 10,
+    fontWeight: 600,
+    color: v2.muted2,
+    textTransform: "uppercase",
+    letterSpacing: ".06em",
   },
   addr: { font: `500 ${fs.body}px ${displayFont}`, color: v2.muted, marginTop: 5 },
   walletBal: { font: `600 22px ${displayFont}`, letterSpacing: "-.04em", marginTop: 12 },
@@ -1643,7 +1673,7 @@ const styles: Record<string, React.CSSProperties> = {
     whiteSpace: "nowrap",
   },
   content: { padding: "19px 25px 23px", display: "grid", gap: 18 },
-  allocation: { display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 11, alignItems: "start" },
+  allocation: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "stretch" },
   assetTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
   token: { display: "flex", gap: 9, alignItems: "center", fontSize: fs.cardTitle, fontWeight: 600 },
   coin: {
