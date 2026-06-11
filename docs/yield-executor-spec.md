@@ -57,7 +57,7 @@ Distinct typehashes + selectors already block cross-action replay, so separate n
 Trusting the signed `pool` blindly = a compromised/prompt-injected agent signer could sign a malicious `pool`, causing `approve(malicious, amount)` + drain. **Allowlist the canonical Aave Pool** (+ optionally asset = USDC/USDT). Model **(A) immutable constants per-impl** (chain-bound, zero governance, re-deploy+re-delegate for new Pool) is recommended over (B) owner-signed updates. **Never trust the witness `pool` unchecked.**
 
 ### 9.3 External DeFi / reentrancy
-Impl now calls an upgradeable external protocol → trust boundary includes Aave governance. Add `nonReentrant` covering ALL state-changing external functions (incl. existing `transferWithAuthorization`) so an Aave callback can't reenter. CEI: nonce marked before interactions.
+Impl now calls an upgradeable external protocol → trust boundary includes Aave governance. Put `nonReentrant` on the new Aave-facing functions (`supplyToAave` / `withdrawFromAave`) so an Aave callback can't reenter them. `transferWithAuthorization` does NOT carry (and need not carry) `nonReentrant` — it follows checks-effects-interactions, marking the per-owner nonce BEFORE the external token transfer, so any reentrant call replaying the same authorization hits `NonceAlreadyUsed` and reverts. This matches the deployed v1 impl; do not add a guard to it. CEI (nonce marked before interactions) applies uniformly across all three functions.
 
 ### 9.6 Storage layout (7702-critical)
 New state must be **append-only** (never insert before existing vars) — re-delegating wallets carry forward storage; a slot shift corrupts `usedNonces`. Diff storage-layout vs prior impl version.
@@ -72,7 +72,7 @@ event AaveWithdrawn(address indexed owner, address indexed pool, address indexed
 ```
 
 ## 12. Test checklist
-Happy supply/withdraw/withdraw-all · wrong facilitator · bad/malleable sig · replay (same nonce) + cross-action replay · expired deadline · non-allowlisted pool · USDT reset-to-zero approve · reverted Aave call leaves nonce unconsumed · reentrancy blocked by shared guard · storage-layout diff vs prior impl · 18-dec USDC/USDT.
+Happy supply/withdraw/withdraw-all · wrong facilitator · bad/malleable sig · replay (same nonce) + cross-action replay · expired deadline · non-allowlisted pool · USDT reset-to-zero approve · reverted Aave call leaves nonce unconsumed · reentrancy into supply/withdraw blocked by `nonReentrant`; reentrant replay of `transferWithAuthorization` blocked by nonce-mark-before-interaction (CEI) → `NonceAlreadyUsed` · storage-layout diff vs prior impl · 18-dec USDC/USDT.
 
 ## 13. Open questions
 1. Allowlist (A) immutable vs (B) signed-updates — rec (A). Confirm.
