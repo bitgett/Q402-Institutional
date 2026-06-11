@@ -317,30 +317,33 @@ export function AgenticWalletRecurringSection({
           <div className="text-[12.5px] text-white/85 mb-2 font-medium">
             No schedules yet. Try one of these patterns:
           </div>
-          {/* 2-up max: md:grid-cols-4 used VIEWPORT width, so on a wide screen
-              the narrow v2 right-rail still got 4 columns and the cards
-              overlapped. Cap at 2 (1 on phones) so it fits any container. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Vertical list — one pattern per row (icon chip + title + copy).
+              Replaces the old multi-column grid, which overlapped inside the
+              narrow v2 right-rail. Stacks cleanly in any container width. */}
+          <div className="flex flex-col gap-1.5">
             {[
-              { Icon: ClockIcon,    title: "Hourly heartbeat",     copy: "Every N hours → service / API" },
-              { Icon: CalendarIcon, title: "Weekly payouts",       copy: "Every Friday → contractor list" },
-              { Icon: RefreshIcon,  title: "Monthly subscriptions", copy: "1st of every month → vendor" },
-              { Icon: VaultIcon,    title: "Treasury sweep",       copy: "Last day → ops wallet" },
+              { Icon: ClockIcon,    title: "Hourly heartbeat",      copy: "Every N hours → service / API" },
+              { Icon: CalendarIcon, title: "Weekly payouts",        copy: "Every Friday → contractor list" },
+              { Icon: RefreshIcon,  title: "Monthly subscriptions", copy: "1st of the month → vendor" },
+              { Icon: VaultIcon,    title: "Treasury sweep",        copy: "Last day → ops wallet" },
             ].map(({ Icon, title, copy }) => (
               <div
                 key={title}
-                className="rounded-md border p-2.5"
+                className="flex items-center gap-3 rounded-md border px-3 py-2"
                 style={{
                   background: "rgba(255,255,255,0.025)",
-                  borderColor: "rgba(255,255,255,0.10)",
+                  borderColor: "rgba(255,255,255,0.08)",
                 }}
               >
-                <div className="text-[12px] text-white/95 font-medium mb-0.5 flex items-center gap-1.5">
-                  <Icon className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                  {title}
-                </div>
-                <div className="text-[10.5px] text-white/65 leading-snug">
-                  {copy}
+                <span
+                  className="grid place-items-center rounded-md shrink-0"
+                  style={{ width: 28, height: 28, background: "rgba(74,222,128,0.10)" }}
+                >
+                  <Icon className="w-4 h-4 text-emerald-300" />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[12.5px] text-white/95 font-medium leading-tight">{title}</div>
+                  <div className="text-[11px] text-white/55 leading-snug">{copy}</div>
                 </div>
               </div>
             ))}
