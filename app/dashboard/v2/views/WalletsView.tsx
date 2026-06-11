@@ -47,7 +47,8 @@ import {
 } from "../primitives";
 import { v2, subCard, fs, gasTankCoinGradient } from "../theme";
 import type { Scope } from "../theme";
-import { ChainIcon, TokenIcon, StablePair, Q402Mark, SparkIcon, AgentBadgeIcon, GasTankIcon } from "../logos";
+import { ChainIcon, TokenIcon, StablePair, Q402Mark, SparkIcon, AgentBadgeIcon, GasTankIcon, GearIcon } from "../logos";
+import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -678,15 +679,52 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
   const archived = activeWallet?.deletedAt != null;
 
+  // ── First-run (connected · zero wallets) ──────────────────────────────────
+  //
+  // A connected owner whose list has RESOLVED to zero wallets is not in demo —
+  // they're a brand-new user who should be sold on creating their first Agent
+  // Wallet, not shown the marketing sample. `firstRun` is true ONLY when: a
+  // wallet is connected (addr set), the list fetch has landed (`wallets !==
+  // undefined`, so we don't flash first-run while loading), the list is empty,
+  // and no active wallet resolved. The empty-list guard keeps us out of the
+  // archived-only case (where `activeWallet` resolves to an archived wallet and
+  // the live console — not first-run — must render). The disconnected DEMO path
+  // (addr === null) is unaffected.
+  const firstRun =
+    Boolean(addr) &&
+    wallets !== undefined &&
+    wallets.length === 0 &&
+    activeWallet == null;
+
   // ── Demo fallback ─────────────────────────────────────────────────────────
   //
   // The console must look complete before any wallet connects. Demo mode is
   // ON whenever we don't yet have a real active wallet to drive the view:
   //   - no connected owner (ownerAddress === null), OR
   //   - connected but the wallet list / active wallet hasn't resolved yet.
+  // It excludes `firstRun` (connected + resolved-empty), which renders its own
+  // first-run surface instead of the sample data.
   // The MOMENT a real active wallet exists, every variable below resolves to
   // live data and the connected path is 100% intact (demoMode === false).
-  const demoMode = activeWallet == null;
+  const demoMode = activeWallet == null && !firstRun;
+
+  // ── Free-trial CTA eligibility ────────────────────────────────────────────
+  //
+  // Surface the always-available "activate free trial" entry only when it makes
+  // sense: a connected owner who is NOT already on an active trial and has NO
+  // active paid subscription. Mirrors the legacy auto-pop eligibility
+  // (app/dashboard/page.tsx) which skips paid users and existing trials. Reads
+  // the canonical subscription facts published by the legacy page through the
+  // identity context (no extra fetch).
+  const identity = useDashboardIdentity();
+  const onActiveTrial =
+    identity.subscription?.isTrialActive === true ||
+    identity.subscription?.plan === "trial";
+  const onActivePaid =
+    !!identity.subscription &&
+    (identity.subscription.amountUSD ?? 0) > 0 &&
+    !identity.isExpired;
+  const trialCtaEligible = Boolean(addr) && !onActiveTrial && !onActivePaid;
 
   // View variables the layout reads. In live mode they are the real values;
   // in demo mode they are substituted from DEMO so the SAME layout renders
@@ -761,9 +799,17 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
           <Eyebrow>Agent wallets</Eyebrow>
 
           {railWallets.length === 0 ? (
-            <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 14, lineHeight: 1.6 }}>
-              No Agent Wallets yet. Create your first sandboxed AI spending
-              wallet — your MetaMask stays untouched.
+            <div style={styles.railFirstRun}>
+              <div style={styles.railFirstRunMark}>
+                <Q402Mark size={22} />
+              </div>
+              <strong style={{ display: "block", fontSize: fs.body, color: v2.text }}>
+                No Agent Wallets yet
+              </strong>
+              <span style={{ display: "block", color: v2.muted, fontSize: fs.label, lineHeight: 1.6, marginTop: 6 }}>
+                Create your first sandboxed AI spending wallet — your MetaMask
+                stays untouched. Set it up in the console.
+              </span>
             </div>
           ) : (
             railWallets.map((w) => {
@@ -838,6 +884,113 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
             <div style={styles.errorBanner}>{error}</div>
           )}
 
+          {/* ── First-run (connected · no wallets) ──────────────────────────
+              Ports the spirit of AgenticWalletPreview into the v2 console:
+              explains what an Agent Wallet is, sells the key benefits, and
+              gives a prominent create CTA wired to the EXISTING create flow.
+              Glass + yellow; no demo data, no emoji, no green. */}
+          {firstRun && (
+            <div style={styles.firstRun}>
+              <div style={styles.heroGlow} aria-hidden />
+
+              <div style={styles.firstRunHead}>
+                <Q402Mark size={30} />
+                <div style={{ minWidth: 0 }}>
+                  <Eyebrow>Agent Wallet · not created yet</Eyebrow>
+                  <h1 style={styles.firstRunH1}>Create your first Agent Wallet</h1>
+                </div>
+              </div>
+
+              <p style={styles.firstRunLede}>
+                A dedicated, sandboxed wallet your AI spends from — bounded by the
+                caps you set. Your MetaMask stays untouched: one signature creates
+                it, and Q402 signs every settlement for this wallet alone.
+              </p>
+
+              {/* Key benefits */}
+              <div style={styles.firstRunBenefits}>
+                {[
+                  {
+                    icon: <AgentBadgeIcon size={16} />,
+                    title: "Your MetaMask stays separate",
+                    body: "Q402 holds an encrypted key for this wallet only. Your personal funds are never exposed to the agent.",
+                  },
+                  {
+                    icon: <GearIcon size={16} />,
+                    title: "Hard spending caps",
+                    body: "Per-payment and daily limits are enforced server-side on every send — the agent cannot exceed them.",
+                  },
+                  {
+                    icon: <SparkIcon size={16} />,
+                    title: "Plain-English control",
+                    body: "Tell it what to do in your AI client. “Pay contributors on the 7th, but ask me above $50.”",
+                  },
+                  {
+                    icon: <GasTankIcon size={16} />,
+                    title: "Gas sponsored",
+                    body: "Our relayer covers gas on 10 EVM chains — only the stablecoin moves from your Agent Wallet balance.",
+                  },
+                ].map((b) => (
+                  <div key={b.title} style={{ ...subCard(13), padding: 13 }}>
+                    <div style={styles.firstRunBenefitTop}>
+                      <span style={styles.firstRunBenefitIcon}>{b.icon}</span>
+                      <strong style={{ fontSize: fs.base }}>{b.title}</strong>
+                    </div>
+                    <span style={styles.firstRunBenefitBody}>{b.body}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Create CTA — wired to the EXISTING create() flow */}
+              <div style={styles.firstRunCtaRow}>
+                <button
+                  type="button"
+                  onClick={create}
+                  disabled={creating || capReached || !addr}
+                  style={{
+                    ...styles.firstRunCta,
+                    opacity: creating || capReached || !addr ? 0.5 : 1,
+                    cursor: creating || capReached || !addr ? "not-allowed" : "pointer",
+                  }}
+                  title={
+                    capReached
+                      ? hasMultichainScope
+                        ? `Cap reached (${activeCount}/${meta.max}).`
+                        : `Trial cap (${meta.trialCap}). Upgrade to Multichain for up to ${meta.max}.`
+                      : "Create a new Agent Wallet"
+                  }
+                >
+                  {creating ? "Creating…" : "＋ New wallet"}
+                </button>
+                <span style={styles.firstRunCtaNote}>
+                  One signature from your MetaMask. Free to create. BNB Chain is
+                  included on the trial; other chains need a Multichain key.
+                </span>
+              </div>
+
+              {/* Activate free trial — subtle, always-available in-page entry */}
+              {trialCtaEligible && (
+                <button
+                  type="button"
+                  onClick={identity.openTrialActivation}
+                  {...hoverBg("rgba(247,202,22,.07)", "rgba(247,202,22,.34)")}
+                  style={styles.trialCta}
+                >
+                  <SparkIcon size={17} />
+                  <span style={{ minWidth: 0, textAlign: "left" }}>
+                    <strong style={{ display: "block", fontSize: fs.body, color: v2.text }}>
+                      Activate your free trial
+                    </strong>
+                    <span style={{ display: "block", color: v2.muted, fontSize: fs.label, marginTop: 2 }}>
+                      2,000 sponsored TX on BNB — no card required.
+                    </span>
+                  </span>
+                  <span style={styles.trialCtaArrow}>Activate →</span>
+                </button>
+              )}
+            </div>
+          )}
+
           {(demoMode || activeWallet) && (
             <>
               {/* Hero */}
@@ -866,6 +1019,14 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         <span style={{ color: copied ? v2.mint : v2.yellow, marginLeft: 6 }}>{copied ? "Copied!" : "copy"}</span>
                       )}
                     </button>
+                    {/* Owner EOA — the connected personal wallet that controls this
+                        Agent Wallet, surfaced distinctly from the agent address. */}
+                    <div style={styles.ownerEoa}>
+                      Owner EOA ·{" "}
+                      <span style={{ fontFamily: displayFont, color: v2.muted }}>
+                        {shortAddr(demoMode ? "0x7a3f29b8C1ea4D6f5B0c2E91aA73D4f8e2C5b9c21" : (addr ?? ""))}
+                      </span>
+                    </div>
                     <div style={styles.badges}>
                       <span style={{ ...styles.badge, ...styles.badgeGreen }}>
                         {archived ? "Archived" : "Ready to spend"}
@@ -989,6 +1150,30 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
               {/* Content */}
               <div style={styles.content}>
+                {/* Activate free trial — subtle, always-available in-console
+                    entry for a connected user with no active sub / trial. The
+                    page also auto-pops the modal; this is the persistent entry.
+                    (firstRun renders its own copy above; demo is excluded.) */}
+                {!demoMode && trialCtaEligible && (
+                  <button
+                    type="button"
+                    onClick={identity.openTrialActivation}
+                    {...hoverBg("rgba(247,202,22,.07)", "rgba(247,202,22,.34)")}
+                    style={styles.trialCta}
+                  >
+                    <SparkIcon size={17} />
+                    <span style={{ minWidth: 0, textAlign: "left" }}>
+                      <strong style={{ display: "block", fontSize: fs.body, color: v2.text }}>
+                        Activate your free trial
+                      </strong>
+                      <span style={{ display: "block", color: v2.muted, fontSize: fs.label, marginTop: 2 }}>
+                        2,000 sponsored TX on BNB — no card required.
+                      </span>
+                    </span>
+                    <span style={styles.trialCtaArrow}>Activate →</span>
+                  </button>
+                )}
+
                 {/* Capital overview — Stablecoins + Gas Tank on one row, Yield below */}
                 <section>
                   <SectionHead title="Capital overview" meta="10 networks monitored" />
@@ -1075,7 +1260,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   <div style={{ ...subCard(13), padding: 14, marginTop: 11 }}>
                     <div style={styles.assetTop}>
                       <div style={styles.token}>
-                        <span style={{ ...styles.coin, background: gasTankCoinGradient, color: "#cfe0ff" }}>
+                        <span style={{ ...styles.coin, background: gasTankCoinGradient, color: v2.yellow }}>
                           <GasTankIcon size={16} />
                         </span>
                         <div>
@@ -1213,6 +1398,29 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
         {/* ── Col 3 · Right rail ──────────────────────────────────────── */}
         <aside className="v2-right" style={styles.right}>
+          {firstRun ? (
+            // First-run: no wallet to configure yet — surface what the rail
+            // will hold once a wallet exists, no demo data.
+            <Surface style={styles.sideCard}>
+              <Eyebrow>After you create</Eyebrow>
+              <div style={styles.firstRunRailList}>
+                {[
+                  "Payment policy — compliance, spend approval & allowlists",
+                  "Automation — recurring & conditional payouts",
+                  "Spending guardrails — per-payment & daily caps",
+                ].map((line) => (
+                  <div key={line} style={styles.firstRunRailItem}>
+                    <span style={styles.firstRunRailDot} />
+                    <span>{line}</span>
+                  </div>
+                ))}
+              </div>
+              <span style={{ display: "block", color: v2.muted2, fontSize: fs.label, lineHeight: 1.6, marginTop: 13 }}>
+                These unlock the moment your first Agent Wallet exists.
+              </span>
+            </Surface>
+          ) : (
+          <>
           {/* Payment policy — real Hooks config (or DEMO.policy in demo mode) */}
           <Surface style={styles.sideCard}>
             <SectionHead
@@ -1345,6 +1553,8 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
               </button>
             )}
           </Surface>
+          </>
+          )}
         </aside>
       </div>
 
@@ -1560,6 +1770,15 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 12,
     borderRadius: 13,
   },
+  // First-run rail nudge (connected · zero wallets).
+  railFirstRun: {
+    marginTop: 14,
+    padding: 13,
+    border: "1px solid rgba(247,202,22,.22)",
+    background: "rgba(247,202,22,.05)",
+    borderRadius: 13,
+  },
+  railFirstRunMark: { marginBottom: 9 },
 
   // Col 2 — console
   console: { overflow: "hidden", minWidth: 0 },
@@ -1571,6 +1790,120 @@ const styles: Record<string, React.CSSProperties> = {
     background: "rgba(255,119,119,.06)",
     color: "#ffb4b4",
     fontSize: fs.body,
+  },
+  // ── First-run console (connected · zero wallets) ─────────────────────────
+  firstRun: { padding: "26px 25px 24px", position: "relative" },
+  firstRunHead: {
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+    position: "relative",
+    zIndex: 1,
+  },
+  firstRunH1: { font: `650 24px ${displayFont}`, letterSpacing: "-.045em", margin: "5px 0 0" },
+  firstRunLede: {
+    position: "relative",
+    zIndex: 1,
+    color: v2.muted,
+    fontSize: fs.base,
+    lineHeight: 1.65,
+    maxWidth: 560,
+    margin: "16px 0 0",
+  },
+  firstRunBenefits: {
+    position: "relative",
+    zIndex: 1,
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 11,
+    marginTop: 20,
+  },
+  firstRunBenefitTop: { display: "flex", alignItems: "center", gap: 9 },
+  firstRunBenefitIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+    color: v2.yellow,
+    border: "1px solid rgba(247,202,22,.28)",
+    background: "rgba(247,202,22,.07)",
+  },
+  firstRunBenefitBody: {
+    display: "block",
+    color: v2.muted,
+    fontSize: fs.label,
+    lineHeight: 1.6,
+    marginTop: 8,
+  },
+  firstRunCtaRow: {
+    position: "relative",
+    zIndex: 1,
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+    flexWrap: "wrap",
+    marginTop: 22,
+  },
+  firstRunCta: {
+    border: 0,
+    background: v2.yellow,
+    color: v2.actionText,
+    fontWeight: 700,
+    fontSize: fs.base,
+    borderRadius: 10,
+    padding: "11px 20px",
+    whiteSpace: "nowrap",
+  },
+  firstRunCtaNote: {
+    flex: 1,
+    minWidth: 220,
+    color: v2.muted,
+    fontSize: fs.label,
+    lineHeight: 1.6,
+  },
+  trialCta: {
+    position: "relative",
+    zIndex: 1,
+    display: "flex",
+    alignItems: "center",
+    gap: 11,
+    width: "100%",
+    marginTop: 18,
+    padding: "12px 14px",
+    borderRadius: 12,
+    border: "1px solid rgba(247,202,22,.19)",
+    background: "linear-gradient(90deg, rgba(247,202,22,.05), rgba(255,255,255,.012))",
+    color: v2.yellow,
+    cursor: "pointer",
+    textAlign: "left",
+    transition: "background-color .15s ease, border-color .16s ease",
+  },
+  trialCtaArrow: {
+    marginLeft: "auto",
+    flexShrink: 0,
+    color: v2.yellow,
+    fontSize: fs.label,
+    fontWeight: 700,
+  },
+  // First-run right rail (preview of what unlocks after creation).
+  firstRunRailList: { display: "grid", gap: 10, marginTop: 13 },
+  firstRunRailItem: {
+    display: "flex",
+    gap: 9,
+    alignItems: "flex-start",
+    color: v2.muted,
+    fontSize: fs.body,
+    lineHeight: 1.5,
+  },
+  firstRunRailDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    background: v2.yellow,
+    flexShrink: 0,
+    marginTop: 6,
   },
   hero: {
     padding: "24px 25px 21px",
@@ -1631,6 +1964,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "block",
     maxWidth: 420,
   },
+  ownerEoa: { color: v2.muted2, fontSize: fs.label, marginTop: 8, letterSpacing: ".01em" },
   badges: { display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" },
   badge: {
     padding: "5px 9px",

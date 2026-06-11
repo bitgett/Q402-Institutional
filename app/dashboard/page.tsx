@@ -1,31 +1,44 @@
 "use client";
 
+/**
+ * /dashboard — entry route.
+ *
+ * This file OWNS the legacy identity state machine (the Phase 1 4-state
+ * model: email-session fetch, wallet-match gating, State D ClaimWalletPrompt,
+ * State G WrongWalletHardBlock, the email-only trial view, the no-wallet
+ * redirect-to-"/" grace window, and the auto-pop trial activation for
+ * unprovisioned wallet-only users) — kept VERBATIM from the pre-v2 dashboard
+ * (preserved at app/dashboard/_legacy-page.tsx.bak for reference).
+ *
+ * The ONE change vs. the legacy page: the final "authenticated, wallet
+ * connected" branch no longer renders the old DashboardSidebar + tabs +
+ * AgenticWalletTab UI. Instead it renders <DashboardV2/> wrapped in a
+ * <DashboardIdentityProvider> that publishes the identity + subscription +
+ * lifecycle facts (and the action handles) the v2 views consume via
+ * useDashboardIdentity(). The legacy modals the action handles drive
+ * (TrialActivationModal, the usage-alert config modal) are mounted here at
+ * the page level and toggled through the context.
+ *
+ * SECURITY: the auth guards (State D / State G early returns, the wallet-match
+ * provision gate, the signed fetches, the redirect grace window) are
+ * reproduced unchanged — do not relax them.
+ */
+
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useCallback } from "react";
-import { createPortal } from "react-dom";
-import { motion } from "framer-motion";
-import WalletButton from "../components/WalletButton";
+import { useEffect, useRef, useState } from "react";
 import WalletModal from "../components/WalletModal";
 import TrialActivationModal from "../components/TrialActivationModal";
-import DashboardSidebar, { type DashboardTab } from "./Sidebar";
-import ClaudeMcpCard from "../components/ClaudeMcpCard";
-import { AgenticWalletTab } from "./components/AgenticWalletTab";
 import ClaimWalletPrompt from "./ClaimWalletPrompt";
 import WrongWalletHardBlock from "./WrongWalletHardBlock";
+import DashboardV2 from "./v2/DashboardV2";
+import {
+  DashboardIdentityProvider,
+  type DashboardIdentityValue,
+} from "./v2/identity-context";
 import { getAuthCreds, clearAuthCache, getActionAuth } from "../lib/auth-client";
-import { GASTANK_ADDRESS } from "../lib/wallets";
-import { sendNativeTransfer, waitForWalletReceipt, walletErrorMessage, type WalletChainKey } from "../lib/wallet";
-import { TRIAL_DURATION_DAYS, TRIAL_CREDITS } from "../lib/feature-flags";
-
-function shortAddr(addr: string) { return `${addr.slice(0, 6)}…${addr.slice(-4)}`; }
-function shortHash(hash: string) { return hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : "—"; }
-
-// User gas deposits (BNB/ETH/MNT/INJ/AVAX/OKB/USDT0/MON) go to the cold GASTANK wallet.
-// (Scroll uses ETH for gas, so it's covered by the ETH entry above.)
-// This address is user-facing on the "Top up" modal; never send revenue or relayer hot-key here.
-const DEPOSIT_ADDRESS = GASTANK_ADDRESS;
+import { TRIAL_CREDITS } from "../lib/feature-flags";
 
 // Must mirror TIER_CREDITS / TIER_PLANS in app/lib/blockchain.ts — the server
 // grants these values, so the UI display must match to the tx count.
@@ -40,634 +53,22 @@ const PLAN_QUOTA: Record<string, number> = {
   enterprise_flex: 500_000,
 };
 
-const CHAIN_META: Record<string, { name: string; token: string; color: string; img: string; rounded: string; gasNote?: string }> = {
-  bnb:    { name: "BNB Chain",  token: "BNB",   color: "#F0B90B", img: "/bnb.png",    rounded: "rounded-full" },
-  eth:    { name: "Ethereum",   token: "ETH",   color: "#627EEA", img: "/eth.png",    rounded: "rounded-full" },
-  mantle: { name: "Mantle",     token: "MNT",   color: "#FFFFFF", img: "/mantle.png", rounded: "rounded-full" },
-  injective: { name: "Injective", token: "INJ", color: "#0082FA", img: "/injective.png", rounded: "rounded-full" },
-  monad: { name: "Monad",       token: "MON",   color: "#836EF9", img: "/monad.png",  rounded: "rounded-full" },
-  xlayer: { name: "X Layer",    token: "OKB",   color: "#1A1A1A", img: "/xlayer.png", rounded: "rounded-full" },
-  avax:   { name: "Avalanche",  token: "AVAX",  color: "#E84142", img: "/avax.png",   rounded: "rounded-full" },
-  // Stable: USDT0 is both the gas token and the payment token — no separate native coin
-  stable: { name: "Stable",     token: "USDT0", color: "#4AE54A", img: "/stable.jpg", rounded: "rounded-full" },
-  scroll: { name: "Scroll",     token: "ETH",   color: "#EEB431", img: "/scroll.png", rounded: "rounded-full" },
-  arbitrum: { name: "Arbitrum", token: "ETH",   color: "#28A0F0", img: "/arbitrum.png", rounded: "rounded-full" },
-};
-
-const STEPS = [
-  { n: "01", title: "Load the SDK (browser)", code: `<script src="https://q402.quackai.ai/q402-sdk.js"></script>\n<!-- or: import { Q402Client } from "q402-sdk" -->` },
-  { n: "02", title: "Initialize with your API key", code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll | arbitrum\n});\n// Note: chain "injective" is USDT-only until Circle CCTP native USDC ships (Q2 2026).` },
-  { n: "03", title: "One-line gasless payment", code: `const result = await q402.pay({\n  to:     "0xRecipient...",\n  amount: "5.00",\n  token:  "USDC",  // use "USDT" for chain: "injective"\n});\nconsole.log(result.txHash);` },
-  { n: "04", title: "Settlement confirmed", code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: "5", token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0` },
-];
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Subscription { apiKey: string; plan: string; paidAt: string; amountUSD: number; quotaBonus?: number; trialQuotaBonus?: number; paidQuotaBonus?: number; sandboxApiKey?: string; trialApiKey?: string; trialSandboxApiKey?: string; isTrialActive?: boolean; trialExpiresAt?: string; email?: string; }
-interface RelayedTx {
-  apiKey: string; address: string; chain: string;
-  fromUser: string; toUser: string; tokenAmount: number | string; tokenSymbol: string;
-  gasCostNative: number; relayTxHash: string; relayedAt: string;
-  receiptId?: string;
-  // Provenance fields populated since the source-tagging rollout. Keep
-  // the local shape in sync with app/lib/db.ts's RelayedTx so the
-  // Transactions tab's source filter can read them without `any`.
-  source?: "recurring" | "send" | "batch" | "api";
-  ruleId?: string;
-}
-interface GasDeposit { chain: string; token: string; amount: number; txHash: string; depositedAt: string; }
-
-// ── Deposit Modal ─────────────────────────────────────────────────────────────
-const Spinner = ({ color = "text-yellow" }: { color?: string }) => (
-  <svg className={`animate-spin w-10 h-10 ${color}`} viewBox="0 0 24 24" fill="none">
-    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
-    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-  </svg>
-);
-
-// Note: Gas Tank withdrawals are currently processed manually by Q402 operations.
-// Contact business@quackai.ai to request a withdrawal.
-function DepositModal({ chain, token, onClose, address, onDepositVerified }: {
-  chain: string; token: string; onClose: () => void; address: string;
-  onDepositVerified?: (balances: Record<string, number>) => void;
-}) {
-  const chainKey = Object.entries(CHAIN_META).find(([, v]) => v.name === chain)?.[0] ?? chain.toLowerCase();
-  const [phase, setPhase] = useState<"loading"|"main"|"awaiting_wallet"|"confirming_tx"|"checking"|"deposit_verified"|"not_found">("loading");
-  const [verifiedBalances, setVerifiedBalances] = useState<Record<string, number>>({});
-  const [txHashError, setTxHashError] = useState("");
-  const [depositAmount, setDepositAmount] = useState("");
-  const [submittedTxHash, setSubmittedTxHash] = useState("");
-
-  useEffect(() => { const t = setTimeout(() => setPhase("main"), 1000); return () => clearTimeout(t); }, []);
-
-  // Internal rescue: server-side retry that absorbs public-RPC lag for a freshly
-  // confirmed wallet deposit. Triggered automatically by topUpWithWallet — no
-  // user-facing TX-hash input is needed.
-  async function creditByTxHashWithRetry(txHash: string, attempts = 8) {
-    let lastError = "Payment submitted, but we could not credit it yet.";
-    for (let i = 0; i < attempts; i++) {
-      const res = await fetch("/api/gas-tank/verify-deposit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address, txHash, chain: chainKey }),
-      });
-      const data = await res.json();
-      if (res.ok && (data.newDeposits > 0 || data.alreadyCredited)) return data;
-      lastError = data.error ?? lastError;
-
-      const retryable =
-        res.status === 404 &&
-        /not found|not yet confirmed/i.test(lastError);
-      if (!retryable || i === attempts - 1) break;
-      await new Promise(resolve => setTimeout(resolve, 2500 + i * 1000));
-    }
-    throw new Error(lastError);
-  }
-
-  async function topUpWithWallet() {
-    const amount = depositAmount.trim();
-    if (!/^(?:\d+|\d*\.\d+)$/.test(amount) || Number(amount) <= 0) {
-      setTxHashError(`Enter an amount of ${token} to deposit.`);
-      return;
-    }
-    setTxHashError("");
-    setSubmittedTxHash("");
-    try {
-      setPhase("awaiting_wallet");
-      const txHash = await sendNativeTransfer({
-        chain: chainKey as WalletChainKey,
-        from: address,
-        to: DEPOSIT_ADDRESS,
-        amount,
-      });
-      setSubmittedTxHash(txHash);
-
-      setPhase("confirming_tx");
-      await waitForWalletReceipt(chainKey as WalletChainKey, txHash);
-
-      setPhase("checking");
-      const data = await creditByTxHashWithRetry(txHash);
-      setVerifiedBalances(data.balances);
-      setPhase("deposit_verified");
-      onDepositVerified?.(data.balances);
-    } catch (err) {
-      setTxHashError(err instanceof Error ? err.message : walletErrorMessage(err));
-      setPhase("not_found");
-    }
-  }
-
-  return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(10px)" }} onClick={onClose}>
-      <div className="w-full max-w-sm rounded-2xl border p-6 shadow-2xl shadow-black" style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="font-bold text-base">{token} — {chain}</h3>
-          <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
-        </div>
-
-        {(phase === "loading") && <div className="flex justify-center py-8"><Spinner /></div>}
-
-        {phase === "main" && (
-          <div className="space-y-4">
-            <p className="text-white/60 text-sm">Top up the Gas Tank with <span className="text-yellow font-semibold">{token}</span>.</p>
-            <div className="rounded-2xl border border-yellow/20 bg-yellow/5 p-4 space-y-3">
-              <div>
-                <label className="block text-[10px] text-white/30 uppercase tracking-widest mb-1">
-                  Amount to deposit
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={depositAmount}
-                    onChange={e => setDepositAmount(e.target.value)}
-                    placeholder={`0.10 ${token}`}
-                    className="min-w-0 flex-1 bg-[#060C14] border border-white/10 rounded-xl px-3 py-3 text-sm font-mono text-white placeholder:text-white/20 focus:outline-none focus:border-yellow/40"
-                  />
-                  <span className="text-xs text-white/35 font-semibold w-14 text-right">{token}</span>
-                </div>
-              </div>
-              <button
-                onClick={topUpWithWallet}
-                disabled={!depositAmount.trim()}
-                className="w-full py-3 rounded-xl font-bold text-sm bg-yellow text-navy hover:bg-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              >
-                Top up with wallet
-              </button>
-              <p className="text-[10px] text-white/40 leading-relaxed">
-                Switches to {chain}, sends {token}, credits your Gas Tank on confirmation.
-              </p>
-            </div>
-            {chainKey === "stable" ? (
-              <div className="flex items-start gap-2.5 bg-green-400/5 border border-green-400/20 rounded-xl px-4 py-3 text-xs text-green-400/80">
-                <span className="mt-0.5 flex-shrink-0">ℹ</span>
-                <span>
-                  Send <strong>USDT0</strong> on <strong>Stable</strong> (chain 988). Don&apos;t send ETH / BNB / AVAX.
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-start gap-2.5 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3 text-xs text-yellow/80">
-                <span className="mt-0.5 flex-shrink-0">⚡</span>
-                <span>Only send <strong>{token}</strong> on the <strong>{chain}</strong> network.</span>
-              </div>
-            )}
-            <div className="border-t border-white/8 pt-4">
-              <p className="text-xs text-white/30 mb-1">Gas Tank withdrawals</p>
-              <p className="text-xs text-white/20 leading-relaxed">
-                Withdrawals are processed manually by Q402 operations.
-                Contact <span className="text-white/40">business@quackai.ai</span> to request a refund.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {(phase === "awaiting_wallet" || phase === "confirming_tx" || phase === "checking") && (
-          <div className="flex flex-col items-center gap-4 py-8">
-            <Spinner />
-            <div className="text-center">
-              <p className="text-white/60 text-sm font-semibold">
-                {phase === "awaiting_wallet" ? `Confirm ${token} deposit in your wallet`
-                  : phase === "confirming_tx" ? "Waiting for on-chain confirmation..."
-                  : "Crediting your Gas Tank..."}
-              </p>
-              <p className="text-white/30 text-xs mt-1">
-                {phase === "checking"
-                  ? "Public RPCs can lag for a few seconds. We will retry automatically."
-                  : submittedTxHash ? shortHash(submittedTxHash) : "Do not close this modal."}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {phase === "deposit_verified" && (
-          <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3 bg-green-400/8 border border-green-400/20 rounded-xl px-4 py-3">
-              <span className="text-green-400 text-xl">✓</span>
-              <div><p className="text-green-400 font-bold text-sm">Deposit Confirmed!</p><p className="text-white/40 text-xs">Gas tank credited.</p></div>
-            </div>
-            <div className="space-y-1.5 text-xs font-mono">
-              {Object.entries(verifiedBalances).filter(([, v]) => v > 0).map(([c, amt]) => (
-                <div key={c} className="flex justify-between text-white/50 bg-white/4 rounded-lg px-3 py-2">
-                  <span className="uppercase text-white/30">{c}</span>
-                  <span className="text-white/70">{amt.toFixed(4)} {CHAIN_META[c]?.token ?? c.toUpperCase()}</span>
-                </div>
-              ))}
-            </div>
-            <button onClick={onClose} className="w-full py-3 rounded-xl font-bold text-sm bg-yellow text-navy hover:bg-yellow-hover transition-all">Back to Dashboard</button>
-          </div>
-        )}
-
-
-        {phase === "not_found" && (
-          <div className="space-y-4 py-2">
-            <div className="bg-red-400/8 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">
-              {txHashError || "Deposit could not be confirmed yet. Try again in a moment."}
-            </div>
-            <button
-              onClick={() => { setTxHashError(""); setPhase("main"); }}
-              className="w-full py-2.5 rounded-xl text-sm bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all font-semibold"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-// ── LINK Deposit Modal (Chainlink CCIP bridge Gas Tank) ──────────────────
-//
-// Different from DepositModal above: LINK is an ERC-20, not a native coin,
-// so the in-app "Top up with wallet" shortcut (sendNativeTransfer) doesn't
-// apply. We surface the deposit address + canonical LINK token contract
-// per chain and let the user copy + send from their own wallet. The
-// `/api/cron/deposit-scan` LINK sweep picks the credit up automatically
-// within ~5 minutes — no manual verify step needed.
-const LINK_TOKEN: Record<"eth" | "avax" | "arbitrum", { address: string; explorer: string; label: string }> = {
-  eth:      { address: "0x514910771AF9Ca656af840dff83E8264EcF986CA", explorer: "https://etherscan.io",     label: "Ethereum" },
-  avax:     { address: "0x5947BB275c521040051D82396192181b413227A3", explorer: "https://snowtrace.io",     label: "Avalanche" },
-  arbitrum: { address: "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4", explorer: "https://arbiscan.io",      label: "Arbitrum" },
-};
-
-type LinkChain = "eth" | "avax" | "arbitrum";
-
-// Chainlink mark — canonical hex shield asset from /public/link.jpg.
-// Kept behind a component so the LINK tile + the deposit modal share a
-// single source of truth (and so swapping for a future SVG/AVIF is a
-// one-line change).
-function ChainlinkLogo({ size = 22 }: { size?: number }) {
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src="/link.jpg"
-      alt="Chainlink"
-      width={size}
-      height={size}
-      className="w-full h-full object-cover"
-    />
-  );
-}
-
-function LinkDepositModal({
-  initialChain,
-  balances,
-  onClose,
-}: {
-  initialChain: LinkChain;
-  balances: Record<LinkChain, number>;
-  onClose: () => void;
-}) {
-  const [chain, setChain] = useState<LinkChain>(initialChain);
-  const cfg = LINK_TOKEN[chain];
-  const bal = balances[chain] ?? 0;
-  const balUsd = bal * 12;
-  const [copiedField, setCopiedField] = useState<"deposit" | "token" | null>(null);
-  async function copy(value: string, field: "deposit" | "token") {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 1500);
-    } catch { /* clipboard not available */ }
-  }
-
-  // Per-chain icon — re-uses the same /<chain>.png assets the gas-tank
-  // grid uses so logos stay consistent across the dashboard.
-  const CHAIN_ICON: Record<LinkChain, string> = {
-    eth:      "/eth.png",
-    avax:     "/avax.png",
-    arbitrum: "/arbitrum.png",
-  };
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[80] flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(10px)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl border p-6 shadow-2xl shadow-black"
-        style={{ background: "#090E1A", borderColor: "rgba(245,197,24,0.2)" }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full ring-1 ring-white/10 overflow-hidden">
-              <ChainlinkLogo size={28} />
-            </div>
-            <h3 className="font-bold text-base">LINK Gas Tank · CCIP</h3>
-          </div>
-          <button onClick={onClose} className="text-white/30 hover:text-white text-xl leading-none">×</button>
-        </div>
-
-        {/* Chain picker — 3 pills, each shows per-chain balance. Active
-            pill flips to brand-yellow so the user always sees which
-            chain the deposit info below is scoped to. */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          {(["eth", "avax", "arbitrum"] as const).map((k) => {
-            const active = k === chain;
-            const cb = balances[k] ?? 0;
-            return (
-              <button
-                key={k}
-                onClick={() => setChain(k)}
-                className="rounded-xl border px-2 py-2.5 transition-all text-left"
-                style={active
-                  ? {
-                      background: "rgba(245,197,24,0.10)",
-                      borderColor: "rgba(245,197,24,0.45)",
-                    }
-                  : {
-                      background: "rgba(255,255,255,0.02)",
-                      borderColor: "rgba(255,255,255,0.07)",
-                    }
-                }
-              >
-                <div className="flex items-center gap-1.5 mb-1">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={CHAIN_ICON[k]} alt={k} className="w-4 h-4 rounded-full" />
-                  <span className={`text-[11px] font-semibold ${active ? "text-yellow" : "text-white/65"}`}>
-                    {LINK_TOKEN[k].label}
-                  </span>
-                </div>
-                <div className={`text-sm font-mono ${active ? "text-white" : "text-white/55"}`}>
-                  {cb.toFixed(4)}
-                </div>
-                <div className="text-[10px] text-white/35">
-                  {cb > 0 ? `≈ $${(cb * 12).toFixed(2)}` : "$0.00"}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Active-chain balance summary */}
-        <div
-          className="rounded-xl border px-3 py-2.5 mb-3"
-          style={{
-            background: "rgba(245,197,24,0.05)",
-            borderColor: "rgba(245,197,24,0.18)",
-          }}
-        >
-          <div className="text-[10px] uppercase tracking-widest text-yellow/85 font-semibold mb-1">
-            {cfg.label} · balance
-          </div>
-          <div className="text-base font-bold text-white">
-            {bal.toFixed(4)} <span className="text-xs font-normal text-white/40">LINK</span>
-            <span className="text-xs text-white/40 ml-2">≈ ${balUsd.toFixed(2)}</span>
-          </div>
-        </div>
-
-        <p className="text-white/60 text-xs leading-relaxed mb-3">
-          Send LINK on <strong>{cfg.label}</strong> to the Q402 facilitator below. The deposit-scan
-          cron credits your LINK Gas Tank within ~5 minutes.
-        </p>
-
-        {/* Deposit address */}
-        <div className="rounded-xl border border-yellow/20 bg-yellow/5 p-3 mb-3">
-          <div className="text-[10px] uppercase tracking-widest text-yellow/85 font-semibold mb-1">
-            Send LINK to
-          </div>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 text-[11px] font-mono text-white/85 break-all">{GASTANK_ADDRESS}</code>
-            <button
-              onClick={() => copy(GASTANK_ADDRESS, "deposit")}
-              className="text-[10px] px-2 py-1 rounded-md bg-yellow/10 text-yellow border border-yellow/25 hover:bg-yellow/20 transition-colors"
-            >
-              {copiedField === "deposit" ? "✓" : "Copy"}
-            </button>
-          </div>
-        </div>
-
-        {/* LINK token address */}
-        <div className="rounded-xl border border-white/8 bg-white/2 p-3 mb-3">
-          <div className="text-[10px] uppercase tracking-widest text-white/55 font-semibold mb-1">
-            LINK token on {cfg.label}
-          </div>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 text-[11px] font-mono text-white/75 break-all">{cfg.address}</code>
-            <button
-              onClick={() => copy(cfg.address, "token")}
-              className="text-[10px] px-2 py-1 rounded-md bg-white/5 text-white/70 border border-white/15 hover:bg-white/10 transition-colors"
-            >
-              {copiedField === "token" ? "✓" : "Copy"}
-            </button>
-          </div>
-          <a
-            href={`${cfg.explorer}/address/${cfg.address}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] text-yellow/85 hover:text-yellow underline underline-offset-2 mt-1 inline-block"
-          >
-            View on {cfg.explorer.replace(/^https?:\/\//, "")} ↗
-          </a>
-        </div>
-
-        <div className="rounded-xl bg-yellow/5 border border-yellow/15 px-3 py-2.5 text-[11px] text-yellow/85 leading-relaxed">
-          ⚠ Send LINK <strong>only on {cfg.label}</strong>. LINK sent on a different chain (or a non-LINK ERC-20)
-          will not be credited and is not recoverable.
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-// ── Bar Chart ─────────────────────────────────────────────────────────────────
-function BarChart({ data, labels }: { data: number[]; labels: string[] }) {
-  const max = Math.max(...data) || 1;
-  return (
-    <div className="flex items-end gap-1.5 h-28">
-      {data.map((v, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-          <div className="relative w-full" style={{ height: `${Math.max((v / max) * 100, v > 0 ? 4 : 0)}%` }}>
-            <motion.div initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} transition={{ duration: 0.5, delay: i * 0.03 }}
-              style={{ transformOrigin: "bottom", background: i === data.length - 1 ? "#F5C518" : "rgba(245,197,24,0.3)" }}
-              className="w-full h-full rounded-sm" />
-            {v > 0 && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-mono text-white/50 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity bg-navy px-1 rounded">{v}</div>}
-          </div>
-          {i % 3 === 0 && <span className="text-[9px] text-white/20 font-mono whitespace-nowrap">{labels[i]?.split(" ")[1]}</span>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Playground ────────────────────────────────────────────────────────────────
-function Playground({ apiKey, trialView }: { apiKey: string; trialView: boolean }) {
-  const [chain, setChain] = useState(trialView ? "bnb" : "avax");
-  const [token, setToken] = useState<"USDC" | "USDT" | "RLUSD">("USDC");
-  const [to, setTo] = useState("");
-  const [amount, setAmount] = useState("5");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<null | { hash: string }>(null);
-
-  // Per-chain token availability mirrors app/api/relay/route.ts CHAIN_TOKEN_ALLOWLIST.
-  //   - Injective: USDT only (Circle CCTP native USDC announced for Q2 2026)
-  //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18)
-  //   - Others:    USDC / USDT
-  // BNB_FOCUS_MODE (emergency flag, currently false) would collapse every
-  // chain except bnb to []; the playground hides them in the picker below
-  // so this branch matters whenever the flag is back to false (the default).
-  const availableTokens: ("USDC" | "USDT" | "RLUSD")[] = trialView
-    ? ["USDC", "USDT"]
-    : chain === "injective" ? ["USDT"]
-      : chain === "eth"    ? ["USDC", "USDT", "RLUSD"]
-      :                       ["USDC", "USDT"];
-
-  // Coerce the selected token onto the chain's allowlist when chain changes.
-  // (e.g. user had RLUSD selected on eth, then switched to bnb → snap to USDC.)
-  useEffect(() => {
-    if (!availableTokens.includes(token)) {
-      setToken(availableTokens[0]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain]);
-
-  // Snap chain to BNB when the user flips into trial view (and they were
-  // previously on a chain that's no longer in the dropdown). Avoids a
-  // stale dropdown showing "Avalanche" while the playground only renders
-  // the BNB option after the trial-view re-render.
-  useEffect(() => {
-    if (trialView && chain !== "bnb") setChain("bnb");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trialView]);
-
-  const previewToken = token;
-
-  async function simulate() {
-    setLoading(true); setResult(null);
-    await new Promise(r => setTimeout(r, 1800));
-    setLoading(false);
-    setResult({ hash: `0x${Math.random().toString(16).slice(2, 10)}…${Math.random().toString(16).slice(2, 6)}` });
-  }
-
-  return (
-    <div className="space-y-5">
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Chain</label>
-          <div className="relative">
-            <select value={chain} onChange={e => setChain(e.target.value)} className="w-full appearance-none border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30 cursor-pointer" style={{ background: "#0d1422" }}>
-              {trialView ? (
-                <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓ (trial)</option>
-              ) : (
-                <>
-                  <option value="avax" style={{ background: "#0d1422" }}>Avalanche ✓</option>
-                  <option value="bnb" style={{ background: "#0d1422" }}>BNB Chain ✓</option>
-                  <option value="eth" style={{ background: "#0d1422" }}>Ethereum ✓</option>
-                  <option value="xlayer" style={{ background: "#0d1422" }}>X Layer ✓</option>
-                  <option value="stable" style={{ background: "#0d1422" }}>Stable ✓</option>
-                  <option value="mantle" style={{ background: "#0d1422" }}>Mantle ✓</option>
-                  <option value="injective" style={{ background: "#0d1422" }}>Injective ✓</option>
-                  <option value="monad" style={{ background: "#0d1422" }}>Monad ✓</option>
-                  <option value="scroll" style={{ background: "#0d1422" }}>Scroll ✓</option>
-                  <option value="arbitrum" style={{ background: "#0d1422" }}>Arbitrum ✓</option>
-                </>
-              )}
-            </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
-          </div></div>
-        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Token</label>
-          <div className="relative">
-            <select value={token} onChange={e => setToken(e.target.value as "USDC" | "USDT" | "RLUSD")} className="w-full appearance-none border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30 cursor-pointer" style={{ background: "#0d1422" }}>
-              {availableTokens.map(t => (
-                <option key={t} value={t} style={{ background: "#0d1422" }}>{t}{t === "RLUSD" ? " (Ethereum-only)" : ""}</option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
-          </div></div>
-        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Recipient</label>
-          <input value={to} onChange={e => setTo(e.target.value)} placeholder="0x..." className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-yellow/30 placeholder-white/20" /></div>
-        <div><label className="text-xs text-white/30 uppercase tracking-widest block mb-1.5">Amount</label>
-          <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-white/5 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-yellow/30" /></div>
-      </div>
-      <div className="bg-[#060C14] border border-white/8 rounded-xl p-4 font-mono text-xs text-white/50 leading-6">
-        <div><span className="text-purple-400">const</span><span className="text-white"> tx </span><span className="text-white/30">= await </span><span className="text-blue-300">q402</span><span className="text-white/30">.pay({"{"}</span></div>
-        <div className="pl-5">
-          <div><span className="text-green-300">to</span><span className="text-white/30">: </span><span className="text-orange-300">&quot;{to}&quot;</span><span className="text-white/30">,</span></div>
-          <div><span className="text-green-300">amount</span><span className="text-white/30">: </span><span className="text-cyan-300">&quot;{amount}&quot;</span><span className="text-white/30">,</span></div>
-          <div><span className="text-green-300">token</span><span className="text-white/30">: </span><span className="text-orange-300">&quot;{previewToken}&quot;</span></div>
-        </div>
-        <div><span className="text-white/30">{"});"}</span></div>
-      </div>
-      <button onClick={simulate} disabled={loading} className="bg-yellow text-navy font-bold text-sm px-6 py-3 rounded-xl hover:bg-yellow-hover transition-all disabled:opacity-60 flex items-center gap-2">
-        {loading ? (<><svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/></svg>Sending…</>) : "▶ Run Simulation"}
-      </button>
-      {result && (
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-green-400/5 border border-green-400/20 rounded-xl p-4 font-mono text-xs space-y-1">
-          <div className="text-green-400 font-bold mb-2">✓ Simulated</div>
-          <div><span className="text-white/30">hash: </span><span className="text-orange-300">{result.hash}</span></div>
-          <div><span className="text-white/30">gas by user: </span><span className="text-yellow font-bold">$0.000000</span></div>
-          <div><span className="text-white/30">{previewToken} sent: </span><span className="text-green-400">${amount}.00</span></div>
-        </motion.div>
-      )}
-      <div className="pt-4 border-t border-white/6">
-        <p className="text-xs text-white/25 mb-2">Your {trialView ? "Trial" : "Multichain"} API Key</p>
-        <div className="flex items-center gap-2 font-mono text-xs text-white/50 bg-navy border border-white/8 rounded-lg px-3 py-2">
-          <span className="flex-1 break-all">{apiKey ? `${apiKey.slice(0, 12)}${"•".repeat(16)}${apiKey.slice(-4)}` : "—"}</span>
-          <button
-            onClick={() => { navigator.clipboard.writeText(apiKey); }}
-            className="text-white/25 hover:text-yellow transition-colors flex-shrink-0 text-[10px] uppercase tracking-widest"
-          >Copy</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-// Legacy tab type — Sidebar.tsx exports DashboardTab as the canonical union
-// (includes "webhooks" too, which the Multichain dashboard renders inside
-// Developer for now). Kept here as an alias so the existing internal
-// references compile without touching every call site.
-type Tab = DashboardTab;
-
 export default function DashboardPage() {
   const { address, isConnected, signMessage, disconnect } = useWallet();
   const router = useRouter();
-  // Seed the active tab from the `?tab=…` query param when present so
-  // deeplinks from /agents, the MCP setup hints, and every "open the
-  // dashboard's Agent tab" CTA actually land on the right tab. Reads
-  // window.location.search directly to avoid Next.js 16's Suspense
-  // requirement on useSearchParams in plain client components.
-  const [tab, setTab] = useState<Tab>(() => {
-    if (typeof window === "undefined") return "overview";
-    const raw = new URLSearchParams(window.location.search).get("tab");
-    const valid: Tab[] = [
-      "overview",
-      "developer",
-      "transactions",
-      "claude",
-      "gas-tank",
-      "webhooks",
-      "agent",
-    ];
-    return raw && (valid as string[]).includes(raw) ? (raw as Tab) : "overview";
-  });
-  const [keyCopied, setKeyCopied] = useState(false);
-  /**
-   * Transactions tab — source filter chip. Splits the scoped tx list
-   * into "All", "Recurring only", and "Manual only" (send + batch + api)
-   * so the user can pull just scheduled payouts for reconciliation or
-   * just one-shot sends for activity review. Backed by the new optional
-   * `source` field on RelayedTx (recurring/send/batch/api). Historical
-   * rows without a source stay visible under "All" and never surface
-   * in the typed filters — we don't claim provenance for rows we can't
-   * classify. Lives in URL state via ?source= so a refresh keeps the
-   * filter and the user can share a link to a specific view.
-   */
-  type TxSourceFilter = "all" | "recurring" | "manual";
-  const [txSourceFilter, setTxSourceFilter] = useState<TxSourceFilter>(() => {
-    if (typeof window === "undefined") return "all";
-    const raw = new URLSearchParams(window.location.search).get("source");
-    return raw === "recurring" || raw === "manual" ? raw : "all";
-  });
-  const [depositChain, setDepositChain] = useState<{ chain: string; token: string } | null>(null);
+  // NOTE: the legacy `?tab=…` deeplink seeding lived here. The v2 shell
+  // (DashboardV2) owns its own top-nav view routing, so the tab state was
+  // dropped — old deeplinks still resolve to /dashboard, they just land on
+  // the v2 default view (Wallets) instead of erroring.
   const [alertEmail, setAlertEmail] = useState("");
   const [alertEmailInput, setAlertEmailInput] = useState("");
-  // Sidebar-driven alert config modal — opens when the user clicks the
-  // "🔔 Email alerts" button in the Account section. The legacy
-  // in-content showEmailSetup banner was removed; this modal is the
-  // single config surface now.
+  // Usage-alert config modal — opened via the identity context's
+  // openUsageAlerts() handle (the v2 views surface the entry point). Wraps the
+  // existing /api/usage-alert flow (POST to set, DELETE to remove).
   const [showAlertModal, setShowAlertModal] = useState(false);
   const [alertSaving, setAlertSaving] = useState(false);
   const [alertDeleting, setAlertDeleting] = useState(false);
@@ -676,52 +77,28 @@ export default function DashboardPage() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [isExpired, setIsExpired] = useState(false);
-  const [sandboxApiKey, setSandboxApiKey] = useState<string>("");
-  const [sandboxKeyCopied, setSandboxKeyCopied] = useState(false);
-  const [relayedTxs, setRelayedTxs] = useState<RelayedTx[]>([]);
-  const [thisMonthCount, setThisMonthCount] = useState(0); // for chart only
-  const [gasDeposits, setGasDeposits] = useState<GasDeposit[]>([]);
-  const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({ bnb: 0, eth: 0, avax: 0, xlayer: 0, stable: 0, mantle: 0, injective: 0, monad: 0, scroll: 0 });
-  // LINK Gas Tank (CCIP bridge fees) — strictly eth/avax/arbitrum.
-  // Separate state from userGasBalance because the bucket lives at a
-  // distinct KV namespace (gasdep_link:* / link_used:*) and only the
-  // 3-chain CCIP triangle accepts deposits.
-  const [linkBalances, setLinkBalances] = useState<Record<"eth" | "avax" | "arbitrum", number>>({ eth: 0, avax: 0, arbitrum: 0 });
-  const [linkDeposits, setLinkDeposits] = useState<Array<{ chain: string; amount: number; txHash: string; depositedAt: string }>>([]);
-  const [linkDepositChain, setLinkDepositChain] = useState<"eth" | "avax" | "arbitrum" | null>(null);
-  const [tokenPrices, setTokenPrices] = useState<Record<string, number>>({});
-  const [walletBalances, setWalletBalances] = useState<Record<string, number>>({});
-  const [tankLoading, setTankLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
-  // Top-level view toggle: trial-flavored (BNB-only · 2k credits · no Gas
-  // Tank · trial key) vs the original Multichain dashboard. Defaulted to
-  // trial for plan === "trial" wallets so first-touch lands on what they
-  // just signed up for.
+  // Top-level view toggle — trial-flavored vs the original Multichain
+  // dashboard. The v2 shell owns its own scope chip, but this flag still
+  // drives the email-only trial view + the trial/paid credit scoping below.
   const [trialViewActive, setTrialViewActive] = useState(false);
   const [hasPaid, setHasPaid] = useState<boolean | null>(null);
-  // Server-computed paywall bypass flag from /api/keys/provision. Was used
-  // by the now-retired full-screen paywall gate; the response field is
-  // still read so the API contract stays stable for other callers.
+  // Server-computed paywall bypass flag from /api/keys/provision. The
+  // response field is still read so the API contract stays stable for other
+  // callers; the value itself is no longer gated on in the UI.
   const [, setIsOwner] = useState<boolean>(false);
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const [webhookUrlInput, setWebhookUrlInput] = useState("");
-  const [webhookSecret, setWebhookSecret] = useState("");
-  const [webhookSaving, setWebhookSaving] = useState(false);
-  const [webhookTesting, setWebhookTesting] = useState(false);
-  const [webhookTestResult, setWebhookTestResult] = useState<null | { ok: boolean; msg: string }>(null);
-  const [rotatingKey, setRotatingKey] = useState(false);
-  const [rotateConfirm, setRotateConfirm] = useState(false);
+  // Tracks an in-flight key rotation. The v2 Developer view renders its own
+  // rotate UI; this flag is retained so the legacy rotate handle's loading
+  // semantics stay intact (set true→false around the POST).
+  const [, setRotatingKey] = useState(false);
   // Email session (Google OAuth or magic-link signup). When the user signed
   // in via /api/auth/google or clicked an email magic link, /api/auth/me
-  // returns { authenticated: true, email, address? }. We surface a
-  // separate sandbox-only view for sessions that have no paired wallet yet,
-  // so "API key 받으러 온" users can grab their sandbox key in one click.
-  // Email session — populated from /api/auth/me. `address` here is the
-  // CANONICAL BOUND wallet (session.address on the server), set ONLY by an
-  // explicit signed POST to /api/auth/wallet-bind. A wallet connected in
-  // the browser that doesn't match this field triggers WrongWalletHardBlock
-  // (State G); a wallet connected with this field still null triggers
-  // ClaimWalletPrompt (State D).
+  // returns { authenticated: true, email, address? }.
+  // `address` here is the CANONICAL BOUND wallet (session.address on the
+  // server), set ONLY by an explicit signed POST to /api/auth/wallet-bind. A
+  // wallet connected in the browser that doesn't match this field triggers
+  // WrongWalletHardBlock (State G); a wallet connected with this field still
+  // null triggers ClaimWalletPrompt (State D).
   const [emailSession, setEmailSession] = useState<{
     email: string;
     address: string | null;
@@ -734,7 +111,7 @@ export default function DashboardPage() {
   // bound canonical wallet for an email user — populated by
   // /api/keys/provision via the wallet_email_link KV index. Lets a
   // wallet-only login (no session cookie) still surface the trial
-  // credits + keys that live on `sub:email:<sub>`. See sprint doc §12.
+  // credits + keys that live on `sub:email:<sub>`.
   const [boundEmailTrial, setBoundEmailTrial] = useState<{
     email: string;
     apiKey: string | null;
@@ -775,10 +152,8 @@ export default function DashboardPage() {
   //   - email session has trial keys (canonical email-pseudo trial), OR
   //   - wallet is bridged to an email pseudo via boundEmailTrial (the
   //     wallet-only-login case the read-side bridge was added for)
-  // A paying user with no active trial defaults to Multichain — landing
-  // them on Trial view would surface "0 / 2000" or their paid credits
-  // in the wrong scope. Users can still toggle to Trial manually from
-  // the sidebar.
+  // A paying user with no active trial defaults to Multichain. Users can
+  // still toggle scope from the v2 top-bar chip.
   const initialViewMatched = useRef(false);
   useEffect(() => {
     if (initialViewMatched.current) return;
@@ -802,9 +177,6 @@ export default function DashboardPage() {
   // Phase 1 identity model: wallet binding is no longer auto-fired. The
   // ClaimWalletPrompt component (State D) handles binding via an explicit
   // user click + fresh signed challenge through /api/auth/wallet-bind.
-  // The old silent unsigned auto-bind was removed in favour of the
-  // bind-once semantics — a user shouldn't get permanently bound to a
-  // wallet just by having MetaMask connected at dashboard load time.
 
   // Wallet-only auto-trial: when a wallet is connected but the address has
   // no subscription (or only a provisioned stub with amountUSD=0 and no
@@ -854,15 +226,9 @@ export default function DashboardPage() {
     };
   }, []);
 
-  // When the user is email-only (session active, no wallet connected), fetch
-  // the sandbox key bound to their email account. Lookup is via the email
-  // pseudo-address index that /api/auth/google + /api/auth/email/callback
-  // both populate. We POST to /api/keys/provision-by-email so the path stays
-  // unauthenticated-by-email — server reads the session cookie, never trusts
-  // a client-supplied email.
   // Always fetch the email pseudo-account's trial data when an email session
   // exists — wallet-connected users with an email session ALSO need it, so
-  // the Trial view can display the canonical email-side trial (the wallet's
+  // the Trial scope can display the canonical email-side trial (the wallet's
   // own subscription is a separate "starter" stub when the user signed up
   // via email first, NOT a trial).
   useEffect(() => {
@@ -909,7 +275,7 @@ export default function DashboardPage() {
         } else {
           setAlertEmail("");
         }
-      } catch { /* network blip — sidebar Email-alerts entry stays "off" */ }
+      } catch { /* network blip — usage-alert entry stays "off" */ }
     }
     load();
     return () => { cancelled = true; };
@@ -928,28 +294,6 @@ export default function DashboardPage() {
     }, 600);
     return () => clearTimeout(t);
   }, [mounted, authChecked, isConnected, emailSession, router]);
-
-  const refreshUserBalance = useCallback(async (addr: string) => {
-    // Q402-SEC-003: user-balance now requires nonce+signature auth.
-    // Reuses the cached session nonce (55-min sessionStorage TTL) — no
-    // extra wallet popup on re-renders.
-    const auth = await getAuthCreds(addr, signMessage);
-    if (!auth) return;
-    const { nonce, signature } = auth;
-    const qs = new URLSearchParams({ address: addr, nonce, sig: signature }).toString();
-    try {
-      const res  = await fetch(`/api/gas-tank/user-balance?${qs}`);
-      const data = await res.json();
-      if (res.status === 401 && data.code === "NONCE_EXPIRED") {
-        clearAuthCache(addr);
-        return;
-      }
-      if (data.balances) setUserGasBalance(data.balances);
-      if (data.deposits) setGasDeposits(data.deposits);
-      if (data.linkBalances) setLinkBalances(data.linkBalances);
-      if (data.linkDeposits) setLinkDeposits(data.linkDeposits);
-    } catch { /* ignore */ }
-  }, [signMessage]);
 
   useEffect(() => {
     if (!address) return;
@@ -995,12 +339,11 @@ export default function DashboardPage() {
         }
       } catch { return; }
 
-      if (provData.sandboxApiKey) setSandboxApiKey(provData.sandboxApiKey as string);
       setHasPaid(provData.hasPaid === true);
       setIsOwner(provData.isOwner === true);
 
       // Mirror the bound-email-trial bridge into local state so the trial
-      // view can fall back to it when this wallet has no own trial keys
+      // scope can fall back to it when this wallet has no own trial keys
       // (e.g. wallet-only login of a bound user — pseudo carries the trial).
       const bet = provData.boundEmailTrial as {
         email: string;
@@ -1045,9 +388,6 @@ export default function DashboardPage() {
         trialQuotaBonus:   provData.trialCredits as number ?? prev?.trialQuotaBonus ?? 0,
         paidQuotaBonus:    provData.paidCredits  as number ?? prev?.paidQuotaBonus  ?? 0,
         paidAt:            provData.paidAt as string ?? prev?.paidAt ?? "",
-        // BUG FIX — actually hydrate amountUSD from the provision response.
-        // The previous default of `prev?.amountUSD ?? 0` meant a fresh reload
-        // always had amountUSD=0 and showPaidScope evaluated to false.
         amountUSD:         (provData.amountUSD as number) ?? prev?.amountUSD ?? 0,
       }));
 
@@ -1058,12 +398,6 @@ export default function DashboardPage() {
           if (data.expiresAt) { setExpiresAt(new Date(data.expiresAt)); setIsExpired(data.isExpired ?? false); }
         })
         .catch(() => {});
-
-      // Fetch webhook config
-      fetch(`/api/webhook?address=${addr}&nonce=${encodeURIComponent(nonce)}&sig=${encodeURIComponent(signature)}`)
-        .then(r => r.json())
-        .then(data => { if (data.configured && data.url) setWebhookUrl(data.url); })
-        .catch(() => {});
     }
 
     provision();
@@ -1073,58 +407,11 @@ export default function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, authChecked, emailSession]);
 
-  useEffect(() => {
-    if (!address) return;
-    if (!authChecked) return; // same race-avoidance as provision useEffect
-    // Same Phase 1 gate as provision — don't pull tx history for a wallet
-    // that isn't the canonical bound wallet for this email session.
-    if (
-      emailSession &&
-      emailSession.address &&
-      address.toLowerCase() !== emailSession.address.toLowerCase()
-    ) {
-      return;
-    }
-    const addr = address;
-    async function fetchTxs() {
-      const auth = await getAuthCreds(addr, signMessage);
-      if (!auth) return;
-      const { nonce, signature } = auth;
-      const res = await fetch(`/api/transactions?address=${addr}&nonce=${encodeURIComponent(nonce)}&sig=${encodeURIComponent(signature)}`);
-      if (res.status === 401) { const d = await res.json(); if (d.code === "NONCE_EXPIRED") clearAuthCache(addr); return; }
-      const data = await res.json();
-      if (data.txs) setRelayedTxs(data.txs);
-      if (data.thisMonthCount !== undefined) setThisMonthCount(data.thisMonthCount);
-    }
-    fetchTxs().catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [address, subscription, authChecked, emailSession]);
-
-  useEffect(() => {
-    setTankLoading(true);
-    fetch("/api/gas-tank").then(r => r.json()).then(data => {
-      if (data.tanks) {
-        const prices: Record<string, number> = {};
-        for (const t of data.tanks) prices[t.key] = t.price;
-        setTokenPrices(prices);
-      }
-    }).catch(() => {}).finally(() => setTankLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (!address) return;
-    refreshUserBalance(address);
-    fetch(`/api/wallet-balance?address=${address}`).then(r => r.json()).then(data => {
-      if (data.balances) setWalletBalances(data.balances);
-    }).catch(() => {});
-  }, [address, refreshUserBalance]);
-
   // ── Phase 1 identity-model early returns ──────────────────────────────
   // The 4-state machine routes the user before any multichain data is
   // fetched. The two branches below cover the cases where an email
   // session + browser-connected wallet exist together but in a state
-  // that must NOT render
-  // the regular dashboard:
+  // that must NOT render the regular dashboard:
   //
   //   State D — wallet connected, session not yet claimed by any wallet
   //             → ClaimWalletPrompt (signed bind via /api/auth/wallet-bind)
@@ -1179,8 +466,8 @@ export default function DashboardPage() {
   // connected wallet doesn't match. Full-screen non-dismissable block, NO
   // multichain data fetch (the provision useEffect's address dep would
   // otherwise pull the wrong wallet's subscription). The wallet match
-  // gate inside that useEffect (added below) is the belt-and-suspenders
-  // — this early return is the actual UX.
+  // gate inside that useEffect is the belt-and-suspenders — this early
+  // return is the actual UX.
   if (
     mounted &&
     authChecked &&
@@ -1306,9 +593,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Trial API Key — primary, the key they came for. Was labelled
-              "Live API key" pre-Phase-2 which collided with the Multichain
-              view's "API Key" card and obscured the trial vs paid split. */}
+          {/* Trial API Key — primary, the key they came for. */}
           <div className="rounded-2xl border border-white/10 p-6 mb-4" style={{ background: "rgba(255,255,255,0.03)" }}>
             <div className="flex items-center justify-between mb-2">
               <div className="text-[10px] uppercase tracking-widest text-white/45 font-semibold">Trial API Key</div>
@@ -1370,9 +655,7 @@ export default function DashboardPage() {
               (b) skip-mode:        wallet already connected but user
                                     deferred binding in State D. Show
                                     "Resume claim" instead of "Connect".
-              (c) pure email-only:  no wallet connected yet
-              Mode (b) is reached via the email-only branch's extended
-              condition above (skipClaimPrompt && !emailSession.address). */}
+              (c) pure email-only:  no wallet connected yet */}
           {emailSession.address ? (
             <div className="rounded-2xl border border-yellow/25 p-6 mb-6"
                  style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(255,255,255,0.02) 100%)" }}>
@@ -1452,17 +735,13 @@ export default function DashboardPage() {
   }
   if (!isConnected || !address) return null;
 
-  // API key + credits are SCOPED to the active view, and trial vs paid keys
-  // live in SEPARATE subscription slots so the scopes never collide:
-  //   - Trial view  → email pseudo's trialApiKey (when emailSession exists —
-  //     that's the canonical trial), else the wallet sub's own trialApiKey.
-  //     A paying user mid-trial sees their trial key in this view AND a
-  //     separate paid key in the Multichain view.
-  //   - Multichain  → wallet sub's apiKey, only when amountUSD > 0. Trial-
-  //     only users see the Locked placeholder (handled in the API Key card)
-  //     until they upgrade.
-  const walletApiKey = subscription?.apiKey ?? "";
-  const walletTrialApiKey = subscription?.trialApiKey ?? "";
+  // ── Scoped credit + lifecycle derivation (reused by the identity context) ──
+  // Credits are SCOPED to the active view; trial vs paid pools live in
+  // SEPARATE subscription slots so the scopes never collide. (The trial/paid
+  // API-KEY strings themselves are no longer derived here — the v2 Developer
+  // view fetches them directly via /api/keys/provision; this page only needs
+  // the credit/quota + lifecycle facts the identity context publishes.)
+  //
   // Two-pool credit model: scoped mirrors are the source of truth post-
   // migration. `quotaBonus` (legacy sum) is retained for back-compat only.
   const trialPoolCredits = subscription?.trialQuotaBonus ?? 0;
@@ -1473,16 +752,6 @@ export default function DashboardPage() {
     subscription?.paidQuotaBonus  !== undefined;
   const isTrialOnlySub = subscription?.plan === "trial";
   const hasEmailTrial = !!emailSession && !!sessionTrial.apiKey;
-  // Trial-side key surface: prefer the dedicated trialApiKey slot. Falls back
-  // to the wallet's main apiKey only on legacy `plan === "trial"` accounts
-  // (pre-Phase-1 they wrote into the apiKey slot). Bound-email bridge
-  // covers wallet-only logins of bound users.
-  const trialApiKey = hasEmailTrial
-    ? (sessionTrial.apiKey ?? "")
-    : (walletTrialApiKey || (isTrialOnlySub ? walletApiKey : "") || (boundEmailTrial?.apiKey ?? ""));
-  // Trial credits: scoped mirror is authoritative once migrated. Pre-migration
-  // accounts fall back to the legacy sum only when the sub is trial-only
-  // (clear single-pool signal). Bound-email bridge handles wallet-only logins.
   const trialCredits = hasEmailTrial
     ? sessionTrial.credits
     : hasScopedMirrors
@@ -1490,119 +759,34 @@ export default function DashboardPage() {
       : (isTrialOnlySub ? legacyTotalCredits : (boundEmailTrial?.credits ?? 0));
   // Multichain side: render real values for paid accounts. `hasPaid` is
   // computed from the provision response (amountUSD > 0 && paid live key
-  // exists) and is the source of truth — the prior `amountUSD > 0` check
-  // failed when amountUSD wasn't in the response and defaulted to 0.
+  // exists) and is the source of truth.
   const showPaidScope = !trialViewActive && hasPaid === true;
-  const API_KEY = trialViewActive
-    ? (trialApiKey || "—")
-    : (showPaidScope ? walletApiKey : "—");
-
-  // Per-view key sets — used to filter the Transactions tab so the user sees
-  // only the history that matches their current scope (trial vs paid). Built
-  // here once so the table render doesn't recompute on each row.
-  const trialKeySet = new Set<string>(
-    [
-      subscription?.trialApiKey,
-      subscription?.trialSandboxApiKey,
-      // Pre-migration: trial activations wrote into apiKey/sandboxApiKey when
-      // plan==="trial". Include those so legacy trial history still shows up.
-      isTrialOnlySub ? subscription?.apiKey : null,
-      isTrialOnlySub ? subscription?.sandboxApiKey : null,
-      hasEmailTrial ? sessionTrial.apiKey : null,
-      hasEmailTrial ? sessionTrial.sandboxApiKey : null,
-      // Bound-email bridge: include the pseudo's keys so wallet-only
-      // logins see the trial history that was generated under the
-      // bridged email pseudo.
-      boundEmailTrial?.apiKey ?? null,
-      boundEmailTrial?.sandboxApiKey ?? null,
-    ].filter((k): k is string => typeof k === "string" && k.length > 0),
-  );
-  const paidKeySet = new Set<string>(
-    [
-      showPaidScope ? subscription?.apiKey : null,
-      showPaidScope ? subscription?.sandboxApiKey : null,
-    ].filter((k): k is string => typeof k === "string" && k.length > 0),
-  );
-  const scopedTxsAllSources = trialViewActive
-    ? relayedTxs.filter(tx => trialKeySet.has(tx.apiKey))
-    : relayedTxs.filter(tx => paidKeySet.has(tx.apiKey));
-  // Source filter on top of the trial/multichain scope. "all" passes
-  // everything (the legacy view); "recurring" keeps only tagged
-  // recurring fires; "manual" keeps send/batch/api (everything that
-  // isn't a scheduled fire). Rows missing a source are treated as
-  // untyped legacy data — they show under "all" only.
-  const scopedTxs = scopedTxsAllSources.filter((tx) => {
-    if (txSourceFilter === "all") return true;
-    if (txSourceFilter === "recurring") return tx.source === "recurring";
-    // manual
-    return tx.source === "send" || tx.source === "batch" || tx.source === "api";
-  });
   const plan = subscription?.plan ?? "starter";
 
-  // View mode — top-level toggle between Free-trial flavoring and the
-  // original Multichain dashboard. State lives on a query param so a
-  // refresh / share-link keeps the user in the same view.
-  const viewMode: "trial" | "multichain" = trialViewActive ? "trial" : "multichain";
-  // Internal key "enterprise_flex" is shown to users as just "Enterprise".
-  const planDisplayKey = plan === "enterprise_flex" ? "enterprise" : plan;
-  const planName = planDisplayKey.charAt(0).toUpperCase() + planDisplayKey.slice(1);
-  // TX credits remaining — pulled from the scope-matching pool. Trial view
-  // reads trialCredits (already scoped above); paid view reads the paid pool
-  // (or the legacy total only when scoped mirrors aren't populated yet).
+  // TX credits remaining — pulled from the scope-matching pool.
   const remainingCredits = trialViewActive
     ? trialCredits
     : (showPaidScope
         ? (hasScopedMirrors ? paidPoolCredits : legacyTotalCredits)
         : 0);
-  // Base quota for the progress bar. Trial view uses the canonical trial
-  // grant (TRIAL_CREDITS); paid view uses the plan's base allotment.
+  // Base quota for the progress bar.
   const baseCredits = trialViewActive
     ? TRIAL_CREDITS
     : (PLAN_QUOTA[plan.toLowerCase()] ?? 500);
   // pct consumed = how far below base we are (capped 0–100)
   const pct = Math.min(100, Math.max(0, Math.round((1 - remainingCredits / Math.max(baseCredits, 1)) * 100)));
+  // used = base minus remaining (clamped ≥ 0), consistent with pct.
+  const usedCredits = Math.max(0, baseCredits - remainingCredits);
   const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86_400_000) : null;
-  const totalUserUSD = Object.entries(userGasBalance).reduce((sum, [c, amt]) => {
-    return sum + amt * (tokenPrices[c] ?? 0);
-  }, 0);
 
-  // Build 14-day chart from scope-filtered transactions. The unscoped
-  // `relayedTxs.length` would show the same number on both views even
-  // though the keys (and therefore the relay activity) are independent.
-  // `scopedTxs` already filters by trialKeySet / paidKeySet above.
-  const today = new Date();
-  const dailyLabels: string[] = [];
-  const dailyData: number[] = [];
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(today); d.setDate(d.getDate() - i);
-    dailyLabels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
-    dailyData.push(scopedTxs.filter(tx => new Date(tx.relayedAt).toDateString() === d.toDateString()).length);
-  }
-
-  function copyKey() { navigator.clipboard.writeText(API_KEY); setKeyCopied(true); setTimeout(() => setKeyCopied(false), 2000); }
-
-  function copySandboxKey() {
-    navigator.clipboard.writeText(sandboxApiKey);
-    setSandboxKeyCopied(true);
-    setTimeout(() => setSandboxKeyCopied(false), 2000);
-  }
-
-  async function rotateKey() {
-    if (!address) return;
-    // Route to the slot the user is actually looking at. The Trial view's
-    // card displays sub.trialApiKey (or the pre-Phase-1 sub.apiKey when
-    // plan === "trial" and trialApiKey is empty); the Multichain view
-    // shows sub.apiKey. Without this scope the rotate endpoint always
-    // touched the paid slot, so the trial view's rotate button left the
-    // displayed key unchanged.
-    const scope = trialViewActive ? "trial" : "paid";
+  // ── Action handles (wired into the identity context) ──────────────────────
+  async function rotateKey(scope: "trial" | "paid") {
+    if (!address) return {};
     // Key rotation requires an INTENT-BOUND signature
     // (action="keys.rotate", intent={scope}) so a signature collected
-    // for any other action (wallet bind, email link, trial activation,
-    // …) cannot be replayed to mint a fresh API key. Audit FIX
-    // 2026-06-07.
+    // for any other action cannot be replayed to mint a fresh API key.
     const auth = await getActionAuth(address, "keys.rotate", { scope }, signMessage);
-    if (!auth) return;
+    if (!auth) return {};
     setRotatingKey(true);
     try {
       const res = await fetch("/api/keys/rotate", {
@@ -1611,7 +795,7 @@ export default function DashboardPage() {
         body: JSON.stringify({ address, nonce: auth.challenge, signature: auth.signature, scope }),
       });
       const data = await res.json();
-      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
+      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return { code: "NONCE_EXPIRED" as const }; }
       if (data.apiKey) {
         setSubscription(prev => {
           if (!prev) return null;
@@ -1627,9 +811,10 @@ export default function DashboardPage() {
           }
           return { ...prev, apiKey: data.apiKey };
         });
-        setRotateConfirm(false);
+        return { apiKey: data.apiKey as string };
       }
-    } catch { /* ignore */ } finally { setRotatingKey(false); }
+      return {};
+    } catch { return {}; } finally { setRotatingKey(false); }
   }
 
   async function saveAlertEmail() {
@@ -1670,54 +855,6 @@ export default function DashboardPage() {
     } catch { /* ignore */ } finally { setAlertDeleting(false); }
   }
 
-  async function saveWebhook() {
-    if (!address) return;
-    const auth = await getAuthCreds(address, signMessage);
-    if (!auth) return;
-    const { nonce, signature } = auth;
-    if (!webhookUrlInput) return;
-    setWebhookSaving(true);
-    try {
-      const res = await fetch("/api/webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, nonce, signature, url: webhookUrlInput }) });
-      const data = await res.json();
-      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); return; }
-      if (data.success) {
-        setWebhookUrl(webhookUrlInput);
-        if (data.secret) setWebhookSecret(data.secret);
-      }
-    } catch { /* ignore */ } finally { setWebhookSaving(false); }
-  }
-
-  async function testWebhook() {
-    if (!address) return;
-    const auth = await getAuthCreds(address, signMessage);
-    if (!auth) return;
-    const { nonce, signature } = auth;
-    setWebhookTesting(true); setWebhookTestResult(null);
-    try {
-      const res = await fetch("/api/webhook/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address, nonce, signature }) });
-      const data = await res.json();
-      if (res.status === 401 && data.code === "NONCE_EXPIRED") { clearAuthCache(address); setWebhookTestResult({ ok: false, msg: "Session expired. Please reload." }); return; }
-      setWebhookTestResult({ ok: data.success, msg: data.success ? `Delivered (HTTP ${data.statusCode})` : (data.error ?? "Failed") });
-    } catch { setWebhookTestResult({ ok: false, msg: "Network error" }); } finally { setWebhookTesting(false); }
-  }
-
-  // Sidebar handles tab labels + section visibility now; the old top-row
-  // tabLabel map was inlined here for the deleted nav row.
-  const trialCreditsLeft = trialViewActive ? trialCredits : 0;
-  const trialDaysLeftDerived = (() => {
-    // Prefer email-session pseudo expiry (canonical when user signed in
-    // via email), then wallet sub's own trialExpiresAt, then the bridged
-    // pseudo expiry — covers wallet-only logins of bound users.
-    const expiry =
-      sessionTrial.trialExpiresAt
-      ?? subscription?.trialExpiresAt
-      ?? boundEmailTrial?.trialExpiresAt
-      ?? null;
-    if (!expiry) return null;
-    return Math.max(0, Math.ceil((new Date(expiry).getTime() - Date.now()) / 86_400_000));
-  })();
-
   function handleSignOut() {
     void (async () => {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
@@ -1732,789 +869,39 @@ export default function DashboardPage() {
     })();
   }
 
+  // ── Identity context value — published to the v2 views ────────────────────
+  // Everything the v2 shell + views need is computed once here (reusing the
+  // proven legacy fetches above) and threaded down. The action handles drive
+  // the legacy modals/flows mounted at the bottom of this render.
+  const identityValue: DashboardIdentityValue = {
+    emailSession,
+    subscription,
+    isExpired,
+    expiresAt,
+    daysLeft,
+    quota: subscription
+      ? { used: usedCredits, total: baseCredits, pct }
+      : null,
+    plan,
+    signOut: handleSignOut,
+    // openTrialActivation — re-arms + opens the legacy TrialActivationModal.
+    // Resetting the ref allows the user to re-trigger after a prior close.
+    openTrialActivation: () => {
+      trialPromptedRef.current = false;
+      setShowAutoTrial(true);
+    },
+    openUsageAlerts: () => {
+      setAlertEmailInput(alertEmail || "");
+      setShowAlertModal(true);
+    },
+    rotateKey,
+  };
+
   return (
-    <div className="min-h-screen text-white flex" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 100%)" }}>
-      <DashboardSidebar
-        selection={{ view: trialViewActive ? "trial" : "multichain", tab: tab as DashboardTab }}
-        onSelect={({ view, tab: nextTab }) => {
-          setTrialViewActive(view === "trial");
-          setTab(nextTab as Tab);
-        }}
-        identity={{ email: emailSession?.email ?? null, address }}
-        trial={{
-          creditsLeft: trialCreditsLeft,
-          totalCredits: sessionTrial.totalCredits || 2000,
-          daysLeft: trialDaysLeftDerived,
-        }}
-        alertEmail={alertEmail || null}
-        onOpenAlerts={() => {
-          setAlertEmailInput(alertEmail || "");
-          setShowAlertModal(true);
-        }}
-        signOut={handleSignOut}
-      />
-
-      <div className="flex-1 min-w-0">
-      {/* Paywall gate retired — pre-trial era it forced a paid plan or
-          grant before any dashboard pixel rendered. With the Free Trial
-          path live, an unpaid wallet now lands on Trial view with the
-          "Activate Free Trial" CTA, and Multichain view carries the
-          paid + grant entry points. No full-screen modal needed. */}
-
-      {depositChain && (
-        <DepositModal chain={depositChain.chain} token={depositChain.token} onClose={() => setDepositChain(null)} address={address}
-          onDepositVerified={balances => { setUserGasBalance(balances); setDepositChain(null); }} />
-      )}
-
-      {linkDepositChain && (
-        <LinkDepositModal
-          initialChain={linkDepositChain}
-          balances={linkBalances}
-          onClose={() => setLinkDepositChain(null)}
-        />
-      )}
-
-      {/* Compact top bar — sidebar carries logo + sections, so we only need
-          a slim wallet/auth strip here. Hidden on md+ since the sidebar
-          already shows identity; visible on mobile as a fallback. */}
-      <header className="md:hidden border-b px-5 h-14 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md"
-        style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(5,7,10,0.85)" }}>
-        <Link href="/" className="flex items-center gap-2">
-          <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
-            <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
-          </span>
-          <span className="text-yellow font-bold text-base tracking-tight leading-none">Q402</span>
-        </Link>
-        <WalletButton />
-      </header>
-
-      {/* Top trial banner moved into the sidebar (credits gauge + days-left
-          chip). One status surface instead of two stacked. */}
-
-      {/* Expiry warning banner — only for paying users */}
-      {hasPaid && daysLeft !== null && daysLeft <= 7 && !isExpired && (
-        <div className="border-b px-6 py-3 flex items-center justify-between gap-4"
-          style={{ background: "rgba(245,197,24,0.06)", borderColor: "rgba(245,197,24,0.2)" }}>
-          <p className="text-yellow text-sm font-medium">
-            Your subscription expires in <span className="font-bold">{daysLeft} day{daysLeft !== 1 ? "s" : ""}</span>. Renew now to avoid service interruption.
-          </p>
-          <button onClick={() => router.push("/payment")}
-            className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-1.5 rounded-full hover:bg-yellow-hover transition-colors">
-            Renew
-          </button>
-        </div>
-      )}
-      {hasPaid && isExpired && (
-        <div className="border-b px-6 py-3 flex items-center justify-between gap-4"
-          style={{ background: "rgba(239,68,68,0.06)", borderColor: "rgba(239,68,68,0.2)" }}>
-          <p className="text-red-400 text-sm font-medium">
-            Your subscription has expired. Your API key is currently inactive.
-          </p>
-          <button onClick={() => router.push("/payment")}
-            className="flex-shrink-0 bg-red-500 text-white font-bold text-xs px-4 py-1.5 rounded-full hover:bg-red-600 transition-colors">
-            Renew Now
-          </button>
-        </div>
-      )}
-
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Title row — view toggle + tab nav now live in the sidebar. The
-            page title doubles as the active view + tab context. */}
-        <div className="flex items-start justify-between mb-6 flex-wrap gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">
-              {viewMode === "trial" ? "Free Trial" : "My Dashboard"}
-            </h1>
-            <p className="text-white/35 text-sm mt-0.5">
-              {viewMode === "trial"
-                ? "2,000 sponsored TX · BNB Chain only · Q402 covers gas."
-                : "Manage your Q402 plan, gas tank, and API access."}
-            </p>
-          </div>
-          {viewMode === "multichain" && subscription && subscription.amountUSD > 0 && (
-            <div className="flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-2">
-              <span className="text-yellow font-bold text-sm">{planName} Plan</span>
-              <span className="text-white/30 text-xs">· ${subscription.amountUSD} paid</span>
-            </div>
-          )}
-        </div>
-
-        {/* Expiry banner — only for genuinely paying users (amountUSD > 0)
-            in Multichain view. Trial-only subs would otherwise show the
-            "Subscription Active · Renews" copy with the trial date, which
-            misreads as a paid subscription. */}
-        {hasPaid && expiresAt && !isTrialOnlySub && !trialViewActive && (subscription?.amountUSD ?? 0) > 0 && (
-          <div className={`mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border ${isExpired ? "bg-red-400/8 border-red-400/20" : daysLeft !== null && daysLeft <= 7 ? "bg-yellow/6 border-yellow/20" : "bg-white/4 border-white/8"}`}>
-            <div className="flex items-center gap-3">
-              <span className={`text-lg ${isExpired ? "text-red-400" : "text-yellow"}`}>{isExpired ? "⚠" : "📅"}</span>
-              <div>
-                <p className={`font-semibold text-sm ${isExpired ? "text-red-400" : "text-white"}`}>
-                  {isExpired ? "Subscription Expired" : daysLeft !== null && daysLeft <= 7 ? `Expiring in ${daysLeft} day${daysLeft === 1 ? "" : "s"}` : "Subscription Active"}
-                </p>
-                <p className="text-white/35 text-xs">
-                  {isExpired ? "Renew to restore relay access" : `Renews ${expiresAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`}
-                </p>
-              </div>
-            </div>
-            {(isExpired || (daysLeft !== null && daysLeft <= 7)) && (
-              <a href="/payment" className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">Renew →</a>
-            )}
-          </div>
-        )}
-
-        {/* In-content email-alert banners removed — config moved into the
-            sidebar Account section, which opens the dashboard's alert modal
-            on click. */}
-
-        {/* The legacy "Different wallet detected" dismissable banner was
-            removed when the Phase 1 identity model landed — mismatched
-            wallets now hit the WrongWalletHardBlock full-screen early
-            return above, which is non-dismissable and prevents any
-            multichain data fetch. */}
-
-        {/* Quota usage warning banner — only for paying users */}
-        {hasPaid && subscription && pct >= 80 && (
-          <div className={`mb-6 flex items-center justify-between gap-4 rounded-2xl px-5 py-4 border ${pct >= 90 ? "bg-red-400/8 border-red-400/25" : "bg-yellow/6 border-yellow/20"}`}>
-            <div className="flex items-center gap-3">
-              <span className={`text-lg ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>⚠</span>
-              <div>
-                <p className={`font-semibold text-sm ${pct >= 90 ? "text-red-400" : "text-yellow"}`}>
-                  {pct >= 90 ? "Sponsored TXs almost exhausted" : "Sponsored TXs running low"}
-                </p>
-                <p className="text-white/35 text-xs">
-                  {remainingCredits.toLocaleString()} TXs remaining
-                  {alertEmail && ` · Alert will be sent to ${alertEmail}`}
-                </p>
-              </div>
-            </div>
-            <a href="/payment" className="flex-shrink-0 bg-yellow text-navy font-bold text-xs px-4 py-2 rounded-full hover:bg-yellow-hover transition-colors">Top up →</a>
-          </div>
-        )}
-
-        {/* Tabs moved into the left sidebar — see DashboardSidebar.tsx.
-            Removed here; tab content rendering continues unchanged below. */}
-
-        {/* Trial activation CTA — wallet-only user with no trial yet. Lets
-            them retry the activation flow as many times as needed without
-            depending on the auto-prompt firing exactly once. Skipped when
-            an email session exists (email path already granted the trial)
-            or the wallet already has plan="trial" / paid plan. */}
-        {trialViewActive
-          && isConnected
-          && address
-          && !emailSession
-          && !isTrialOnlySub
-          && hasPaid === false
-          && tab === "overview"
-          && (
-          <div className="mb-6 rounded-2xl border p-6"
-            style={{
-              background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(74,222,128,0.04) 100%)",
-              borderColor: "rgba(245,197,24,0.25)",
-            }}>
-            <div className="flex items-start gap-4 flex-wrap">
-              <div className="flex-1 min-w-[260px]">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-2">
-                  Free trial · BNB Chain
-                </div>
-                <h3 className="text-xl font-bold mb-2">Activate 2,000 sponsored TX</h3>
-                <p className="text-white/65 text-sm leading-relaxed">
-                  One signature → live API key + 2,000 gasless TX for {TRIAL_DURATION_DAYS} days.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  trialPromptedRef.current = false; // allow re-fire
-                  setShowAutoTrial(true);
-                }}
-                className="self-center bg-yellow text-navy font-bold text-sm px-6 py-3 rounded-full hover:bg-yellow-hover transition-colors shadow-lg shadow-yellow/20"
-              >
-                Activate Free Trial →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── OVERVIEW ── */}
-        {tab === "overview" && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                {
-                  label: "Sponsored TXs Left",
-                  value: remainingCredits.toLocaleString(),
-                  sub:
-                    viewMode === "trial"
-                      ? "trial · BNB only"
-                      : isTrialOnlySub
-                        ? "no paid plan — upgrade"
-                        : `${plan} plan`,
-                },
-                { label: "Total Relayed", value: scopedTxs.length.toLocaleString(), sub: viewMode === "trial" ? "trial · all time" : "multichain · all time" },
-                // Trial view: no per-user gas tank — Q402 covers it. Multichain
-                // view: surface the deposited balance card so paid users can
-                // top up.
-                viewMode === "trial"
-                  ? { label: "Gas",         value: "Covered",                      sub: "Q402 pays during trial", accent: true }
-                  : { label: "My Gas Tank", value: `$${totalUserUSD.toFixed(2)}`, sub: "deposited balance",       accent: true },
-                { label: "Today's Txs", value: dailyData[13].toLocaleString(), sub: "today", green: true },
-              ].map((s, i) => (
-                <div key={i} className="card-glow rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                  <div className="text-white/35 text-xs mb-2">{s.label}</div>
-                  <div className={`text-2xl font-bold mb-1 ${"accent" in s && s.accent ? "text-yellow" : "green" in s && s.green ? "text-green-400" : "text-white"}`}>{s.value}</div>
-                  <div className="text-white/25 text-xs">{s.sub}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="rounded-2xl p-6 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-              <div className="flex items-center justify-between mb-6">
-                <div><div className="font-semibold">Daily Transactions</div><div className="text-white/35 text-xs mt-0.5">Last 14 days</div></div>
-                <div className="flex items-center gap-4 text-xs text-white/30">
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-yellow/30" />Previous</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-yellow" />Today</span>
-                </div>
-              </div>
-              <BarChart data={dailyData} labels={dailyLabels} />
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="rounded-2xl p-6 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                <div className="flex justify-between mb-3">
-                  <span className="text-sm font-medium">Sponsored TXs</span>
-                  <span className="text-sm text-white/40">{remainingCredits.toLocaleString()} remaining</span>
-                </div>
-                <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(pct, 100)}%` }} transition={{ duration: 1, delay: 0.3 }}
-                    className="h-full rounded-full" style={{ background: pct > 80 ? "#E84142" : "#F5C518" }} />
-                </div>
-                <div className="flex justify-between mt-2 text-xs text-white/25">
-                  <span>{thisMonthCount.toLocaleString()} used</span>
-                  <span>{remainingCredits.toLocaleString()} left</span>
-                </div>
-              </div>
-
-              {/* API Key card.
-                  - Trial view: only renders when we actually have a trial
-                    key — no point teasing a key the user doesn't yet have.
-                  - Multichain view: ALWAYS renders. When the user has a
-                    paid plan we show the live key + rotate controls; when
-                    they don't, we keep the card shell so the surface still
-                    feels complete, but show a "Locked" badge + a hint
-                    pointing them at the paid product. Trial keys are
-                    intentionally NOT bridged into the multichain card —
-                    paid scope gets its own key (see /api/subscription/
-                    create). */}
-              {(trialViewActive ? !!trialApiKey : true) && (
-              <div className="rounded-2xl p-5 border" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium">
-                    {trialViewActive ? "Trial API Key" : "Multichain API Key"}
-                  </span>
-                  {showPaidScope || trialViewActive ? (
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full border ${
-                      isExpired
-                        ? "text-red-400 bg-red-400/8 border-red-400/20"
-                        : "text-green-400 bg-green-400/8 border-green-400/20"
-                    }`}>
-                      {isExpired ? "Expired" : "Active"}
-                    </span>
-                  ) : (
-                    <span className="text-xs px-2.5 py-0.5 rounded-full border text-white/40 bg-white/[0.04] border-white/10">
-                      Locked
-                    </span>
-                  )}
-                </div>
-                {showPaidScope || trialViewActive ? (
-                  <>
-                    <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
-                      <span className="font-mono text-xs text-white/40 truncate flex-1">{API_KEY === "—" ? "Loading…" : API_KEY}</span>
-                      {API_KEY !== "—" && (
-                        <button onClick={copyKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${keyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
-                          {keyCopied ? "Copied!" : `Copy ${trialViewActive ? "Trial" : "Multichain"} Key`}
-                        </button>
-                      )}
-                    </div>
-                    {subscription?.paidAt && expiresAt && (
-                      <p className="text-white/20 text-xs mt-2">
-                        Paid {new Date(subscription.paidAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        {" · expires "}{expiresAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </p>
-                    )}
-                    {!rotateConfirm ? (
-                      <button onClick={() => setRotateConfirm(true)} className="mt-3 text-xs text-white/25 hover:text-red-400 transition-colors">
-                        Rotate Key…
-                      </button>
-                    ) : (
-                      <div className="mt-3 flex items-center gap-2 bg-red-400/8 border border-red-400/20 rounded-xl px-3 py-2.5">
-                        <span className="text-xs text-red-400 flex-1">Current key will stop working immediately.</span>
-                        <button onClick={() => setRotateConfirm(false)} className="text-xs text-white/30 hover:text-white px-2">Cancel</button>
-                        <button onClick={rotateKey} disabled={rotatingKey} className="text-xs font-bold text-red-400 hover:text-red-300 px-2 disabled:opacity-50">
-                          {rotatingKey ? "Rotating…" : "Confirm"}
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
-                      <span className="font-mono text-xs text-white/25 truncate flex-1 select-none">
-                        ••••••••••••••••••••••••••••
-                      </span>
-                      <span className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg text-white/35">🔒</span>
-                    </div>
-                    <p className="text-white/55 text-xs mt-2 leading-relaxed">
-                      Paid plan unlocks 10-chain relay (BNB · ETH · Avalanche · X Layer · Stable · Mantle · Injective · Monad · Scroll · Arbitrum).
-                    </p>
-                    <Link href="/#pricing" className="mt-3 inline-flex items-center gap-1.5 text-xs text-yellow hover:text-yellow/80 transition-colors font-semibold">
-                      View pricing
-                      <span aria-hidden>→</span>
-                    </Link>
-                  </>
-                )}
-              </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── GAS TANK ── */}
-        {tab === "gas-tank" && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-            <div className="rounded-2xl p-6 border relative overflow-hidden"
-              style={{ background: "linear-gradient(135deg, #0F1929 0%, #131E30 100%)", borderColor: "rgba(245,197,24,0.15)" }}>
-              <div className="absolute right-6 top-6 w-32 h-32 rounded-full blur-3xl" style={{ background: "rgba(245,197,24,0.06)" }} />
-              <div className="text-white/55 text-sm mb-1">My Gas Tank (USD est.)</div>
-              <div className="text-4xl font-bold text-yellow mb-1">
-                {tankLoading ? <span className="text-2xl text-white/20 animate-pulse">Loading…</span> : `$${totalUserUSD.toFixed(2)}`}
-              </div>
-              <div className="text-white/45 text-xs">Sponsors gas on relayed payments.</div>
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-              {Object.entries(CHAIN_META).map(([key, meta]) => {
-                const userAmt = userGasBalance[key] ?? 0;
-                const price = tokenPrices[key] ?? 0;
-                const userUSD = userAmt * price;
-                const hasBalance = userAmt > 0;
-                return (
-                  <div key={key} className="rounded-2xl p-5 border flex flex-col gap-0 relative overflow-hidden"
-                    style={{ background: "linear-gradient(145deg, #0F1929 0%, #0B1220 100%)", borderColor: hasBalance ? "rgba(245,197,24,0.2)" : "rgba(255,255,255,0.07)" }}>
-                    {/* chain color accent top bar */}
-                    <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl" style={{ background: meta.color, opacity: 0.5 }} />
-
-                    {/* header */}
-                    <div className="flex items-center gap-2.5 mb-4">
-                      <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ring-1 ring-white/10">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={meta.img} alt={meta.name} className="w-full h-full object-cover" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold leading-tight truncate">{meta.name}</div>
-                        <div className="text-white/35 text-[11px]">{meta.token}</div>
-                      </div>
-                    </div>
-
-                    {/* balance */}
-                    <div className="text-2xl font-bold tracking-tight leading-none">
-                      {userAmt.toFixed(4)}
-                      <span className="text-sm font-normal text-white/35 ml-1">{meta.token}</span>
-                    </div>
-                    <div className="text-white/30 text-xs mt-1 mb-3">
-                      {userUSD >= 0.01 ? `$${userUSD.toFixed(2)}` : "$0.00"}
-                    </div>
-
-                    {/* wallet balance indicator */}
-                    {(walletBalances[key] ?? 0) > 0 && (
-                      <div className="flex items-center gap-1.5 text-[10px] text-white/30 mb-3">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-400/50 flex-shrink-0" />
-                        <span>Wallet: {(walletBalances[key] ?? 0).toFixed(4)} {meta.token}</span>
-                      </div>
-                    )}
-
-                    {/* button */}
-                    <button onClick={() => setDepositChain({ chain: meta.name, token: meta.token })}
-                      className="mt-auto w-full text-xs font-bold py-2 rounded-xl transition-all"
-                      style={hasBalance
-                        ? { background: "rgba(245,197,24,0.12)", color: "#F5C518", border: "1px solid rgba(245,197,24,0.25)" }
-                        : { background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }
-                      }>
-                      {hasBalance ? `Manage ${meta.token}` : `+ Deposit`}
-                    </button>
-                  </div>
-                );
-              })}
-
-              {/* LINK Gas Tank — Chainlink CCIP bridge fees. Sits in the
-                  same grid as native gas so the visual hierarchy is one
-                  consistent grid (not two stacked sections). Aggregates
-                  balance across eth/avax/arbitrum into a single tile; the
-                  Deposit modal lets the user pick a chain + see per-chain
-                  balance + deposit address. */}
-              {(() => {
-                const totalLink =
-                  (linkBalances.eth ?? 0) +
-                  (linkBalances.avax ?? 0) +
-                  (linkBalances.arbitrum ?? 0);
-                const hasLink = totalLink > 0;
-                const linkUsd = totalLink * 12; // rough $12/LINK, matches BridgeModal
-                return (
-                  <div
-                    key="link-bridge"
-                    className="rounded-2xl p-5 border flex flex-col gap-0 relative overflow-hidden"
-                    style={{
-                      background: "linear-gradient(145deg, #0F1929 0%, #0B1220 100%)",
-                      borderColor: hasLink ? "rgba(245,197,24,0.2)" : "rgba(255,255,255,0.07)",
-                    }}
-                  >
-                    <div
-                      className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl"
-                      style={{ background: "#375BD2", opacity: 0.55 }}
-                    />
-                    <div className="flex items-center gap-2.5 mb-4">
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 ring-1 ring-white/10 overflow-hidden">
-                        <ChainlinkLogo size={32} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold leading-tight truncate">LINK</div>
-                        <div className="text-white/35 text-[11px]">CCIP bridge fees</div>
-                      </div>
-                    </div>
-                    <div className="text-2xl font-bold tracking-tight leading-none">
-                      {totalLink.toFixed(4)}
-                      <span className="text-sm font-normal text-white/35 ml-1">LINK</span>
-                    </div>
-                    <div className="text-white/30 text-xs mt-1 mb-3">
-                      {linkUsd >= 0.01 ? `$${linkUsd.toFixed(2)}` : "$0.00"}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-[10px] text-white/30 mb-3">
-                      <span className="w-1.5 h-1.5 rounded-full bg-yellow/60 flex-shrink-0" />
-                      <span>
-                        {linkDeposits.length > 0
-                          ? `Last: ${linkDeposits[linkDeposits.length - 1].amount.toFixed(2)} on ${linkDeposits[linkDeposits.length - 1].chain}`
-                          : "eth · avax · arbitrum"}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setLinkDepositChain("eth")}
-                      className="mt-auto w-full text-xs font-bold py-2 rounded-xl transition-all"
-                      style={hasLink
-                        ? { background: "rgba(245,197,24,0.12)", color: "#F5C518", border: "1px solid rgba(245,197,24,0.25)" }
-                        : { background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }
-                      }
-                    >
-                      {hasLink ? "Manage LINK" : "+ Deposit"}
-                    </button>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Real deposit history */}
-            <div className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-              <div className="px-6 py-4 border-b" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-                <span className="font-semibold">Tank Activity</span>
-              </div>
-              {gasDeposits.length === 0 ? (
-                <div className="px-6 py-10 text-center text-white/25 text-sm">No activity yet</div>
-              ) : [...gasDeposits].reverse().map((d, i) => {
-                const isWithdrawal = d.amount < 0;
-                return (
-                  <div key={i} className="flex items-center justify-between px-6 py-4 border-b last:border-0 hover:bg-white/2 transition-colors" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-                    <div>
-                      <div className="text-sm font-medium">{isWithdrawal ? "Withdrawal" : "Deposit"}</div>
-                      <div className="text-white/30 text-xs mt-0.5">{CHAIN_META[d.chain]?.name ?? d.chain} · {new Date(d.depositedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
-                      <div className="font-mono text-[10px] text-white/20 mt-0.5">{shortHash(d.txHash)}</div>
-                    </div>
-                    <span className={`font-mono text-sm font-semibold ${isWithdrawal ? "text-red-400" : "text-green-400"}`}>
-                      {isWithdrawal ? "-" : "+"}{Math.abs(d.amount).toFixed(4)} {d.token}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── DEVELOPER ── */}
-        {tab === "developer" && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-
-            {/* Sandbox Key + Webhook row */}
-            <div className="grid md:grid-cols-2 gap-4">
-              {/* Sandbox Key */}
-              <div className="rounded-2xl border p-5 space-y-3" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-sm font-semibold">Sandbox Key</span>
-                    <span className="ml-2 text-[10px] bg-yellow/10 text-yellow border border-yellow/20 px-2 py-0.5 rounded-full font-semibold">TEST</span>
-                  </div>
-                </div>
-                <p className="text-white/55 text-xs">Prefix <span className="font-mono text-yellow/85">q402_test_</span>. No real TX — safe for dev / CI.</p>
-                {sandboxApiKey ? (
-                  <div className="flex items-center gap-2 bg-navy border border-white/7 rounded-xl px-3 py-2.5">
-                    <span className="font-mono text-xs text-white/40 truncate flex-1">{sandboxApiKey.slice(0,14)}{"•".repeat(14)}{sandboxApiKey.slice(-4)}</span>
-                    <button onClick={copySandboxKey} className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${sandboxKeyCopied ? "bg-green-400/15 text-green-400" : "bg-yellow/10 text-yellow hover:bg-yellow/20"}`}>
-                      {sandboxKeyCopied ? "Copied!" : "Copy"}
-                    </button>
-                  </div>
-                ) : <div className="font-mono text-xs text-white/20 animate-pulse">Loading…</div>}
-              </div>
-
-              {/* Webhook */}
-              <div className="rounded-2xl border p-5 space-y-3" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">Webhook</span>
-                  {webhookUrl && <span className="text-[10px] bg-green-400/10 text-green-400 border border-green-400/20 px-2 py-0.5 rounded-full">Active</span>}
-                </div>
-                <p className="text-white/55 text-xs">Signed POST after every relay. Header <span className="font-mono text-white/75">X-Q402-Signature</span>.</p>
-                <div className="flex gap-2">
-                  <input value={webhookUrlInput || webhookUrl} onChange={e => setWebhookUrlInput(e.target.value)}
-                    placeholder="https://your-server.com/webhook"
-                    className="flex-1 bg-white/5 border border-white/8 rounded-xl px-3 py-2 text-xs text-white placeholder-white/20 outline-none focus:border-yellow/30" />
-                  <button onClick={saveWebhook} disabled={webhookSaving || !webhookUrlInput}
-                    className="text-xs font-bold px-4 py-2 rounded-xl bg-yellow/10 text-yellow border border-yellow/20 hover:bg-yellow/20 transition-all disabled:opacity-40">
-                    {webhookSaving ? "…" : "Save"}
-                  </button>
-                </div>
-                {webhookSecret && (
-                  <div className="bg-yellow/5 border border-yellow/20 rounded-xl px-3 py-2.5 space-y-1">
-                    <p className="text-[10px] text-yellow/70 font-semibold uppercase tracking-widest">Signing Secret — save this now</p>
-                    <div className="font-mono text-xs text-white/60 break-all">{webhookSecret}</div>
-                    <button onClick={() => { navigator.clipboard.writeText(webhookSecret); }} className="text-[10px] text-white/30 hover:text-yellow transition-colors">Copy secret</button>
-                  </div>
-                )}
-                {webhookUrl && (
-                  <div className="flex items-center gap-2">
-                    <button onClick={testWebhook} disabled={webhookTesting}
-                      className="text-xs text-white/40 hover:text-white border border-white/10 hover:border-white/25 px-3 py-1.5 rounded-lg transition-all disabled:opacity-40">
-                      {webhookTesting ? "Sending…" : "▶ Test"}
-                    </button>
-                    {webhookTestResult && (
-                      <span className={`text-xs ${webhookTestResult.ok ? "text-green-400" : "text-red-400"}`}>
-                        {webhookTestResult.ok ? "✓" : "✗"} {webhookTestResult.msg}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="grid lg:grid-cols-2 gap-5">
-              <div className="space-y-4">
-                <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest">Integration Guide</h3>
-                {STEPS.map(s => (
-                  <div key={s.n} className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                    <div className="flex items-center gap-3 px-5 py-4">
-                      <span className="w-7 h-7 rounded-lg bg-yellow/10 border border-yellow/20 text-yellow text-xs font-bold flex items-center justify-center flex-shrink-0">{s.n}</span>
-                      <span className="text-sm font-medium">{s.title}</span>
-                    </div>
-                    <div className="mx-4 mb-4 bg-[#060C14] border border-white/7 rounded-xl p-4">
-                      <pre className="font-mono text-xs text-green-400 leading-5 whitespace-pre-wrap overflow-x-auto">{s.code}</pre>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div>
-                <h3 className="font-semibold text-white/70 text-sm uppercase tracking-widest mb-4">API Playground</h3>
-                <div className="rounded-2xl border p-6" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-                  <p className="text-white/60 text-sm mb-5">Simulate a TX with your API key.</p>
-                  <Playground apiKey={API_KEY} trialView={viewMode === "trial"} />
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── TRANSACTIONS ── */}
-        {tab === "transactions" && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="rounded-2xl border overflow-hidden" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-              <div className="px-6 py-4 border-b flex items-center justify-between gap-3 flex-wrap" style={{ borderColor: "rgba(255,255,255,0.07)" }}>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold">Relayed Transaction History</span>
-                  {/* Scope chip — makes the trial/paid split visible so the user
-                      doesn't think "where did my multichain TXs go" after
-                      flipping to Trial view. Filters are keyed on the API
-                      key used at relay time. */}
-                  <span className={`text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full border ${
-                    trialViewActive
-                      ? "text-yellow bg-yellow/8 border-yellow/20"
-                      : "text-white/55 bg-white/[0.04] border-white/10"
-                  }`}>
-                    {trialViewActive ? "Trial scope" : "Multichain scope"}
-                  </span>
-                  {/* Source-filter pill group. Backed by RelayedTx.source. */}
-                  <div className="inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-white/[0.02] p-0.5 ml-1">
-                    {([
-                      { key: "all" as const,       label: "All" },
-                      { key: "recurring" as const, label: "Recurring only" },
-                      { key: "manual" as const,    label: "Manual only" },
-                    ]).map(({ key, label }) => {
-                      const active = txSourceFilter === key;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => {
-                            setTxSourceFilter(key);
-                            if (typeof window !== "undefined") {
-                              const params = new URLSearchParams(window.location.search);
-                              if (key === "all") params.delete("source");
-                              else params.set("source", key);
-                              const next = params.toString();
-                              window.history.replaceState(null, "", next ? `?${next}` : window.location.pathname);
-                            }
-                          }}
-                          className={`text-[10.5px] font-medium px-2 py-1 rounded transition-colors ${
-                            active
-                              ? "bg-emerald-400/15 text-emerald-200"
-                              : "text-white/55 hover:text-white"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <span className="text-white/45 text-xs">
-                  {scopedTxs.length} in view · {remainingCredits.toLocaleString()} TXs left
-                </span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px]">
-                  <thead>
-                    <tr className="border-b" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-                      {["Date", "Chain", "From → To", "Amount", "Tx Hash", "Receipt", "Status"].map(h => (
-                        <th key={h} className="text-left text-xs text-white/25 font-normal px-5 py-3">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scopedTxs.length === 0 ? (
-                      <tr><td colSpan={7} className="px-6 py-12 text-center text-white/45 text-sm">
-                        {relayedTxs.length === 0
-                          ? "No transactions yet"
-                          : txSourceFilter === "recurring"
-                            ? "No recurring fires in view yet. New scheduled payouts will appear here once the cron fires them."
-                            : txSourceFilter === "manual"
-                              ? "No manual (send / batch / API) transactions in this scope yet."
-                              : trialViewActive
-                                ? "No trial transactions yet — Multichain history lives in the Multichain view."
-                                : "No multichain transactions yet — Trial history lives in the Free Trial view."}
-                      </td></tr>
-                    ) : [...scopedTxs].reverse().map((tx, i) => {
-                      const meta = CHAIN_META[tx.chain];
-                      return (
-                        <motion.tr key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                          className="border-b last:border-0 hover:bg-white/2 transition-colors" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-                          <td className="px-5 py-4 text-xs text-white/50 whitespace-nowrap">
-                            {new Date(tx.relayedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className="flex items-center gap-1.5 text-xs text-white/60">
-                              {meta && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: meta.color }} />}
-                              {meta?.name ?? tx.chain}
-                              {tx.source === "recurring" && (
-                                <span
-                                  className="ml-1 inline-flex items-center gap-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-emerald-400/15 text-emerald-200 border border-emerald-400/25"
-                                  title={tx.ruleId ? `Recurring rule ${tx.ruleId.slice(0, 8)}…` : "Recurring fire"}
-                                >
-                                  ⟲ recurring
-                                </span>
-                              )}
-                              {tx.source === "batch" && (
-                                <span className="ml-1 text-[9px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-white/[0.06] text-white/65 border border-white/15">
-                                  batch
-                                </span>
-                              )}
-                            </span>
-                          </td>
-                          <td className="px-5 py-4 font-mono text-xs text-white/35">{shortAddr(tx.fromUser)} → {shortAddr(tx.toUser)}</td>
-                          <td className="px-5 py-4 text-xs font-semibold text-white/70">
-                            {Number(tx.tokenAmount).toFixed(2)} <span className="text-white/30">{tx.tokenSymbol}</span>
-                          </td>
-                          <td className="px-5 py-4 font-mono text-xs text-white/30">{shortHash(tx.relayTxHash)}</td>
-                          <td className="px-5 py-4 text-xs">
-                            {tx.receiptId ? (
-                              <a href={`/receipt/${tx.receiptId}`} target="_blank" rel="noopener noreferrer"
-                                 className="text-yellow/80 hover:text-yellow transition">
-                                View ↗
-                              </a>
-                            ) : (
-                              <span className="text-white/20">—</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-4">
-                            <span className="text-xs text-green-400 bg-green-400/8 border border-green-400/20 px-2.5 py-1 rounded-full">Success</span>
-                          </td>
-                        </motion.tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── MCP CLIENT INTEGRATION ── */}
-        {tab === "claude" && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-            <div className="space-y-1 mb-2">
-              <h2 className="text-lg font-semibold">Use Q402 from your AI client</h2>
-              <p className="text-white/60 text-sm">
-                Paste the snippet below into Claude / Codex / Cursor / Cline. The sandbox key is pre-filled — safe to commit.
-                For real payments, install then say <strong className="text-white/85">&ldquo;Set up Q402&rdquo;</strong> to your AI.
-              </p>
-            </div>
-            <ClaudeMcpCard sandboxApiKey={sandboxApiKey || "q402_test_••••"} />
-            <div className="rounded-2xl border p-5" style={{ background: "#0F1929", borderColor: "rgba(255,255,255,0.07)" }}>
-              <div className="text-[10px] uppercase tracking-widest text-white/55 mb-3 font-semibold">
-                20 tools · sandbox by default
-              </div>
-              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-white/70 text-[12.5px] leading-relaxed">
-                <div><code className="text-yellow text-xs">q402_doctor</code> — install + health check</div>
-                <div><code className="text-yellow text-xs">q402_quote</code> — compare gas across chains</div>
-                <div><code className="text-yellow text-xs">q402_balance</code> — verify key + quota</div>
-                <div><code className="text-yellow text-xs">q402_pay</code> — single send</div>
-                <div><code className="text-yellow text-xs">q402_batch_pay</code> — up to 20 recipients</div>
-                <div><code className="text-yellow text-xs">q402_receipt</code> — fetch Trust Receipt</div>
-                <div><code className="text-yellow text-xs">q402_wallet_status</code> — EIP-7702 delegation</div>
-                <div><code className="text-yellow text-xs">q402_agentic_info</code> — Agent Wallet info</div>
-                <div><code className="text-yellow text-xs">q402_clear_delegation</code> — reset delegation</div>
-                <div><code className="text-yellow text-xs">q402_recurring_list</code> — list rules</div>
-                <div><code className="text-yellow text-xs">q402_recurring_create</code> — author a rule</div>
-                <div><code className="text-yellow text-xs">q402_recurring_fires</code> — fire history</div>
-                <div><code className="text-yellow text-xs">q402_recurring_pause</code> — pause a rule</div>
-                <div><code className="text-yellow text-xs">q402_recurring_resume</code> — resume a rule</div>
-                <div><code className="text-yellow text-xs">q402_recurring_skip_next</code> — skip next fire</div>
-                <div><code className="text-yellow text-xs">q402_recurring_cancel</code> — stop a rule</div>
-                <div><code className="text-yellow text-xs">q402_bridge_quote</code> — CCIP fee quote</div>
-                <div><code className="text-yellow text-xs">q402_bridge_send</code> — CCIP bridge (sandbox)</div>
-                <div><code className="text-yellow text-xs">q402_bridge_history</code> — recent bridges</div>
-                <div><code className="text-yellow text-xs">q402_bridge_gas_tank</code> — LINK + native bucket</div>
-              </div>
-              <div className="text-[11px] text-white/30 mt-4 pt-3 border-t border-white/8">
-                Full reference in{" "}
-                <a className="text-yellow hover:underline" href="/docs#claude-mcp">/docs → MCP for AI Clients</a>
-                {" "}· npm:{" "}
-                <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
-                {" "}· source:{" "}
-                <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* ── AGENTIC WALLET ── */}
-        {tab === "agent" && address && (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-            <AgenticWalletTab address={address} signMessage={signMessage} />
-          </motion.div>
-        )}
-      </div>
+    <DashboardIdentityProvider value={identityValue}>
+      {/* The v2 dashboard shell. It owns its own scope chip + view router and
+          reads identity/subscription/lifecycle from the context above. */}
+      <DashboardV2 />
 
       {showAutoTrial && (
         <TrialActivationModal
@@ -2527,10 +914,10 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Email Alert config modal — opened from the sidebar's Account
-          section. Wraps the existing /api/usage-alert flow (POST to set,
-          DELETE to remove). Only callable when a wallet is connected since
-          the endpoint requires nonce+signature auth from a real EOA. */}
+      {/* Email Alert config modal — opened from the identity context's
+          openUsageAlerts() handle. Wraps the existing /api/usage-alert flow
+          (POST to set, DELETE to remove). Only callable when a wallet is
+          connected since the endpoint requires nonce+signature auth. */}
       {showAlertModal && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center px-4"
@@ -2603,7 +990,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-      </div>
-    </div>
+    </DashboardIdentityProvider>
   );
 }

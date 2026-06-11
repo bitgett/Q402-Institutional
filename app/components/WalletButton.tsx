@@ -9,9 +9,13 @@
  * Four UI states depending on which of {wallet, email} is active:
  *
  *   (none)          → "Connect" CTA → WalletModal
- *   (wallet only)   → MY Page + addr chip (no nudge to add email)
- *   (email only)    → MY Page + email chip + "+ Wallet" → WalletModal
- *   (both)          → MY Page + email chip + addr chip + sign-out
+ *   (wallet only)   → Agent Wallet + addr chip (no nudge to add email)
+ *   (email only)    → Agent Wallet + email chip + "+ Wallet" → WalletModal
+ *   (both)          → Agent Wallet + email chip + addr chip + sign-out
+ *
+ * The leading "Agent Wallet" chip links to /dashboard. When the user is
+ * ALREADY on /dashboard (usePathname), it would be a redundant self-link, so
+ * we render a non-navigating identity chip (short address) in its place.
  *
  * The "+ Email" / "+ Wallet" pills let an existing user attach the second
  * method without leaving the page — important now that the dashboard's
@@ -21,6 +25,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useWallet } from "../context/WalletContext";
 import WalletModal from "./WalletModal";
 import ConnectModal from "./ConnectModal";
@@ -36,6 +41,10 @@ interface EmailSession {
 
 export default function WalletButton() {
   const { address, isConnected, disconnect } = useWallet();
+  const pathname = usePathname();
+  // On the dashboard itself, the "Agent Wallet" chip would be a redundant
+  // self-link, so we render a non-navigating identity chip there instead.
+  const onDashboard = pathname?.startsWith("/dashboard") ?? false;
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [session, setSession] = useState<EmailSession | null>(null);
@@ -90,15 +99,25 @@ export default function WalletButton() {
     );
   }
 
-  // ── Shared chips: MY Page, email, address ─────────────────────────────────
-  const myPage = (
+  // ── Shared chips: Agent Wallet (or on-dashboard identity), email, address ──
+  // Off the dashboard: a navigating "Agent Wallet" chip → /dashboard.
+  // On the dashboard: a non-navigating identity chip (short address) so the
+  // user isn't offered a redundant link to the page they're already on.
+  const myPage = onDashboard ? (
+    <div
+      className="animate-mypage flex items-center gap-1.5 border text-yellow text-xs font-bold px-3.5 py-2 rounded-full"
+      style={{ borderColor: "rgba(245,197,24,0.6)", background: "rgba(245,197,24,0.08)" }}
+      aria-label="Agent Wallet"
+    >
+      {address ? shortAddr(address) : "Agent Wallet"}
+    </div>
+  ) : (
     <Link
       href="/dashboard"
       className="animate-mypage flex items-center gap-1.5 border text-yellow text-xs font-bold px-3.5 py-2 rounded-full"
       style={{ borderColor: "rgba(245,197,24,0.6)", background: "rgba(245,197,24,0.08)" }}
     >
-      <span>✦</span>
-      MY Page
+      Agent Wallet
     </Link>
   );
 
@@ -132,7 +151,9 @@ export default function WalletButton() {
       <div className="flex items-center gap-2">
         {myPage}
         {hasEmail && emailChip}
-        {hasWallet && walletChip}
+        {/* On the dashboard the leading chip already shows the short address,
+            so the separate wallet chip would duplicate it — suppress it there. */}
+        {hasWallet && !onDashboard && walletChip}
 
         {/* "+ Wallet" pill — only shown to email-only users. Wallet-only
             users see no "+ Email" prompt; email pairing is optional and

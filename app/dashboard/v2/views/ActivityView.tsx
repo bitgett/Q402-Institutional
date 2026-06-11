@@ -40,7 +40,8 @@
  *   key) — same data shape, different key scope. Not a layout change.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -115,6 +116,20 @@ const RAIL: { id: RailTab; label: string; hint: string }[] = [
   { id: "receipts", label: "Trust Receipts", hint: "Verifiable receipts" },
 ];
 
+/**
+ * URL persistence — the rail filter lives in `?source=` so a reload keeps the
+ * active tab and the link is shareable. Mirrors the legacy Transactions tab's
+ * `?source=` behaviour (page.tsx pre-v2), widened to the five v2 rail tabs.
+ * "all" is the implicit default and is omitted from the URL (clean links).
+ */
+const RAIL_IDS = new Set<string>(RAIL.map((r) => r.id));
+function parseSource(raw: string | null): RailTab {
+  return raw && RAIL_IDS.has(raw) ? (raw as RailTab) : "all";
+}
+function parseScopeParam(raw: string | null): Scope | null {
+  return raw === "trial" || raw === "multichain" ? raw : null;
+}
+
 // ── Chain meta — colour + display name (matches v1 CHAIN_META) ───────────────
 const CHAIN_META: Record<string, { name: string; color: string }> = {
   bnb: { name: "BNB Chain", color: "#F0B90B" },
@@ -155,6 +170,10 @@ function fmtDate(iso: string | number): string {
 
 function shortHash(h: string): string {
   return h ? `${h.slice(0, 8)}…${h.slice(-6)}` : "—";
+}
+
+function fmtNum(n: number): string {
+  return n.toLocaleString("en-US");
 }
 
 // ── DEMO data ────────────────────────────────────────────────────────────────
@@ -313,14 +332,42 @@ const DEMO_BRIDGES: BridgeRecord[] = [
 ];
 
 // ── view ─────────────────────────────────────────────────────────────────────
-export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewProps) {
-  const [tab, setTab] = useState<RailTab>("all");
+/**
+ * Public entry. `ActivityViewInner` reads `useSearchParams` (for the `?source=`
+ * rail-filter persistence), which Next 16 requires to sit under a Suspense
+ * boundary. We provide that boundary here so the requirement is fully contained
+ * in this file (the /dashboard route itself adds none). The fallback never
+ * actually paints — searchParams resolve synchronously on the client — but the
+ * boundary keeps `next build` from flagging a missing-Suspense prerender error.
+ */
+export function ActivityView(props: ActivityViewProps) {
+  return (
+    <Suspense fallback={null}>
+      <ActivityViewInner {...props} />
+    </Suspense>
+  );
+}
+
+function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Seed the rail filter from `?source=` so deeplinks + reloads land on the
+  // right tab. Read once on mount (initializer); subsequent URL writes go
+  // through `selectTab` below.
+  const [tab, setTab] = useState<RailTab>(() => parseSource(searchParams.get("source")));
   const [txs, setTxs] = useState<RelayedTx[]>([]);
   const [bridges, setBridges] = useState<BridgeRecord[]>([]);
   const [wallets, setWallets] = useState<WalletRow[]>([]);
   // Scope key sets — built from the provision response (trial vs paid).
   const [trialKeys, setTrialKeys] = useState<Set<string>>(new Set());
   const [paidKeys, setPaidKeys] = useState<Set<string>>(new Set());
+  // Scoped sponsored-TX credit counts from the provision response — the same
+  // source of truth the legacy Overview's "Sponsored TXs Left" card used
+  // (provision returns `trialCredits` / `paidCredits`). null until loaded so
+  // the stat is shown ONLY when a real count is available (never fabricated).
+  const [trialCredits, setTrialCredits] = useState<number | null>(null);
+  const [paidCredits, setPaidCredits] = useState<number | null>(null);
   const [walletFilter, setWalletFilter] = useState<string>("all"); // walletId | "all"
   const [chainFilter, setChainFilter] = useState<string>("all"); // chain | "all"
   const [loading, setLoading] = useState(false);
@@ -362,6 +409,12 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
       setPaidKeys(
         new Set([hasPaid ? multichainKey : null, hasPaid ? multichainSandbox : null].filter(str)),
       );
+
+      // Scoped sponsored-TX credits — provision is the source of truth (same
+      // fields the legacy Overview read). Only set when numeric so the stat
+      // card stays hidden rather than rendering a fabricated 0.
+      if (typeof d.trialCredits === "number") setTrialCredits(d.trialCredits);
+      if (typeof d.paidCredits === "number") setPaidCredits(d.paidCredits);
     } catch {
       /* non-fatal — table simply shows nothing in scope */
     }
@@ -438,6 +491,8 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
       setWallets([]);
       setTrialKeys(new Set());
       setPaidKeys(new Set());
+      setTrialCredits(null);
+      setPaidCredits(null);
       return;
     }
     let cancelled = false;
@@ -456,6 +511,48 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
       cancelled = true;
     };
   }, [ownerAddress, loadProvision, loadTxs, loadBridges, loadWallets]);
+
+  // ── URL persistence (?source=…&scope=…) ──────────────────────────────────
+  // Write the active rail filter to `?source=` (omitted when "all" for clean
+  // links) and the active scope to `?scope=`, replacing — not pushing — so the
+  // back button isn't polluted and the link is shareable + survives reload.
+  // Scope is owned by the shell (prop), so this view only REFLECTS it into the
+  // URL; it never drives the shell from the query.
+  const writeUrl = useCallback(
+    (nextTab: RailTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextTab === "all") params.delete("source");
+      else params.set("source", nextTab);
+      params.set("scope", scope);
+      const qs = params.toString();
+      router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
+    },
+    [router, searchParams, scope],
+  );
+
+  // Tab selector — updates state + URL together so the rail click and the
+  // address bar never drift.
+  const selectTab = useCallback(
+    (next: RailTab) => {
+      setTab(next);
+      writeUrl(next);
+    },
+    [writeUrl],
+  );
+
+  // Keep `?scope=` in sync when the shell flips scope while this view is open
+  // (the rail tab is preserved). Runs on scope changes only.
+  useEffect(() => {
+    const current = parseScopeParam(searchParams.get("scope"));
+    if (current === scope) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("scope", scope);
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : window.location.pathname, { scroll: false });
+    // searchParams intentionally omitted: this effect reacts to scope flips,
+    // not to its own URL writes (which would loop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, router]);
 
   // ── Demo fallback ─────────────────────────────────────────────────────────
   // When no wallet is connected, OR a connected owner hasn't surfaced any real
@@ -489,6 +586,32 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
     for (const tx of scopedTxs) if (tx.chain) s.add(tx.chain);
     return [...s];
   }, [scopedTxs]);
+
+  // ── 14-day daily-transactions chart (ported from legacy Overview) ─────────
+  // Bucket the scope-filtered settlements by local calendar day across the
+  // last 14 days. Same derivation the legacy Overview used (page.tsx) — built
+  // from `scopedTxs` so trial vs multichain scope show independent activity.
+  const { dailyData, dailyLabels } = useMemo(() => {
+    const data: number[] = [];
+    const labels: string[] = [];
+    const today = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = d.toDateString();
+      labels.push(d.toLocaleDateString("en-US", { month: "short", day: "numeric" }));
+      data.push(scopedTxs.filter((tx) => new Date(tx.relayedAt).toDateString() === key).length);
+    }
+    return { dailyData: data, dailyLabels: labels };
+  }, [scopedTxs]);
+
+  // Headline stats. Total Relayed + Today's Txs derive from the loaded
+  // settlements (always available). Sponsored-TXs-left comes from the
+  // provision response and is shown ONLY when a real count is known for the
+  // active scope (never in demo mode, never fabricated).
+  const totalRelayed = scopedTxs.length;
+  const todaysTxs = dailyData[13] ?? 0;
+  const sponsoredLeft = demoMode ? null : scope === "trial" ? trialCredits : paidCredits;
 
   // Rail-tab settlement subset.
   const railTxs = useMemo(() => {
@@ -551,7 +674,7 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
                 <button
                   key={r.id}
                   type="button"
-                  onClick={() => setTab(r.id)}
+                  onClick={() => selectTab(r.id)}
                   style={{
                     textAlign: "left",
                     border: active ? `1px solid ${v2.line}` : "1px solid transparent",
@@ -596,8 +719,19 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
           </div>
         </Surface>
 
-        {/* ── Col 2 · view-main ────────────────────────────────────── */}
-        <Surface style={{ padding: 21 }}>
+        {/* ── Col 2 · stats strip + view-main ──────────────────────── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+          <ActivityStatsStrip
+            totalRelayed={totalRelayed}
+            todaysTxs={todaysTxs}
+            sponsoredLeft={sponsoredLeft}
+            scope={scope}
+            demoMode={demoMode}
+            dailyData={dailyData}
+            dailyLabels={dailyLabels}
+          />
+
+          <Surface style={{ padding: 21 }}>
           <div
             style={{
               display: "flex",
@@ -699,9 +833,206 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
               <SettlementTable txs={visibleTxs} emptyFor={tab} />
             )}
           </div>
-        </Surface>
+          </Surface>
+        </div>
       </div>
     </V2AccentScope>
+  );
+}
+
+// ── Activity stats strip + 14-day chart (ported from legacy Overview) ─────────
+/**
+ * Headline stats + a 14-day daily-transactions bar chart, ported from the
+ * legacy Overview (page.tsx — "Total Relayed" / "Today's Txs" / "Sponsored
+ * TXs Left" cards + the `<BarChart/>`). v2 re-skin: glass mini-cards, yellow
+ * bars, Space Grotesk numerals, muted axis/labels. No emoji, no green —
+ * "today" reads as a brighter yellow bar instead of the legacy green accent.
+ *
+ * `sponsoredLeft` is null whenever the count isn't known for the active scope
+ * (demo mode, or provision hasn't returned a numeric credit count) — that card
+ * is then omitted rather than showing a fabricated value.
+ */
+function ActivityStatsStrip({
+  totalRelayed,
+  todaysTxs,
+  sponsoredLeft,
+  scope,
+  demoMode,
+  dailyData,
+  dailyLabels,
+}: {
+  totalRelayed: number;
+  todaysTxs: number;
+  sponsoredLeft: number | null;
+  scope: Scope;
+  demoMode: boolean;
+  dailyData: number[];
+  dailyLabels: string[];
+}) {
+  const scopeSub = scope === "trial" ? "trial · all time" : "multichain · all time";
+  const stats: { label: string; value: string; sub: string }[] = [
+    { label: "Total Relayed", value: fmtNum(totalRelayed), sub: demoMode ? "preview" : scopeSub },
+    { label: "Today's Txs", value: fmtNum(todaysTxs), sub: "today" },
+  ];
+  if (sponsoredLeft !== null) {
+    stats.push({
+      label: "Sponsored TXs Left",
+      value: fmtNum(sponsoredLeft),
+      sub: scope === "trial" ? "trial · BNB only" : `${scope} plan`,
+    });
+  }
+
+  return (
+    <Surface style={{ padding: 21 }}>
+      {/* Headline stat mini-cards. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gap: 10,
+        }}
+      >
+        {stats.map((s) => (
+          <div
+            key={s.label}
+            style={{
+              border: `1px solid ${v2.line}`,
+              background: "rgba(255,255,255,.02)",
+              borderRadius: 13,
+              padding: "13px 15px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: fs.label,
+                letterSpacing: ".1em",
+                textTransform: "uppercase",
+                fontWeight: 700,
+                color: v2.muted2,
+              }}
+            >
+              {s.label}
+            </div>
+            <div
+              style={{
+                font: `600 ${fs.hero}px ${displayFont}`,
+                letterSpacing: "-.03em",
+                color: v2.text,
+                marginTop: 6,
+                lineHeight: 1.05,
+              }}
+            >
+              {s.value}
+            </div>
+            <div style={{ fontSize: fs.label, color: v2.muted2, marginTop: 3 }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 14-day daily-transactions bar chart. */}
+      <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${v2.line}` }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: fs.cardTitle, fontWeight: 600, color: v2.text }}>
+              Daily transactions
+            </div>
+            <div style={{ fontSize: fs.label, color: v2.muted2, marginTop: 2 }}>Last 14 days</div>
+          </div>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 14,
+              fontSize: fs.label,
+              color: v2.muted2,
+            }}
+          >
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{ width: 8, height: 8, borderRadius: 2, background: V2_ACCENT_LINE }}
+                aria-hidden
+              />
+              Previous
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{ width: 8, height: 8, borderRadius: 2, background: v2.yellow }}
+                aria-hidden
+              />
+              Today
+            </span>
+          </div>
+        </div>
+        <DailyBarChart data={dailyData} labels={dailyLabels} />
+      </div>
+    </Surface>
+  );
+}
+
+// ── 14-day bar chart (v2 re-skin of the legacy BarChart) ──────────────────────
+/**
+ * Yellow-on-glass daily bars. The final bar (today) is full-opacity yellow;
+ * earlier days use the muted accent line tone. Heights are normalised to the
+ * 14-day max; any day with activity shows at least a hairline so empty
+ * stretches read as gaps, not absence. Every 3rd day prints a muted axis label
+ * (day-of-month), and each bar carries an accessible title with its exact
+ * count (no hover tooltip needed in a styles-only port).
+ */
+function DailyBarChart({ data, labels }: { data: number[]; labels: string[] }) {
+  const max = Math.max(...data, 1);
+  return (
+    <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 108, marginTop: 16 }}>
+      {data.map((v, i) => {
+        const isToday = i === data.length - 1;
+        const hPct = v > 0 ? Math.max((v / max) * 100, 5) : 0;
+        return (
+          <div
+            key={i}
+            title={`${labels[i]}: ${fmtNum(v)} tx`}
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 6,
+              minWidth: 0,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-end", width: "100%", height: "100%" }}>
+              <div
+                style={{
+                  width: "100%",
+                  height: `${hPct}%`,
+                  minHeight: v > 0 ? 2 : 0,
+                  borderRadius: 3,
+                  background: isToday ? v2.yellow : V2_ACCENT_LINE,
+                }}
+              />
+            </div>
+            <span
+              style={{
+                fontSize: fs.micro,
+                fontFamily: displayFont,
+                color: v2.muted2,
+                whiteSpace: "nowrap",
+                visibility: i % 3 === 0 ? "visible" : "hidden",
+              }}
+              aria-hidden={i % 3 !== 0}
+            >
+              {labels[i]?.split(" ")[1]}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

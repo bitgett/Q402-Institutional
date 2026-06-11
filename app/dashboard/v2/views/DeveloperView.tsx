@@ -51,12 +51,87 @@ import {
   displayFont,
 } from "../primitives";
 import { v2, glass, subCard, fs, type Scope } from "../theme";
-import { CheckIcon, XIcon } from "../logos";
+import { CheckIcon, XIcon, SparkIcon, TimerIcon } from "../logos";
+import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 
 /** Published @quackai/q402-mcp version surfaced on the MCP setup card. */
 const MCP_VERSION = "v0.8.19";
 const MCP_INSTALL = "npx -y @quackai/q402-mcp";
+
+/** npm + GitHub source for the MCP package (surfaced on the tool-reference grid). */
+const MCP_NPM_URL = "https://www.npmjs.com/package/@quackai/q402-mcp";
+const MCP_GITHUB_URL = "https://github.com/bitgett/q402-mcp";
+
+/**
+ * SDK integration snippets — the four-step quickstart the legacy Developer tab
+ * showed (app/dashboard/_legacy-page.tsx.bak STEPS). Ported verbatim so the v2
+ * surface teaches the same script-load → init → pay → settlement path. Each
+ * block carries a short metadata `label` rendered above its dashed code box.
+ */
+const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: string }> = [
+  {
+    n: "01",
+    title: "Load the SDK",
+    label: "Browser · script tag",
+    code: `<script src="https://q402.quackai.ai/q402-sdk.js"></script>\n<!-- or: import { Q402Client } from "q402-sdk" -->`,
+  },
+  {
+    n: "02",
+    title: "Initialize with your API key",
+    label: "Client init",
+    code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll | arbitrum\n});\n// Note: chain "injective" is USDT-only until Circle CCTP native USDC ships (Q2 2026).`,
+  },
+  {
+    n: "03",
+    title: "One-line gasless payment",
+    label: "Pay",
+    code: `const result = await q402.pay({\n  to:     "0xRecipient...",\n  amount: "5.00",\n  token:  "USDC",  // use "USDT" for chain: "injective"\n});\nconsole.log(result.txHash);`,
+  },
+  {
+    n: "04",
+    title: "Settlement confirmed",
+    label: "Result shape",
+    code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: "5", token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0`,
+  },
+];
+
+/**
+ * Canonical @quackai/q402-mcp tool surface — 24 tools, source of truth is
+ * mcp-server/src/index.ts (ListTools order). One-line purposes condensed from
+ * each tool's own `description` + app/docs/page.tsx. Grouped so the grid reads
+ * as Core → Recurring → Bridge (CCIP) → Yield (Aave).
+ */
+const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }> = [
+  // Core
+  { group: "Core", name: "q402_doctor", purpose: "First-install onboarding + ongoing health check (quota, EIP-7702 state, relay reachability)." },
+  { group: "Core", name: "q402_quote", purpose: "Compare gas + supported tokens across 10 chains. No auth." },
+  { group: "Core", name: "q402_balance", purpose: "Verify key + remaining quota. Returns Trial + Multichain in one read." },
+  { group: "Core", name: "q402_pay", purpose: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
+  { group: "Core", name: "q402_batch_pay", purpose: "Up to 20 recipients per call (trial: 5) in one settlement." },
+  { group: "Core", name: "q402_receipt", purpose: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery)." },
+  { group: "Core", name: "q402_wallet_status", purpose: "Per-chain EIP-7702 delegation state for the configured EOA. Read-only." },
+  { group: "Core", name: "q402_clear_delegation", purpose: "Clear EIP-7702 delegation on a single chain. Q402-sponsored gas." },
+  { group: "Core", name: "q402_agentic_info", purpose: "Agent Wallet info (addresses, caps, daily-spend used, ERC-8004 id)." },
+  // Recurring
+  { group: "Recurring", name: "q402_recurring_list", purpose: "List scheduled rules." },
+  { group: "Recurring", name: "q402_recurring_create", purpose: "Author a rule. Paid Multichain on every chain (BNB included)." },
+  { group: "Recurring", name: "q402_recurring_fires", purpose: "Last 50 fires per rule (timestamp + txHashes + amount)." },
+  { group: "Recurring", name: "q402_recurring_pause", purpose: "Pause a rule. Reversible." },
+  { group: "Recurring", name: "q402_recurring_resume", purpose: "Resume a paused / stopped rule." },
+  { group: "Recurring", name: "q402_recurring_skip_next", purpose: "Skip only the next scheduled fire. Cadence preserved." },
+  { group: "Recurring", name: "q402_recurring_cancel", purpose: "Permanently stop a rule." },
+  // Bridge (Chainlink CCIP — eth/avax/arbitrum triangle)
+  { group: "Bridge", name: "q402_bridge_quote", purpose: "Quote the CCIP fee for a USDC bridge (LINK vs native). Read-only." },
+  { group: "Bridge", name: "q402_bridge_send", purpose: "Execute a CCIP USDC bridge via the Agent Wallet (Mode C). Sandbox by default." },
+  { group: "Bridge", name: "q402_bridge_history", purpose: "Recent CCIP bridges — dashboard pointer until session-binding lands." },
+  { group: "Bridge", name: "q402_bridge_gas_tank", purpose: "Bridge Gas Tank fee model + deposit address (dashboard pointer)." },
+  // Yield (Aave V3 — BNB only today)
+  { group: "Yield", name: "q402_yield_reserves", purpose: "List Q402 Yield (Aave) markets + supply APY. Read-only, no auth." },
+  { group: "Yield", name: "q402_yield_positions", purpose: "Agent Wallet's current Aave positions + aggregate USD value. Read-only." },
+  { group: "Yield", name: "q402_yield_deposit", purpose: "Supply USDC / USDT into Aave V3 to earn APY. Moves funds — needs confirm." },
+  { group: "Yield", name: "q402_yield_withdraw", purpose: `Withdraw stablecoin from Aave (amount "max" = full). Moves funds — needs confirm.` },
+];
 
 /**
  * DEMO — sample dataset shown when no wallet is connected (or the signed
@@ -383,7 +458,9 @@ function InlineCopy({
 // ── Context sub-nav (left rail) ──────────────────────────────────────────────
 const SECTIONS = [
   { id: "credentials", label: "Credentials" },
+  { id: "integration", label: "Integration guide" },
   { id: "mcp", label: "MCP setup" },
+  { id: "tools", label: "MCP tool reference" },
   { id: "webhook", label: "Webhook" },
   { id: "playground", label: "API playground" },
   { id: "docs", label: "Documentation" },
@@ -432,6 +509,149 @@ function ContextRail({
   );
 }
 
+// ── Trial credit gauge ───────────────────────────────────────────────────────
+// Credits-left/total progress bar + a "days left" chip, fed by identity.quota
+// (used/total/pct) + identity.daysLeft. Rendered inside the Trial KeyCard so
+// the trial's remaining headroom reads at a glance. Yellow fill = healthy;
+// flips to red as it depletes (>=80% consumed). No green.
+function TrialGauge({
+  used,
+  total,
+  pct,
+  daysLeft,
+}: {
+  used: number;
+  total: number;
+  pct: number;
+  daysLeft: number | null;
+}) {
+  const clampedPct = Math.max(0, Math.min(100, pct));
+  const left = Math.max(0, total - used);
+  // Low-headroom → warn color. Keeps the "running low" cue without green.
+  const fill = clampedPct >= 90 ? v2.red : clampedPct >= 80 ? "#f0a35e" : v2.yellow;
+
+  return (
+    <div style={{ marginTop: 13 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 7,
+        }}
+      >
+        <span style={{ color: v2.muted, fontSize: fs.label }}>
+          <span style={{ color: v2.text, fontWeight: 700 }}>{left.toLocaleString()}</span>
+          {" / "}
+          {total.toLocaleString()} credits left
+        </span>
+        {daysLeft != null && (
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: fs.micro,
+              fontWeight: 700,
+              letterSpacing: ".06em",
+              color: daysLeft <= 3 ? "#f0a35e" : v2.yellow,
+              background: daysLeft <= 3 ? "rgba(240,163,94,.10)" : "rgba(245,202,22,.10)",
+              border: `1px solid ${daysLeft <= 3 ? "rgba(240,163,94,.28)" : "rgba(245,202,22,.26)"}`,
+              borderRadius: 7,
+              padding: "3px 8px",
+            }}
+          >
+            <TimerIcon size={12} color={daysLeft <= 3 ? "#f0a35e" : v2.yellow} />
+            {daysLeft === 1 ? "1 day left" : `${daysLeft} days left`}
+          </span>
+        )}
+      </div>
+      <div
+        style={{
+          width: "100%",
+          height: 8,
+          borderRadius: 999,
+          overflow: "hidden",
+          background: "rgba(255,255,255,.07)",
+        }}
+      >
+        <div
+          style={{
+            width: `${clampedPct}%`,
+            height: "100%",
+            borderRadius: 999,
+            background: fill,
+            boxShadow: `0 0 10px ${fill}55`,
+            transition: "width .8s cubic-bezier(.22,.61,.36,1)",
+          }}
+        />
+      </div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginTop: 6,
+          color: v2.muted2,
+          fontSize: fs.micro,
+        }}
+      >
+        <span>{used.toLocaleString()} used</span>
+        <span>{clampedPct}%</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Usage alerts row ─────────────────────────────────────────────────────────
+// "Email me at 80% / 90%" — opens the legacy usage-alert config modal via
+// identity.openUsageAlerts(). Yellow = action.
+function UsageAlertsRow({ onOpen }: { onOpen: () => void }) {
+  return (
+    <div
+      className="v2-lift"
+      style={{
+        ...glass(13),
+        padding: "13px 18px",
+        display: "flex",
+        alignItems: "center",
+        gap: 13,
+        flexWrap: "wrap",
+      }}
+    >
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 9, minWidth: 0, flex: 1 }}>
+        <TimerIcon size={16} color={v2.yellow} />
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", font: `600 ${fs.base}px ${displayFont}`, color: v2.text }}>
+            Usage alerts
+          </span>
+          <span style={{ color: v2.muted, fontSize: fs.label }}>
+            Email me when sponsored TXs hit 80% / 90% consumed.
+          </span>
+        </span>
+      </span>
+      <button
+        type="button"
+        className="v2-trans v2-press"
+        onClick={onOpen}
+        style={{
+          flexShrink: 0,
+          border: `1px solid rgba(245,202,22,.30)`,
+          background: "rgba(245,202,22,.10)",
+          color: v2.yellow,
+          borderRadius: 9,
+          padding: "8px 15px",
+          fontSize: fs.label,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        Email me at 80% / 90%
+      </button>
+    </div>
+  );
+}
+
 // ── API key card ─────────────────────────────────────────────────────────────
 function KeyCard({
   eyebrow,
@@ -443,6 +663,8 @@ function KeyCard({
   locked,
   lockedNote,
   demo,
+  onRotate,
+  footer,
 }: {
   eyebrow: string;
   apiKey: string;
@@ -457,7 +679,36 @@ function KeyCard({
    * key value (not a locked note) but keep Copy disabled with a tooltip.
    */
   demo?: boolean;
+  /**
+   * Rotate handler — wired to identity.rotateKey(scope). When supplied (real
+   * data, key present), the card surfaces a "Rotate key…" control behind a
+   * confirm step. Resolves with the freshly minted key (or null on failure).
+   */
+  onRotate?: () => Promise<string | null>;
+  /** Optional extra block rendered under the sub-line (e.g. the trial gauge). */
+  footer?: React.ReactNode;
 }) {
+  // Rotation is only offered on a real, unlocked key (never in demo/locked).
+  const canRotate = !!onRotate && !demo && !locked && !!apiKey;
+  const [confirming, setConfirming] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [rotatedKey, setRotatedKey] = useState<string | null>(null);
+  const [rotatedCopied, setRotatedCopied] = useState(false);
+
+  async function doRotate() {
+    if (!onRotate) return;
+    setRotating(true);
+    try {
+      const next = await onRotate();
+      if (next) {
+        setRotatedKey(next);
+        setConfirming(false);
+      }
+    } finally {
+      setRotating(false);
+    }
+  }
+
   return (
     <div
       className="v2-lift"
@@ -527,7 +778,90 @@ function KeyCard({
 
       <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 11, lineHeight: 1.6 }}>{sub}</div>
 
-      <div style={{ marginTop: "auto" }}>
+      {footer}
+
+      {/* Freshly rotated key — surfaced once, with its own copy control. The
+          old key is dead the moment this lands, so we make it loud + copyable. */}
+      {rotatedKey && (
+        <div
+          style={{
+            marginTop: 12,
+            ...subCard(11, 0.0),
+            background: "rgba(85,230,165,.05)",
+            borderColor: "rgba(85,230,165,.22)",
+            padding: "10px 11px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: fs.label,
+              letterSpacing: ".12em",
+              textTransform: "uppercase",
+              fontWeight: 700,
+              color: v2.mint,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+            }}
+          >
+            <CheckIcon size={12} color={v2.mint} /> New key — old one is now dead
+          </div>
+          <div
+            style={{
+              font: `500 ${fs.body}px ${displayFont}`,
+              color: "#cbd3dd",
+              wordBreak: "break-all",
+              marginTop: 6,
+            }}
+          >
+            {rotatedKey}
+          </div>
+          <button
+            type="button"
+            className="v2-trans"
+            onClick={() => {
+              navigator.clipboard.writeText(rotatedKey);
+              setRotatedCopied(true);
+              setTimeout(() => setRotatedCopied(false), 1600);
+            }}
+            style={{
+              marginTop: 8,
+              border: 0,
+              background: "none",
+              color: rotatedCopied ? v2.mint : v2.muted,
+              fontSize: fs.label,
+              fontWeight: 600,
+              cursor: "pointer",
+              padding: 0,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 5,
+              transform: rotatedCopied ? "scale(1.08)" : "scale(1)",
+              transformOrigin: "left center",
+            }}
+          >
+            {rotatedCopied ? (
+              <>
+                <CheckIcon size={13} color={v2.mint} /> Copied
+              </>
+            ) : (
+              "Copy new key"
+            )}
+          </button>
+        </div>
+      )}
+
+      <div
+        style={{
+          marginTop: "auto",
+          paddingTop: 14,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          flexWrap: "wrap",
+        }}
+      >
         {demo ? (
           <CopyButton
             value=""
@@ -538,6 +872,79 @@ function KeyCard({
         ) : (
           <CopyButton value={locked ? "" : apiKey} label="Copy key" disabled={locked} />
         )}
+
+        {/* Rotation control — confirm-then-rotate. Yellow = action; the confirm
+            row stays neutral-glass (no green) and the destructive note is muted. */}
+        {canRotate &&
+          (confirming ? (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+                marginTop: 13,
+              }}
+            >
+              <span style={{ color: v2.muted, fontSize: fs.label }}>
+                Rotating invalidates the current key — continue?
+              </span>
+              <button
+                type="button"
+                className="v2-trans"
+                onClick={() => setConfirming(false)}
+                disabled={rotating}
+                style={{
+                  border: 0,
+                  background: "none",
+                  color: v2.muted2,
+                  fontSize: fs.label,
+                  fontWeight: 600,
+                  cursor: rotating ? "default" : "pointer",
+                  padding: 0,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="v2-trans v2-press"
+                onClick={doRotate}
+                disabled={rotating}
+                style={{
+                  border: `1px solid rgba(245,202,22,.30)`,
+                  background: "rgba(245,202,22,.10)",
+                  color: v2.yellow,
+                  borderRadius: 8,
+                  padding: "6px 12px",
+                  fontSize: fs.label,
+                  fontWeight: 700,
+                  cursor: rotating ? "default" : "pointer",
+                  opacity: rotating ? 0.5 : 1,
+                }}
+              >
+                {rotating ? "Rotating…" : "Rotate now"}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="v2-trans"
+              onClick={() => setConfirming(true)}
+              style={{
+                marginTop: 13,
+                border: 0,
+                background: "none",
+                color: v2.muted2,
+                fontSize: fs.label,
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              Rotate key…
+            </button>
+          ))}
       </div>
     </div>
   );
@@ -1378,6 +1785,205 @@ function Playground({
   );
 }
 
+// ── Integration guide (4 SDK snippets) ───────────────────────────────────────
+// Ports the legacy STEPS quickstart into v2 chrome: each step is a numbered
+// row + a read-only code block (dashed border, a small metadata label, and a
+// copy button on the block header).
+function IntegrationGuide() {
+  const codeBlock: React.CSSProperties = {
+    padding: 14,
+    border: CODE_BLOCK_BORDER,
+    borderRadius: 11,
+    background: v2.inputFill,
+    color: "#aeb8c6",
+    font: `500 ${fs.body}px/1.65 ${displayFont}`,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    overflowX: "auto",
+  };
+  const blockHeader: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginBottom: 7,
+  };
+
+  return (
+    <Surface className="v2-lift" style={{ padding: 19, marginTop: 12 }} radius={15}>
+      <SectionHead
+        title="Integration guide"
+        action={
+          <a
+            href="/docs"
+            className="v2-trans"
+            style={{ color: v2.cyan, fontSize: fs.label, fontWeight: 600, textDecoration: "none" }}
+          >
+            Full reference →
+          </a>
+        }
+      />
+      <div style={{ color: v2.muted, fontSize: fs.body, marginBottom: 14 }}>
+        Script-load → init → pay → settlement. Gas paid by Q402 — the user
+        spends $0.
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {STEPS.map((s) => (
+          <div key={s.n}>
+            <div style={blockHeader}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <span
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 7,
+                    flexShrink: 0,
+                    background: "rgba(245,202,22,.10)",
+                    border: "1px solid rgba(245,202,22,.22)",
+                    color: v2.yellow,
+                    fontSize: fs.micro,
+                    fontWeight: 800,
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  {s.n}
+                </span>
+                <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                  <span style={{ font: `600 ${fs.base}px ${displayFont}`, color: v2.text }}>
+                    {s.title}
+                  </span>
+                  <MetaLabel>{s.label}</MetaLabel>
+                </span>
+              </span>
+              <InlineCopy value={s.code} label="Copy" />
+            </div>
+            <div style={codeBlock}>{s.code}</div>
+          </div>
+        ))}
+      </div>
+    </Surface>
+  );
+}
+
+// ── MCP tool reference grid (24 tools) ───────────────────────────────────────
+// The full @quackai/q402-mcp tool surface with one-line purposes + npm/GitHub
+// source links. Grouped Core → Recurring → Bridge → Yield.
+function McpToolGrid() {
+  const groups = useMemo(() => {
+    const order = ["Core", "Recurring", "Bridge", "Yield"] as const;
+    return order.map((g) => ({
+      group: g,
+      tools: MCP_TOOLS.filter((t) => t.group === g),
+    }));
+  }, []);
+
+  const GROUP_META: Record<string, string> = {
+    Core: "Quote · pay · receipts · delegation",
+    Recurring: "Scheduled rules",
+    Bridge: "Chainlink CCIP · eth/avax/arbitrum",
+    Yield: "Aave V3 · BNB only today",
+  };
+
+  const sourceLink: React.CSSProperties = {
+    color: v2.cyan,
+    fontSize: fs.label,
+    fontWeight: 600,
+    textDecoration: "none",
+  };
+
+  return (
+    <Surface className="v2-lift" style={{ padding: 19, marginTop: 12 }} radius={15}>
+      <SectionHead
+        title={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 9 }}>
+            <SparkIcon size={16} color={v2.yellow} /> MCP tool reference
+          </span>
+        }
+        action={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 14 }}>
+            <a href={MCP_NPM_URL} target="_blank" rel="noreferrer" className="v2-trans" style={sourceLink}>
+              npm →
+            </a>
+            <a href={MCP_GITHUB_URL} target="_blank" rel="noreferrer" className="v2-trans" style={sourceLink}>
+              GitHub →
+            </a>
+          </span>
+        }
+      />
+      <div style={{ color: v2.muted, fontSize: fs.body, marginBottom: 14 }}>
+        {MCP_TOOLS.length} tools exposed by{" "}
+        <code style={{ color: v2.muted }}>@quackai/q402-mcp</code> ({MCP_VERSION}).
+        Each is callable from any MCP client once the server is configured above.
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        {groups.map(({ group, tools }) => (
+          <div key={group}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                gap: 9,
+                marginBottom: 9,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: fs.micro,
+                  letterSpacing: ".14em",
+                  textTransform: "uppercase",
+                  fontWeight: 800,
+                  color: v2.yellow,
+                }}
+              >
+                {group}
+              </span>
+              <span style={{ color: v2.muted2, fontSize: fs.label }}>{GROUP_META[group]}</span>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(248px, 1fr))",
+                gap: 9,
+              }}
+            >
+              {tools.map((t) => (
+                <div
+                  key={t.name}
+                  style={{
+                    ...subCard(11, 0.012),
+                    padding: "11px 13px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 5,
+                  }}
+                >
+                  <code
+                    style={{
+                      color: v2.yellow,
+                      fontSize: fs.body,
+                      fontWeight: 700,
+                      fontFamily: displayFont,
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {t.name}
+                  </code>
+                  <span style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.55 }}>
+                    {t.purpose}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Surface>
+  );
+}
+
 // ── Documentation card ───────────────────────────────────────────────────────
 function DocsCard() {
   return (
@@ -1428,6 +2034,22 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
     credsRef,
   } = useDeveloperData(ownerAddress, signMessage);
 
+  // Identity bridge — published by the legacy page (key rotation, trial quota,
+  // days-left, usage-alert modal). Reused so v2 never re-derives those facts.
+  const identity = useDashboardIdentity();
+
+  // Rotate handlers — the confirm step lives in the KeyCard; this just calls
+  // the intent-bound /api/keys/rotate via identity.rotateKey(scope) and returns
+  // the new key (null on cancel / expiry / failure). page.tsx scope: paid|trial.
+  const rotateMultichain = useCallback(async () => {
+    const { apiKey } = await identity.rotateKey("paid");
+    return apiKey ?? null;
+  }, [identity]);
+  const rotateTrial = useCallback(async () => {
+    const { apiKey } = await identity.rotateKey("trial");
+    return apiKey ?? null;
+  }, [identity]);
+
   // Demo (preview) mode: no wallet connected, OR a wallet is connected but the
   // signed provision read hasn't landed yet. In this mode the whole surface
   // renders the DEMO dataset so it reads as complete at a glance, with Copy
@@ -1438,10 +2060,25 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
   // Sandbox key fed to the MCP card: real one when loaded, else demo sample.
   const mcpSandboxKey = demoMode ? DEMO.sandboxKey : sandboxKey;
 
+  // ── Trial credit gauge inputs ───────────────────────────────────────────
+  // Prefer the canonical scoped quota the legacy page publishes (used/total/
+  // pct); fall back to the provision-derived trial credits so the gauge still
+  // renders in isolation. Days-left likewise prefers identity.daysLeft.
+  const TRIAL_GRANT = 2000;
+  const gaugeTotal = identity.quota?.total ?? TRIAL_GRANT;
+  const gaugeUsed = identity.quota?.used ?? Math.max(0, gaugeTotal - trialCredits);
+  const gaugePct =
+    identity.quota?.pct ?? (gaugeTotal > 0 ? Math.round((gaugeUsed / gaugeTotal) * 100) : 0);
+  const gaugeDaysLeft = identity.daysLeft ?? trialDaysLeft;
+  // Only show the gauge on a real, active trial (never in demo / locked).
+  const showTrialGauge = !demoMode && isTrialActive && !!trialKey;
+
   // Section anchors for the context-rail scroll-spy nav.
   const refs: Record<SectionId, React.RefObject<HTMLDivElement | null>> = {
     credentials: useRef<HTMLDivElement>(null),
+    integration: useRef<HTMLDivElement>(null),
     mcp: useRef<HTMLDivElement>(null),
+    tools: useRef<HTMLDivElement>(null),
     webhook: useRef<HTMLDivElement>(null),
     playground: useRef<HTMLDivElement>(null),
     docs: useRef<HTMLDivElement>(null),
@@ -1583,6 +2220,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                 lockedNote={
                   ownerAddress ? "Upgrade to unlock" : "Connect wallet"
                 }
+                onRotate={rotateMultichain}
               />
               <KeyCard
                 eyebrow="Trial API Key"
@@ -1593,14 +2231,25 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                   demoMode
                     ? DEMO.trialSub
                     : `2,000 sponsored TX · 30-day trial${
-                        isTrialActive ? ` · ${trialCredits.toLocaleString()} left` : ""
-                      }${trialDaysLeft != null ? ` · ${trialDaysLeft}d left` : ""}`
+                        isTrialActive && !showTrialGauge ? ` · ${trialCredits.toLocaleString()} left` : ""
+                      }${trialDaysLeft != null && !showTrialGauge ? ` · ${trialDaysLeft}d left` : ""}`
                 }
                 active={scope === "trial"}
                 demo={demoMode}
                 locked={!trialKey}
                 lockedNote={
                   ownerAddress ? "Start a trial to unlock" : "Connect wallet"
+                }
+                onRotate={rotateTrial}
+                footer={
+                  showTrialGauge ? (
+                    <TrialGauge
+                      used={gaugeUsed}
+                      total={gaugeTotal}
+                      pct={gaugePct}
+                      daysLeft={gaugeDaysLeft}
+                    />
+                  ) : undefined
                 }
               />
             </div>
@@ -1610,15 +2259,32 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                 onConfigure={() => scrollTo("webhook")}
               />
             </div>
+            {/* Usage alerts — only when a wallet is connected (the alert config
+                endpoint requires a signed session). */}
+            {ownerAddress && (
+              <div style={{ marginTop: 14 }}>
+                <UsageAlertsRow onOpen={identity.openUsageAlerts} />
+              </div>
+            )}
+          </div>
+
+          {/* ── Integration guide (4 SDK snippets) ──────────────────── */}
+          <div ref={refs.integration} style={section(1)}>
+            <IntegrationGuide />
           </div>
 
           {/* ── MCP setup ───────────────────────────────────────────── */}
-          <div ref={refs.mcp} style={section(1)}>
+          <div ref={refs.mcp} style={section(2)}>
             <McpSetupCard sandboxKey={mcpSandboxKey} demo={demoMode} />
           </div>
 
+          {/* ── MCP tool reference grid (24 tools) ──────────────────── */}
+          <div ref={refs.tools} style={section(3)}>
+            <McpToolGrid />
+          </div>
+
           {/* ── Webhook config ──────────────────────────────────────── */}
-          <div ref={refs.webhook} style={section(2)}>
+          <div ref={refs.webhook} style={section(4)}>
             <WebhookConfig
               address={ownerAddress}
               signMessage={signMessage}
@@ -1629,12 +2295,12 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
           </div>
 
           {/* ── API playground ──────────────────────────────────────── */}
-          <div ref={refs.playground} style={section(3)}>
+          <div ref={refs.playground} style={section(5)}>
             <Playground apiKey={playgroundKey} trialView={trialView} demo={demoMode} />
           </div>
 
           {/* ── Documentation ───────────────────────────────────────── */}
-          <div ref={refs.docs} style={section(4)}>
+          <div ref={refs.docs} style={section(6)}>
             <DocsCard />
           </div>
         </main>
