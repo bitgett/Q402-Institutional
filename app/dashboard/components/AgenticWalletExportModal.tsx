@@ -221,7 +221,7 @@ export function AgenticWalletExportModal({
           <>
             <div
               className="rounded-md border px-3 py-3 font-mono text-[12px] break-all leading-relaxed"
-              style={{ background: "rgba(8,17,30,0.7)", borderColor: "rgba(74,222,128,0.22)", color: "#E2E8F0" }}
+              style={{ background: "rgba(8,17,30,0.7)", borderColor: "rgba(247,202,22,0.22)", color: "#E2E8F0" }}
             >
               {show ? pk : "•".repeat(64)}
             </div>

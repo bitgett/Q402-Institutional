@@ -322,8 +322,8 @@ export function AgenticWalletRecurringModal({
         <div
           className="mb-4 rounded-md border p-3 text-[12px]"
           style={{
-            background: "rgba(74,222,128,0.05)",
-            borderColor: "rgba(74,222,128,0.20)",
+            background: "rgba(247,202,22,0.05)",
+            borderColor: "rgba(247,202,22,0.20)",
             color: "rgba(226,232,240,0.78)",
           }}
         >

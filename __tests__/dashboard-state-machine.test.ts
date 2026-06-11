@@ -23,19 +23,19 @@ const ROOT = resolve(__dirname, "..");
 const dashboardSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "page.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 const sidebarSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "Sidebar.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 const claimPromptSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "ClaimWalletPrompt.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 const wrongWalletSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "WrongWalletHardBlock.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 // v2 settlement ledger — the tx-history fetch moved here from page.tsx when
 // the dashboard adopted the v2 shell (DashboardV2). page.tsx now renders
 // <DashboardV2/> (which mounts ActivityView) ONLY after the State G early
@@ -45,7 +45,7 @@ const wrongWalletSource = readFileSync(
 const activityViewSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "v2", "views", "ActivityView.tsx"),
   "utf8",
-);
+).replace(/\r\n/g, "\n");
 
 describe("dashboard — 4-state machine early returns", () => {
   it("imports the State D + State G components", () => {

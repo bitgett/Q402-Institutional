@@ -262,7 +262,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
           cycle, so the list + total above are incomplete. Surface it instead
           of passing a partial sum off as the full total. */}
       {!loading && !error && partialRead && (
-        <div className="text-[11px] text-amber-300/80 mt-2 pt-2 border-t" style={{ borderColor: "rgba(74,222,128,0.12)" }}>
+        <div className="text-[11px] text-amber-300/80 mt-2 pt-2 border-t" style={{ borderColor: "rgba(247,202,22,0.12)" }}>
           Couldn&apos;t read {unreadableChains.length} chain
           {unreadableChains.length === 1 ? "" : "s"} ({unreadableChains.map(chainLabel).join(", ")}) —
           total may be incomplete. Refresh to retry.

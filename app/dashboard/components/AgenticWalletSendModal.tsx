@@ -351,7 +351,7 @@ export function AgenticWalletSendModal({
                 Gas: <span style={{ color: "#f9d64a" }}>Trial</span> = Q402 sponsors{" "}
                 <span style={{ color: "#f9d64a" }}>BNB Chain only</span>.{" "}
                 <span style={{ color: "#f9d64a" }}>Multichain</span> = relay gas debits
-                from your Gas Tank on the selected chain. Top up via the Gas Tank tab.
+                from your Gas Tank on the selected chain. Top up via the Treasury.
               </div>
             </div>
 
