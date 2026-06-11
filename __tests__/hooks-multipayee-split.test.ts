@@ -5,6 +5,9 @@
  * config. The load-bearing assertions are the EXACT-SUM math: leg
  * amounts must sum to the original total to the wei, with rounding dust
  * absorbed by the last leg.
+ *
+ * Fund-safety: a STORED default split must NOT silently redirect a
+ * payment away from its named recipient — covered below.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -48,6 +51,12 @@ function enable(defaultSplits?: SplitSpec[]) {
   });
 }
 
+/** ctx carrying an EXPLICIT per-payment split (the safe path — bypasses
+ *  the default-override guard, since the caller named these legs). */
+function explicitCtx(amount: string, splits: SplitSpec[], over: Partial<HookContext> = {}): HookContext {
+  return ctx(amount, { params: { splits }, ...over });
+}
+
 /** Sum leg amounts back to raw units at `decimals` and assert == total. */
 function assertExactSum(parts: Array<{ amount: string }>, total: string, decimals: number) {
   const legSum = parts.reduce((acc, p) => acc + parseUnits(p.amount, decimals), 0n);
@@ -79,19 +88,52 @@ describe("MultiPayeeSplit.run — allow (no-op) paths", () => {
     const r = await multiPayeeSplit.run(ctx("1"));
     expect(r.action).toBe("allow");
   });
-  it("DENIES a single-leg split whose leg differs from `to` (misdirection guard)", async () => {
-    // leg = A, but ctx recipient is 0x999... — allowing would pay `to`,
-    // ignoring the leg, silently sending funds elsewhere than declared.
+});
+
+describe("MultiPayeeSplit.run — explicit-only (P1 consent fix)", () => {
+  it("IGNORES a stored default split — a normal pay settles to the named recipient, NOT the legs", async () => {
+    // The P1 footgun: owner config fans out to A/B, caller named 0x999.
+    // The hook must NOT silently redirect to A/B — it ignores the stored
+    // default entirely and lets the normal single-recipient pay proceed.
+    enable([{ recipient: A, bps: 7000 }, { recipient: B, bps: 3000 }]);
+    const r = await multiPayeeSplit.run(ctx("1.00")); // no explicit split
+    expect(r.action).toBe("allow");
+  });
+
+  it("IGNORES a stored single-leg default too", async () => {
     enable([{ recipient: A, bps: 10000 }]);
     const r = await multiPayeeSplit.run(ctx("1"));
+    expect(r.action).toBe("allow");
+  });
+
+  it("runs an EXPLICIT per-payment split (caller named the legs in THIS request)", async () => {
+    enable();
+    const r = await multiPayeeSplit.run(explicitCtx("1.00", [{ recipient: A, bps: 7000 }, { recipient: B, bps: 3000 }]));
+    expect(r.action).toBe("split");
+  });
+
+  it("DENIES an explicit single-leg split whose leg differs from `to`", async () => {
+    enable();
+    const r = await multiPayeeSplit.run(explicitCtx("1", [{ recipient: A, bps: 10000 }]));
     expect(r).toMatchObject({ action: "deny", code: "SPLIT_SINGLE_LEG_MISMATCH" });
+  });
+
+  it("DENIES an explicit split when Multi-Payee Split is DISABLED (no silent single-pay to `to`)", async () => {
+    mockConfig.getWalletHookConfig.mockResolvedValue({ multiPayeeSplit: { enabled: false } });
+    const r = await multiPayeeSplit.run(explicitCtx("1", [{ recipient: A, bps: 6000 }, { recipient: B, bps: 4000 }]));
+    expect(r).toMatchObject({ action: "deny", code: "MULTI_PAYEE_SPLIT_DISABLED" });
+  });
+
+  it("shouldRun is true for an explicit split even when disabled (so run() can reject)", async () => {
+    mockConfig.getWalletHookConfig.mockResolvedValue({ multiPayeeSplit: { enabled: false } });
+    expect(await multiPayeeSplit.shouldRun(explicitCtx("1", [{ recipient: A, bps: 6000 }, { recipient: B, bps: 4000 }]))).toBe(true);
   });
 });
 
 describe("MultiPayeeSplit.run — exact-sum math (load-bearing)", () => {
   it("70/30 of 1.00 USDC → 0.70 + 0.30, exact sum", async () => {
-    enable([{ recipient: A, bps: 7000 }, { recipient: B, bps: 3000 }]);
-    const r = await multiPayeeSplit.run(ctx("1.00"));
+    enable();
+    const r = await multiPayeeSplit.run(explicitCtx("1.00", [{ recipient: A, bps: 7000 }, { recipient: B, bps: 3000 }]));
     expect(r.action).toBe("split");
     if (r.action !== "split") return;
     expect(r.parts).toEqual([
@@ -102,27 +144,25 @@ describe("MultiPayeeSplit.run — exact-sum math (load-bearing)", () => {
   });
 
   it("1/3 split of 1.00 USDC → dust to last leg, exact sum", async () => {
-    // 3333 + 3333 + 3334 = 10000
-    enable([
+    enable();
+    const r = await multiPayeeSplit.run(explicitCtx("1.00", [
       { recipient: A, bps: 3333 },
       { recipient: B, bps: 3333 },
       { recipient: C, bps: 3334 },
-    ]);
-    const r = await multiPayeeSplit.run(ctx("1.00"));
+    ]));
     expect(r.action).toBe("split");
     if (r.action !== "split") return;
-    // 1.00 USDC = 1_000_000 raw. 3333 bps = 333_300 each; last = 1_000_000 - 666_600 = 333_400.
     expect(r.parts.map((p) => p.amount)).toEqual(["0.3333", "0.3333", "0.3334"]);
     assertExactSum(r.parts, "1.00", 6);
   });
 
   it("odd amount 0.07 USDC 70/25/5 → exact sum, dust absorbed", async () => {
-    enable([
+    enable();
+    const r = await multiPayeeSplit.run(explicitCtx("0.07", [
       { recipient: A, bps: 7000 },
       { recipient: B, bps: 2500 },
       { recipient: C, bps: 500 },
-    ]);
-    const r = await multiPayeeSplit.run(ctx("0.07"));
+    ]));
     expect(r.action).toBe("split");
     if (r.action !== "split") return;
     assertExactSum(r.parts, "0.07", 6);
@@ -142,8 +182,8 @@ describe("MultiPayeeSplit.run — exact-sum math (load-bearing)", () => {
   });
 
   it("honors 18-dec token on BNB chain", async () => {
-    enable([{ recipient: A, bps: 6000 }, { recipient: B, bps: 4000 }]);
-    const r = await multiPayeeSplit.run(ctx("1.0", { chain: "bnb" })); // USDC 18-dec on bnb
+    enable();
+    const r = await multiPayeeSplit.run(explicitCtx("1.0", [{ recipient: A, bps: 6000 }, { recipient: B, bps: 4000 }], { chain: "bnb" }));
     expect(r.action).toBe("split");
     if (r.action !== "split") return;
     assertExactSum(r.parts, "1.0", 18);
@@ -152,15 +192,15 @@ describe("MultiPayeeSplit.run — exact-sum math (load-bearing)", () => {
 
 describe("MultiPayeeSplit.run — deny paths", () => {
   it("denies SPLIT_INVALID when bps don't sum to 10000", async () => {
-    enable([{ recipient: A, bps: 7000 }, { recipient: B, bps: 2000 }]);
-    const r = await multiPayeeSplit.run(ctx("1.00"));
+    enable();
+    const r = await multiPayeeSplit.run(explicitCtx("1.00", [{ recipient: A, bps: 7000 }, { recipient: B, bps: 2000 }]));
     expect(r).toMatchObject({ action: "deny", code: "SPLIT_INVALID" });
   });
 
   it("denies SPLIT_LEG_TOO_SMALL when a leg rounds to zero", async () => {
     // 0.000001 USDC (1 raw unit at 6-dec) split 50/50 → leg 0 = 0 raw.
-    enable([{ recipient: A, bps: 5000 }, { recipient: B, bps: 5000 }]);
-    const r = await multiPayeeSplit.run(ctx("0.000001"));
+    enable();
+    const r = await multiPayeeSplit.run(explicitCtx("0.000001", [{ recipient: A, bps: 5000 }, { recipient: B, bps: 5000 }]));
     expect(r).toMatchObject({ action: "deny", code: "SPLIT_LEG_TOO_SMALL" });
   });
 });

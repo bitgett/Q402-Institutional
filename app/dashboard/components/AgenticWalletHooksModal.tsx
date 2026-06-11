@@ -51,7 +51,6 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
   const [onUnknown, setOnUnknown] = useState<"allow" | "deny">("allow");
   // MultiPayeeSplit
   const [msEnabled, setMsEnabled] = useState(false);
-  const [splitsRaw, setSplitsRaw] = useState(""); // "0xabc:7000\n0xdef:3000"
   // YieldPolicy (deposit guardrails)
   const [ypEnabled, setYpEnabled] = useState(false);
   const [ypUsdc, setYpUsdc] = useState(true);
@@ -127,7 +126,6 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
     }
     if (cfg.multiPayeeSplit) {
       setMsEnabled(!!cfg.multiPayeeSplit.enabled);
-      setSplitsRaw((cfg.multiPayeeSplit.defaultSplits ?? []).map((s) => `${s.recipient}:${s.bps}`).join("\n"));
     }
     if (cfg.yieldPolicy) {
       const yp = cfg.yieldPolicy;
@@ -181,19 +179,11 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
     }
 
     if (msEnabled) {
-      const legs = splitsRaw.split(/\n+/).map((l) => l.trim()).filter(Boolean).map((l) => {
-        const [recipient, bps] = l.split(":").map((x) => x.trim());
-        return { recipient, bps: Number(bps) };
-      });
-      if (legs.length === 0) return "Add at least one split leg (format: 0xADDRESS:BPS).";
-      let total = 0;
-      for (const leg of legs) {
-        if (!ADDR_RE.test(leg.recipient)) return `Split recipient is not a 0x address: ${leg.recipient}`;
-        if (!Number.isInteger(leg.bps) || leg.bps <= 0) return `Split bps must be a positive integer: ${leg.bps}`;
-        total += leg.bps;
-      }
-      if (total !== 10000) return `Split bps must sum to 10000 (got ${total}).`;
-      config.multiPayeeSplit = { enabled: true, defaultSplits: legs.map((l) => ({ recipient: l.recipient.toLowerCase(), bps: l.bps })) };
+      // Per-payment splits ONLY — no wallet-wide default. A stored default
+      // would silently override the recipient a caller named/confirmed in a
+      // normal send (consent violation, P1). The split legs are supplied
+      // per payment (e.g. in the agent's pay request) instead.
+      config.multiPayeeSplit = { enabled: true };
     }
 
     if (ypEnabled) {
@@ -332,12 +322,14 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
               </div>
             </Section>
 
-            {/* MultiPayeeSplit */}
+            {/* MultiPayeeSplit — per-payment only (no wallet-wide default) */}
             <Section title="Multi-Payee Split" enabled={msEnabled} onToggle={setMsEnabled}>
-              <div>
-                <div className={labelCls}>Default split — one leg per line, 0xADDRESS:BPS (sum 10000)</div>
-                <textarea value={splitsRaw} onChange={(e) => setSplitsRaw(e.target.value)} rows={3}
-                  placeholder={"0xRoyalty...:7000\n0xRevenue...:2500\n0xFee...:500"} className={inputCls} style={inputStyle} />
+              <div className="text-[11px] text-white/55 leading-relaxed">
+                When enabled, this wallet may fan one payment out to several
+                payees — but the split legs are supplied <span className="text-white/80">per payment</span> (e.g.
+                in the agent&apos;s pay request). There is intentionally no
+                wallet-wide default split: a stored default would silently
+                override the recipient you name on a normal send.
               </div>
             </Section>
 

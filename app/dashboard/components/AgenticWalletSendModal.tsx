@@ -134,6 +134,9 @@ export function AgenticWalletSendModal({
   useModalEscape(onClose, submitting);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [success, setSuccess] = useState<{ txHash: string } | null>(null);
+  // A 2xx that did NOT settle: a Hook held the payment for approval (HTTP
+  // 202 approval_required). Distinct from success — funds did not move.
+  const [held, setHeld] = useState<{ code?: string; message?: string } | null>(null);
   /**
    * Double-click guard — checked + flipped synchronously at the top of
    * submit() so a rapid second click can't slip through before
@@ -160,6 +163,7 @@ export function AgenticWalletSendModal({
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setError(null);
+    setHeld(null);
     if (!isAddress(recipient)) {
       setError({ headline: "Recipient must be a 0x-prefixed 20-byte address." });
       inFlightRef.current = false;
@@ -212,8 +216,20 @@ export function AgenticWalletSendModal({
         setError(friendlyError(res.status, data));
         return;
       }
-      const txHash = (data as { txHash?: string }).txHash;
-      setSuccess({ txHash: txHash ?? "(pending)" });
+      const body = data as { status?: string; code?: string; message?: string; txHash?: string };
+      // A 2xx that did NOT settle: a Hook held the payment for approval
+      // (HTTP 202 approval_required). Funds did NOT move — surface the hook
+      // + reason instead of a false "Sent." (a sweep over the Spend Cap
+      // threshold lands here; it was not withdrawn).
+      if (body.status === "approval_required") {
+        setHeld({ code: body.code, message: body.message });
+        return;
+      }
+      if (!body.txHash) {
+        setError({ headline: `The payment did not settle${body.message ? `: ${body.message}` : "."}` });
+        return;
+      }
+      setSuccess({ txHash: body.txHash });
     } catch (e) {
       setError({ headline: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -251,7 +267,32 @@ export function AgenticWalletSendModal({
           </button>
         </div>
 
-        {success ? (
+        {held ? (
+          <div className="space-y-3">
+            <div
+              className="rounded-md border px-3 py-2.5 text-sm"
+              style={{ background: "rgba(251,191,36,0.06)", borderColor: "rgba(251,191,36,0.30)", color: "rgb(253,224,71)" }}
+            >
+              <div className="font-semibold">Held by a policy hook. Not sent.</div>
+              <div className="text-[12px] mt-1" style={{ color: "rgba(253,224,71,0.85)" }}>
+                {held.message ?? "A Hook on this wallet held this payment for approval."}
+                {held.code ? ` (${held.code})` : ""}
+              </div>
+              <div className="text-[11px] mt-2 text-white/55 leading-relaxed">
+                No funds moved. To send it, open ⬡ Hooks and adjust the policy
+                that held it — e.g. raise the Spend Cap approval threshold above
+                this amount, or turn Spend Cap off — then try again.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full px-3 py-2 rounded-md text-sm font-semibold border border-white/15 text-white/80 hover:bg-white/5"
+            >
+              Close
+            </button>
+          </div>
+        ) : success ? (
           <div className="space-y-3">
             <div className="rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2 text-sm text-green-200">
               Sent.

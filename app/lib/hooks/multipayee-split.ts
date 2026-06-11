@@ -3,10 +3,15 @@
  *
  * Lifecycle: beforeSettle (transform).
  *
- * Turns one payment intent into an automatic N-way split — royalty /
+ * Turns one payment intent into an N-way split — royalty /
  * revenue-share / protocol-fee fan-out. The owner opts in per-wallet
- * (multiPayeeSplit.enabled) and supplies the legs either as a stored
- * default (config.defaultSplits) or per-payment (params.splits).
+ * (multiPayeeSplit.enabled), and the split legs are supplied EXPLICITLY
+ * per-payment (params.splits). A stored wallet default is NEVER
+ * auto-applied: `config.defaultSplits` is retained only for backward
+ * compatibility and is intentionally ignored here (see the FUND-SAFETY
+ * note in run() — silently redirecting a confirmed "pay 0xX" across other
+ * addresses is a consent violation). A split happens only when THIS
+ * payment names its legs.
  *
  * Returns a `split` outcome; the send route fans the single settlement
  * into one sub-settlement per leg. The daily reservation was charged
@@ -46,17 +51,39 @@ export const multiPayeeSplit: Hook = {
 
   async shouldRun(ctx: HookContext): Promise<boolean> {
     const cfg = await getWalletHookConfig(ctx.walletId);
-    return cfg?.multiPayeeSplit?.enabled === true;
+    if (cfg?.multiPayeeSplit?.enabled === true) return true;
+    // Also run (to REJECT) when a payment explicitly requests a split but
+    // the wallet hasn't enabled Multi-Payee Split — otherwise the split is
+    // silently dropped and the full amount single-pays `to`.
+    return (ctx.params?.splits?.length ?? 0) > 0;
   },
 
   async run(ctx: HookContext): Promise<HookOutcome> {
     const cfg = await getWalletHookConfig(ctx.walletId);
     const ms = cfg?.multiPayeeSplit;
+
+    // Explicit split requested but Multi-Payee Split is OFF on this wallet:
+    // deny rather than silently single-pay the full amount to `to` (the
+    // caller asked for a split; honoring `to` only is a silent surprise).
+    if ((ctx.params?.splits?.length ?? 0) > 0 && !ms?.enabled) {
+      return {
+        action: "deny",
+        code: "MULTI_PAYEE_SPLIT_DISABLED",
+        reason: "This payment requested a split, but Multi-Payee Split is not enabled on this wallet. Enable it in Hooks, or remove the split.",
+        status: 400,
+      };
+    }
     if (!ms || !ms.enabled) return { action: "allow" };
 
-    // Per-payment legs override the stored default. No legs at all →
-    // nothing to split, settle as a normal single payment.
-    const splits: SplitSpec[] | undefined = ctx.params?.splits ?? ms.defaultSplits;
+    // FUND-SAFETY (P1): split ONLY on an EXPLICIT per-payment request.
+    // A wallet-level stored default split is NEVER auto-applied — silently
+    // redirecting a normal "pay 1 to 0xX" across other addresses is a
+    // consent violation (the caller confirmed 0xX, not the legs; the demo
+    // that surfaced this paid a named recipient but settled to three
+    // others). `ms.defaultSplits` is retained in config for backward
+    // compatibility but intentionally ignored here; the dashboard no longer
+    // lets you set one. Splits happen only when THIS payment names them.
+    const splits: SplitSpec[] | undefined = ctx.params?.splits;
     if (!splits || splits.length === 0) return { action: "allow" };
 
     // Single-leg "split": a no-op ONLY if the leg is the same recipient

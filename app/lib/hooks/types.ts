@@ -186,7 +186,14 @@ export interface WalletHookConfig {
   };
   multiPayeeSplit?: {
     enabled: boolean;
-    /** Default split applied when the request carries no per-payment splits. */
+    /**
+     * DEPRECATED / inert. Splits are now EXPLICIT-ONLY: the hook acts only
+     * on per-payment `params.splits`, never on a stored wallet default
+     * (auto-applying a default silently redirects a confirmed recipient's
+     * funds — a consent violation). Retained for backward compatibility
+     * with old stored configs; the hook ignores it and the dashboard no
+     * longer sets it.
+     */
     defaultSplits?: SplitSpec[];
   };
   /**
@@ -201,7 +208,12 @@ export interface WalletHookConfig {
    */
   spendCap?: {
     enabled: boolean;
-    /** Whitelist of lowercase 0x recipients. Empty/absent = no whitelist. */
+    /**
+     * Whitelist of 0x recipients. ABSENT = no whitelist (allow-all by this
+     * rule). An EMPTY array is rejected at validation — it would otherwise
+     * read as allow-all in the runtime `length > 0` guard, the opposite of
+     * a typed-but-empty allowlist's intent. Present ⇒ must list >=1 address.
+     */
     allowedRecipients?: string[];
     /** Allowed settlement windows in UTC hours [startHour, endHour). */
     allowedWindowsUtc?: Array<{ startHour: number; endHour: number }>;
