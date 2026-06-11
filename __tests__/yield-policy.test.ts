@@ -24,6 +24,37 @@ vi.mock("@/app/lib/yield/aave", () => ({
   aaveTotalPositionValueStrict: mockYield.aaveTotalPositionValueStrict,
 }));
 
+// In-memory KV stand-in for the FIX-2 daily-op-cap + FIX-3 lock tests.
+// policy.ts itself never touches kv (RPC + hook-config mocks above cover it),
+// but yield/relay.ts and agentic-wallet.ts do.
+const kvNumStore = vi.hoisted(() => new Map<string, number>());
+const kvStrStore = vi.hoisted(() => new Map<string, unknown>());
+const mockKv = vi.hoisted(() => ({
+  incr: vi.fn(async (key: string) => {
+    const v = (kvNumStore.get(key) ?? 0) + 1;
+    kvNumStore.set(key, v);
+    return v;
+  }),
+  decr: vi.fn(async (key: string) => {
+    const v = (kvNumStore.get(key) ?? 0) - 1;
+    kvNumStore.set(key, v);
+    return v;
+  }),
+  expire: vi.fn(async () => 1),
+  // SET NX semantics for the wallet-chain lock.
+  set: vi.fn(async (key: string, value: unknown, opts?: { nx?: boolean }) => {
+    if (opts?.nx && kvStrStore.has(key)) return null;
+    kvStrStore.set(key, value);
+    return "OK";
+  }),
+  del: vi.fn(async (key: string) => {
+    kvStrStore.delete(key);
+    return 1;
+  }),
+  get: vi.fn(async (key: string) => kvStrStore.get(key) ?? null),
+}));
+vi.mock("@vercel/kv", () => ({ kv: mockKv }));
+
 // viem: only createPublicClient().readContract (balanceOf) and formatUnits
 // are exercised by policy.ts. Keep formatUnits real for correct math.
 const mockReadContract = vi.hoisted(() => vi.fn());
@@ -37,6 +68,8 @@ vi.mock("viem", async (importOriginal) => {
 });
 
 import { enforceYieldPolicy, type YieldPolicyInput } from "@/app/lib/yield/policy";
+import { chargeYieldOpBudget, refundYieldOpBudget } from "@/app/lib/yield/relay";
+import { acquireWalletChainLock, releaseWalletChainLock } from "@/app/lib/agentic-wallet";
 
 const WALLET = "0x" + "a".repeat(40);
 
@@ -59,6 +92,9 @@ function raw18(human: number): bigint {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  kvNumStore.clear();
+  kvStrStore.clear();
+  delete process.env.YIELD_DAILY_OP_CAP;
   mockConfig.getWalletHookConfig.mockResolvedValue(null);
   mockYield.aaveTotalPositionValueStrict.mockResolvedValue(0);
   mockReadContract.mockResolvedValue(0n);
@@ -198,5 +234,88 @@ describe("enforceYieldPolicy — config read error propagates (not swallowed int
   it("lets a KV throw from getWalletHookConfig propagate", async () => {
     mockConfig.getWalletHookConfig.mockRejectedValue(new Error("KV connection failed"));
     await expect(enforceYieldPolicy(input())).rejects.toThrow("KV connection failed");
+  });
+});
+
+// ── FIX 2 — per-owner daily yield-op cap (relayer gas-abuse rail) ──────────
+describe("chargeYieldOpBudget — daily yield-op cap", () => {
+  const OWNER = "0x" + "c".repeat(40);
+
+  it("allows ops up to the cap then denies", async () => {
+    process.env.YIELD_DAILY_OP_CAP = "3";
+    const r1 = await chargeYieldOpBudget(OWNER);
+    const r2 = await chargeYieldOpBudget(OWNER);
+    const r3 = await chargeYieldOpBudget(OWNER);
+    const r4 = await chargeYieldOpBudget(OWNER);
+    expect([r1.allowed, r2.allowed, r3.allowed]).toEqual([true, true, true]);
+    expect(r4.allowed).toBe(false);
+    expect(r4.cap).toBe(3);
+    // The over-cap reservation must be rolled back (count stays AT the cap),
+    // so a refund of an earlier op frees exactly one slot.
+    expect(r4.count).toBe(3);
+  });
+
+  it("rolls back the over-cap INCR so the counter never exceeds the cap", async () => {
+    process.env.YIELD_DAILY_OP_CAP = "1";
+    await chargeYieldOpBudget(OWNER);       // count = 1 (allowed)
+    await chargeYieldOpBudget(OWNER);       // would be 2 → denied + rolled back
+    // A refund now should bring it to 0 and re-open a slot.
+    await refundYieldOpBudget(OWNER);
+    const again = await chargeYieldOpBudget(OWNER);
+    expect(again.allowed).toBe(true);
+  });
+
+  it("refund releases a reserved slot so an honest retry isn't capped out", async () => {
+    process.env.YIELD_DAILY_OP_CAP = "1";
+    const first = await chargeYieldOpBudget(OWNER);
+    expect(first.allowed).toBe(true);
+    // Simulate a pre-broadcast failure refunding the slot.
+    await refundYieldOpBudget(OWNER);
+    const retry = await chargeYieldOpBudget(OWNER);
+    expect(retry.allowed).toBe(true);
+  });
+
+  it("sets a TTL on the first write of the day (self-flushing counter)", async () => {
+    await chargeYieldOpBudget(OWNER);
+    expect(mockKv.expire).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails OPEN when KV.incr throws (gas rail must not block honest users)", async () => {
+    mockKv.incr.mockRejectedValueOnce(new Error("KV down"));
+    const r = await chargeYieldOpBudget(OWNER);
+    expect(r.allowed).toBe(true);
+  });
+
+  it("defaults the cap to 50 when YIELD_DAILY_OP_CAP is unset/invalid", async () => {
+    const r = await chargeYieldOpBudget(OWNER);
+    expect(r.cap).toBe(50);
+  });
+});
+
+// ── FIX 3 — per-wallet+chain settle lock (cap-race + 7702 nonce-race) ──────
+describe("acquireWalletChainLock — serialises one wallet+chain", () => {
+  const WALLET_A = "0x" + "d".repeat(40);
+  const WALLET_B = "0x" + "e".repeat(40);
+
+  it("grants the lock once, then refuses a concurrent holder", async () => {
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
+    // Second acquire while held → false (SET NX miss).
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(false);
+  });
+
+  it("re-grants after release", async () => {
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
+    await releaseWalletChainLock(WALLET_A, "bnb");
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
+  });
+
+  it("is scoped per chain — same wallet, different chain, both lock", async () => {
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
+    expect(await acquireWalletChainLock(WALLET_A, "eth")).toBe(true);
+  });
+
+  it("is scoped per wallet — different wallets don't contend", async () => {
+    expect(await acquireWalletChainLock(WALLET_A, "bnb")).toBe(true);
+    expect(await acquireWalletChainLock(WALLET_B, "bnb")).toBe(true);
   });
 });

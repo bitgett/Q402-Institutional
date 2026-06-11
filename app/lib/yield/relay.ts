@@ -20,9 +20,79 @@ import {
   type Address,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { kv } from "@vercel/kv";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
 import { AGENTIC_CHAINS } from "@/app/lib/agentic-wallet-sign";
 import type { SignedYieldAction } from "./sign";
+
+// ── Per-owner daily yield-operation cap (gas-budget rail) ──────────────────
+//
+// Yield is intentionally fee-free — the relayer pays the Aave gas with NO
+// per-op credit decrement. Without a ceiling, a valid-but-abusive caller
+// (live trial/sub key, passes every gate) could fire yield ops in a loop and
+// drain the relayer's gas wallet unbounded. This is the guard rail: a per
+// (owner, UTC-day) operation COUNT, INCR'd before settle and refunded on a
+// non-settlement. Same INCR + per-day-key + TTL idiom as agentic-wallet.ts's
+// chargeAgainstDailyLimit, but counting operations (gas cost is roughly
+// fixed per op) rather than USD notional.
+//
+// Override via YIELD_DAILY_OP_CAP env; default 50/owner/day comfortably
+// exceeds any honest deposit/withdraw/rebalance pattern while capping the
+// blast radius of a leaked key at ~50 × per-op gas.
+const YIELD_OP_DAY_TTL_SEC = 48 * 60 * 60;
+
+function yieldOpCountKey(owner: string, dateUtc: string): string {
+  return `aw:yield:opcount:${owner.toLowerCase()}:${dateUtc}`;
+}
+
+function yieldDailyOpCap(): number {
+  const raw = Number(process.env.YIELD_DAILY_OP_CAP);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 50;
+}
+
+/**
+ * Atomically reserve one yield-op against the owner's daily cap. INCR the
+ * per-day counter; if it overshoots, INCR back (-1) and deny. Mirrors
+ * chargeAgainstDailyLimit's reserve-then-rollback shape. Caller MUST
+ * `refundYieldOpBudget` on any non-settlement so a failed op doesn't burn a
+ * cap slot.
+ *
+ * Fail-OPEN on a KV error: yield is fund-safe regardless of this counter
+ * (the policy gate + locks guard funds), and the counter is purely a relayer
+ * gas-abuse rail — a KV blip must not block an honest user's legitimate
+ * deposit. The blast radius without it is one day's relayer gas, which the
+ * relayer's own balance bounds.
+ */
+export async function chargeYieldOpBudget(
+  owner: string,
+): Promise<{ allowed: boolean; count: number; cap: number }> {
+  const cap = yieldDailyOpCap();
+  const dateUtc = new Date().toISOString().slice(0, 10);
+  const key = yieldOpCountKey(owner, dateUtc);
+  let count: number;
+  try {
+    count = await kv.incr(key);
+  } catch {
+    return { allowed: true, count: 0, cap }; // fail-open — see docstring
+  }
+  // Set the TTL on first write so the counter self-flushes daily.
+  if (count === 1) {
+    try { await kv.expire(key, YIELD_OP_DAY_TTL_SEC); } catch { /* best-effort */ }
+  }
+  if (count > cap) {
+    // Roll back the reservation we just made (INCR overshot the cap).
+    try { await kv.decr(key); } catch { /* best-effort */ }
+    return { allowed: false, count: count - 1, cap };
+  }
+  return { allowed: true, count, cap };
+}
+
+/** Release a reserved yield-op slot (failed/rejected before settlement). */
+export async function refundYieldOpBudget(owner: string): Promise<void> {
+  const dateUtc = new Date().toISOString().slice(0, 10);
+  const key = yieldOpCountKey(owner, dateUtc);
+  try { await kv.decr(key); } catch { /* best-effort — TTL flushes anyway */ }
+}
 
 const YIELD_IMPL_ABI = [
   {
