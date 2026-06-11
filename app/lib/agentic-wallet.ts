@@ -99,13 +99,26 @@ const defaultKey = (owner: string) => `aw:default:${lower(owner)}`;
 const createLockKey = (owner: string) => `aw:create-lock:${lower(owner)}`;
 /**
  * Per-wallet, per-chain settle lock. A fund-moving action (yield deposit /
- * withdraw) holds this for the full read-check-sign-settle window so two
- * concurrent actions on the SAME wallet+chain serialise. Two purposes:
+ * withdraw, and any future send/batch caller that opts in) holds this for
+ * the full read-check-sign-settle window so two concurrent actions on the
+ * SAME wallet+chain serialise. Two purposes:
  *   - the maxAllocationPct read-check-execute can't be raced (both racers
  *     reading the same balance and each passing the cap);
  *   - the EIP-7702 authorization nonce (derived from the wallet's current
  *     tx count) can't be reused by two in-flight delegations on one chain.
- * Same SET NX + TTL idiom as createLockKey.
+ *
+ * This is the SINGLE shared per-(wallet, chain) settle lock — yield and the
+ * send/batch/recurring fund-moving paths must all acquire THIS key (and only
+ * this key) so a yield op and a send on one wallet+chain can never run
+ * concurrently and collide on the 7702 nonce.
+ *
+ * SAFE-LEASE (token-based), mirroring acquire/releasePendingFundReconcileLock
+ * in db.ts: acquire writes a unique per-call token via SET NX + TTL; release
+ * does a Lua compare-and-DELETE that only removes the key when the stored
+ * token still equals ours. A plain unconditional DEL is unsafe: if holder A's
+ * TTL expires and holder B then takes a FRESH lease, A's later release would
+ * wipe B's lock (classic ABA / lease-drift) and let two fund-moving ops run
+ * on one wallet+chain at once.
  */
 const walletChainLockKey = (walletId: string, chain: string) =>
   `aw:wc-lock:${lower(walletId)}:${chain}`;
@@ -156,30 +169,57 @@ const CREATE_LOCK_TTL_SEC = 10;
 const WALLET_CHAIN_LOCK_TTL_SEC = 90;
 
 /**
- * Acquire the per-wallet+chain settle lock (SET NX + TTL). Returns true if
- * acquired, false if another fund-moving action holds it. Mirrors
- * createAgenticWallet's create-lock idiom — serialise the critical section
- * per (wallet, chain) so concurrent yield deposits (and a concurrent send +
- * yield) can't race the balance cap or collide on the 7702 auth nonce.
+ * Acquire the per-wallet+chain settle lock as a SAFE LEASE (SET NX + TTL with
+ * a unique per-call token). Returns the lease TOKEN on success (pass it back
+ * to `releaseWalletChainLock`), or `null` when another fund-moving action
+ * already holds it. Serialises the critical section per (wallet, chain) so
+ * concurrent yield deposits — and a concurrent send + yield — can't race the
+ * balance cap or collide on the 7702 auth nonce.
+ *
+ * The token is what makes release ABA-safe: a stale holder whose TTL expired
+ * cannot DEL a fresh holder's lock because the stored token no longer matches.
  */
 export async function acquireWalletChainLock(
   walletId: string,
   chain: string,
-): Promise<boolean> {
+): Promise<string | null> {
+  const token =
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const claimed = await kv.set(
     walletChainLockKey(walletId, chain),
-    "1",
+    token,
     { nx: true, ex: WALLET_CHAIN_LOCK_TTL_SEC },
   );
-  return !!claimed;
+  return claimed ? token : null;
 }
 
-/** Release the per-wallet+chain settle lock. Best-effort — TTL is the backstop. */
+/**
+ * Release the per-wallet+chain settle lock. Compare-and-DELETE: only removes
+ * the key when the stored token still equals OUR lease — so a holder whose TTL
+ * already expired (and whose lock a different action has since re-acquired)
+ * can't wipe the new holder's lock. Best-effort — the TTL is the backstop.
+ *
+ * Pass the exact token returned by `acquireWalletChainLock`; a null/missing
+ * token is a no-op (nothing was acquired). Uses an atomic Lua compare-and-del
+ * (provided by @vercel/kv via the underlying @upstash/redis `eval`), mirroring
+ * releasePendingFundReconcileLock in db.ts.
+ */
 export async function releaseWalletChainLock(
   walletId: string,
   chain: string,
+  token: string | null | undefined,
 ): Promise<void> {
-  await kv.del(walletChainLockKey(walletId, chain)).catch(() => {});
+  if (!token) return;
+  try {
+    const script =
+      "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+    await (kv as unknown as {
+      eval: (s: string, keys: string[], args: string[]) => Promise<unknown>;
+    }).eval(script, [walletChainLockKey(walletId, chain)], [token]);
+  } catch {
+    /* TTL will sweep the lease if eval is unavailable / KV blips. */
+  }
 }
 
 // Legacy keys — only used in the lazy-migration read path.
@@ -533,12 +573,82 @@ export async function restoreAgenticWallet(
 }
 
 /**
+ * Delete every derived KV key this wallet owns, so a hard-delete leaves no
+ * residue (privacy) and doesn't slowly grow the `aw:*` surface (storage
+ * drift). ONLY this wallet's keys — never another wallet's or an owner-shared
+ * index (`aw:list:{owner}` / `aw:default:{owner}` are handled by the caller).
+ *
+ * Recurring rules + their list/firelog are NOT swept here — the
+ * `deleteRulesForHardDelete` cascade already owns that family.
+ *
+ * Two shapes:
+ *   (1) deterministic, one key per wallet — deleted directly:
+ *         aw:hooks:{walletId}                       hook / policy config
+ *         aw:yield:{walletId}                       tracked Aave principal
+ *         aw:balance:{owner}:{walletId}             balance cache (5m TTL)
+ *         aw:daily-spend-c:{owner}:{walletId}:{today}  today's spend ledger
+ *   (2) variable-suffix families keyed by the wallet address prefix —
+ *       enumerated with a bounded SCAN then deleted:
+ *         aw:yield:settled:{walletId}:*             durable yield idem markers
+ *         aw:yield:idem:{walletId}:*                short-lived yield idem claims
+ *         aw:wc-lock:{walletId}:*                   per-chain settle leases
+ *
+ * Each leg is best-effort: a KV blip on one family must not abort the record
+ * delete in the caller. The GC cron's per-key scan would eventually reap any
+ * stragglers anyway, but sweeping here keeps the common path clean.
+ */
+async function deleteDerivedWalletKv(owner: string, id: string): Promise<void> {
+  // (1) Deterministic single keys.
+  const direct = [
+    `aw:hooks:${id}`,
+    `aw:yield:${id}`,
+    `aw:balance:${owner}:${id}`,
+    dailySpendKey(owner, id, todayUtc()),
+  ];
+  for (const key of direct) {
+    await kv.del(key).catch(() => {});
+  }
+
+  // (2) Variable-suffix families — SCAN the wallet-scoped prefix and DEL each
+  // hit. Bounded by scanIters so a misbehaving cursor can't spin forever.
+  for (const prefix of [
+    `aw:yield:settled:${id}:`,
+    `aw:yield:idem:${id}:`,
+    `aw:wc-lock:${id}:`,
+  ]) {
+    let cursor: string | number = 0;
+    let scanIters = 0;
+    try {
+      do {
+        const res: [string | number, string[]] = await (
+          kv as unknown as {
+            scan: (
+              c: string | number,
+              o: { match: string; count: number },
+            ) => Promise<[string | number, string[]]>;
+          }
+        ).scan(cursor, { match: `${prefix}*`, count: 200 });
+        cursor = res[0];
+        for (const key of res[1]) {
+          await kv.del(key).catch(() => {});
+        }
+        scanIters++;
+      } while (String(cursor) !== "0" && scanIters < 1000);
+    } catch {
+      /* best-effort — GC cron / TTLs reap anything left behind. */
+    }
+  }
+}
+
+/**
  * Permanent delete — only called by the hard-delete cron once the grace
  * window has elapsed AND on-chain balance is empty (the cron is
- * responsible for the balance check; this function trusts the caller).
+ * responsible for the balance + Aave-yield checks; this function trusts the
+ * caller and does NOT re-read either — it only removes KV state).
  *
  * Removes the wallet record, audit log, list entry, recurring rules
- * (cascade), and re-elects the default if this was the default wallet.
+ * (cascade), every derived KV key this wallet owns, and re-elects the
+ * default if this was the default wallet.
  */
 export async function hardDeleteAgenticWallet(
   ownerAddr: string,
@@ -557,6 +667,15 @@ export async function hardDeleteAgenticWallet(
   }
   await kv.del(recordKey(owner, id));
   await kv.del(exportLogKey(owner, id));
+
+  // Sweep this wallet's derived KV (hooks, yield position + idem markers,
+  // balance cache, daily-spend, settle leases). Best-effort — never blocks
+  // the record/list/default teardown below.
+  try {
+    await deleteDerivedWalletKv(owner, id);
+  } catch (e) {
+    console.error("[agentic-wallet] derived KV cleanup failed:", e);
+  }
 
   // Remove from list.
   const list = (await kv.get<string[]>(listKey(owner))) ?? [];
