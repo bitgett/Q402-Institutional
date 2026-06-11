@@ -165,6 +165,8 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/aave.svg" alt="Aave" width={18} height={18} className="rounded-full shrink-0" />
           <span className={labelCls}>Earn · Q402 Yield</span>
           <span className="text-[9px] uppercase tracking-widest text-emerald-400/70 font-semibold">
             Aave V3
