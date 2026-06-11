@@ -985,46 +985,10 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                       </div>
                     </div>
 
-                    {/* Gas Tank — surfaced on page 1 next to capital so the
-                        operator sees relayer-gas headroom without leaving the
-                        Wallets view. Full management lives in the Treasury tab. */}
-                    <div style={{ ...subCard(13), padding: 14 }}>
-                      <div style={styles.assetTop}>
-                        <div style={styles.token}>
-                          <span style={{ ...styles.coin, background: "linear-gradient(135deg,#2c3c57,#172234)", color: "#cfe0ff", fontSize: 14 }}>⛽</span>
-                          <div>
-                            Gas Tank
-                            <div style={styles.sub}>Relayer gas · pre-funded</div>
-                          </div>
-                        </div>
-                        <div style={{ font: `600 19px ${displayFont}` }}>{fmtUsd(vmGasTank.usd)}</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 16, flexWrap: "wrap" }}>
-                        {vmGasTank.funded.length > 0 ? (
-                          <>
-                            {vmGasTank.funded.slice(0, 7).map((c) => (
-                              <ChainIcon key={c} chain={c} size={18} />
-                            ))}
-                            <span style={{ color: v2.muted, fontSize: fs.label, marginLeft: 3 }}>
-                              {vmGasTank.funded.length} chain{vmGasTank.funded.length > 1 ? "s" : ""} funded
-                            </span>
-                          </>
-                        ) : (
-                          <span style={{ color: v2.muted, fontSize: fs.label }}>
-                            Empty — top up in Treasury to sponsor gas.
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Yield — reuse the shipped Earn section (real Aave data +
-                      its own deposit/withdraw modal), full-width below the
-                      Stablecoins / Gas-Tank row. The surrounding V2AccentScope
-                      re-skins its emerald → yellow. In demo mode there is no
-                      wallet/owner to authenticate its reads, so render a static
-                      demo card instead of mounting it (would 401 / sign-prompt). */}
-                  <div style={{ marginTop: 11 }}>
+                    {/* Yield — restored to the top row beside Stablecoins.
+                        Reuses the shipped Earn section (real Aave data +
+                        deposit/withdraw). Demo mode renders a static card
+                        (mounting the real one would 401 / sign-prompt). */}
                     {demoMode || !activeWallet ? (
                       <div style={{ ...subCard(13), padding: 14 }}>
                         <div style={styles.assetTop}>
@@ -1051,6 +1015,38 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         />
                       </div>
                     )}
+                  </div>
+
+                  {/* Gas Tank — full-width strip at the FOOT of the capital
+                      overview (per request). Surfaced on page 1 so the operator
+                      sees relayer-gas headroom; full management is in Treasury. */}
+                  <div style={{ ...subCard(13), padding: 14, marginTop: 11 }}>
+                    <div style={styles.assetTop}>
+                      <div style={styles.token}>
+                        <span style={{ ...styles.coin, background: "linear-gradient(135deg,#2c3c57,#172234)", color: "#cfe0ff", fontSize: 14 }}>⛽</span>
+                        <div>
+                          Gas Tank
+                          <div style={styles.sub}>Relayer gas · pre-funded · sponsors every settlement</div>
+                        </div>
+                      </div>
+                      <div style={{ font: `600 19px ${displayFont}` }}>{fmtUsd(vmGasTank.usd)}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 14, flexWrap: "wrap" }}>
+                      {vmGasTank.funded.length > 0 ? (
+                        <>
+                          {vmGasTank.funded.slice(0, 10).map((c) => (
+                            <ChainIcon key={c} chain={c} size={20} />
+                          ))}
+                          <span style={{ color: v2.muted, fontSize: fs.label, marginLeft: 4 }}>
+                            {vmGasTank.funded.length} chain{vmGasTank.funded.length > 1 ? "s" : ""} funded
+                          </span>
+                        </>
+                      ) : (
+                        <span style={{ color: v2.muted, fontSize: fs.label }}>
+                          Empty — top up in Treasury to sponsor gas.
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </section>
 
