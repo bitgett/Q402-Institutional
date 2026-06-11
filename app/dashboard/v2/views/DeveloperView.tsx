@@ -78,6 +78,7 @@ interface ProvisionResult {
   isTrialActive?: boolean;
   plan?: string;
   trialCredits?: number;
+  trialExpiresAt?: string | null;
   code?: string;
 }
 
@@ -173,6 +174,10 @@ function useDeveloperData(
   const trialKey = prov?.trialApiKey ?? "";
   const isTrialActive = prov?.isTrialActive === true || !!trialKey;
   const trialCredits = prov?.trialCredits ?? 0;
+  const trialDaysLeft =
+    prov?.trialExpiresAt && isTrialActive
+      ? Math.max(0, Math.ceil((new Date(prov.trialExpiresAt).getTime() - Date.now()) / 86_400_000))
+      : null;
   // Sandbox key — feeds the MCP setup card (safe to surface anywhere).
   const sandboxKey =
     prov?.multichainSandboxApiKey ?? prov?.sandboxApiKey ?? "";
@@ -184,6 +189,7 @@ function useDeveloperData(
     hasPaid,
     isTrialActive,
     trialCredits,
+    trialDaysLeft,
     sandboxKey,
     webhookUrl,
     setWebhookUrl,
@@ -1067,6 +1073,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
     hasPaid,
     isTrialActive,
     trialCredits,
+    trialDaysLeft,
     sandboxKey,
     webhookUrl,
     setWebhookUrl,
@@ -1144,7 +1151,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                 tagColor={v2.yellow}
                 sub={`2,000 sponsored TX · 30-day trial${
                   isTrialActive ? ` · ${trialCredits.toLocaleString()} left` : ""
-                }`}
+                }${trialDaysLeft != null ? ` · ${trialDaysLeft}d left` : ""}`}
                 active={scope === "trial"}
                 locked={!trialKey}
                 lockedNote={
