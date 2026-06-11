@@ -501,7 +501,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
   return (
     <V2AccentScope style={{ paddingTop: 17 }}>
-      <div style={styles.workspace}>
+      <div className="v2-workspace" style={styles.workspace}>
         {/* ── Col 1 · Wallet rail ─────────────────────────────────────── */}
         <Surface className="v2-wallet-rail" style={styles.rail}>
           <Eyebrow>Agent wallets</Eyebrow>
@@ -827,7 +827,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
         </Surface>
 
         {/* ── Col 3 · Right rail ──────────────────────────────────────── */}
-        <aside style={styles.right}>
+        <aside className="v2-right" style={styles.right}>
           {/* Payment policy — real Hooks config */}
           <Surface style={styles.sideCard}>
             <SectionHead
@@ -946,6 +946,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
           signMessage={signMessage}
           perTxMaxUsd={activeWallet.perTxMaxUsd}
           dailyLimitUsd={activeWallet.dailyLimitUsd}
+          allowedChains={multichainActive ? undefined : ["bnb"]}
           onClose={() => setSendOpen(false)}
           onSent={() => {
             setSendOpen(false);
@@ -978,7 +979,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
           walletId={activeWallet.walletId}
           ownerAddress={addr ?? activeWallet.ownerAddr}
           signMessage={signMessage}
-          hasMultichainScope={hasMultichainScope}
+          hasMultichainScope={multichainActive}
           onClose={() => setBridgeOpen(false)}
           onSent={() => {
             setBridgeOpen(false);

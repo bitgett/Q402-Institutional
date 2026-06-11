@@ -354,6 +354,7 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
   return (
     <V2AccentScope style={{ paddingTop: 17 }}>
       <div
+        className="v2-view-shell"
         style={{
           display: "grid",
           gridTemplateColumns: "230px 1fr",
@@ -362,7 +363,7 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
         }}
       >
         {/* ── Col 1 · context rail ─────────────────────────────────── */}
-        <Surface style={{ padding: 14, position: "sticky", top: 84 }}>
+        <Surface className="v2-context" style={{ padding: 14, position: "sticky", top: 84 }}>
           <Eyebrow style={{ marginBottom: 10 }}>Activity</Eyebrow>
           <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {RAIL.map((r) => {

@@ -42,6 +42,11 @@ interface Props {
   prefillChain?: ChainKey;
   /** Pre-fill the token picker (e.g. picked sweep bucket). */
   prefillToken?: Token;
+  /** Restrict the chain picker to this set (e.g. ["bnb"] under a Trial
+   *  scope). Undefined = all chains. The picker is filtered to this set and
+   *  the active chain is snapped into it, so a Trial session can't pick a
+   *  chain the server would reject — no mode-confusion. */
+  allowedChains?: ChainKey[];
   /** Override the modal title — Withdraw uses "Withdraw to your wallet". */
   titleOverride?: string;
   /** Wallet-level per-tx cap, used to soft-block before hitting backend. */
@@ -111,11 +116,12 @@ export function AgenticWalletSendModal({
   prefillAmount,
   prefillChain,
   prefillToken,
+  allowedChains,
   titleOverride,
   perTxMaxUsd,
   dailyLimitUsd,
 }: Props) {
-  const [chain, setChain] = useState<ChainKey>(prefillChain ?? "bnb");
+  const [chain, setChain] = useState<ChainKey>(prefillChain ?? allowedChains?.[0] ?? "bnb");
   const chainMeta = chainMetaFor(chain);
   const allowedTokens = chainMeta.tokens;
   const [token, setToken] = useState<Token>(prefillToken ?? "USDT");
@@ -129,6 +135,14 @@ export function AgenticWalletSendModal({
   useEffect(() => {
     if (!allowedTokens.includes(token)) setToken(allowedTokens[0]);
   }, [allowedTokens, token]);
+
+  // Snap the chain into the allowed set (e.g. Trial scope → BNB only) so a
+  // session can never sit on a chain the server would reject.
+  useEffect(() => {
+    if (allowedChains && allowedChains.length > 0 && !allowedChains.includes(chain)) {
+      setChain(allowedChains[0]);
+    }
+  }, [allowedChains, chain]);
 
   const [submitting, setSubmitting] = useState(false);
   useModalEscape(onClose, submitting);
@@ -344,7 +358,7 @@ export function AgenticWalletSendModal({
                 <ThemedSelect<ChainKey>
                   value={chain}
                   onChange={setChain}
-                  options={CHAIN_META.map((c) => ({
+                  options={CHAIN_META.filter((c) => !allowedChains || allowedChains.includes(c.key)).map((c) => ({
                     value: c.key,
                     label: c.label,
                     meta: c.multichainOnly ? "multichain" : undefined,

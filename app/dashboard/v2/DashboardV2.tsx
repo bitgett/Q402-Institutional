@@ -48,6 +48,7 @@ export default function DashboardV2() {
 
   return (
     <div
+      className="v2-app"
       style={{
         minHeight: "100vh",
         maxWidth: "100%",
@@ -89,6 +90,7 @@ export default function DashboardV2() {
       >
         {/* ── Top bar ──────────────────────────────────────────────── */}
         <header
+          className="v2-topbar"
           style={{
             height: 68,
             display: "flex",
@@ -125,10 +127,13 @@ export default function DashboardV2() {
         </header>
 
         {/* ── View router ──────────────────────────────────────────── */}
-        {view === "wallets" && <WalletsView {...viewProps} />}
-        {view === "activity" && <ActivityView {...viewProps} />}
-        {view === "treasury" && <TreasuryView {...viewProps} />}
-        {view === "developer" && <DeveloperView {...viewProps} />}
+        {/* key={view} re-mounts on switch so the enter animation replays. */}
+        <div key={view} className="v2-view-enter">
+          {view === "wallets" && <WalletsView {...viewProps} />}
+          {view === "activity" && <ActivityView {...viewProps} />}
+          {view === "treasury" && <TreasuryView {...viewProps} />}
+          {view === "developer" && <DeveloperView {...viewProps} />}
+        </div>
       </div>
     </div>
   );
