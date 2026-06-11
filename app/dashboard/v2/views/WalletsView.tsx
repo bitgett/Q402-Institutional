@@ -1023,7 +1023,11 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                   <div style={{ ...subCard(13), padding: 14, marginTop: 11 }}>
                     <div style={styles.assetTop}>
                       <div style={styles.token}>
-                        <span style={{ ...styles.coin, background: "linear-gradient(135deg,#2c3c57,#172234)", color: "#cfe0ff", fontSize: 14 }}>⛽</span>
+                        <span style={{ ...styles.coin, background: "linear-gradient(135deg,#2c3c57,#172234)" }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" fill="#cfe0ff" />
+                          </svg>
+                        </span>
                         <div>
                           Gas Tank
                           <div style={styles.sub}>Relayer gas · pre-funded · sponsors every settlement</div>
@@ -1130,9 +1134,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
               {!demoMode && activeWallet && (
                 <details className="v2-manage" style={styles.manageDetails}>
                   <summary className="v2-manage-summary" style={styles.manageSummary}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <span aria-hidden>⚙</span> Wallet management
-                    </span>
+                    <span>Wallet management</span>
                     <span style={{ color: v2.muted2, fontSize: fs.label }}>
                       Export key · Archive · Restore
                     </span>
