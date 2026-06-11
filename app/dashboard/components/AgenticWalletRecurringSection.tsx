@@ -311,11 +311,11 @@ export function AgenticWalletRecurringSection({
 
       {!loading && !error && visibleRules.length === 0 && (
         <div
-          className="rounded-lg border border-dashed p-4 mt-1"
-          style={{ borderColor: "rgba(74,222,128,0.28)" }}
+          className="mt-3 pt-3 border-t"
+          style={{ borderColor: "rgba(74,222,128,0.16)" }}
         >
-          <div className="text-[12.5px] text-white/85 mb-2 font-medium">
-            No schedules yet. Try one of these patterns:
+          <div className="text-[12px] text-white/70 mb-2">
+            No schedules yet — try one of these patterns:
           </div>
           {/* Vertical list — one pattern per row (icon chip + title + copy).
               Replaces the old multi-column grid, which overlapped inside the
