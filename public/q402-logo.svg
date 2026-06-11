@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="170" height="72" viewBox="0 0 170 72" role="img" aria-label="Q402 logo">
+  <rect width="170" height="72" rx="18" fill="none"/>
+  <g transform="translate(8 8)">
+    <rect x="0" y="0" width="56" height="56" rx="14" fill="#F5C518"/>
+    <rect x="21" y="21" width="14" height="14" rx="3.5" fill="#0B1220"/>
+  </g>
+  <text
+    x="80"
+    y="45"
+    fill="#F5C518"
+    font-family="Space Grotesk, Gilroy, Inter, Arial, sans-serif"
+    font-size="32"
+    font-weight="800"
+    letter-spacing="-1.2"
+  >Q402</text>
+</svg>

@@ -29,7 +29,7 @@ export const v2 = {
   text: "#f2f0e8",
   muted: "#8993a6",
   muted2: "#616d81",
-  yellow: "#f7ca16",
+  yellow: "#F5C518", // canonical Q402 brand gold (matches Q402-logo.svg + landing nav)
   mint: "#55e6a5",
   cyan: "#58c7f4",
   red: "#ff7777",
@@ -48,9 +48,25 @@ export const v2 = {
   toggleKnob: "#748096",
   toastBg: "#edf1f5",
   toastText: "#0b1422",
-  markInner: "#0a1220",
+  markInner: "#0B1220", // logo inner square
   actionText: "#101722", // primary action / scope-active text
   yieldBtnText: "#06150f",
+} as const;
+
+/**
+ * Readable type scale. The reference prototype set everything at 8–11px,
+ * which is unreadable in a real product. These are the FLOORS the v2 surface
+ * uses — nothing meaningful should render below `fs.micro`.
+ */
+export const fs = {
+  micro: 11, // badges / fine print (prototype 8–9)
+  label: 12, // eyebrows, field labels, meta (prototype 9–10)
+  body: 13, // secondary body text (prototype 10–11)
+  base: 14, // primary body, row/table text (prototype 11–12)
+  cardTitle: 15, // card / row titles (prototype 12–13)
+  title: 17, // section titles (prototype 13–14)
+  h2: 22, // view titles (prototype 21)
+  hero: 34, // hero balance / big numbers
 } as const;
 
 /**

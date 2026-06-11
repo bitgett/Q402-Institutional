@@ -50,7 +50,7 @@ import {
   SectionHead,
   displayFont,
 } from "../primitives";
-import { v2, glass, subCard, type Scope } from "../theme";
+import { v2, glass, subCard, fs, type Scope } from "../theme";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 
 /** Published @quackai/q402-mcp version surfaced on the MCP setup card. */
@@ -260,11 +260,11 @@ function CopyButton({
         setTimeout(() => setCopied(false), 1600);
       }}
       style={{
-        marginTop: 13,
+        marginTop: 15,
         border: 0,
         background: "none",
         color: copied ? v2.mint : v2.yellow,
-        fontSize: 9,
+        fontSize: fs.label,
         cursor: isOff ? (disabledTooltip ? "help" : "default") : "pointer",
         opacity: isOff ? 0.4 : 1,
         padding: 0,
@@ -309,9 +309,9 @@ function ContextRail({
               background: isActive ? "rgba(255,255,255,.05)" : "none",
               color: isActive ? v2.text : v2.muted,
               textAlign: "left",
-              padding: 9,
+              padding: 11,
               borderRadius: 9,
-              fontSize: 10,
+              fontSize: fs.body,
               cursor: "pointer",
             }}
           >
@@ -365,14 +365,14 @@ function KeyCard({
         {active && (
           <span
             style={{
-              fontSize: 7.5,
+              fontSize: fs.micro,
               letterSpacing: ".14em",
               textTransform: "uppercase",
               fontWeight: 700,
               color: v2.actionText,
               background: v2.yellow,
               borderRadius: 6,
-              padding: "2px 6px",
+              padding: "3px 7px",
             }}
           >
             Active scope
@@ -383,12 +383,12 @@ function KeyCard({
       <div
         style={{
           marginTop: 12,
-          padding: 11,
+          padding: 13,
           border: `1px solid ${v2.line}`,
           borderRadius: 10,
           background: v2.inputFill,
           color: locked ? v2.muted2 : "#aab5c4",
-          font: `500 9px ${displayFont}`,
+          font: `500 ${fs.body}px ${displayFont}`,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
@@ -402,12 +402,12 @@ function KeyCard({
               ? (lockedNote ?? "Locked")
               : maskKey(apiKey)}
         </span>
-        <span style={{ color: tagColor, fontSize: 8, fontWeight: 700, flexShrink: 0 }}>
+        <span style={{ color: tagColor, fontSize: fs.label, fontWeight: 700, flexShrink: 0 }}>
           {tag}
         </span>
       </div>
 
-      <div style={{ color: v2.muted, fontSize: 9, marginTop: 8 }}>{sub}</div>
+      <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 9 }}>{sub}</div>
 
       {demo ? (
         <CopyButton
@@ -436,25 +436,25 @@ function WebhookStatusCard({
       <Eyebrow>Webhook</Eyebrow>
       <div
         style={{
-          font: `600 16px ${displayFont}`,
+          font: `600 ${fs.title}px ${displayFont}`,
           marginTop: 12,
           color: configured ? v2.mint : v2.text,
         }}
       >
         {configured ? "Configured" : "Not configured"}
       </div>
-      <div style={{ color: v2.muted, fontSize: 9, marginTop: 8 }}>
+      <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 9 }}>
         Signed POST after each settlement
       </div>
       <button
         type="button"
         onClick={onConfigure}
         style={{
-          marginTop: 13,
+          marginTop: 15,
           border: 0,
           background: "none",
           color: v2.yellow,
-          fontSize: 9,
+          fontSize: fs.label,
           cursor: "pointer",
           padding: 0,
         }}
@@ -497,14 +497,14 @@ function McpSetupCard({
       <SectionHead
         title={
           <div>
-            <div style={{ font: `600 13px ${displayFont}` }}>MCP setup</div>
-            <div style={{ color: v2.muted, fontSize: 9, marginTop: 2 }}>
+            <div style={{ font: `600 ${fs.title}px ${displayFont}` }}>MCP setup</div>
+            <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 3 }}>
               Claude · Codex · Cursor · Cline
             </div>
           </div>
         }
         action={
-          <span style={{ color: v2.mint, fontSize: 8, fontWeight: 700 }}>
+          <span style={{ color: v2.mint, fontSize: fs.label, fontWeight: 700 }}>
             {MCP_VERSION}
           </span>
         }
@@ -512,19 +512,19 @@ function McpSetupCard({
       <div
         style={{
           marginTop: 12,
-          padding: 13,
+          padding: 14,
           border: `1px solid ${v2.line}`,
           borderRadius: 10,
           background: v2.inputFill,
           color: "#aeb8c6",
-          font: `500 9px/1.6 ${displayFont}`,
+          font: `500 ${fs.body}px/1.6 ${displayFont}`,
           whiteSpace: "pre-wrap",
           wordBreak: "break-all",
         }}
       >
         {MCP_INSTALL}
       </div>
-      <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 13 }}>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", marginTop: 14 }}>
         <button
           type="button"
           disabled={demo}
@@ -539,7 +539,7 @@ function McpSetupCard({
             border: 0,
             background: "none",
             color: copied ? v2.mint : v2.yellow,
-            fontSize: 9,
+            fontSize: fs.label,
             cursor: demo ? "help" : "pointer",
             opacity: demo ? 0.4 : 1,
             padding: 0,
@@ -549,7 +549,7 @@ function McpSetupCard({
         </button>
         <a
           href="/claude"
-          style={{ color: v2.muted, fontSize: 9, textDecoration: "none" }}
+          style={{ color: v2.muted, fontSize: fs.label, textDecoration: "none" }}
         >
           Full guide →
         </a>
@@ -558,8 +558,8 @@ function McpSetupCard({
       {/* Config JSON pre-filled with the sandbox key (safe to paste). */}
       <div
         style={{
-          marginTop: 12,
-          fontSize: 8,
+          marginTop: 14,
+          fontSize: fs.label,
           letterSpacing: ".14em",
           textTransform: "uppercase",
           fontWeight: 700,
@@ -574,12 +574,12 @@ function McpSetupCard({
       <div style={{ position: "relative", marginTop: 6 }}>
         <div
           style={{
-            padding: 13,
+            padding: 14,
             border: `1px solid ${v2.line}`,
             borderRadius: 10,
             background: v2.inputFill,
             color: "#aeb8c6",
-            font: `500 9px/1.6 ${displayFont}`,
+            font: `500 ${fs.body}px/1.6 ${displayFont}`,
             whiteSpace: "pre-wrap",
             wordBreak: "break-all",
           }}
@@ -603,8 +603,8 @@ function McpSetupCard({
             border: 0,
             background: "rgba(255,255,255,.05)",
             color: jsonCopied ? v2.mint : v2.muted,
-            fontSize: 8,
-            padding: "3px 7px",
+            fontSize: fs.label,
+            padding: "4px 8px",
             borderRadius: 6,
             cursor: demo ? "help" : "pointer",
             opacity: demo ? 0.55 : 1,
@@ -614,7 +614,7 @@ function McpSetupCard({
         </button>
       </div>
 
-      <div style={{ color: v2.muted2, fontSize: 9, marginTop: 10, lineHeight: 1.5 }}>
+      <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 12, lineHeight: 1.6 }}>
         Safe to paste anywhere, then ask your AI &ldquo;Set up Q402&rdquo; —{" "}
         <code style={{ color: v2.muted }}>q402_doctor</code> writes{" "}
         <code style={{ color: v2.muted }}>~/.q402/mcp.env</code> with your live
@@ -731,8 +731,8 @@ function WebhookConfig({
     background: v2.inputFill,
     border: `1px solid ${v2.line}`,
     borderRadius: 10,
-    padding: "9px 11px",
-    fontSize: 10,
+    padding: "11px 13px",
+    fontSize: fs.body,
     color: v2.text,
     outline: "none",
   };
@@ -747,7 +747,7 @@ function WebhookConfig({
           </span>
         }
       />
-      <div style={{ color: v2.muted, fontSize: 9, marginBottom: 12 }}>
+      <div style={{ color: v2.muted, fontSize: fs.label, marginBottom: 12 }}>
         Signed POST after every relay.
         {webhookUrl && (
           <span style={{ color: v2.mint, marginLeft: 6 }}>· Active</span>
@@ -769,8 +769,8 @@ function WebhookConfig({
             background: "rgba(247,202,22,.10)",
             color: v2.yellow,
             borderRadius: 10,
-            padding: "0 16px",
-            fontSize: 10,
+            padding: "0 18px",
+            fontSize: fs.body,
             fontWeight: 700,
             cursor: saving || !urlInput ? "default" : "pointer",
             opacity: saving || !urlInput ? 0.4 : 1,
@@ -792,7 +792,7 @@ function WebhookConfig({
         >
           <div
             style={{
-              fontSize: 8,
+              fontSize: fs.label,
               letterSpacing: ".12em",
               textTransform: "uppercase",
               fontWeight: 700,
@@ -803,10 +803,10 @@ function WebhookConfig({
           </div>
           <div
             style={{
-              font: `500 10px ${displayFont}`,
+              font: `500 ${fs.body}px ${displayFont}`,
               color: "#cbd3dd",
               wordBreak: "break-all",
-              marginTop: 4,
+              marginTop: 6,
             }}
           >
             {secret}
@@ -819,11 +819,11 @@ function WebhookConfig({
               setTimeout(() => setSecretCopied(false), 1600);
             }}
             style={{
-              marginTop: 6,
+              marginTop: 8,
               border: 0,
               background: "none",
               color: secretCopied ? v2.mint : v2.muted,
-              fontSize: 9,
+              fontSize: fs.label,
               cursor: "pointer",
               padding: 0,
             }}
@@ -844,8 +844,8 @@ function WebhookConfig({
               background: "none",
               color: v2.muted,
               borderRadius: 8,
-              padding: "6px 12px",
-              fontSize: 9,
+              padding: "8px 14px",
+              fontSize: fs.label,
               cursor: testing ? "default" : "pointer",
               opacity: testing ? 0.4 : 1,
             }}
@@ -855,7 +855,7 @@ function WebhookConfig({
           {testResult && (
             <span
               style={{
-                fontSize: 9,
+                fontSize: fs.label,
                 color: testResult.ok ? v2.mint : v2.red,
               }}
             >
@@ -922,20 +922,20 @@ function Playground({
   }, []);
 
   const fieldLabel: React.CSSProperties = {
-    fontSize: 8,
+    fontSize: fs.label,
     letterSpacing: ".14em",
     textTransform: "uppercase",
     color: v2.muted2,
     display: "block",
-    marginBottom: 6,
+    marginBottom: 7,
   };
   const field: React.CSSProperties = {
     width: "100%",
     background: v2.inputFill,
     border: `1px solid ${v2.line}`,
     borderRadius: 10,
-    padding: "9px 11px",
-    fontSize: 11,
+    padding: "11px 13px",
+    fontSize: fs.body,
     color: v2.text,
     outline: "none",
   };
@@ -1018,8 +1018,8 @@ function Playground({
           background: v2.inputFill,
           border: `1px solid ${v2.line}`,
           borderRadius: 10,
-          padding: 13,
-          font: `500 10px/1.7 ${displayFont}`,
+          padding: 14,
+          font: `500 ${fs.body}px/1.7 ${displayFont}`,
           color: v2.muted,
           whiteSpace: "pre-wrap",
         }}
@@ -1037,8 +1037,8 @@ function Playground({
           background: v2.yellow,
           color: v2.actionText,
           fontWeight: 700,
-          fontSize: 11,
-          padding: "10px 18px",
+          fontSize: fs.body,
+          padding: "11px 20px",
           borderRadius: 10,
           cursor: loading ? "default" : "pointer",
           opacity: loading ? 0.6 : 1,
@@ -1054,8 +1054,8 @@ function Playground({
             ...subCard(10, 0.0),
             background: "rgba(85,230,165,.05)",
             borderColor: "rgba(85,230,165,.20)",
-            padding: 13,
-            font: `500 10px/1.7 ${displayFont}`,
+            padding: 14,
+            font: `500 ${fs.body}px/1.7 ${displayFont}`,
           }}
         >
           <div style={{ color: v2.mint, fontWeight: 700, marginBottom: 6 }}>
@@ -1074,8 +1074,8 @@ function Playground({
         </div>
       )}
 
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${v2.line}` }}>
-        <div style={{ color: v2.muted2, fontSize: 9, marginBottom: 6 }}>
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${v2.line}` }}>
+        <div style={{ color: v2.muted2, fontSize: fs.label, marginBottom: 7 }}>
           Your {trialView ? "Trial" : "Multichain"} API Key
         </div>
         <div
@@ -1086,8 +1086,8 @@ function Playground({
             background: v2.inputFill,
             border: `1px solid ${v2.line}`,
             borderRadius: 8,
-            padding: "7px 11px",
-            font: `500 10px ${displayFont}`,
+            padding: "9px 13px",
+            font: `500 ${fs.body}px ${displayFont}`,
             color: v2.muted,
           }}
         >
@@ -1106,7 +1106,7 @@ function Playground({
               border: 0,
               background: "none",
               color: v2.muted2,
-              fontSize: 8,
+              fontSize: fs.label,
               letterSpacing: ".12em",
               textTransform: "uppercase",
               cursor: demo ? "help" : apiKey ? "pointer" : "default",
@@ -1128,12 +1128,12 @@ function DocsCard() {
       <SectionHead
         title="Documentation"
         action={
-          <a href="/docs" style={{ color: v2.yellow, fontSize: 9, textDecoration: "none" }}>
+          <a href="/docs" style={{ color: v2.yellow, fontSize: fs.label, textDecoration: "none" }}>
             Open docs →
           </a>
         }
       />
-      <div style={{ color: v2.muted, fontSize: 10, lineHeight: 1.6 }}>
+      <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.7 }}>
         API reference, gas-pool model, per-chain witness scheme, and the SDK
         integration guide live at{" "}
         <a href="/docs" style={{ color: v2.yellow, textDecoration: "none" }}>
@@ -1224,7 +1224,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
               flexWrap: "wrap",
             }}
           >
-            <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
+            <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em" }}>
               Developer access
             </div>
             {demoMode && (
@@ -1234,14 +1234,14 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 5,
-                  fontSize: 8.5,
+                  fontSize: fs.label,
                   fontWeight: 700,
                   letterSpacing: ".08em",
                   color: v2.yellow,
                   background: "rgba(247,202,22,.08)",
                   border: "1px solid rgba(247,202,22,.30)",
                   borderRadius: 7,
-                  padding: "3px 8px",
+                  padding: "4px 9px",
                 }}
               >
                 <span
@@ -1257,7 +1257,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
               </span>
             )}
           </div>
-          <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
+          <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6 }}>
             Scoped credentials and AI-client integration without mixing product
             economics.
             {loading && <span style={{ color: v2.muted2 }}> · Loading…</span>}

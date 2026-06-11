@@ -45,7 +45,7 @@ import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
 import { Surface, Eyebrow, V2AccentScope, displayFont, shortAddr } from "../primitives";
-import { v2 } from "../theme";
+import { v2, fs } from "../theme";
 import type { Scope } from "../theme";
 
 export interface ActivityViewProps {
@@ -557,20 +557,20 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
                     border: active ? `1px solid ${v2.line}` : "1px solid transparent",
                     background: active ? "rgba(247,202,22,.06)" : "transparent",
                     borderRadius: 10,
-                    padding: "9px 11px",
+                    padding: "11px 13px",
                     cursor: "pointer",
                   }}
                 >
                   <div
                     style={{
-                      fontSize: 11.5,
+                      fontSize: fs.body,
                       fontWeight: active ? 700 : 500,
                       color: active ? v2.yellow : v2.text,
                     }}
                   >
                     {r.label}
                   </div>
-                  <div style={{ fontSize: 9, color: v2.muted2, marginTop: 1 }}>{r.hint}</div>
+                  <div style={{ fontSize: fs.label, color: v2.muted2, marginTop: 2 }}>{r.hint}</div>
                 </button>
               );
             })}
@@ -581,9 +581,9 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
               marginTop: 14,
               paddingTop: 12,
               borderTop: `1px solid ${v2.line}`,
-              fontSize: 9,
+              fontSize: fs.label,
               color: v2.muted2,
-              lineHeight: 1.5,
+              lineHeight: 1.6,
             }}
           >
             Scope <span style={{ color: v2.yellow }}>{demoMode ? "preview" : scope}</span> ·{" "}
@@ -616,12 +616,12 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
                   flexWrap: "wrap",
                 }}
               >
-                <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
+                <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em" }}>
                   Settlement activity
                 </div>
                 {demoMode && <PreviewChip />}
               </div>
-              <div style={{ color: v2.muted, fontSize: 10, marginTop: 4, maxWidth: 460 }}>
+              <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, maxWidth: 460, lineHeight: 1.5 }}>
                 {demoMode ? (
                   <>Manual, scheduled, and cross-chain execution. Showing example settlements.</>
                 ) : (
@@ -632,7 +632,7 @@ export function ActivityView({ ownerAddress, signMessage, scope }: ActivityViewP
                 )}
               </div>
             </div>
-            <div style={{ color: v2.muted, fontSize: 9, fontFamily: displayFont }}>
+            <div style={{ color: v2.muted, fontSize: fs.label, fontFamily: displayFont }}>
               {totalInView} in view
             </div>
           </div>
@@ -727,9 +727,9 @@ function FilterChip({
         border: `1px solid ${active ? "rgba(247,202,22,.30)" : v2.line}`,
         background: active ? "rgba(247,202,22,.10)" : "rgba(255,255,255,.02)",
         color: active ? v2.yellow : v2.muted,
-        fontSize: 9.5,
+        fontSize: fs.label,
         fontWeight: active ? 700 : 500,
-        padding: "6px 10px",
+        padding: "7px 11px",
         borderRadius: 8,
         cursor: "pointer",
         whiteSpace: "nowrap",
@@ -780,10 +780,10 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
             return (
               <Tr key={`${tx.relayTxHash}-${i}`}>
                 <Td>
-                  <div style={{ fontSize: 11.5, color: v2.text, fontWeight: 500 }}>
+                  <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500 }}>
                     {tx._demoKind ?? settlementKind(tx)}
                   </div>
-                  <div style={{ fontSize: 9, color: v2.muted2, marginTop: 2 }}>
+                  <div style={{ fontSize: fs.body, color: v2.muted2, marginTop: 3 }}>
                     {tx._demoSub ?? fmtDate(tx.relayedAt)} ·{" "}
                     {hasExplorer ? (
                       <a
@@ -819,7 +819,7 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                 </Td>
                 <Td>
                   <span
-                    style={{ fontSize: 10.5, color: v2.muted, fontFamily: displayFont }}
+                    style={{ fontSize: fs.body, color: v2.muted, fontFamily: displayFont }}
                     title={`${tx.fromUser} → ${tx.toUser}`}
                   >
                     {shortAddr(tx.fromUser)}
@@ -831,7 +831,7 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 6,
-                      fontSize: 10.5,
+                      fontSize: fs.base,
                       color: v2.muted,
                     }}
                   >
@@ -854,7 +854,7 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                   />
                 </Td>
                 <Td align="right">
-                  <span style={{ fontSize: 12, fontWeight: 600, fontFamily: displayFont }}>
+                  <span style={{ fontSize: fs.base, fontWeight: 600, fontFamily: displayFont }}>
                     {Number(tx.tokenAmount).toFixed(2)}{" "}
                     <span style={{ color: v2.muted2, fontWeight: 400 }}>{tx.tokenSymbol}</span>
                   </span>
@@ -893,8 +893,8 @@ function BridgeTable({ bridges }: { bridges: BridgeRecord[] }) {
             return (
               <Tr key={`${b.messageId}-${i}`}>
                 <Td>
-                  <div style={{ fontSize: 11.5, color: v2.text, fontWeight: 500 }}>CCIP bridge</div>
-                  <div style={{ fontSize: 9, color: v2.muted2, marginTop: 2 }}>
+                  <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500 }}>CCIP bridge</div>
+                  <div style={{ fontSize: fs.body, color: v2.muted2, marginTop: 3 }}>
                     {fmtDate(b.initiatedAt)} ·{" "}
                     {hasExplorer ? (
                       <a
@@ -921,7 +921,7 @@ function BridgeTable({ bridges }: { bridges: BridgeRecord[] }) {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 6,
-                      fontSize: 10.5,
+                      fontSize: fs.base,
                       color: v2.muted,
                     }}
                   >
@@ -939,7 +939,7 @@ function BridgeTable({ bridges }: { bridges: BridgeRecord[] }) {
                   </span>
                 </Td>
                 <Td>
-                  <span style={{ fontSize: 10.5, color: v2.muted, fontFamily: displayFont }}>
+                  <span style={{ fontSize: fs.base, color: v2.muted, fontFamily: displayFont }}>
                     {b.feeWhole.toFixed(4)} {b.feeToken}
                   </span>
                 </Td>
@@ -950,7 +950,7 @@ function BridgeTable({ bridges }: { bridges: BridgeRecord[] }) {
                   />
                 </Td>
                 <Td align="right">
-                  <span style={{ fontSize: 12, fontWeight: 600, fontFamily: displayFont }}>
+                  <span style={{ fontSize: fs.base, fontWeight: 600, fontFamily: displayFont }}>
                     {usdc.toFixed(2)} <span style={{ color: v2.muted2, fontWeight: 400 }}>USDC</span>
                   </span>
                 </Td>
@@ -976,12 +976,12 @@ function Th({ children, align = "left" }: { children: React.ReactNode; align?: "
     <th
       style={{
         textAlign: align,
-        fontSize: 9,
+        fontSize: fs.label,
         letterSpacing: ".12em",
         textTransform: "uppercase",
         fontWeight: 700,
         color: v2.muted2,
-        padding: "0 12px 9px",
+        padding: "0 12px 11px",
       }}
     >
       {children}
@@ -995,7 +995,7 @@ function Td({
   children: React.ReactNode;
   align?: "left" | "right";
 }) {
-  return <td style={{ textAlign: align, padding: "12px", verticalAlign: "middle" }}>{children}</td>;
+  return <td style={{ textAlign: align, padding: "14px 12px", verticalAlign: "middle" }}>{children}</td>;
 }
 
 function StatusPill({ kind, label }: { kind: "success" | "pending" | "failed"; label: string }) {
@@ -1006,12 +1006,12 @@ function StatusPill({ kind, label }: { kind: "success" | "pending" | "failed"; l
         display: "inline-flex",
         alignItems: "center",
         gap: 5,
-        fontSize: 9,
+        fontSize: fs.label,
         fontWeight: 700,
         color,
         background: `${color}14`,
         border: `1px solid ${color}33`,
-        padding: "4px 9px",
+        padding: "5px 10px",
         borderRadius: 999,
       }}
     >
@@ -1030,13 +1030,13 @@ function PreviewChip() {
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        fontSize: 9,
+        fontSize: fs.label,
         fontWeight: 700,
         letterSpacing: ".02em",
         color: v2.yellow,
         background: "rgba(247,202,22,.10)",
         border: "1px solid rgba(247,202,22,.30)",
-        padding: "4px 9px",
+        padding: "5px 10px",
         borderRadius: 999,
         whiteSpace: "nowrap",
       }}
@@ -1053,11 +1053,12 @@ function Empty({ text, tone }: { text: string; tone?: "red" }) {
       style={{
         padding: "44px 16px",
         textAlign: "center",
-        fontSize: 11,
+        fontSize: fs.body,
         color: tone === "red" ? v2.red : v2.muted,
         border: `1px dashed ${v2.line}`,
         borderRadius: 12,
         marginTop: 6,
+        lineHeight: 1.5,
       }}
     >
       {text}
