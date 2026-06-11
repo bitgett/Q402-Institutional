@@ -64,7 +64,7 @@ export default function TermsPage() {
             <h2 className="text-white font-semibold text-base mb-3">5. Gas Tank</h2>
             <p className="mb-3">
               Some plans require customers to pre-fund a Gas Tank by depositing the native gas token for
-              the selected chain to the Q402 Gas Tank address shown in your Dashboard → Gas Tank tab
+              the selected chain to the Q402 Gas Tank address shown in your Dashboard → Treasury view
               (each chain has its own address and its own native token — refer to the dashboard for the
               exact deposit instructions per chain). Do not send Gas Tank deposits to the relayer
               (signer) address. These deposits are used exclusively to cover on-chain gas costs for
