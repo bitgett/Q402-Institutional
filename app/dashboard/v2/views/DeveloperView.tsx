@@ -457,13 +457,13 @@ function InlineCopy({
 
 // ── Context sub-nav (left rail) ──────────────────────────────────────────────
 const SECTIONS = [
-  { id: "credentials", label: "Credentials" },
-  { id: "integration", label: "Integration guide" },
-  { id: "mcp", label: "MCP setup" },
-  { id: "tools", label: "MCP tool reference" },
-  { id: "webhook", label: "Webhook" },
-  { id: "playground", label: "API playground" },
-  { id: "docs", label: "Documentation" },
+  { id: "credentials", label: "Credentials", hint: "API keys · scopes" },
+  { id: "integration", label: "Integration guide", hint: "SDK in 4 steps" },
+  { id: "mcp", label: "MCP setup", hint: "Claude · Cursor · Cline" },
+  { id: "tools", label: "MCP tool reference", hint: "24 tools" },
+  { id: "webhook", label: "Webhook", hint: "Signed settlement POSTs" },
+  { id: "playground", label: "API playground", hint: "Simulate a quote" },
+  { id: "docs", label: "Documentation", hint: "Full reference" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -487,21 +487,18 @@ function ContextRail({
             onClick={() => onSelect(s.id)}
             style={{
               width: "100%",
-              border: 0,
-              borderLeft: isActive
-                ? `3px solid ${v2.yellow}`
-                : "1px solid transparent",
+              border: isActive ? `1px solid ${v2.line}` : "1px solid transparent",
               background: isActive ? "rgba(247,202,22,.07)" : "none",
-              color: isActive ? v2.yellow : v2.muted,
-              fontWeight: isActive ? 600 : 400,
               textAlign: "left",
-              padding: "10px 11px 10px 12px",
-              borderRadius: "0 9px 9px 0",
-              fontSize: fs.body,
+              padding: "10px 13px",
+              borderRadius: 10,
               cursor: "pointer",
             }}
           >
-            {s.label}
+            <div style={{ fontSize: fs.body, fontWeight: isActive ? 700 : 500, color: isActive ? v2.yellow : v2.text }}>
+              {s.label}
+            </div>
+            <div style={{ fontSize: fs.label, color: v2.muted2, marginTop: 2 }}>{s.hint}</div>
           </button>
         );
       })}
