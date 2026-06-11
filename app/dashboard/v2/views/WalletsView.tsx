@@ -35,7 +35,7 @@
  * multichain = 10 chains / live key. It does not change layout structure.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Surface,
   V2AccentScope,
@@ -117,6 +117,52 @@ const CHAIN_LABEL: Record<string, string> = {
 
 // Allocation-bar segment colours, in prototype order (yellow / cyan / violet …).
 const SEG_COLORS = [v2.yellow, v2.cyan, v2.chartViolet, v2.mint, "#c98bff", "#ff9d6b"];
+
+// Per-chain brand logos (public/). Falls back to a colored dot when absent.
+const CHAIN_LOGO: Record<string, string> = {
+  bnb: "/bnb.png",
+  eth: "/eth.png",
+  avax: "/avax.png",
+  arbitrum: "/arbitrum.png",
+  xlayer: "/xlayer.png",
+  scroll: "/scroll.png",
+  mantle: "/mantle.png",
+  injective: "/injective.png",
+  monad: "/monad.png",
+  stable: "/stable.jpg",
+};
+
+/** Round chain logo with a colored-dot fallback for unmapped chains. */
+function ChainIcon({ chain, size = 16, color }: { chain: string; size?: number; color?: string }) {
+  const src = CHAIN_LOGO[chain];
+  if (!src) {
+    return (
+      <span style={{ width: size, height: size, borderRadius: "50%", background: color ?? v2.muted2, flexShrink: 0, display: "inline-block" }} />
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" width={size} height={size} style={{ borderRadius: "50%", flexShrink: 0, objectFit: "cover", display: "block", background: "#0c1626" }} />
+  );
+}
+
+/** Round token logo (USDT/USDC/Aave) from public/ SVGs. */
+function TokenIcon({ src, size = 27, style }: { src: string; size?: number; style?: CSSProperties }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" width={size} height={size} style={{ borderRadius: "50%", flexShrink: 0, display: "block", ...style }} />
+  );
+}
+
+/** Overlapping USDT + USDC pair — the "Stablecoins" chip. */
+function StablePair({ size = 27 }: { size?: number }) {
+  return (
+    <div style={{ display: "flex", flexShrink: 0, alignItems: "center" }}>
+      <TokenIcon src="/usdt.svg" size={size} style={{ boxShadow: "0 0 0 2px #0c1626" }} />
+      <TokenIcon src="/usdc.svg" size={size} style={{ marginLeft: -size * 0.38, boxShadow: "0 0 0 2px #0c1626" }} />
+    </div>
+  );
+}
 
 function fmtUsd(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "$—";
@@ -552,6 +598,44 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
     return { total, segs };
   }, [activeBalance]);
 
+  // Gas Tank summary surfaced on the Wallets page (same reads TreasuryView
+  // uses): relayer-gas balance per chain × price → total USD + funded chains.
+  // Reuses the cached owner-auth (no extra sign prompt).
+  const [gasTank, setGasTank] = useState<{ usd: number; funded: string[] } | null>(null);
+  useEffect(() => {
+    if (!addr) {
+      setGasTank(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const auth = await getAuthCreds(addr, signMessage);
+        if (!auth || cancelled) return;
+        const qs = new URLSearchParams({ address: addr, nonce: auth.nonce, sig: auth.signature }).toString();
+        const [balRes, priceRes] = await Promise.all([
+          fetch(`/api/gas-tank/user-balance?${qs}`),
+          fetch(`/api/gas-tank`),
+        ]);
+        const balData = (await balRes.json().catch(() => ({}))) as { balances?: Record<string, number> };
+        const priceData = (await priceRes.json().catch(() => ({}))) as { tanks?: Array<{ key: string; price: number }> };
+        if (cancelled) return;
+        const balances = balData.balances ?? {};
+        const prices: Record<string, number> = {};
+        for (const t of priceData.tanks ?? []) prices[t.key] = t.price;
+        const usd = Object.entries(balances).reduce((s, [c, a]) => s + a * (prices[c] ?? 0), 0);
+        const funded = Object.entries(balances).filter(([, a]) => a > 0).map(([c]) => c);
+        setGasTank({ usd, funded });
+      } catch {
+        /* leave null — card shows $0 / top-up hint */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addr]);
+
   const policyRows = useMemo(() => policyRowsFromConfig(hookConfig), [hookConfig]);
   const protectionsActive = policyRows.filter((r) => r.on).length;
   // Score: 1 always-on compliance gate + each active programmable protection,
@@ -657,6 +741,11 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
         segs: DEMO.allocation.map((a) => ({ chain: a.chain, usd: 0, pct: a.pct })),
       }
     : allocation;
+
+  // Gas Tank view model — demo shows the same figures as the Treasury demo.
+  const vmGasTank = demoMode
+    ? { usd: 18.42, funded: ["bnb", "eth", "arbitrum"] }
+    : { usd: gasTank?.usd ?? 0, funded: gasTank?.funded ?? [] };
 
   // Policy view model.
   const vmPolicyRows = demoMode ? DEMO.policy.rows : policyRows;
@@ -889,17 +978,17 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
               {/* Content */}
               <div style={styles.content}>
-                {/* Capital allocation + Yield */}
+                {/* Capital overview — Stablecoins + Gas Tank on one row, Yield below */}
                 <section>
-                  <SectionHead title="Capital allocation" meta="10 networks monitored" />
+                  <SectionHead title="Capital overview" meta="10 networks monitored" />
                   <div style={styles.allocation}>
                     <div style={{ ...subCard(13), padding: 14 }}>
                       <div style={styles.assetTop}>
                         <div style={styles.token}>
-                          <span style={styles.coin}>₮</span>
+                          <StablePair size={26} />
                           <div>
                             Stablecoins
-                            <div style={styles.sub}>Available to agents</div>
+                            <div style={styles.sub}>USDT · USDC · available to agents</div>
                           </div>
                         </div>
                         <div style={{ font: `600 19px ${displayFont}` }}>{fmtUsd(vmAlloc.total)}</div>
@@ -923,8 +1012,9 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                       <div style={styles.chains}>
                         {vmAlloc.segs.length > 0 ? (
                           vmAlloc.segs.map((s) => (
-                            <span key={s.chain}>
-                              <b style={{ color: "#d6dce5" }}>{Math.round(s.pct)}%</b>{" "}
+                            <span key={s.chain} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                              <ChainIcon chain={s.chain} size={15} />
+                              <b style={{ color: "#d6dce5" }}>{Math.round(s.pct)}%</b>
                               {CHAIN_LABEL[s.chain] ?? s.chain}
                             </span>
                           ))
@@ -934,29 +1024,61 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                       </div>
                     </div>
 
-                    {/* Yield — reuse the shipped Earn section (real Aave data +
-                        its own deposit/withdraw modal). It carries its own
-                        bordered card + a `mt-4` top margin; neutralise that
-                        margin so it top-aligns with the allocation card. The
-                        surrounding V2AccentScope re-skins its emerald → yellow.
-                        In demo mode there is no wallet/owner to authenticate the
-                        Earn section's reads, so we render a static demo card
-                        instead of mounting it (which would sign-prompt / 401). */}
+                    {/* Gas Tank — surfaced on page 1 next to capital so the
+                        operator sees relayer-gas headroom without leaving the
+                        Wallets view. Full management lives in the Treasury tab. */}
+                    <div style={{ ...subCard(13), padding: 14 }}>
+                      <div style={styles.assetTop}>
+                        <div style={styles.token}>
+                          <span style={{ ...styles.coin, background: "linear-gradient(135deg,#2c3c57,#172234)", color: "#cfe0ff", fontSize: 14 }}>⛽</span>
+                          <div>
+                            Gas Tank
+                            <div style={styles.sub}>Relayer gas · pre-funded</div>
+                          </div>
+                        </div>
+                        <div style={{ font: `600 19px ${displayFont}` }}>{fmtUsd(vmGasTank.usd)}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 16, flexWrap: "wrap" }}>
+                        {vmGasTank.funded.length > 0 ? (
+                          <>
+                            {vmGasTank.funded.slice(0, 7).map((c) => (
+                              <ChainIcon key={c} chain={c} size={18} />
+                            ))}
+                            <span style={{ color: v2.muted, fontSize: fs.label, marginLeft: 3 }}>
+                              {vmGasTank.funded.length} chain{vmGasTank.funded.length > 1 ? "s" : ""} funded
+                            </span>
+                          </>
+                        ) : (
+                          <span style={{ color: v2.muted, fontSize: fs.label }}>
+                            Empty — top up in Treasury to sponsor gas.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Yield — reuse the shipped Earn section (real Aave data +
+                      its own deposit/withdraw modal), full-width below the
+                      Stablecoins / Gas-Tank row. The surrounding V2AccentScope
+                      re-skins its emerald → yellow. In demo mode there is no
+                      wallet/owner to authenticate its reads, so render a static
+                      demo card instead of mounting it (would 401 / sign-prompt). */}
+                  <div style={{ marginTop: 11 }}>
                     {demoMode || !activeWallet ? (
                       <div style={{ ...subCard(13), padding: 14 }}>
                         <div style={styles.assetTop}>
                           <div style={styles.token}>
-                            <span style={{ ...styles.coin, background: v2.yellow, color: v2.actionText }}>%</span>
+                            <TokenIcon src="/aave.svg" size={27} />
                             <div>
-                              Yield (Earn)
-                              <div style={styles.sub}>Aave · auto-allocated</div>
+                              Q402 Yield
+                              <div style={styles.sub}>Aave V3 · ~2.33% APY · paid plans</div>
                             </div>
                           </div>
                           <div style={{ font: `600 19px ${displayFont}` }}>$0.00</div>
                         </div>
                         <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 14, lineHeight: 1.6 }}>
-                          Idle stablecoins can earn up to 35% allocation in Aave.
-                          Connect your wallet to enable Earn.
+                          Idle stablecoins can earn ~2.33% APY in Aave V3 (up to your 35%
+                          yield cap). Available on paid plans — connect + upgrade to enable Earn.
                         </div>
                       </div>
                     ) : (
@@ -1037,22 +1159,32 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                 </section>
               </div>
 
-              {/* Danger zone — export key / archive / restore. Only ever
-                  acts on a REAL connected wallet (never a demo wallet);
-                  brings its own red styling, which we intentionally keep
-                  red (danger should not read as the yellow accent). In
-                  demo mode the block below renders a muted hint instead. */}
+              {/* Wallet management (export key / archive / restore) — tucked
+                  into a collapsed disclosure at the foot of the console so the
+                  destructive actions don't crowd the everyday surface. Only
+                  ever acts on a REAL connected wallet; the DangerZone keeps its
+                  own red styling once expanded. */}
               {!demoMode && activeWallet && (
-                <div style={styles.dangerZone}>
-                  <AgenticWalletDangerZone
-                    wallet={activeWallet}
-                    address={addr!}
-                    signMessage={signMessage}
-                    onChanged={afterWrite}
-                    balanceUsd={balances[activeWallet.walletId]?.totalUsd ?? null}
-                    onRequestBalanceRefresh={() => afterWrite()}
-                  />
-                </div>
+                <details className="v2-manage" style={styles.manageDetails}>
+                  <summary className="v2-manage-summary" style={styles.manageSummary}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <span aria-hidden>⚙</span> Wallet management
+                    </span>
+                    <span style={{ color: v2.muted2, fontSize: fs.label }}>
+                      Export key · Archive · Restore
+                    </span>
+                  </summary>
+                  <div style={styles.dangerZone}>
+                    <AgenticWalletDangerZone
+                      wallet={activeWallet}
+                      address={addr!}
+                      signMessage={signMessage}
+                      onChanged={afterWrite}
+                      balanceUsd={balances[activeWallet.walletId]?.totalUsd ?? null}
+                      onRequestBalanceRefresh={() => afterWrite()}
+                    />
+                  </div>
+                </details>
               )}
             </>
           )}
@@ -1678,10 +1810,28 @@ const styles: Record<string, React.CSSProperties> = {
     padding: 0,
     textAlign: "left",
   },
+  // Collapsed "Wallet management" disclosure — keeps the destructive
+  // DangerZone tucked at the foot of the console, opened on demand.
+  manageDetails: {
+    margin: "2px 25px 20px",
+    borderTop: `1px solid ${v2.line}`,
+    paddingTop: 12,
+  },
+  manageSummary: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    cursor: "pointer",
+    listStyle: "none",
+    userSelect: "none",
+    color: v2.muted,
+    fontSize: fs.body,
+    fontWeight: 600,
+    padding: "5px 0",
+  },
   // Danger zone wrapper — small top margin so the reused (red) DangerZone
-  // sits at the bottom of the console without bleeding into the content
-  // above. Its own red styling is intentionally preserved.
-  dangerZone: { margin: "0 25px 23px" },
+  // sits inside the disclosure without bleeding into the summary above.
+  dangerZone: { marginTop: 12 },
   dangerHint: {
     margin: "0 25px 23px",
     color: v2.muted,
