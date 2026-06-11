@@ -60,7 +60,7 @@ import {
 } from "../primitives";
 import { v2, glass, subCard, fs } from "../theme";
 import type { Scope } from "../theme";
-import { ChainIcon, TokenIcon } from "../logos";
+import { ChainIcon, TokenIcon, Q402Mark } from "../logos";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { GASTANK_ADDRESS } from "@/app/lib/wallets";
 import {
@@ -573,12 +573,13 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                 <SectionHead
                   title={
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <TokenIcon src="/aave.svg" size={20} />
+                      <Q402Mark size={20} />
                       Q402 Yield
                     </span>
                   }
                   meta={
-                    <span style={{ color: v2.mint }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: v2.mint }}>
+                      <TokenIcon src="/aave.svg" size={15} />
                       Aave V3{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
                     </span>
                   }

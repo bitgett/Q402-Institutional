@@ -156,19 +156,19 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
   const bestApyRaw = finiteApys.length > 0 ? Math.max(...finiteApys) : NaN;
   const bestApy = Number.isFinite(bestApyRaw) ? bestApyRaw : null;
 
-  const labelCls = "text-[10px] text-white/65 uppercase tracking-widest font-medium";
+  const labelCls = "text-[10px] text-white/80 uppercase tracking-widest font-medium";
 
   return (
     <div
       className="relative mt-4 rounded-xl border p-3"
-      style={{ background: "rgba(74,222,128,0.04)", borderColor: "rgba(74,222,128,0.18)" }}
+      style={{ background: "rgba(255,255,255,0.017)", borderColor: "rgba(255,255,255,0.085)" }}
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/aave.svg" alt="Aave" width={18} height={18} className="rounded-full shrink-0" />
           <span className={labelCls}>Earn · Q402 Yield</span>
-          <span className="text-[9px] uppercase tracking-widest text-emerald-400/70 font-semibold">
+          <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-widest text-emerald-400/80 font-semibold">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/aave.svg" alt="Aave" width={13} height={13} className="rounded-full" />
             Aave V3
           </span>
         </div>
@@ -193,7 +193,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-white/85 font-medium font-mono text-[12px]">{p.asset}</span>
                 <span className="text-white/40">·</span>
-                <span className="text-white/55 text-[11px] capitalize">{p.protocol}</span>
+                <span className="text-white/72 text-[11px] capitalize">{p.protocol}</span>
                 <span className="text-white/40">·</span>
                 <span className="text-emerald-300/90 text-[11px]">{pct(p.supplyApy)} APY</span>
               </div>
@@ -211,7 +211,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
       ) : (
         // Teaser — subtle, no positions yet. Pulls the best live APY from
         // the public markets feed when available.
-        <div className="text-[12px] text-white/55 leading-relaxed py-1">
+        <div className="text-[12.5px] text-white/80 leading-relaxed py-1">
           Earn{" "}
           <span className="text-emerald-300 font-medium">
             {bestApy !== null ? `~${pct(bestApy)}` : "yield"}
@@ -347,12 +347,12 @@ function AgenticWalletEarnActions({
     }
   }
 
-  const labelCls = "text-[10px] text-white/65 uppercase tracking-widest font-medium";
+  const labelCls = "text-[10px] text-white/80 uppercase tracking-widest font-medium";
   const inputStyle = { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" } as const;
 
   if (comingSoon) {
     return (
-      <div className="mt-3 pt-3 border-t" style={{ borderColor: "rgba(74,222,128,0.12)" }}>
+      <div className="mt-3 pt-3 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
         <div className="text-[11.5px] text-white/45">
           Deposit / Withdraw —{" "}
           <span className="text-emerald-300/70 font-medium">coming soon</span>. Q402 Yield isn&apos;t
@@ -363,7 +363,7 @@ function AgenticWalletEarnActions({
   }
 
   return (
-    <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "rgba(74,222,128,0.12)" }}>
+    <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
       {/* Deposit / Withdraw tab toggle */}
       <div className="flex items-center gap-1.5">
         {(["deposit", "withdraw"] as const).map((m) => (
@@ -374,7 +374,7 @@ function AgenticWalletEarnActions({
             className="px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition-colors"
             style={
               mode === m
-                ? { background: "rgba(74,222,128,0.14)", color: "#86efac", border: "1px solid rgba(74,222,128,0.3)" }
+                ? { background: "rgba(247,202,22,0.14)", color: "#f9d64a", border: "1px solid rgba(247,202,22,0.35)" }
                 : { background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.07)" }
             }
           >
