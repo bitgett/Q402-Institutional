@@ -471,7 +471,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 16 total</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 24 total</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <table className="w-full text-sm">
                 <thead>
@@ -499,6 +499,10 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_recurring_resume",    auth: "api key",     purpose: "Resume a paused / stopped rule." },
                     { name: "q402_recurring_skip_next", auth: "api key",     purpose: "Skip ONLY the next scheduled fire. Cadence preserved." },
                     { name: "q402_recurring_cancel",    auth: "api key",     purpose: "Permanently stop a rule." },
+                    { name: "q402_yield_reserves",      auth: "none",        purpose: "List Q402 Yield (Aave V3) lending markets + live supply APY. BNB Chain only today." },
+                    { name: "q402_yield_positions",     auth: "api key",     purpose: "The Agent Wallet's current Q402 Yield positions — value + live supply APY. Read-only." },
+                    { name: "q402_yield_deposit",       auth: "live mode",   purpose: "Supply the Agent Wallet's USDC / USDT into Aave (Mode C). PAID feature — Trial cannot deposit. Confirm-gated + sandbox by default." },
+                    { name: "q402_yield_withdraw",      auth: "live mode",   purpose: "Withdraw supplied stablecoin out of Aave (amount=\"max\" for the full position). Always allowed, even after a plan downgrade." },
                   ]).map((t, i, arr) => (
                     <tr key={t.name} style={{ borderBottom: i === arr.length - 1 ? undefined : "1px solid rgba(255,255,255,0.04)" }}>
                       <td className="px-4 py-3"><code className="text-yellow text-xs">{t.name}</code></td>
@@ -977,8 +981,8 @@ const signature = await signer.signTypedData(domain, types, {
                 a: "You — from your per-chain Gas Tank. Withdrawals are manual via business@quackai.ai."
               },
               {
-                q: "Is Q402 non-custodial?",
-                a: "Yes. The EIP-712 signature authorizes one transfer A→C. Q402 only pays gas and relays — it cannot redirect funds."
+                q: "Does Q402 hold my keys?",
+                a: "Your personal wallet is non-custodial — you connect it (MetaMask / OKX) and Q402 never holds its key; the EIP-712 signature authorizes one transfer A→C, so Q402 only pays gas and relays and cannot redirect funds. Agent Wallets (Mode C) are managed: Q402 custodies an AES-256-GCM-encrypted key you can export or archive anytime."
               },
               {
                 q: "What if a transaction fails?",
