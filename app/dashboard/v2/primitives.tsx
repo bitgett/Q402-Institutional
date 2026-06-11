@@ -22,7 +22,7 @@
  */
 
 import type { CSSProperties, ReactNode } from "react";
-import { glass, v2, v2CssVars, type Scope, type V2ViewId } from "./theme";
+import { glass, v2, v2CssVars, fs, type Scope, type V2ViewId } from "./theme";
 
 /** Space Grotesk stack — display / numbers / addresses. */
 export const displayFont = 'var(--font-space-grotesk), "Space Grotesk", sans-serif';
@@ -65,7 +65,7 @@ export function Eyebrow({
     <div
       style={{
         color: v2.muted2,
-        fontSize: 9,
+        fontSize: fs.label,
         letterSpacing: ".16em",
         textTransform: "uppercase",
         fontWeight: 700,
@@ -98,9 +98,9 @@ export function SectionHead({
         marginBottom: 10,
       }}
     >
-      <div style={{ font: `600 13px ${displayFont}` }}>{title}</div>
+      <div style={{ font: `600 ${fs.title}px ${displayFont}` }}>{title}</div>
       {meta != null && (
-        <div style={{ color: v2.muted, fontSize: 9 }}>{meta}</div>
+        <div style={{ color: v2.muted, fontSize: fs.label }}>{meta}</div>
       )}
       {action}
     </div>
@@ -123,7 +123,7 @@ export function LinkButton({
         border: 0,
         background: "none",
         color: v2.yellow,
-        fontSize: 9,
+        fontSize: fs.label,
         cursor: "pointer",
       }}
     >
@@ -171,7 +171,7 @@ export function TopNav({
               color: isActive ? v2.text : v2.muted,
               padding: "8px 13px",
               borderRadius: 8,
-              fontSize: 10,
+              fontSize: fs.body,
               fontWeight: 600,
               cursor: "pointer",
             }}
@@ -219,7 +219,7 @@ export function ScopeChip({
               border: 0,
               background: isActive ? v2.yellow : "none",
               color: isActive ? v2.actionText : v2.muted,
-              fontSize: 9,
+              fontSize: fs.label,
               padding: "7px 9px",
               borderRadius: 7,
               fontWeight: isActive ? 700 : 400,
@@ -243,7 +243,7 @@ export function OwnerChip({ address }: { address: string | null }) {
         borderRadius: 10,
         padding: "8px 10px",
         color: "#cbd3dd",
-        font: `500 9px ${displayFont}`,
+        font: `500 ${fs.label}px ${displayFont}`,
       }}
     >
       {address ? shortAddr(address) : "Not connected"}
@@ -258,20 +258,22 @@ export function BrandMark() {
     <span
       aria-hidden
       style={{
-        width: 30,
-        height: 30,
-        borderRadius: 9,
+        // Exact copy of the landing navbar mark (app/components/Navbar.tsx):
+        // 28px rounded-md yellow square + 12px rounded-sm navy inner.
+        width: 28,
+        height: 28,
+        borderRadius: 6,
         background: v2.yellow,
         display: "grid",
         placeItems: "center",
-        boxShadow: "0 0 28px rgba(247,202,22,.18)",
+        boxShadow: "0 0 12px rgba(245,197,24,.35)",
       }}
     >
       <span
         style={{
-          width: 10,
-          height: 10,
-          borderRadius: 3,
+          width: 12,
+          height: 12,
+          borderRadius: 2,
           background: v2.markInner,
         }}
       />

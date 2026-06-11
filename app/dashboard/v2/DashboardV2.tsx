@@ -22,14 +22,8 @@
 
 import { useState } from "react";
 import { useWallet } from "@/app/context/WalletContext";
-import {
-  BrandMark,
-  OwnerChip,
-  ScopeChip,
-  TopNav,
-  displayFont,
-  bodyFont,
-} from "./primitives";
+import { BrandMark, ScopeChip, TopNav, bodyFont } from "./primitives";
+import WalletButton from "@/app/components/WalletButton";
 import { v2, type Scope, type V2ViewId } from "./theme";
 import { WalletsView } from "./views/WalletsView";
 import { ActivityView } from "./views/ActivityView";
@@ -105,19 +99,31 @@ export default function DashboardV2() {
             WebkitBackdropFilter: "blur(18px)",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              font: `700 19px ${displayFont}`,
-              letterSpacing: "-.04em",
-            }}
-          >
+          {/* Brand — exact copy of the landing navbar (Poppins Bold, the
+              navbar mark, "by Quack AI" tagline) so the dashboard reads as
+              the same product. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <BrandMark />
-            <span style={{ color: v2.yellow }}>Q402</span>
             <span
-              style={{ color: "rgba(255,255,255,0.32)", fontSize: 11, fontWeight: 300, letterSpacing: 0, marginLeft: 1, fontFamily: bodyFont }}
+              style={{
+                fontFamily: "var(--font-poppins)",
+                color: v2.yellow,
+                fontWeight: 700,
+                fontSize: 18,
+                letterSpacing: "-0.025em",
+                lineHeight: 1,
+              }}
+            >
+              Q402
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--font-poppins)",
+                color: "rgba(255,255,255,0.3)",
+                fontSize: 12,
+                fontWeight: 300,
+                lineHeight: 1,
+              }}
             >
               by Quack AI
             </span>
@@ -127,7 +133,9 @@ export default function DashboardV2() {
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <ScopeChip scope={scope} onChange={setScope} />
-            <OwnerChip address={address} />
+            {/* Real connect flow (MetaMask / OKX modal) — same component the
+                landing nav uses, so disconnected users can actually connect. */}
+            <WalletButton />
           </div>
         </header>
 

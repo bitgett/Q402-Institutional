@@ -45,7 +45,7 @@ import {
   displayFont,
   shortAddr,
 } from "../primitives";
-import { v2, subCard } from "../theme";
+import { v2, subCard, fs } from "../theme";
 import type { Scope } from "../theme";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
@@ -669,7 +669,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
           <Eyebrow>Agent wallets</Eyebrow>
 
           {railWallets.length === 0 ? (
-            <div style={{ color: v2.muted, fontSize: 10, marginTop: 14, lineHeight: 1.5 }}>
+            <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 14, lineHeight: 1.6 }}>
               No Agent Wallets yet. Create your first sandboxed AI spending
               wallet — your MetaMask stays untouched.
             </div>
@@ -722,10 +722,10 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
           <div style={styles.railFoot}>
             <div style={styles.mode}>
-              <strong style={{ display: "block", color: v2.mint, fontSize: 11 }}>
+              <strong style={{ display: "block", color: v2.mint, fontSize: fs.body }}>
                 Mode C · Managed
               </strong>
-              <span style={{ display: "block", color: v2.muted, fontSize: 9, lineHeight: 1.45, marginTop: 4 }}>
+              <span style={{ display: "block", color: v2.muted, fontSize: fs.label, lineHeight: 1.5, marginTop: 5 }}>
                 Q402 signs for this dedicated wallet. Your personal wallet
                 stays separate.
               </span>
@@ -858,10 +858,10 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
                 {/* MCP command bar */}
                 <div style={styles.command}>
-                  <div style={{ color: v2.yellow, fontSize: 15 }}>✦</div>
+                  <div style={{ color: v2.yellow, fontSize: 19 }}>✦</div>
                   <div style={{ minWidth: 0 }}>
-                    <strong style={{ display: "block", fontSize: 9 }}>Tell this wallet what to do</strong>
-                    <span style={{ display: "block", color: v2.muted, fontSize: 9, marginTop: 2 }}>
+                    <strong style={{ display: "block", fontSize: fs.body }}>Tell this wallet what to do</strong>
+                    <span style={{ display: "block", color: v2.muted, fontSize: fs.label, marginTop: 3 }}>
                       &ldquo;Pay contributors on the 7th, but ask me above $50.&rdquo;
                     </span>
                   </div>
@@ -886,7 +886,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                             <div style={styles.sub}>Available to agents</div>
                           </div>
                         </div>
-                        <div style={{ font: `600 16px ${displayFont}` }}>{fmtUsd(vmAlloc.total)}</div>
+                        <div style={{ font: `600 19px ${displayFont}` }}>{fmtUsd(vmAlloc.total)}</div>
                       </div>
                       <div style={styles.chainbar}>
                         {vmAlloc.segs.length > 0 ? (
@@ -936,9 +936,9 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                               <div style={styles.sub}>Aave · auto-allocated</div>
                             </div>
                           </div>
-                          <div style={{ font: `600 16px ${displayFont}` }}>$0.00</div>
+                          <div style={{ font: `600 19px ${displayFont}` }}>$0.00</div>
                         </div>
-                        <div style={{ color: v2.muted, fontSize: 8, marginTop: 13, lineHeight: 1.5 }}>
+                        <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 14, lineHeight: 1.6 }}>
                           Idle stablecoins can earn up to 35% allocation in Aave.
                           Connect your wallet to enable Earn.
                         </div>
@@ -968,7 +968,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         <div key={t.id} style={styles.row}>
                           <div style={styles.rowIcon}>{t.direction === "out" ? "↗" : "↓"}</div>
                           <div style={{ minWidth: 0 }}>
-                            <strong style={{ fontSize: 10 }}>{t.title}</strong>
+                            <strong style={{ fontSize: fs.base }}>{t.title}</strong>
                             <span style={styles.rowSpan}>{t.meta}</span>
                           </div>
                           <div style={{ textAlign: "right" }}>
@@ -978,7 +978,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         </div>
                       ))
                     ) : recentForActive.length === 0 ? (
-                      <div style={{ color: v2.muted, fontSize: 10, padding: "12px 0" }}>
+                      <div style={{ color: v2.muted, fontSize: fs.body, padding: "14px 0" }}>
                         No settlements yet for this wallet.
                       </div>
                     ) : (
@@ -990,7 +990,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           <div key={t.relayTxHash} style={styles.row}>
                             <div style={styles.rowIcon}>{out ? "↗" : "↓"}</div>
                             <div style={{ minWidth: 0 }}>
-                              <strong style={{ fontSize: 10 }}>
+                              <strong style={{ fontSize: fs.base }}>
                                 {out ? "Payment to" : "Received from"} {shortAddr(counter ?? "")}
                               </strong>
                               <span style={styles.rowSpan}>
@@ -1047,10 +1047,10 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                 <b style={styles.ringNum}>{vmPolicyScore}</b>
               </div>
               <div>
-                <strong style={{ fontSize: 12 }}>
+                <strong style={{ fontSize: fs.base }}>
                   {vmProtectionsActive >= 3 ? "Strong guardrails" : vmProtectionsActive >= 1 ? "Some guardrails" : "Minimal guardrails"}
                 </strong>
-                <span style={{ display: "block", color: v2.muted, fontSize: 9, marginTop: 3 }}>
+                <span style={{ display: "block", color: v2.muted, fontSize: fs.label, marginTop: 4 }}>
                   {vmProtectionsActive} protection{vmProtectionsActive === 1 ? "" : "s"} active
                 </span>
               </div>
@@ -1065,7 +1065,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
               >
                 <div style={{ textAlign: "left" }}>
                   {p.label}
-                  <span style={{ display: "block", color: v2.muted, fontSize: 8, marginTop: 2 }}>{p.detail}</span>
+                  <span style={{ display: "block", color: v2.muted, fontSize: fs.micro, marginTop: 3 }}>{p.detail}</span>
                 </div>
                 <span style={{ ...styles.toggle, ...(p.on ? styles.toggleOn : null) }}>
                   <span style={{ ...styles.toggleKnob, ...(p.on ? styles.toggleKnobOn : null) }} />
@@ -1098,7 +1098,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           gap: 8,
                         }}
                       >
-                        <strong style={{ fontSize: 10 }}>{a.label}</strong>
+                        <strong style={{ fontSize: fs.base }}>{a.label}</strong>
                         <span
                           style={{
                             ...styles.autoBadge,
@@ -1108,7 +1108,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           {a.status}
                         </span>
                       </div>
-                      <span style={{ display: "block", color: v2.muted, fontSize: 8, marginTop: 4 }}>
+                      <span style={{ display: "block", color: v2.muted, fontSize: fs.label, marginTop: 5 }}>
                         {a.detail}
                       </span>
                     </div>
@@ -1139,13 +1139,13 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
             />
             <div style={styles.limitGrid}>
               <div style={styles.limit}>
-                <span style={{ display: "block", color: v2.muted, fontSize: 8 }}>Per payment</span>
+                <span style={{ display: "block", color: v2.muted, fontSize: fs.label }}>Per payment</span>
                 <b style={styles.limitVal}>
                   {vmPerTx != null ? `$${vmPerTx}` : "No cap"}
                 </b>
               </div>
               <div style={styles.limit}>
-                <span style={{ display: "block", color: v2.muted, fontSize: 8 }}>Daily limit</span>
+                <span style={{ display: "block", color: v2.muted, fontSize: fs.label }}>Daily limit</span>
                 <b style={styles.limitVal}>
                   {vmDaily != null ? `$${vmDaily}` : "No cap"}
                 </b>
@@ -1287,7 +1287,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     alignItems: "center",
     gap: 6,
-    fontSize: 12,
+    fontSize: fs.cardTitle,
     fontWeight: 650,
   },
   dot: {
@@ -1298,18 +1298,18 @@ const styles: Record<string, React.CSSProperties> = {
     boxShadow: `0 0 10px ${v2.mint}`,
     flexShrink: 0,
   },
-  addr: { font: `500 9px ${displayFont}`, color: v2.muted, marginTop: 4 },
-  walletBal: { font: `600 21px ${displayFont}`, letterSpacing: "-.04em", marginTop: 12 },
-  walletNote: { color: v2.muted2, fontSize: 9, marginTop: 2 },
+  addr: { font: `500 ${fs.body}px ${displayFont}`, color: v2.muted, marginTop: 5 },
+  walletBal: { font: `600 22px ${displayFont}`, letterSpacing: "-.04em", marginTop: 12 },
+  walletNote: { color: v2.muted2, fontSize: fs.label, marginTop: 3 },
   newWallet: {
     marginTop: 10,
     border: "1px dashed rgba(255,255,255,.14)",
     background: "none",
     color: v2.muted,
-    padding: 11,
+    padding: 12,
     borderRadius: 11,
     cursor: "pointer",
-    fontSize: 10,
+    fontSize: fs.body,
   },
   railFoot: { marginTop: "auto", paddingTop: 18 },
   mode: {
@@ -1328,7 +1328,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(255,119,119,.3)",
     background: "rgba(255,119,119,.06)",
     color: "#ffb4b4",
-    fontSize: 10,
+    fontSize: fs.body,
   },
   hero: {
     padding: "24px 25px 21px",
@@ -1347,7 +1347,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(247,202,22,.3)",
     background: "rgba(247,202,22,.08)",
     color: v2.yellow,
-    fontSize: 9,
+    fontSize: fs.label,
     fontWeight: 600,
     letterSpacing: ".01em",
   },
@@ -1377,10 +1377,10 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     zIndex: 1,
   },
-  heroH1: { font: `650 25px ${displayFont}`, letterSpacing: "-.045em", margin: "5px 0 2px" },
+  heroH1: { font: `650 27px ${displayFont}`, letterSpacing: "-.045em", margin: "6px 0 3px" },
   address: {
     color: v2.muted,
-    font: `500 10px ${displayFont}`,
+    font: `500 ${fs.body}px ${displayFont}`,
     background: "none",
     border: 0,
     padding: 0,
@@ -1391,11 +1391,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   badges: { display: "flex", gap: 6, marginTop: 12, flexWrap: "wrap" },
   badge: {
-    padding: "5px 8px",
+    padding: "5px 9px",
     border: `1px solid ${v2.line}`,
     borderRadius: 99,
     color: "#adb7c7",
-    fontSize: 8,
+    fontSize: fs.micro,
   },
   badgeGreen: {
     color: v2.mint,
@@ -1406,18 +1406,18 @@ const styles: Record<string, React.CSSProperties> = {
   heroBalLabel: {
     display: "block",
     color: v2.muted,
-    fontSize: 9,
+    fontSize: fs.label,
     letterSpacing: ".13em",
     textTransform: "uppercase",
   },
-  heroBalValue: { display: "block", font: `650 34px ${displayFont}`, letterSpacing: "-.06em", marginTop: 4 },
+  heroBalValue: { display: "block", font: `650 ${fs.hero}px ${displayFont}`, letterSpacing: "-.06em", marginTop: 5 },
   refreshLink: {
     border: 0,
     background: "none",
     color: v2.muted,
-    fontSize: 9,
+    fontSize: fs.label,
     cursor: "pointer",
-    marginTop: 4,
+    marginTop: 5,
     padding: 0,
   },
   actions: {
@@ -1433,9 +1433,10 @@ const styles: Record<string, React.CSSProperties> = {
     background: "rgba(255,255,255,.025)",
     color: v2.text,
     borderRadius: 10,
-    padding: 11,
+    padding: 12,
     textAlign: "left",
     cursor: "pointer",
+    fontSize: fs.base,
   },
   actionPrimary: {
     background: v2.yellow,
@@ -1444,7 +1445,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
   actionDisabled: { opacity: 0.4, cursor: "not-allowed" },
-  actionSmall: { display: "block", fontSize: 8, opacity: 0.55, marginTop: 2 },
+  actionSmall: { display: "block", fontSize: fs.micro, opacity: 0.55, marginTop: 3 },
   command: {
     marginTop: 11,
     padding: "10px 11px 10px 14px",
@@ -1462,10 +1463,10 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(247,202,22,.3)",
     background: "rgba(247,202,22,.06)",
     color: v2.yellow,
-    fontSize: 9,
+    fontSize: fs.label,
     fontWeight: 700,
     borderRadius: 8,
-    padding: "7px 10px",
+    padding: "8px 11px",
     cursor: "pointer",
     textDecoration: "none",
     whiteSpace: "nowrap",
@@ -1473,19 +1474,19 @@ const styles: Record<string, React.CSSProperties> = {
   content: { padding: "19px 25px 23px", display: "grid", gap: 18 },
   allocation: { display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 11, alignItems: "start" },
   assetTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" },
-  token: { display: "flex", gap: 8, alignItems: "center", fontSize: 11, fontWeight: 600 },
+  token: { display: "flex", gap: 9, alignItems: "center", fontSize: fs.cardTitle, fontWeight: 600 },
   coin: {
-    width: 23,
-    height: 23,
+    width: 27,
+    height: 27,
     borderRadius: "50%",
     display: "grid",
     placeItems: "center",
     background: v2.coinUsdt,
     color: "white",
-    fontSize: 8,
+    fontSize: fs.micro,
     flexShrink: 0,
   },
-  sub: { color: v2.muted, fontSize: 8, marginTop: 2 },
+  sub: { color: v2.muted, fontSize: fs.label, marginTop: 3 },
   chainbar: {
     display: "flex",
     height: 5,
@@ -1494,29 +1495,29 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#172438",
     marginTop: 13,
   },
-  chains: { display: "flex", gap: 10, color: v2.muted, fontSize: 8, marginTop: 8, flexWrap: "wrap" },
+  chains: { display: "flex", gap: 10, color: v2.muted, fontSize: fs.label, marginTop: 10, flexWrap: "wrap" },
   rows: { borderTop: `1px solid ${v2.line}` },
   row: {
     display: "grid",
-    gridTemplateColumns: "30px minmax(0,1fr) auto",
-    gap: 10,
+    gridTemplateColumns: "31px minmax(0,1fr) auto",
+    gap: 11,
     alignItems: "center",
-    padding: "10px 0",
+    padding: "11px 0",
     borderBottom: "1px solid rgba(255,255,255,.05)",
   },
   rowIcon: {
-    width: 29,
-    height: 29,
+    width: 31,
+    height: 31,
     borderRadius: 9,
     background: "rgba(255,255,255,.04)",
     display: "grid",
     placeItems: "center",
     color: v2.mint,
-    fontSize: 12,
+    fontSize: fs.base,
   },
-  rowSpan: { display: "block", color: v2.muted, fontSize: 8, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  rowValue: { textAlign: "right", font: `600 10px ${displayFont}` },
-  rowStatus: { fontSize: 8, marginTop: 2, textDecoration: "none", display: "inline-block" },
+  rowSpan: { display: "block", color: v2.muted, fontSize: fs.label, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  rowValue: { textAlign: "right", font: `600 ${fs.cardTitle}px ${displayFont}` },
+  rowStatus: { fontSize: fs.label, marginTop: 3, textDecoration: "none", display: "inline-block" },
 
   // Col 3 — right rail
   right: { display: "flex", flexDirection: "column", gap: 15 },
@@ -1537,13 +1538,13 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "50%",
     background: v2.ringInner,
   },
-  ringNum: { position: "relative", font: `600 11px ${displayFont}` },
+  ringNum: { position: "relative", font: `600 ${fs.body}px ${displayFont}` },
   policy: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: "9px 0",
-    fontSize: 10,
+    padding: "10px 0",
+    fontSize: fs.body,
     width: "100%",
     background: "none",
     // Reset the button's default border, then re-draw only the top rule
@@ -1575,11 +1576,11 @@ const styles: Record<string, React.CSSProperties> = {
   },
   toggleKnobOn: { transform: "translateX(13px)", background: v2.mint },
   autoBadge: {
-    padding: "3px 7px",
+    padding: "4px 8px",
     borderRadius: 99,
     border: `1px solid ${v2.line}`,
     color: v2.muted,
-    fontSize: 7,
+    fontSize: fs.micro,
     fontWeight: 700,
     letterSpacing: ".06em",
     flexShrink: 0,
@@ -1592,13 +1593,13 @@ const styles: Record<string, React.CSSProperties> = {
   limitsCard: { borderColor: "rgba(247,202,22,.18)", background: "rgba(247,202,22,.03)" },
   limitGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginTop: 11 },
   limit: { padding: 9, borderRadius: 9, background: "rgba(0,0,0,.14)" },
-  limitVal: { display: "block", font: `600 12px ${displayFont}`, marginTop: 3 },
+  limitVal: { display: "block", font: `600 ${fs.cardTitle}px ${displayFont}`, marginTop: 4 },
   agentLink: {
-    marginTop: 13,
+    marginTop: 14,
     border: 0,
     background: "none",
     color: v2.yellow,
-    fontSize: 9,
+    fontSize: fs.label,
     cursor: "pointer",
     padding: 0,
     textAlign: "left",

@@ -58,7 +58,7 @@ import {
   V2AccentScope,
   displayFont,
 } from "../primitives";
-import { v2, glass, subCard } from "../theme";
+import { v2, glass, subCard, fs } from "../theme";
 import type { Scope } from "../theme";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { GASTANK_ADDRESS } from "@/app/lib/wallets";
@@ -406,9 +406,9 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
         }}
       >
         {/* ── Col 1 · context rail ─────────────────────────────────────── */}
-        <Surface className="v2-context" style={{ padding: 13, position: "sticky", top: 84 }}>
-          <Eyebrow style={{ marginBottom: 9, paddingLeft: 3 }}>Capital</Eyebrow>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Surface className="v2-context" style={{ padding: 15, position: "sticky", top: 84 }}>
+          <Eyebrow style={{ marginBottom: 11, paddingLeft: 3, fontSize: fs.label }}>Capital</Eyebrow>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             {SECTIONS.map((s) => {
               const on = s.id === activeSection;
               return (
@@ -421,9 +421,9 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     textAlign: "left",
                     background: on ? "var(--v2-accent-soft)" : "transparent",
                     color: on ? v2.yellow : v2.muted,
-                    padding: "8px 10px",
+                    padding: "9px 11px",
                     borderRadius: 9,
-                    fontSize: 11,
+                    fontSize: fs.body,
                     fontWeight: on ? 600 : 400,
                     cursor: "pointer",
                     borderLeft: on ? `2px solid ${v2.yellow}` : "2px solid transparent",
@@ -438,13 +438,13 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
           <div
             style={{
               ...subCard(11),
-              marginTop: 13,
-              padding: 11,
+              marginTop: 15,
+              padding: 13,
             }}
           >
-            <Eyebrow style={{ marginBottom: 4 }}>Custody</Eyebrow>
-            <div style={{ color: v2.text, fontSize: 11, fontWeight: 600 }}>Cold Gas Tank</div>
-            <div style={{ color: v2.muted2, fontSize: 9, marginTop: 3, lineHeight: 1.5 }}>
+            <Eyebrow style={{ marginBottom: 5, fontSize: fs.label }}>Custody</Eyebrow>
+            <div style={{ color: v2.text, fontSize: fs.body, fontWeight: 600 }}>Cold Gas Tank</div>
+            <div style={{ color: v2.muted2, fontSize: fs.micro, marginTop: 4, lineHeight: 1.55 }}>
               Deposits sit in a cold wallet; the hot relayer sponsors gas on every
               settlement.
             </div>
@@ -456,7 +456,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
           {/* Title */}
           <div id="treasury-overview" style={{ scrollMarginTop: 84 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div style={{ font: `600 21px ${displayFont}`, letterSpacing: "-.04em" }}>
+              <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em" }}>
                 Capital operations
               </div>
               {demoMode && (
@@ -466,12 +466,12 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     display: "inline-flex",
                     alignItems: "center",
                     gap: 5,
-                    fontSize: 9,
+                    fontSize: fs.micro,
                     fontWeight: 700,
                     letterSpacing: ".06em",
                     textTransform: "uppercase",
                     color: v2.yellow,
-                    padding: "4px 9px",
+                    padding: "5px 10px",
                     borderRadius: 999,
                     border: `1px solid var(--v2-accent-line)`,
                     background: "var(--v2-accent-fill)",
@@ -485,7 +485,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                 </span>
               )}
             </div>
-            <div style={{ color: v2.muted, fontSize: 11, marginTop: 4, marginBottom: 16 }}>
+            <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, marginBottom: 18 }}>
               Gas Tank, Q402 Yield, and CCIP liquidity across{" "}
               {isMultichain ? "10 networks" : "BNB Chain (trial)"}.
               {demoMode && " Sample figures shown — connect a wallet to load live balances."}
@@ -497,29 +497,29 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: 13,
-              marginBottom: 17,
+              gap: 15,
+              marginBottom: 19,
             }}
           >
             {/* Gas Tank card */}
-            <Surface radius={15} style={{ padding: 17, scrollMarginTop: 84 }}>
+            <Surface radius={15} style={{ padding: 19, scrollMarginTop: 84 }}>
               <div id="treasury-gastank" style={{ scrollMarginTop: 84 }}>
-                <Eyebrow>Gas Tank</Eyebrow>
+                <Eyebrow style={{ fontSize: fs.label }}>Gas Tank</Eyebrow>
                 <div
                   style={{
-                    font: `600 27px ${displayFont}`,
+                    font: `600 ${fs.hero}px ${displayFont}`,
                     color: v2.yellow,
                     letterSpacing: "-.04em",
-                    marginTop: 8,
+                    marginTop: 10,
                   }}
                 >
                   {tankLoading && !demoMode ? (
-                    <span style={{ color: v2.muted2, fontSize: 18 }}>Loading…</span>
+                    <span style={{ color: v2.muted2, fontSize: fs.h2 }}>Loading…</span>
                   ) : (
                     fmtUsd(gasTankUsdDisplay)
                   )}
                 </div>
-                <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
+                <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6 }}>
                   {demoMode ? "Healthy across active chains." : "Sponsors gas on relayed payments."}
                 </div>
                 {/* health bar — funded vs total chains */}
@@ -528,7 +528,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     height: 5,
                     borderRadius: 3,
                     background: v2.ringTrack,
-                    marginTop: 13,
+                    marginTop: 15,
                     overflow: "hidden",
                   }}
                 >
@@ -542,21 +542,21 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     }}
                   />
                 </div>
-                <div style={{ color: v2.muted2, fontSize: 9, marginTop: 6 }}>
+                <div style={{ color: v2.muted2, fontSize: fs.micro, marginTop: 7 }}>
                   {fundedCountDisplay} / {networkCountDisplay} networks funded
                 </div>
                 <button
                   type="button"
                   onClick={() => scrollTo("deposits")}
                   style={{
-                    marginTop: 13,
+                    marginTop: 15,
                     width: "100%",
                     border: `1px solid var(--v2-accent-line)`,
                     background: "var(--v2-accent-fill)",
                     color: v2.yellow,
-                    padding: "8px 0",
+                    padding: "10px 0",
                     borderRadius: 9,
-                    fontSize: 11,
+                    fontSize: fs.body,
                     fontWeight: 600,
                     cursor: "pointer",
                   }}
@@ -567,7 +567,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             </Surface>
 
             {/* Q402 Yield card */}
-            <Surface radius={15} style={{ padding: 17 }}>
+            <Surface radius={15} style={{ padding: 19 }}>
               <div id="treasury-yield" style={{ scrollMarginTop: 84 }}>
                 <SectionHead
                   title="Q402 Yield"
@@ -592,29 +592,29 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   <>
                     <div
                       style={{
-                        font: `600 27px ${displayFont}`,
+                        font: `600 ${fs.hero}px ${displayFont}`,
                         color: v2.mint,
                         letterSpacing: "-.04em",
-                        marginTop: 8,
+                        marginTop: 10,
                       }}
                     >
                       {fmtUsd(DEMO.yieldUsd)}
                     </div>
-                    <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
+                    <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6 }}>
                       Supplied to Aave V3 · best {DEMO.yieldApy} APY
                     </div>
                     <div
                       title={connectHint}
                       style={{
-                        marginTop: 13,
+                        marginTop: 15,
                         width: "100%",
                         textAlign: "center",
                         border: `1px solid ${v2.line}`,
                         background: "rgba(255,255,255,.03)",
                         color: v2.muted2,
-                        padding: "8px 0",
+                        padding: "10px 0",
                         borderRadius: 9,
-                        fontSize: 11,
+                        fontSize: fs.body,
                         fontWeight: 600,
                         cursor: "not-allowed",
                       }}
@@ -623,7 +623,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     </div>
                   </>
                 ) : (
-                  <div style={{ color: v2.muted, fontSize: 11, lineHeight: 1.6, marginTop: 8 }}>
+                  <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.6, marginTop: 10 }}>
                     Create an Agent Wallet to supply idle USDC / USDT and earn Aave V3 yield.
                   </div>
                 )}
@@ -631,62 +631,62 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             </Surface>
 
             {/* CCIP Bridge card */}
-            <Surface radius={15} style={{ padding: 17 }}>
+            <Surface radius={15} style={{ padding: 19 }}>
               <div id="treasury-bridge" style={{ scrollMarginTop: 84 }}>
-                <Eyebrow>CCIP Bridge</Eyebrow>
+                <Eyebrow style={{ fontSize: fs.label }}>CCIP Bridge</Eyebrow>
                 {demoMode ? (
                   <div
                     style={{
-                      font: `600 27px ${displayFont}`,
+                      font: `600 ${fs.hero}px ${displayFont}`,
                       color: v2.cyan,
                       letterSpacing: "-.04em",
-                      marginTop: 8,
+                      marginTop: 10,
                     }}
                   >
                     {DEMO.bridgeLanes}
-                    <span style={{ fontSize: 13, color: v2.muted, marginLeft: 5, fontWeight: 400 }}>
+                    <span style={{ fontSize: fs.cardTitle, color: v2.muted, marginLeft: 6, fontWeight: 400 }}>
                       lanes
                     </span>
                   </div>
                 ) : (
                   <div
                     style={{
-                      font: `600 27px ${displayFont}`,
+                      font: `600 ${fs.hero}px ${displayFont}`,
                       color: v2.cyan,
                       letterSpacing: "-.04em",
-                      marginTop: 8,
+                      marginTop: 10,
                     }}
                   >
                     {totalLinkDisplay.toLocaleString("en-US", { maximumFractionDigits: 4 })}
-                    <span style={{ fontSize: 13, color: v2.muted, marginLeft: 5, fontWeight: 400 }}>
+                    <span style={{ fontSize: fs.cardTitle, color: v2.muted, marginLeft: 6, fontWeight: 400 }}>
                       LINK
                     </span>
                   </div>
                 )}
-                <div style={{ color: v2.muted, fontSize: 10, marginTop: 4 }}>
+                <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6 }}>
                   {demoMode
                     ? `${DEMO.bridgeLaneLabels.join(" · ")}`
                     : `${fmtUsd(linkUsdDisplay)} · fee bucket for 3 lanes (eth · avax · arbitrum)`}
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 11 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 13 }}>
                   {LINK_CHAINS.map((k) => (
                     <div
                       key={k}
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
-                        fontSize: 10,
+                        fontSize: fs.body,
                         color: v2.muted,
                       }}
                     >
                       <span>{LINK_TOKEN[k].label}</span>
-                      <span style={{ font: `500 10px ${displayFont}`, color: demoMode ? v2.muted : v2.text }}>
+                      <span style={{ font: `500 ${fs.body}px ${displayFont}`, color: demoMode ? v2.muted : v2.text }}>
                         {demoMode ? "Ready" : `${(linkBalances[k] ?? 0).toFixed(4)} LINK`}
                       </span>
                     </div>
                   ))}
                 </div>
-                <div style={{ display: "flex", gap: 7, marginTop: 13 }}>
+                <div style={{ display: "flex", gap: 8, marginTop: 15 }}>
                   <button
                     type="button"
                     disabled={actionsDisabled}
@@ -697,9 +697,9 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                       border: `1px solid ${v2.line}`,
                       background: "rgba(255,255,255,.03)",
                       color: actionsDisabled ? v2.muted2 : v2.text,
-                      padding: "8px 0",
+                      padding: "10px 0",
                       borderRadius: 9,
-                      fontSize: 10,
+                      fontSize: fs.body,
                       fontWeight: 600,
                       cursor: actionsDisabled ? "not-allowed" : "pointer",
                     }}
@@ -726,9 +726,9 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                         !actionsDisabled && isMultichain && agentWallet ? v2.yellow : "rgba(255,255,255,.05)",
                       color:
                         !actionsDisabled && isMultichain && agentWallet ? v2.actionText : v2.muted2,
-                      padding: "8px 0",
+                      padding: "10px 0",
                       borderRadius: 9,
-                      fontSize: 10,
+                      fontSize: fs.body,
                       fontWeight: 700,
                       cursor:
                         !actionsDisabled && isMultichain && agentWallet ? "pointer" : "not-allowed",
@@ -744,7 +744,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
           {/* ── Per-network table ──────────────────────────────────────── */}
           <Surface radius={15} style={{ overflow: "hidden" }}>
             <div id="treasury-deposits" style={{ scrollMarginTop: 84 }}>
-              <div style={{ padding: "15px 17px 11px" }}>
+              <div style={{ padding: "17px 19px 13px" }}>
                 <SectionHead
                   title="Networks"
                   meta={
@@ -756,7 +756,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   }
                 />
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.base }}>
                 <thead>
                   <tr style={{ color: v2.muted2 }}>
                     <Th style={{ paddingLeft: 17 }}>Network</Th>
@@ -804,31 +804,31 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                             >
                               {c.name}
                             </a>
-                            <span style={{ color: v2.muted2, fontSize: 9 }}>{c.token}</span>
+                            <span style={{ color: v2.muted2, fontSize: fs.label }}>{c.token}</span>
                           </div>
                         </Td>
                         <Td>
                           {demo ? (
-                            <span style={{ font: `400 11px ${displayFont}`, color: v2.text }}>
+                            <span style={{ font: `400 ${fs.base}px ${displayFont}`, color: v2.text }}>
                               {fmtUsd(walletUsd)}
                             </span>
                           ) : (
-                            <span style={{ font: `400 11px ${displayFont}`, color: eoa > 0 ? v2.text : v2.muted2 }}>
+                            <span style={{ font: `400 ${fs.base}px ${displayFont}`, color: eoa > 0 ? v2.text : v2.muted2 }}>
                               {eoa > 0 ? `${eoa.toFixed(4)} ${c.token}` : "—"}
                             </span>
                           )}
                         </Td>
                         <Td>
                           {demo ? (
-                            <span style={{ font: `400 11px ${displayFont}`, color: v2.text }}>
+                            <span style={{ font: `400 ${fs.base}px ${displayFont}`, color: v2.text }}>
                               {fmtUsd(gasTankUsd)}
                             </span>
                           ) : (
                             <>
-                              <span style={{ font: `400 11px ${displayFont}`, color: funded ? v2.text : v2.muted2 }}>
+                              <span style={{ font: `400 ${fs.base}px ${displayFont}`, color: funded ? v2.text : v2.muted2 }}>
                                 {gas.toFixed(4)} {c.token}
                               </span>
-                              <span style={{ color: v2.muted2, fontSize: 9, marginLeft: 6 }}>
+                              <span style={{ color: v2.muted2, fontSize: fs.label, marginLeft: 6 }}>
                                 {gasTankUsd >= 0.01 ? fmtUsd(gasTankUsd) : ""}
                               </span>
                             </>
@@ -837,10 +837,10 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                         <Td>
                           <span
                             style={{
-                              fontSize: 9,
+                              fontSize: fs.label,
                               fontWeight: 700,
                               letterSpacing: ".04em",
-                              padding: "3px 7px",
+                              padding: "4px 8px",
                               borderRadius: 6,
                               color: funded ? v2.mint : v2.muted2,
                               background: funded ? "rgba(85,230,165,.10)" : "rgba(255,255,255,.04)",
@@ -862,9 +862,9 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                               background:
                                 funded && !actionsDisabled ? "var(--v2-accent-fill)" : "rgba(255,255,255,.03)",
                               color: funded && !actionsDisabled ? v2.yellow : v2.muted,
-                              padding: "6px 11px",
+                              padding: "7px 13px",
                               borderRadius: 8,
-                              fontSize: 10,
+                              fontSize: fs.body,
                               fontWeight: 600,
                               cursor: actionsDisabled ? "not-allowed" : "pointer",
                               opacity: actionsDisabled ? 0.5 : 1,
@@ -880,10 +880,10 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
               </table>
 
               {/* Tank activity (deposit history) */}
-              <div style={{ padding: "13px 17px", borderTop: `1px solid ${v2.line}` }}>
-                <Eyebrow style={{ marginBottom: 9 }}>Tank activity</Eyebrow>
+              <div style={{ padding: "15px 19px", borderTop: `1px solid ${v2.line}` }}>
+                <Eyebrow style={{ marginBottom: 11, fontSize: fs.label }}>Tank activity</Eyebrow>
                 {demoMode ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {DEMO_ACTIVITY.map((d, i) => {
                       const meta = CHAIN_META.find((c) => c.key === d.chain);
                       return (
@@ -893,13 +893,13 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
-                            fontSize: 10,
+                            fontSize: fs.body,
                           }}
                         >
                           <span style={{ color: v2.muted }}>
                             Deposit · {meta?.name ?? d.chain} · {d.date}
                           </span>
-                          <span style={{ font: `500 10px ${displayFont}`, color: v2.mint }}>
+                          <span style={{ font: `500 ${fs.body}px ${displayFont}`, color: v2.mint }}>
                             +{d.amount.toFixed(4)} {meta?.token ?? d.chain.toUpperCase()}
                           </span>
                         </div>
@@ -907,11 +907,11 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     })}
                   </div>
                 ) : gasDeposits.length === 0 ? (
-                  <div style={{ color: v2.muted2, fontSize: 10, textAlign: "center", padding: "10px 0" }}>
+                  <div style={{ color: v2.muted2, fontSize: fs.body, textAlign: "center", padding: "12px 0" }}>
                     No deposits yet
                   </div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {[...gasDeposits].reverse().slice(0, 8).map((d, i) => {
                       const isWithdrawal = d.amount < 0;
                       const meta = CHAIN_META.find((c) => c.key === d.chain);
@@ -922,7 +922,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
-                            fontSize: 10,
+                            fontSize: fs.body,
                           }}
                         >
                           <span style={{ color: v2.muted }}>
@@ -935,7 +935,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                           </span>
                           <span
                             style={{
-                              font: `500 10px ${displayFont}`,
+                              font: `500 ${fs.body}px ${displayFont}`,
                               color: isWithdrawal ? v2.red : v2.mint,
                             }}
                           >
@@ -998,10 +998,10 @@ function Th({ children, style }: { children: React.ReactNode; style?: CSSPropert
       style={{
         textAlign: "left",
         fontWeight: 600,
-        fontSize: 9,
+        fontSize: fs.label,
         letterSpacing: ".1em",
         textTransform: "uppercase",
-        padding: "0 11px 9px",
+        padding: "0 13px 11px",
         ...style,
       }}
     >
@@ -1010,7 +1010,7 @@ function Th({ children, style }: { children: React.ReactNode; style?: CSSPropert
   );
 }
 function Td({ children, style }: { children: React.ReactNode; style?: CSSProperties }) {
-  return <td style={{ padding: "11px", verticalAlign: "middle", ...style }}>{children}</td>;
+  return <td style={{ padding: "13px", verticalAlign: "middle", ...style }}>{children}</td>;
 }
 
 // ── V2DepositModal ───────────────────────────────────────────────────────────
@@ -1087,11 +1087,11 @@ function V2DepositModal({
   return <ModalShell title={`${chain.token} · ${chain.name}`} onClose={onClose}>
     {phase === "main" && (
       <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
-        <div style={{ color: v2.muted, fontSize: 11 }}>
+        <div style={{ color: v2.muted, fontSize: fs.body }}>
           Top up the Gas Tank with <span style={{ color: v2.yellow }}>{chain.token}</span>.
         </div>
         <div>
-          <Eyebrow style={{ marginBottom: 6 }}>Amount to deposit</Eyebrow>
+          <Eyebrow style={{ marginBottom: 7, fontSize: fs.label }}>Amount to deposit</Eyebrow>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input
               inputMode="decimal"
@@ -1104,13 +1104,13 @@ function V2DepositModal({
                 background: v2.inputFill,
                 border: `1px solid ${v2.line}`,
                 borderRadius: 10,
-                padding: "11px 12px",
+                padding: "12px 13px",
                 color: v2.text,
-                font: `500 13px ${displayFont}`,
+                font: `500 ${fs.cardTitle}px ${displayFont}`,
                 outline: "none",
               }}
             />
-            <span style={{ color: v2.muted, fontSize: 11, fontWeight: 600, width: 48, textAlign: "right" }}>
+            <span style={{ color: v2.muted, fontSize: fs.body, fontWeight: 600, width: 52, textAlign: "right" }}>
               {chain.token}
             </span>
           </div>
@@ -1123,22 +1123,22 @@ function V2DepositModal({
             border: 0,
             background: v2.yellow,
             color: v2.actionText,
-            padding: "12px 0",
+            padding: "13px 0",
             borderRadius: 11,
             fontWeight: 700,
-            fontSize: 13,
+            fontSize: fs.cardTitle,
             cursor: amount.trim() ? "pointer" : "not-allowed",
             opacity: amount.trim() ? 1 : 0.4,
           }}
         >
           Top up with wallet
         </button>
-        <div style={{ color: v2.muted2, fontSize: 9, lineHeight: 1.5 }}>
+        <div style={{ color: v2.muted2, fontSize: fs.micro, lineHeight: 1.55 }}>
           Switches to {chain.name}, sends {chain.token}, credits your Gas Tank on
           confirmation. {chain.key === "stable" && "Send USDT0 on Stable (chain 988) — not ETH/BNB/AVAX."}
         </div>
-        <div style={{ borderTop: `1px solid ${v2.line}`, paddingTop: 11 }}>
-          <div style={{ color: v2.muted2, fontSize: 9, lineHeight: 1.5 }}>
+        <div style={{ borderTop: `1px solid ${v2.line}`, paddingTop: 12 }}>
+          <div style={{ color: v2.muted2, fontSize: fs.micro, lineHeight: 1.55 }}>
             Gas Tank withdrawals are processed manually by Q402 operations. Contact{" "}
             business@quackai.ai to request a refund.
           </div>
@@ -1147,7 +1147,7 @@ function V2DepositModal({
     )}
 
     {(phase === "awaiting_wallet" || phase === "confirming_tx" || phase === "checking") && (
-      <div style={{ textAlign: "center", padding: "26px 0", color: v2.muted, fontSize: 12 }}>
+      <div style={{ textAlign: "center", padding: "28px 0", color: v2.muted, fontSize: fs.base }}>
         {phase === "awaiting_wallet"
           ? `Confirm ${chain.token} deposit in your wallet…`
           : phase === "confirming_tx"
@@ -1169,10 +1169,10 @@ function V2DepositModal({
             border: `1px solid rgba(85,230,165,.22)`,
           }}
         >
-          <span style={{ color: v2.mint, fontSize: 17 }}>✓</span>
+          <span style={{ color: v2.mint, fontSize: fs.title }}>✓</span>
           <div>
-            <div style={{ color: v2.mint, fontWeight: 700, fontSize: 12 }}>Deposit confirmed</div>
-            <div style={{ color: v2.muted, fontSize: 10 }}>Gas Tank credited.</div>
+            <div style={{ color: v2.mint, fontWeight: 700, fontSize: fs.base }}>Deposit confirmed</div>
+            <div style={{ color: v2.muted, fontSize: fs.body }}>Gas Tank credited.</div>
           </div>
         </div>
         {Object.entries(verified)
@@ -1183,15 +1183,15 @@ function V2DepositModal({
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                fontSize: 11,
+                fontSize: fs.body,
                 color: v2.muted,
                 background: "rgba(255,255,255,.03)",
-                padding: "8px 11px",
+                padding: "9px 12px",
                 borderRadius: 9,
               }}
             >
               <span style={{ textTransform: "uppercase" }}>{c}</span>
-              <span style={{ font: `500 11px ${displayFont}`, color: v2.text }}>
+              <span style={{ font: `500 ${fs.body}px ${displayFont}`, color: v2.text }}>
                 {amt.toFixed(4)} {CHAIN_META.find((m) => m.key === c)?.token ?? c.toUpperCase()}
               </span>
             </div>
@@ -1203,10 +1203,10 @@ function V2DepositModal({
             border: 0,
             background: v2.yellow,
             color: v2.actionText,
-            padding: "11px 0",
+            padding: "12px 0",
             borderRadius: 11,
             fontWeight: 700,
-            fontSize: 13,
+            fontSize: fs.cardTitle,
             cursor: "pointer",
           }}
         >
@@ -1220,10 +1220,10 @@ function V2DepositModal({
         <div
           style={{
             color: v2.red,
-            fontSize: 11,
+            fontSize: fs.body,
             background: "rgba(255,119,119,.08)",
             border: `1px solid rgba(255,119,119,.22)`,
-            padding: "11px 13px",
+            padding: "12px 14px",
             borderRadius: 11,
           }}
         >
@@ -1239,10 +1239,10 @@ function V2DepositModal({
             border: `1px solid var(--v2-accent-line)`,
             background: "var(--v2-accent-fill)",
             color: v2.yellow,
-            padding: "10px 0",
+            padding: "11px 0",
             borderRadius: 11,
             fontWeight: 600,
-            fontSize: 12,
+            fontSize: fs.base,
             cursor: "pointer",
           }}
         >
@@ -1301,13 +1301,13 @@ function V2LinkDepositModal({
                 cursor: "pointer",
               }}
             >
-              <div style={{ color: on ? v2.yellow : v2.muted, fontSize: 10, fontWeight: 600 }}>
+              <div style={{ color: on ? v2.yellow : v2.muted, fontSize: fs.body, fontWeight: 600 }}>
                 {LINK_TOKEN[k].label}
               </div>
-              <div style={{ font: `500 13px ${displayFont}`, color: on ? v2.text : v2.muted }}>
+              <div style={{ font: `500 ${fs.cardTitle}px ${displayFont}`, color: on ? v2.text : v2.muted }}>
                 {cb.toFixed(4)}
               </div>
-              <div style={{ color: v2.muted2, fontSize: 9 }}>
+              <div style={{ color: v2.muted2, fontSize: fs.micro }}>
                 {cb > 0 ? `≈ $${(cb * LINK_USD).toFixed(2)}` : "$0.00"}
               </div>
             </button>
@@ -1315,7 +1315,7 @@ function V2LinkDepositModal({
         })}
       </div>
 
-      <div style={{ color: v2.muted, fontSize: 11, lineHeight: 1.6, marginBottom: 11 }}>
+      <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.6, marginBottom: 12 }}>
         Send LINK on <span style={{ color: v2.text }}>{cfg.label}</span> to the Q402 facilitator
         below. The deposit-scan cron credits your LINK Gas Tank within ~5 minutes. Current balance:{" "}
         <span style={{ color: v2.cyan }}>{bal.toFixed(4)} LINK</span>.
@@ -1360,9 +1360,9 @@ function CopyRow({
         padding: 11,
       }}
     >
-      <Eyebrow style={{ marginBottom: 6, color: accent ? v2.yellow : v2.muted2 }}>{label}</Eyebrow>
+      <Eyebrow style={{ marginBottom: 7, color: accent ? v2.yellow : v2.muted2, fontSize: fs.label }}>{label}</Eyebrow>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <code style={{ flex: 1, minWidth: 0, fontSize: 11, color: v2.text, wordBreak: "break-all" }}>
+        <code style={{ flex: 1, minWidth: 0, fontSize: fs.body, color: v2.text, wordBreak: "break-all" }}>
           {value}
         </code>
         <button
@@ -1373,9 +1373,9 @@ function CopyRow({
             border: `1px solid ${v2.line}`,
             background: "rgba(255,255,255,.04)",
             color: copied ? v2.mint : v2.muted,
-            padding: "5px 9px",
+            padding: "6px 10px",
             borderRadius: 7,
-            fontSize: 10,
+            fontSize: fs.body,
             fontWeight: 600,
             cursor: "pointer",
           }}
@@ -1433,12 +1433,12 @@ function ModalShell({
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 17 }}>
-          <div style={{ font: `600 15px ${displayFont}`, letterSpacing: "-.02em" }}>{title}</div>
+          <div style={{ font: `600 ${fs.title}px ${displayFont}`, letterSpacing: "-.02em" }}>{title}</div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{ border: 0, background: "none", color: v2.muted, fontSize: 19, cursor: "pointer", lineHeight: 1 }}
+            style={{ border: 0, background: "none", color: v2.muted, fontSize: 22, cursor: "pointer", lineHeight: 1 }}
           >
             ×
           </button>
