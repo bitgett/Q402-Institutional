@@ -210,48 +210,12 @@ function BannerShell({
   );
 }
 
-/* ── Plan badge ──────────────────────────────────────────────────────────── */
-
-/** Internal "enterprise_flex" reads to users as "Enterprise" (legacy parity). */
-function planLabel(plan: string): string {
-  const key = plan === "enterprise_flex" ? "enterprise" : plan;
-  return key.charAt(0).toUpperCase() + key.slice(1);
-}
-
-function PlanBadge({ plan, amountUSD }: { plan: string; amountUSD: number }) {
-  return (
-    <div
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        alignSelf: "flex-start",
-        padding: "7px 14px",
-        borderRadius: 999,
-        border: `1px solid ${v2.line}`,
-        background: "rgba(245,197,24,0.06)",
-        fontFamily: bodyFont,
-      }}
-    >
-      <span style={{ color: v2.yellow, fontWeight: 700, fontSize: fs.base }}>
-        {planLabel(plan)} Plan
-      </span>
-      {amountUSD > 0 && (
-        <span style={{ color: v2.muted, fontSize: fs.label }}>
-          ·{" "}
-          <span style={{ fontFamily: displayFont }}>${amountUSD}</span> paid
-        </span>
-      )}
-    </div>
-  );
-}
-
 /* ──────────────────────────────────────────────────────────────────────────
  * DashboardBanners — assembles the stack from the identity context.
  * ────────────────────────────────────────────────────────────────────────── */
 
 export default function DashboardBanners() {
-  const { subscription, isExpired, expiresAt, daysLeft, quota, plan } = useDashboardIdentity();
+  const { subscription, isExpired, expiresAt, daysLeft, quota } = useDashboardIdentity();
 
   // Session dismisses (reset on reload, mirroring legacy banner lifetimes).
   const [expiryDismissed, setExpiryDismissed] = useState(false);
@@ -262,10 +226,9 @@ export default function DashboardBanners() {
   const amountUSD = subscription?.amountUSD ?? 0;
   const isPaid = amountUSD > 0;
 
-  // ── 1. Plan badge ──────────────────────────────────────────────────────
-  const showPlan = isPaid;
+  // (The plan badge moved to the Wallets-view hero, next to the wallet title.)
 
-  // ── 2. Expiry banner ───────────────────────────────────────────────────
+  // ── Expiry banner ──────────────────────────────────────────────────────
   // Expired is always shown (critical, non-dismissible). The pre-expiry
   // warning (<= 7d) is yellow + dismissible.
   const showExpiryWarn =
@@ -279,11 +242,10 @@ export default function DashboardBanners() {
   const quotaCrit = pct >= 90;
   const remaining = quota ? Math.max(0, quota.total - quota.used) : 0;
 
-  if (!showPlan && !showExpiry && !showQuota) return null;
+  if (!showExpiry && !showQuota) return null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, margin: "16px 0 4px" }}>
-      {showPlan && <PlanBadge plan={plan} amountUSD={amountUSD} />}
 
       {showExpiry && (
         <BannerShell
