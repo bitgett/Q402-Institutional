@@ -87,6 +87,7 @@ interface BridgeRecord {
   feeToken: string;
   feeWhole: number;
   initiatedAt: number;
+  status: "processing" | "success" | "failed";
 }
 
 /** Mirrors AgenticWalletPublic (the fields the wallet filter needs). */
@@ -744,7 +745,10 @@ function BridgeTable({ bridges }: { bridges: BridgeRecord[] }) {
                   </span>
                 </Td>
                 <Td>
-                  <StatusPill kind="pending" label="In flight" />
+                  <StatusPill
+                    kind={b.status === "success" ? "success" : b.status === "failed" ? "failed" : "pending"}
+                    label={b.status === "success" ? "Delivered" : b.status === "failed" ? "Failed" : "In flight"}
+                  />
                 </Td>
                 <Td align="right">
                   <span style={{ fontSize: 12, fontWeight: 600, fontFamily: displayFont }}>
@@ -795,8 +799,8 @@ function Td({
   return <td style={{ textAlign: align, padding: "12px", verticalAlign: "middle" }}>{children}</td>;
 }
 
-function StatusPill({ kind, label }: { kind: "success" | "pending"; label: string }) {
-  const color = kind === "success" ? v2.mint : v2.yellow;
+function StatusPill({ kind, label }: { kind: "success" | "pending" | "failed"; label: string }) {
+  const color = kind === "success" ? v2.mint : kind === "failed" ? v2.red : v2.yellow;
   return (
     <span
       style={{

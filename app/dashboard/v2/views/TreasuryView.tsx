@@ -595,7 +595,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                 <thead>
                   <tr style={{ color: v2.muted2 }}>
                     <Th style={{ paddingLeft: 17 }}>Network</Th>
-                    <Th>Wallet stablecoins</Th>
+                    <Th>Wallet (native gas)</Th>
                     <Th>Gas Tank</Th>
                     <Th>State</Th>
                     <Th style={{ textAlign: "right", paddingRight: 17 }}>Manage</Th>
