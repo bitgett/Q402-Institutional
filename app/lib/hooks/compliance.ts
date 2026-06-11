@@ -40,6 +40,7 @@ const SANCTIONED_SET_KEY = "ofac:sanctioned";
 const META_KEY = "ofac:meta";
 const STALE_AFTER_MS = 48 * 60 * 60 * 1000;
 const STALE_ALERT_DEDUP_KEY = "ofac:stale-alert"; // SETNX, 12h TTL
+const EMPTY_ALERT_DEDUP_KEY = "ofac:empty-alert"; // SETNX, 1h TTL — empty-set fail-closed page
 
 interface OfacMeta {
   lastRefresh: number;
@@ -125,7 +126,28 @@ export const complianceGate: Hook = {
   },
 
   async run(ctx: HookContext): Promise<HookOutcome> {
-    // Membership check first — this is the actual screen. A KV throw
+    // FAIL-CLOSED when the screen can't actually run. An EMPTY (or wiped /
+    // never-populated) sanctioned set makes the sismember check below return
+    // false for EVERY address — i.e. fail-OPEN, the exact opposite of the
+    // "always-on compliance" posture. Treat an empty set as UNVERIFIABLE →
+    // deny + a throttled critical page. (A populated-but-STALE set still
+    // screens against the last snapshot — handled by checkStaleness after a
+    // clean membership check.) A KV throw on scard propagates to the
+    // dispatcher's fail-closed path, same as the membership check.
+    const setSize = await setOps().scard(SANCTIONED_SET_KEY);
+    if (setSize <= 0) {
+      await alertEmptySanctionedSet(ctx);
+      return {
+        action: "deny",
+        code: "COMPLIANCE_UNVERIFIABLE",
+        reason:
+          "Sanctions screening is temporarily unavailable — this payment can't be processed right now. Please retry shortly.",
+        status: 503, // Service Unavailable — transient, retryable
+        meta: { reason: "sanctioned_set_empty" },
+      };
+    }
+
+    // Membership check — this is the actual screen. A KV throw
     // here propagates to the dispatcher → fail-closed deny.
     const sanctioned = await isSanctioned(ctx.recipient);
     if (sanctioned) {
@@ -176,6 +198,31 @@ async function checkStaleness(ctx: HookContext): Promise<HookOutcome | void> {
         `staleness instead of alerting. (Triggered on a payment to ` +
         `${ctx.recipient.toLowerCase()}.)`,
         "warn",
+      ).catch(() => { /* best-effort */ });
+    }
+  } catch {
+    /* alert dedup KV blip — non-fatal */
+  }
+}
+
+/**
+ * Page ops when the sanctioned set is EMPTY and ComplianceGate has begun
+ * failing CLOSED (denying all payments). Throttled to one page per hour so a
+ * sustained outage doesn't spam — but more urgent than the 12h stale page,
+ * because the rail is now blocking every payment.
+ */
+async function alertEmptySanctionedSet(ctx: HookContext): Promise<void> {
+  try {
+    const claimed = await kv.set(EMPTY_ALERT_DEDUP_KEY, "1", { nx: true, ex: 60 * 60 });
+    if (claimed === "OK") {
+      void sendOpsAlert(
+        `<b>🛑 OFAC sanctioned set is EMPTY — ComplianceGate failing CLOSED</b>\n\n` +
+        `scard(${SANCTIONED_SET_KEY}) = 0, so the screen can't run. ComplianceGate ` +
+        `is now DENYING all payments (503 COMPLIANCE_UNVERIFIABLE) until the list is ` +
+        `repopulated — better than waving possibly-sanctioned addresses through. ` +
+        `Run/check the ofac-refresh cron + OFAC_LIST_URL immediately. ` +
+        `(Triggered on a payment to ${ctx.recipient.toLowerCase()}.)`,
+        "critical",
       ).catch(() => { /* best-effort */ });
     }
   } catch {

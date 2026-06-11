@@ -69,18 +69,75 @@ export interface ScanResult {
   deposits: { txHash: string; amount: number }[];
   chunkFailures: number;
   chunkTotal: number;
+  /** Inclusive block range actually walked this call. Lets the cron's
+   *  per-chain cursor advance to exactly where this scan stopped, so the
+   *  next tick resumes from `scannedTo + 1` with zero re-scan and zero
+   *  skipped blocks. `tip` is the chain head observed for this call. */
+  scannedFrom: number;
+  scannedTo: number;
+  tip: number;
+}
+
+/**
+ * Optional bounded-scan controls for the cron's incremental walker.
+ *
+ * - `fromBlock` / `toBlock` — explicit inclusive range. When omitted the
+ *   walker keeps its original behavior (`tip - blockWindow .. tip`), so
+ *   the user-initiated verify-deposit path is unchanged.
+ * - `maxBlocks` — hard cap on blocks walked this call (cron timeout
+ *   guard). Cap DIRECTION depends on whether `fromBlock` was given:
+ *     • no `fromBlock` (default recent-window scan): keep the MOST
+ *       RECENT `maxBlocks` ending at the tip — newest deposits first.
+ *     • explicit `fromBlock` (cron resuming a forward walk): keep the
+ *       OLDEST `maxBlocks` starting at `fromBlock` and advance forward,
+ *       so the caller can resume from `scannedTo + 1` next tick with
+ *       NO skipped blocks in the middle of the window.
+ *
+ * The cron uses these to spread a wide-window chain (Monad 6000, Arbitrum
+ * 5000, Scroll 1200) across several ticks instead of one 60s-busting
+ * sweep. The verify path passes nothing and behaves exactly as before.
+ */
+export interface ScanOpts {
+  fromBlock?: number;
+  toBlock?: number;
+  maxBlocks?: number;
 }
 
 export async function scanNativeDeposits(
   chain: DepositChain,
   fromAddress: string,
+  opts: ScanOpts = {},
 ): Promise<ScanResult> {
   const provider = new ethers.JsonRpcProvider(chain.rpc);
-  const current = await Promise.race([
+  const tip = await Promise.race([
     provider.getBlockNumber(),
     new Promise<never>((_, r) => setTimeout(() => r(new Error("timeout")), 5000)),
   ]);
-  const fromBlock = current - chain.blockWindow;
+
+  // Resolve the inclusive [fromBlock, toBlock] window. Default (verify
+  // path) = the chain's full recent window ending at the tip. Cron path
+  // supplies an explicit `fromBlock` so it can resume where it left off.
+  const resuming = opts.fromBlock != null;
+  const rangeTop = Math.min(opts.toBlock ?? tip, tip);
+  const rawFrom = resuming
+    ? Math.max(0, Math.min(opts.fromBlock!, rangeTop))
+    : Math.max(0, rangeTop - chain.blockWindow);
+
+  // Apply the per-call block cap in the direction that preserves
+  // coverage:
+  //   - resuming (forward walk): keep the OLDEST slice [rawFrom ..
+  //     rawFrom+cap-1] so the caller resumes at scannedTo+1 with no gap.
+  //   - default (recent window): keep the MOST RECENT slice ending at
+  //     the tip — newest deposits first, older tail carried by overlap.
+  let fromBlock = rawFrom;
+  let current = rangeTop;
+  if (opts.maxBlocks != null && current - rawFrom + 1 > opts.maxBlocks) {
+    if (resuming) {
+      current = rawFrom + opts.maxBlocks - 1;
+    } else {
+      fromBlock = current - opts.maxBlocks + 1;
+    }
+  }
 
   const found: { txHash: string; amount: number }[] = [];
 
@@ -132,7 +189,7 @@ export async function scanNativeDeposits(
     }
   }
 
-  return { deposits: found, chunkFailures, chunkTotal };
+  return { deposits: found, chunkFailures, chunkTotal, scannedFrom: fromBlock, scannedTo: current, tip };
 }
 
 // ─── LINK ERC-20 Transfer scanner (CCIP bridge Gas Tank) ────────────────────

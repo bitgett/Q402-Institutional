@@ -63,12 +63,13 @@ export async function setWalletHookConfig(
  * adversarial extra key would change the signed bytes while enforcing
  * nothing. Strict shape closes that gap.
  */
-const TOP_LEVEL_KEYS = ["reputationGate", "multiPayeeSplit", "spendCap"] as const;
+const TOP_LEVEL_KEYS = ["reputationGate", "multiPayeeSplit", "spendCap", "yieldPolicy"] as const;
 const REPUTATION_GATE_KEYS = ["enabled", "minScore", "onUnknown"] as const;
 const MULTI_PAYEE_SPLIT_KEYS = ["enabled", "defaultSplits"] as const;
 const SPEND_CAP_KEYS = ["enabled", "allowedRecipients", "allowedWindowsUtc", "perCallApprovalUsd"] as const;
 const WINDOW_KEYS = ["startHour", "endHour"] as const;
 const SPLIT_LEG_KEYS = ["recipient", "bps"] as const;
+const YIELD_POLICY_KEYS = ["enabled", "allowedAssets", "allowedProtocols", "maxAllocationPct"] as const;
 
 function rejectUnknownKeys(
   obj: Record<string, unknown>,
@@ -182,6 +183,33 @@ export function validateWalletHookConfig(config: WalletHookConfig): void {
       throw new Error(
         "spendCap.enabled is true but no rule is set (need at least one of allowedRecipients, allowedWindowsUtc, perCallApprovalUsd)",
       );
+    }
+  }
+  if (config.yieldPolicy) {
+    const yp = config.yieldPolicy;
+    rejectUnknownKeys(yp as Record<string, unknown>, YIELD_POLICY_KEYS, "yieldPolicy");
+    if (typeof yp.enabled !== "boolean") {
+      throw new Error("yieldPolicy.enabled must be boolean");
+    }
+    if (yp.allowedAssets !== undefined) {
+      if (!Array.isArray(yp.allowedAssets) || yp.allowedAssets.some((a) => a !== "USDC" && a !== "USDT")) {
+        throw new Error('yieldPolicy.allowedAssets must be an array of "USDC" | "USDT"');
+      }
+    }
+    if (yp.allowedProtocols !== undefined) {
+      if (!Array.isArray(yp.allowedProtocols) || yp.allowedProtocols.some((p) => p !== "aave" && p !== "morpho")) {
+        throw new Error('yieldPolicy.allowedProtocols must be an array of "aave" | "morpho"');
+      }
+    }
+    if (yp.maxAllocationPct !== undefined) {
+      if (
+        typeof yp.maxAllocationPct !== "number" ||
+        !Number.isFinite(yp.maxAllocationPct) ||
+        yp.maxAllocationPct < 0 ||
+        yp.maxAllocationPct > 100
+      ) {
+        throw new Error("yieldPolicy.maxAllocationPct must be a number 0..100");
+      }
     }
   }
   if (config.yieldPolicy) {

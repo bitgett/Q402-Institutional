@@ -21,6 +21,7 @@
  */
 
 import { createPublicClient, http, formatUnits, type Address } from "viem";
+import { kv } from "@vercel/kv";
 import { getPrimaryRpc, CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
 import type { YieldAdapter, YieldMarket, YieldPosition } from "./types";
 
@@ -157,25 +158,57 @@ function marketRow(chain: string, cfg: ChainAaveCfg, r: ReserveCfg, apy: number)
   };
 }
 
+/**
+ * Read the off-chain principal map for a wallet, keyed `{chain}:{asset}`
+ * (human units). Written by the deposit/withdraw executor
+ * (updateYieldPosition → KV `aw:yield:{walletAddress}`). Best-effort: a KV
+ * miss/error yields {} so the position still reads (principal just stays
+ * unknown). The key uses the lowercased wallet address to match the writer.
+ */
+async function readPrincipalMap(walletAddress: string): Promise<Record<string, number>> {
+  try {
+    return (await kv.get<Record<string, number>>(`aw:yield:${walletAddress.toLowerCase()}`)) ?? {};
+  } catch {
+    return {};
+  }
+}
+
 function positionRow(
   chain: string,
   cfg: ChainAaveCfg,
   r: ReserveCfg,
   balRaw: bigint,
   apy: number,
+  /** Recorded supplied principal (human units), or undefined when unknown. */
+  principalHuman: number | undefined,
 ): YieldPosition {
+  const balance = formatUnits(balRaw, tokenDecimals(chain, r.asset));
+  // accrued ≈ current redeemable balance − tracked principal. Clamp at 0:
+  // a tracked principal slightly above the aToken balance (rounding, or a
+  // record that predates a withdraw) must not surface negative "earnings".
+  let principal: string | null = null;
+  let accrued: string | null = null;
+  // Only treat a POSITIVE tracked principal as known. A recorded 0 (a market
+  // tracked then fully drained by partial withdraws) is effectively "no
+  // principal" — reporting principal 0 would mis-claim the whole live balance
+  // as earnings, so leave both null rather than fabricate a profit figure.
+  if (principalHuman != null && Number.isFinite(principalHuman) && principalHuman > 0) {
+    principal = String(principalHuman);
+    accrued = String(Math.max(0, Number(balance) - principalHuman));
+  }
   return {
     protocol: "aave",
     chain,
     asset: r.asset,
     marketAddress: cfg.pool,
     positionToken: r.aToken,
-    balance: formatUnits(balRaw, tokenDecimals(chain, r.asset)),
+    balance,
     balanceRaw: balRaw.toString(),
-    // Principal tracking begins at Phase-1 deposit (KV aw:yield:*).
-    // Phase 0 read has no record → principal/accrued null.
-    principal: null,
-    accrued: null,
+    // principal/accrued populated from the KV mirror when a deposit-time
+    // record exists; null only when genuinely untracked (position predates
+    // tracking, or the executor never recorded it).
+    principal,
+    accrued,
     supplyApy: apy,
   };
 }
@@ -220,6 +253,7 @@ export const aaveAdapter: YieldAdapter = {
     if (!cfg) return [];
     const c = client(chain);
     const wallet = walletAddress as Address;
+    const principals = await readPrincipalMap(walletAddress);
     const positions: YieldPosition[] = [];
     for (const r of cfg.reserves) {
       let balRaw = 0n;
@@ -234,7 +268,7 @@ export const aaveAdapter: YieldAdapter = {
       try {
         apy = await readReserveApy(c, cfg, r);
       } catch { /* best-effort */ }
-      positions.push(positionRow(chain, cfg, r, balRaw, apy));
+      positions.push(positionRow(chain, cfg, r, balRaw, apy, principals[`${chain}:${r.asset}`]));
     }
     return positions;
   },
@@ -247,12 +281,16 @@ export const aaveAdapter: YieldAdapter = {
     if (!cfg) return [];
     const c = client(chain);
     const wallet = walletAddress as Address;
+    // Principal is a best-effort enrichment, NOT part of the strict on-chain
+    // read — readPrincipalMap already swallows KV errors, so it never turns a
+    // clean balance read into a thrown "couldn't read".
+    const principals = await readPrincipalMap(walletAddress);
     const positions: YieldPosition[] = [];
     for (const r of cfg.reserves) {
       const balRaw = await readReserveBalance(c, r, wallet);
       if (balRaw === 0n) continue; // no position — omit
       const apy = await readReserveApy(c, cfg, r);
-      positions.push(positionRow(chain, cfg, r, balRaw, apy));
+      positions.push(positionRow(chain, cfg, r, balRaw, apy, principals[`${chain}:${r.asset}`]));
     }
     return positions;
   },

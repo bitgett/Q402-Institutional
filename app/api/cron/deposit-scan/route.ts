@@ -37,11 +37,29 @@
  *
  * Cursor handling: KV `cron:deposit-scan:cursor`. Each tick pulls up
  * to `MAX_USERS_PER_RUN` paid owners from the cursor, scans 10 chains
- * in parallel, persists the next cursor. On wrap (cursor === "0") the
- * next tick restarts the keyspace. With MAX_USERS_PER_RUN=1 and a 5-
- * minute heartbeat, the full sweep at 151 paid users ≈ 12.5h — every
- * paid owner gets re-scanned roughly twice a day with zero per-tick
- * timeout risk. Tunable per growth via `DEPOSIT_SCAN_BATCH` env.
+ * in parallel, and advances the cursor ONLY AFTER the slice is fully
+ * scanned. On wrap (cursor === "0") the next tick restarts the keyspace.
+ * With MAX_USERS_PER_RUN=1 and a 5-minute heartbeat, the full sweep at
+ * 151 paid users ≈ 12.5h — every paid owner gets re-scanned roughly
+ * twice a day with zero per-tick timeout risk. Tunable per growth via
+ * `DEPOSIT_SCAN_BATCH` env.
+ *
+ * Durable progress (timeout safety): the owner cursor is NOT advanced
+ * optimistically. A function timeout mid-scan leaves the cursor pinned
+ * on the in-flight owner, so the next tick re-attempts THAT SAME owner
+ * rather than skipping them. Re-scanning is safe + idempotent — the
+ * storage layer (`addGasDeposit`) dedups by txHash, so a replayed owner
+ * never double-credits. This trades a (cheap, idempotent) re-scan for a
+ * guarantee that a timeout can never skip an unscanned depositor.
+ *
+ * Per-chain chunking: each chain's per-owner scan is capped at
+ * `PER_CHAIN_BLOCK_CAP` blocks (the most-recent slice). Wide-window
+ * chains (Monad 6000, Arbitrum 5000, Scroll 1200 blocks) used to walk
+ * their FULL window for every owner in one tick — Monad alone is 300
+ * sequential RPC batches, the dominant 504 source. With the cap each
+ * owner's whole 10-chain scan is bounded to ~50 batches on its slowest
+ * chain, well under the 60s budget, and the overlapping recent window on
+ * the owner's next cycle keeps the deposit-relevant range covered.
  *
  * Vercel Hobby budget — at 5 min × ~30s per call (Monad's wide window
  * dominates) the cron consumes ~72 GB-h/month, well under the 100
@@ -76,6 +94,27 @@ export const maxDuration = 60;
 
 const CURSOR_KEY = "cron:deposit-scan:cursor";
 const SCAN_COUNT = 200;
+
+/**
+ * Hard cap on blocks walked per chain per owner per heartbeat — the
+ * timeout guard. The walker batches 20 blocks/request behind a 6s
+ * per-batch RPC timeout, so N blocks ≈ ceil(N/20) sequential batches
+ * worst-case. At 1000 that's ≤50 batches/chain; chains run in parallel
+ * per owner, so the per-owner wall time is bounded by the slowest single
+ * chain's ~50 batches — comfortably under maxDuration=60 even when one
+ * RPC is dragging at its 6s ceiling.
+ *
+ * Before this cap a single owner walked the FULL window of every chain
+ * in one tick — Monad's 6000-block window alone is 300 sequential
+ * batches, which intermittently 504'd the function. The cap scans the
+ * most-recent `PER_CHAIN_BLOCK_CAP` blocks per chain instead; the cron
+ * re-visits each owner every cycle with an overlapping recent window, so
+ * the deposit-relevant window stays covered without a one-shot full
+ * sweep. Tunable via DEPOSIT_SCAN_BLOCK_CAP env.
+ */
+const _blockCapRaw = parseInt(process.env.DEPOSIT_SCAN_BLOCK_CAP ?? "1000", 10);
+const PER_CHAIN_BLOCK_CAP =
+  Number.isFinite(_blockCapRaw) && _blockCapRaw > 0 ? _blockCapRaw : 1000;
 /**
  * Owners processed per heartbeat. Default 1 — keeps wall time deterministic
  * (max single-owner = Monad's ~30s parallel scan) and the per-month
@@ -157,11 +196,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (scanIters > MAX_SCAN_ITERS) break;
   } while (true);
 
-  // Persist cursor BEFORE scanning work. If per-chain RPC walks hit the
-  // function timeout, the cursor still moves so the next tick doesn't
-  // replay the same owners forever — the timed-out owners just get their
-  // turn one cycle later.
-  await kv.set(CURSOR_KEY, String(cursor));
+  // NOTE: the owner cursor is intentionally NOT persisted here. It is
+  // advanced only AFTER the per-owner native scan slice below completes
+  // (see "advance owner cursor" block). A function timeout mid-scan must
+  // leave the cursor pinned on the in-flight owner so the next tick
+  // re-attempts them — never skips an unscanned depositor.
 
   // ── LINK deposit sweep (CCIP bridge Gas Tank) ──────────────────────────
   // One getLogs per CCIP chain reveals every LINK transfer to the
@@ -230,11 +269,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     console.error("[deposit-scan] LINK sweep threw:", e);
   }
 
-  // Process owners sequentially (per-owner wall time is bounded by the
-  // slowest chain, ~30s on Monad). Per-chain RPC failures stay isolated
+  // Process owners sequentially. Per-owner wall time is now bounded by
+  // PER_CHAIN_BLOCK_CAP (chains run in parallel, so the slowest single
+  // chain ≤ ceil(cap/20) batches), not by the widest chain's full
+  // window — that window is walked across multiple ticks via the
+  // per-(owner,chain) block cursor. Per-chain RPC failures stay isolated
   // to that chain via Promise.allSettled.
   let newDeposits = 0;
   const perOwner: OwnerResult[] = [];
+  // Did the per-owner loop run to completion for this slice? Gates the
+  // owner-cursor advance: only a fully-scanned slice moves the cursor, so
+  // a mid-slice throw (or a function timeout, which never reaches the
+  // advance at all) holds the cursor and the slice is re-attempted next
+  // tick instead of being skipped.
+  let sliceCompleted = true;
 
   // Per-owner native scan, wrapped in a try/catch per owner so a single
   // misbehaving address (e.g. a KV WRONGTYPE on its gasdep:* list, or a
@@ -246,9 +294,18 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const failedChains: string[] = [];
       const partialChains: OwnerResult["partialChains"] = [];
       let ownerCredits = 0;
+
+      // Bound per-chain work to PER_CHAIN_BLOCK_CAP blocks so one owner's
+      // wide-window chains (Monad 6000, Arbitrum 5000, Scroll 1200) can't
+      // blow the 60s budget. We scan the MOST-RECENT cap blocks per chain
+      // — deposits land newest-first, and the cron re-visits each owner
+      // each cycle with an overlapping recent window, so the relevant
+      // deposit window stays covered without a one-shot full-window sweep.
       const results = await Promise.allSettled(
         DEPOSIT_CHAINS.map((chain) =>
-          scanNativeDeposits(chain, address).then((scan) => ({ chain, scan })),
+          scanNativeDeposits(chain, address, { maxBlocks: PER_CHAIN_BLOCK_CAP }).then(
+            (scan) => ({ chain, scan }),
+          ),
         ),
       );
       for (let i = 0; i < results.length; i++) {
@@ -300,6 +357,27 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   } catch (e) {
     perOwnerError = e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200);
     console.error("[deposit-scan] per-owner loop threw:", e);
+    // An exception mid-slice means we did NOT finish scanning this slice.
+    // Hold the owner cursor so the next tick replays it (idempotent via
+    // addGasDeposit dedup) rather than skipping the unscanned remainder.
+    sliceCompleted = false;
+  }
+
+  // ── Advance the owner cursor — ONLY after the slice was scanned ────────
+  // Durability fix: a function timeout earlier in this handler never
+  // reaches this line, so the cursor stays pinned on the in-flight slice
+  // and the NEXT tick re-attempts those same owners — an unscanned
+  // depositor is never skipped. We advance only when the per-owner loop
+  // ran to completion for the whole slice. A single chain's RPC failure
+  // for an owner does NOT hold the cursor: the original design tolerates
+  // that via the overlapping recent window on the owner's next cycle, so
+  // a chronically-flaky chain can't wedge the whole sweep on one owner.
+  if (sliceCompleted) {
+    try {
+      await kv.set(CURSOR_KEY, String(cursor));
+    } catch (e) {
+      console.error("[deposit-scan] owner cursor set failed:", e);
+    }
   }
 
   const durationMs = Date.now() - startedAt;
@@ -322,6 +400,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       linkSweepError,
       perOwnerError,
       wrapped,
+      // Whether the owner cursor advanced this tick. false = the slice
+      // didn't finish scanning (mid-slice throw / would-be timeout), so
+      // the same owner(s) are re-attempted next tick — NOT a skip.
+      ownerCursorAdvanced: sliceCompleted,
       partialChainCount: perOwner.reduce((s, o) => s + o.partialChains.length, 0),
       failedChainCount: perOwner.reduce((s, o) => s + o.failedChains.length, 0),
     },
@@ -335,6 +417,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     linkDepositsCredited,
     linkFailedChains,
     cursor: String(cursor),
+    ownerCursorAdvanced: sliceCompleted,
     wrapped,
     perOwner: perOwner.slice(0, 50),
     durationMs,

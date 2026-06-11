@@ -175,15 +175,31 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   // live trial/subscription, so an active Trial key (or any owner sig)
   // could move funds via Yield even when an equivalent BNB /send would be
   // gated. We bind to the SAME tier rule /send applies for the chain.
+  // FUND-SAFETY (P0): WITHDRAW must ALWAYS be allowed. Recovering your own
+  // funds from Aave can never be blocked by a subscription/key entitlement,
+  // trial/paid EXPIRY, or drained CREDITS — otherwise an expired account's
+  // funds would be locked in Aave forever. The policy already permits
+  // withdraw unconditionally; mirror that here. The whole entitlement +
+  // expiry + credit gate below therefore applies to SUPPLY (deposit) only.
+  // Withdraw is still owner-authenticated (intent-bound) above and still
+  // passes the per-owner daily op-budget rail (a generous gas cap, NOT a
+  // subscription block).
+  if (action === "supply") {
   const sub = await getSubscription(owner);
-  // (1) Multichain scope. Yield is BNB-only today so this never trips, but
-  // mirror /send's gate verbatim so the two routes can't drift. /send also
-  // exempts withdraw-to-owner-EOA; Yield never sends to the owner's EOA
-  // (funds go into Aave / come back into the Agent Wallet), so that
-  // exception does not apply here.
-  if (chain !== "bnb" && !hasMultichainScope(sub)) {
+  // PRODUCT DECISION: Q402 Yield is a PAID feature — Trial accounts cannot
+  // deposit. This also settles the "who pays Trial-yield gas" question
+  // (nobody — Trial can't deposit). Require a paid Multichain subscription
+  // to SUPPLY. WITHDRAW is exempt from this whole gate (above), so a user
+  // who deposited while paid can ALWAYS recover funds even after downgrade
+  // or expiry.
+  if (!hasMultichainScope(sub)) {
     return NextResponse.json(
-      { error: "SUBSCRIPTION_REQUIRED", message: "Multichain access requires a paid subscription." },
+      {
+        error: "YIELD_REQUIRES_PAID",
+        message:
+          "Q402 Yield deposits require a paid Multichain plan. Upgrade at /payment. " +
+          "(Withdrawals are always allowed.)",
+      },
       { status: 402 },
     );
   }
@@ -291,6 +307,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       );
     }
   }
+  } // end SUPPLY-only entitlement/expiry/credit gate — withdraw is exempt
 
   const ready = isKeystoreReady();
   if (!ready.ok) {
@@ -321,8 +338,11 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   // Serialising here also serialises a concurrent /send (once /send adopts
   // the same lock) + yield on one wallet. Lock contention surfaces as 409
   // so the caller retries after the in-flight action finishes.
-  const lockAcquired = await acquireWalletChainLock(walletAddr, chain);
-  if (!lockAcquired) {
+  // SAFE-LEASE: acquire returns a unique token (or null on contention). The
+  // token is required at release so a stale holder whose TTL expired can't
+  // ABA-delete a fresh holder's lock.
+  const lockToken = await acquireWalletChainLock(walletAddr, chain);
+  if (!lockToken) {
     return NextResponse.json(
       {
         error: "WALLET_BUSY",
@@ -332,12 +352,13 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     );
   }
   // Single release point for every path below the lock. Idempotent + best-
-  // effort (the TTL is the backstop if KV is down).
+  // effort (the TTL is the backstop if KV is down). Compare-and-del with our
+  // token so we only ever release the lease we actually hold.
   let lockReleased = false;
   const releaseLock = async () => {
     if (lockReleased) return;
     lockReleased = true;
-    await releaseWalletChainLock(walletAddr, chain);
+    await releaseWalletChainLock(walletAddr, chain, lockToken);
   };
 
   // Request fingerprint for content-bound idempotency (FIX 4). Hoisted (with
