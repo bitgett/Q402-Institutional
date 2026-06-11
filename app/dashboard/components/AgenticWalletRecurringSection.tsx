@@ -317,7 +317,10 @@ export function AgenticWalletRecurringSection({
           <div className="text-[12.5px] text-white/85 mb-2 font-medium">
             No schedules yet. Try one of these patterns:
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          {/* 2-up max: md:grid-cols-4 used VIEWPORT width, so on a wide screen
+              the narrow v2 right-rail still got 4 columns and the cards
+              overlapped. Cap at 2 (1 on phones) so it fits any container. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {[
               { Icon: ClockIcon,    title: "Hourly heartbeat",     copy: "Every N hours → service / API" },
               { Icon: CalendarIcon, title: "Weekly payouts",       copy: "Every Friday → contractor list" },
