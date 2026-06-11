@@ -178,7 +178,7 @@ export function AgenticWalletDangerZone({
           <div className="text-[10px] uppercase tracking-[0.22em] text-red-300/85 font-semibold">
             Danger zone
           </div>
-          <div className="text-[10px] text-white/35">
+          <div className="text-[10px] text-white/50">
             irreversible after the 7-day grace expires
           </div>
         </div>
@@ -274,7 +274,7 @@ function CompactDangerRow({
     <div className="flex items-center justify-between gap-3 py-1">
       <div className="min-w-0 flex-1">
         <div className="text-[12.5px] text-white/85 font-medium">{title}</div>
-        <div className="text-[11px] text-white/45 leading-snug">{hint}</div>
+        <div className="text-[11px] text-white/60 leading-snug">{hint}</div>
       </div>
       <button
         type="button"
