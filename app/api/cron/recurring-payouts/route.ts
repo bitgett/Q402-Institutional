@@ -66,6 +66,7 @@ import {
   submitToRelay,
   internalBaseUrl,
 } from "@/app/lib/agentic-wallet-sign";
+import { runHooks } from "@/app/lib/hooks";
 import {
   pullDueRules,
   markRulePending,
@@ -104,6 +105,7 @@ interface PerRuleOutcome {
     | "skipped-per-tx-exceeded"
     | "skipped-daily-cap-too-low"
     | "skipped-daily-cap-full"
+    | "skipped-hook-denied"
     | "transient-error"
     | "recovered-missed-bookkeeping";
   txHash?: string;
@@ -208,6 +210,62 @@ async function processOneRule(
         fireStateWebhook(rule, "recurring.stopped", errMsg, nowMs);
         return { ruleKey, walletId: rule.walletId, outcome: "skipped-per-tx-exceeded" };
       }
+    }
+  }
+
+  // 2a. Q402 Hooks — beforeAuthorize, screened per recipient
+  //     (security audit FIX 2026-06-10). Runs BEFORE the daily-cap
+  //     reservation (mirrors /send + /batch ordering: beforeAuthorize
+  //     fires before any daily charge) so a hook deny never shadow-locks
+  //     the daily bucket. Without this loop the unattended cron settled
+  //     each recipient straight through submitToRelay and NEVER bound the
+  //     wallet owner's opted-in policy hooks: SpendCapPolicy's
+  //     allowedRecipients whitelist (HARD deny — "only pay these
+  //     counterparties") and allowedWindowsUtc (business-hours-only),
+  //     plus the GLOBAL ComplianceGate (OFAC). Rules are creatable with
+  //     just an API key (Mode C), so a compromised key could stand up a
+  //     rule paying recipients the owner explicitly excluded, at any
+  //     hour — all silently honoured by the cron. /api/relay only
+  //     backstops OFAC, nothing else.
+  //
+  //     Semantics on the unattended cron: there is no client to surface
+  //     an interactive hold to, so a deny OR a require_approval (e.g. the
+  //     SpendCapPolicy soft cap perCallApprovalUsd — a recurring auto-fire
+  //     can't be human-approved in-band) TERMINATES the rule the same way
+  //     a per-tx / daily-cap exceedance does: recordRuleCapExceeded freezes
+  //     the rule (fired-cap-exceeded), removes it from the ZSET, surfaces
+  //     the hook's reason in lastError, and fires the recurring.stopped
+  //     webhook. The owner must fix the config (widen the allowlist /
+  //     window / approve out-of-band) and resume. We screen EVERY
+  //     recipient up front and do NOT settle any of them when one is
+  //     blocked — a payroll with one excluded counterparty freezes whole
+  //     rather than partial-firing the rest. Nothing reserved yet here, so
+  //     no refund is needed on this path.
+  for (let i = 0; i < rule.recipients.length; i++) {
+    const row = rule.recipients[i];
+    const auth = await runHooks("beforeAuthorize", {
+      lifecycle: "beforeAuthorize",
+      owner: rule.ownerAddr,
+      walletId: rule.walletId,
+      chain: rule.chain,
+      token: rule.token,
+      recipient: row.to.toLowerCase(),
+      amount: row.amount,
+      amountUsd: Number(row.amount),
+      source: "recurring",
+      // Recurring rules carry no per-payment hook params surface; only
+      // the wallet's STORED hook config (SpendCapPolicy allowlist/window,
+      // ComplianceGate's global OFAC list) applies.
+      params: undefined,
+    });
+    if (auth.outcome.action === "deny" || auth.outcome.action === "require_approval") {
+      const { code, reason } = auth.outcome;
+      const errMsg =
+        `recipients[${i}] (${row.to.toLowerCase()}) blocked by ${code}: ${reason} ` +
+        `Update the wallet's spend policy / compliance posture and resume the rule.`;
+      await recordRuleCapExceeded(rule, errMsg, nowMs);
+      fireStateWebhook(rule, "recurring.stopped", errMsg, nowMs);
+      return { ruleKey, walletId: rule.walletId, outcome: "skipped-hook-denied" };
     }
   }
 
@@ -379,6 +437,41 @@ async function processOneRule(
   for (let i = 0; i < rule.recipients.length; i++) {
     const row = rule.recipients[i];
     try {
+      // Q402 Hooks — beforeSettle, per recipient (security audit FIX
+      // 2026-06-10). Runs after all native gating (per-tx, daily cap,
+      // subscription, api key) and BEFORE the signature + relay, mirroring
+      // /send. Binds ReputationGate (recipient must meet the wallet's
+      // ERC-8004 minScore) and ConditionalOracle on the unattended cron;
+      // a deny / require_approval here blocks THIS recipient's settlement.
+      // Treated like a per-row relay failure (no money moved for this
+      // row): if it's the first row before any settle → rule-level abort
+      // (transient retry path below releases the lock + refunds the full
+      // reservation); on a partial it's recorded as a failed row and the
+      // daily reservation reconciliation refunds the unsettled portion.
+      const settleHook = await runHooks("beforeSettle", {
+        lifecycle: "beforeSettle",
+        owner: rule.ownerAddr,
+        walletId: rule.walletId,
+        chain: rule.chain,
+        token: rule.token,
+        recipient: row.to.toLowerCase(),
+        amount: row.amount,
+        amountUsd: Number(row.amount),
+        source: "recurring",
+        params: undefined,
+      });
+      if (
+        settleHook.outcome.action === "deny" ||
+        settleHook.outcome.action === "require_approval"
+      ) {
+        const errMsg = `${settleHook.outcome.code}: ${settleHook.outcome.reason}`;
+        if (settledRows.length === 0) {
+          firstFailureBeforeAnySuccess = errMsg;
+          break;
+        }
+        failedRows.push({ to: row.to, amount: row.amount, reason: errMsg, index: i });
+        continue;
+      }
       const pk = decryptPrivateKey(wallet);
       const signed = await signAgenticPayment({
         privateKey: pk as Hex,
