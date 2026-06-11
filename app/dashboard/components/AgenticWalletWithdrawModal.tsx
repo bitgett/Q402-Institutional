@@ -210,7 +210,7 @@ export function AgenticWalletWithdrawModal({
     >
       <div
         className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
+        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,0.20)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">

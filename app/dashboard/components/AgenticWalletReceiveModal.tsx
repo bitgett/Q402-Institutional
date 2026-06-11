@@ -66,7 +66,7 @@ export function AgenticWalletReceiveModal({ walletAddress, onClose }: Props) {
     >
       <div
         className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(74,222,128,0.20)" }}
+        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,0.20)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between">
@@ -116,8 +116,8 @@ export function AgenticWalletReceiveModal({ walletAddress, onClose }: Props) {
           <div
             className="rounded-md border px-3 py-2.5 text-[12px]"
             style={{
-              background: "rgba(74,222,128,0.05)",
-              borderColor: "rgba(74,222,128,0.18)",
+              background: "rgba(247,202,22,0.05)",
+              borderColor: "rgba(247,202,22,0.18)",
               color: "rgba(226,232,240,0.88)",
             }}
           >
@@ -144,12 +144,12 @@ export function AgenticWalletReceiveModal({ walletAddress, onClose }: Props) {
               onClick={copy}
               className="flex-1 px-3 py-2 rounded-full text-sm font-medium"
               style={{
-                background: "rgba(74,222,128,0.10)",
-                color: "#86efac",
-                border: "1px solid rgba(74,222,128,0.25)",
+                background: "rgba(247,202,22,0.10)",
+                color: "#f9d64a",
+                border: "1px solid rgba(247,202,22,0.25)",
               }}
             >
-              {copied ? "copied ✓" : "Copy address"}
+              {copied ? "Copied!" : "Copy address"}
             </button>
             <a
               href={explorerAddressUrl(chain, walletAddress)}
