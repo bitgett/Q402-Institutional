@@ -97,6 +97,18 @@ const recordKey = (owner: string, walletId: string) =>
 const listKey = (owner: string) => `aw:list:${lower(owner)}`;
 const defaultKey = (owner: string) => `aw:default:${lower(owner)}`;
 const createLockKey = (owner: string) => `aw:create-lock:${lower(owner)}`;
+/**
+ * Per-wallet, per-chain settle lock. A fund-moving action (yield deposit /
+ * withdraw) holds this for the full read-check-sign-settle window so two
+ * concurrent actions on the SAME wallet+chain serialise. Two purposes:
+ *   - the maxAllocationPct read-check-execute can't be raced (both racers
+ *     reading the same balance and each passing the cap);
+ *   - the EIP-7702 authorization nonce (derived from the wallet's current
+ *     tx count) can't be reused by two in-flight delegations on one chain.
+ * Same SET NX + TTL idiom as createLockKey.
+ */
+const walletChainLockKey = (walletId: string, chain: string) =>
+  `aw:wc-lock:${lower(walletId)}:${chain}`;
 const exportLogKey = (owner: string, walletId: string) =>
   `aw:export-log:${lower(owner)}:${lower(walletId)}`;
 /**
@@ -134,6 +146,41 @@ function centsToUsd(cents: number): number {
 }
 
 const CREATE_LOCK_TTL_SEC = 10;
+/**
+ * TTL for the per-wallet+chain settle lock. Sized to comfortably exceed the
+ * worst-case sign+settle path (RPC nonce read + EIP-712 sign + type-4
+ * broadcast + receipt wait) while still self-healing if a holder dies
+ * mid-flight, so a wallet can't be stuck-locked forever. Kept under the
+ * route's maxDuration so a hung leg releases before the next request.
+ */
+const WALLET_CHAIN_LOCK_TTL_SEC = 90;
+
+/**
+ * Acquire the per-wallet+chain settle lock (SET NX + TTL). Returns true if
+ * acquired, false if another fund-moving action holds it. Mirrors
+ * createAgenticWallet's create-lock idiom — serialise the critical section
+ * per (wallet, chain) so concurrent yield deposits (and a concurrent send +
+ * yield) can't race the balance cap or collide on the 7702 auth nonce.
+ */
+export async function acquireWalletChainLock(
+  walletId: string,
+  chain: string,
+): Promise<boolean> {
+  const claimed = await kv.set(
+    walletChainLockKey(walletId, chain),
+    "1",
+    { nx: true, ex: WALLET_CHAIN_LOCK_TTL_SEC },
+  );
+  return !!claimed;
+}
+
+/** Release the per-wallet+chain settle lock. Best-effort — TTL is the backstop. */
+export async function releaseWalletChainLock(
+  walletId: string,
+  chain: string,
+): Promise<void> {
+  await kv.del(walletChainLockKey(walletId, chain)).catch(() => {});
+}
 
 // Legacy keys — only used in the lazy-migration read path.
 const legacyRecordKey = (owner: string) => `aw:${lower(owner)}`;
