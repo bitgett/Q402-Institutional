@@ -22,6 +22,7 @@
 
 import { useState } from "react";
 import { useWallet } from "@/app/context/WalletContext";
+import Link from "next/link";
 import { BrandMark, ScopeChip, TopNav, bodyFont } from "./primitives";
 import WalletButton from "@/app/components/WalletButton";
 import { v2, type Scope, type V2ViewId } from "./theme";
@@ -110,8 +111,12 @@ export default function DashboardV2() {
         >
           {/* Brand — exact copy of the landing navbar (Poppins Bold, the
               navbar mark, "by Quack AI" tagline) so the dashboard reads as
-              the same product. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              the same product. Clicking it returns to the landing page. */}
+          <Link
+            href="/"
+            aria-label="Q402 — back to home"
+            style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
+          >
             <BrandMark />
             <span
               style={{
@@ -136,7 +141,7 @@ export default function DashboardV2() {
             >
               by Quack AI
             </span>
-          </div>
+          </Link>
 
           <TopNav active={view} onChange={setView} />
 
