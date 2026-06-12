@@ -84,6 +84,14 @@ interface SendBody {
   // Q402 Hooks — per-payment hook parameters. Optional; absent means
   // no per-intent hook config (stored per-wallet config still applies).
   hookParams?: HookParams;
+  /**
+   * Optional client idempotency key. When present, the durable replay marker
+   * is scoped to it, so two intentional same-amount payments under DIFFERENT
+   * keys both settle (repeats allowed) while a retry reusing the SAME key is
+   * deduped. When absent, repeats are allowed (no permanent content block);
+   * the 30-min claim still guards same-payment double-clicks.
+   */
+  idempotencyKey?: string;
 }
 
 interface SendRecord {
@@ -214,7 +222,10 @@ interface SettledMarker {
  * fail (caller pages ops for manual reconciliation — there's nothing
  * more we can do once KV is durably down at settlement time).
  */
-async function writeSettledMarker(key: string, marker: SettledMarker): Promise<boolean> {
+async function writeSettledMarker(key: string | null, marker: SettledMarker): Promise<boolean> {
+  // No client idempotency key → no durable marker (intentional repeats are
+  // allowed). Vacuously "written" so callers don't page ops.
+  if (!key) return true;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       await kv.set(key, marker);
@@ -489,58 +500,53 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     hookParamsTag,
   );
   const idempotencyKey = sendKey(fp);
-  // Durable settled marker uses a SCOPE-LESS fingerprint (scope segment
-  // pinned to "settled"). The 30-min idempotency record keeps the key
-  // scope so a Trial-key failure doesn't shadow-lock a Multichain retry,
-  // but the durable settled marker is written only on SUCCESS — so the
-  // shadow-lock concern doesn't apply, and dropping the scope means
-  // rotating the API key between the original send and a retry can't slip
-  // a fresh fingerprint past the replay guard.
-  const durableFp = agenticSendFingerprint(
-    owner,
-    walletId,
-    body.chain,
-    body.token,
-    body.to,
-    body.amount,
-    "settled",
-    hookParamsTag,
-  );
-  const settledKey = sendSettledKey(durableFp);
+  // Durable replay marker is scoped to the CLIENT idempotency key (when
+  // supplied) rather than the payment content. This is what lets a user pay the
+  // same recipient the same amount more than once: distinct keys = distinct
+  // payments; a reused key = a deduped retry. With NO key we skip the durable
+  // marker entirely — a content fingerprint blocked every repeat forever; the
+  // 30-min idempotency claim above still catches same-payment double-clicks.
+  const clientIdemKey =
+    typeof body.idempotencyKey === "string" &&
+    /^[A-Za-z0-9_.:-]{8,200}$/.test(body.idempotencyKey)
+      ? body.idempotencyKey
+      : null;
+  const settledKey = clientIdemKey ? sendSettledKey(`idem:${clientIdemKey}`) : null;
 
   // ── Durable settled-marker replay guard ────────────────────────────────
-  // Checked BEFORE the idempotency claim: if this exact payment already
-  // produced an on-chain settlement in a prior request — even one older
-  // than the 30-min idempotency TTL — replay the stored result instead of
-  // re-firing (a fresh witness nonce would otherwise double-settle).
-  // FAIL CLOSED: if the marker read errors we cannot prove the payment
-  // hasn't already settled, so we reject (503) rather than risk a
-  // double-send. The client retries once KV recovers.
-  let priorSettled: SettledMarker | null;
-  try {
-    priorSettled = await kv.get<SettledMarker>(settledKey);
-  } catch {
-    return NextResponse.json(
-      { error: "idempotency_unavailable", message: "Could not verify payment idempotency (storage). Retry shortly." },
-      { status: 503 },
-    );
-  }
-  if (priorSettled) {
-    const isPartial = priorSettled.status === "partial";
-    const isUncertain = priorSettled.status === "relay_unreachable_uncertain";
-    return NextResponse.json(
-      {
-        sendId: priorSettled.sendId,
-        status: priorSettled.status,
-        ...(priorSettled.txHash ? { txHash: priorSettled.txHash } : {}),
-        ...(priorSettled.legs ? { split: true, legs: priorSettled.legs } : {}),
-        replayed: true,
-        message:
-          "This exact payment already settled on-chain in a prior request; " +
-          "returning the original result instead of re-firing.",
-      },
-      { status: isUncertain ? 502 : isPartial ? 207 : 200 },
-    );
+  // ONLY active when a client idempotency key scoped the marker (settledKey
+  // non-null). It replays a prior settlement under the SAME key — even older
+  // than the 30-min claim TTL — instead of re-firing (a fresh witness nonce
+  // would otherwise double-settle). With no key there's no permanent marker,
+  // so an intentional repeat is allowed. FAIL CLOSED: if the marker read
+  // errors we can't prove the payment hasn't settled, so reject (503).
+  if (settledKey) {
+    let priorSettled: SettledMarker | null;
+    try {
+      priorSettled = await kv.get<SettledMarker>(settledKey);
+    } catch {
+      return NextResponse.json(
+        { error: "idempotency_unavailable", message: "Could not verify payment idempotency (storage). Retry shortly." },
+        { status: 503 },
+      );
+    }
+    if (priorSettled) {
+      const isPartial = priorSettled.status === "partial";
+      const isUncertain = priorSettled.status === "relay_unreachable_uncertain";
+      return NextResponse.json(
+        {
+          sendId: priorSettled.sendId,
+          status: priorSettled.status,
+          ...(priorSettled.txHash ? { txHash: priorSettled.txHash } : {}),
+          ...(priorSettled.legs ? { split: true, legs: priorSettled.legs } : {}),
+          replayed: true,
+          message:
+            "This payment already settled on-chain under the same idempotency key; " +
+            "returning the original result instead of re-firing.",
+        },
+        { status: isUncertain ? 502 : isPartial ? 207 : 200 },
+      );
+    }
   }
 
   const startedAt = Date.now();
