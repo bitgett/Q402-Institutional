@@ -221,7 +221,7 @@ function policyRowsFromConfig(cfg: WalletHookConfig | null): PolicyRow[] {
     },
     {
       key: "yield-alloc",
-      label: "Yield policy",
+      label: "Yield allocation",
       detail:
         yp?.maxAllocationPct != null
           ? `Max ${yp.maxAllocationPct}% in yield`
@@ -316,7 +316,7 @@ const DEMO = {
     rows: [
       { key: "compliance", label: "Compliance gate", detail: "Sanction screening · always on", on: true },
       { key: "spend-approval", label: "Spend approval", detail: "Human review at $50+", on: true },
-      { key: "yield-alloc", label: "Yield policy", detail: "Max 35% in yield", on: true },
+      { key: "yield-alloc", label: "Yield allocation", detail: "Max 35% in yield", on: true },
       { key: "allowlist", label: "Recipient allowlist", detail: "No restriction", on: false },
     ] as PolicyRow[],
   },
