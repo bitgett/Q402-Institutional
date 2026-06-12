@@ -72,6 +72,7 @@ import {
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
 import { AgenticWalletEarnSection } from "@/app/dashboard/components/AgenticWalletEarnSection";
 import { AgenticWalletBridgeModal } from "@/app/dashboard/components/AgenticWalletBridgeModal";
+import { useDashboardIdentity } from "../identity-context";
 
 export interface TreasuryViewProps {
   /** Connected owner address (null until wallet connects). */
@@ -181,6 +182,7 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewProps) {
+  const identity = useDashboardIdentity();
   const isMultichain = scope === "multichain";
 
   // ── Gas Tank state (mirrors page.tsx) ──────────────────────────────────
@@ -580,6 +582,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     ownerAddress={ownerAddress}
                     walletId={agentWallet.walletId}
                     signMessage={signMessage}
+                    canDeposit={identity.hasPaid === true}
                   />
                 ) : demoMode ? (
                   // Demo: show a populated, $0.00 supplied position with the best

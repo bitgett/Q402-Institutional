@@ -125,6 +125,19 @@ function isPositiveDecimalString(s: unknown): s is string {
 }
 
 /**
+ * Canonicalize a decimal-string amount so equivalent formats ("1", "1.0",
+ * "01.00") collapse to ONE fingerprint slot — otherwise a caller bypasses the
+ * idempotency / durable double-settle guard by reformatting the amount. Pure
+ * string ops (NO Number()) so 18-decimal precision is never lost.
+ */
+function canonicalAmount(a: string): string {
+  const [intRaw, fracRaw = ""] = a.trim().split(".");
+  const int = intRaw.replace(/^0+(?=\d)/, "");
+  const frac = fracRaw.replace(/0+$/, "");
+  return frac ? `${int}.${frac}` : int;
+}
+
+/**
  * Send-level fingerprint. Mirrors `agenticBatchFingerprint` but binds
  * walletId AND key-scope so retries that differ on those axes don't
  * collide. Key-scope matters because:
@@ -155,7 +168,7 @@ function agenticSendFingerprint(
     chain,
     token,
     to.toLowerCase(),
-    amount,
+    canonicalAmount(amount),
     scope,
     // Hook params (condition / splits / recipientAgentId) change what
     // actually settles — a different split or oracle condition to the

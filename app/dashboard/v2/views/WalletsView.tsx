@@ -1260,6 +1260,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           ownerAddress={addr ?? activeWallet.ownerAddr}
                           walletId={activeWallet.walletId}
                           signMessage={signMessage}
+                          canDeposit={identity.hasPaid === true}
                         />
                       </div>
                     )}
