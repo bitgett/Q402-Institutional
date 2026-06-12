@@ -913,6 +913,9 @@ export default function DashboardPage() {
       ? { used: usedCredits, total: baseCredits, pct }
       : null,
     plan,
+    // boolean|null — null while /api/keys/provision is still resolving. Lets the
+    // v2 shell default a non-paid wallet's scope to "trial".
+    hasPaid,
     signOut: handleSignOut,
     // openTrialActivation — re-arms + opens the legacy TrialActivationModal.
     // Resetting the ref allows the user to re-trigger after a prior close.
