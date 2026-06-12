@@ -39,6 +39,7 @@ vi.mock("ethers", async () => {
 });
 
 import { scanNativeDeposits, DEPOSIT_CHAINS } from "@/app/lib/deposit-scanner";
+import { GASTANK_ADDRESS_LC } from "@/app/lib/wallets";
 
 const MONAD = DEPOSIT_CHAINS.find((c) => c.key === "monad")!;
 const ETH = DEPOSIT_CHAINS.find((c) => c.key === "eth")!;
@@ -182,5 +183,50 @@ describe("scanNativeDeposits — deadline guard (cron timeout safety)", () => {
     expect(requestedBlocks.length).toBe(ETH.blockWindow + 1); // full 51-block walk
     expect(scan.scannedFrom).toBe(TIP - ETH.blockWindow);
     expect(scan.scannedTo).toBe(TIP);
+  });
+});
+
+describe("scanNativeDeposits — sender collection (per-chain cron sweep)", () => {
+  const ALICE = "0xaaaa000000000000000000000000000000000001";
+  const BOB = "0xbbbb000000000000000000000000000000000002";
+  const NOT_GAS_TANK = "0xcccc000000000000000000000000000000000003";
+
+  // Override the default empty-tx mock: the most-recent block carries two
+  // gas-tank deposits (alice 1 ETH, bob 2 ETH) plus one transfer to a
+  // different address (must be ignored).
+  function mockGasTankTxs() {
+    global.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const batch = typeof init?.body === "string" ? JSON.parse(init.body) : [];
+      const payload = batch.map((req: { params: string[] }, i: number) => {
+        const blockNum = parseInt(req.params[0], 16);
+        const transactions =
+          blockNum === TIP
+            ? [
+                { from: ALICE, to: GASTANK_ADDRESS_LC, value: "0xde0b6b3a7640000", hash: "0xtxAlice" }, // 1 ETH
+                { from: BOB, to: GASTANK_ADDRESS_LC, value: "0x1bc16d674ec80000", hash: "0xtxBob" }, // 2 ETH
+                { from: ALICE, to: NOT_GAS_TANK, value: "0xde0b6b3a7640000", hash: "0xtxOther" }, // ignored
+              ]
+            : [];
+        return { id: i, result: { transactions } };
+      });
+      return new Response(JSON.stringify(payload), { status: 200 });
+    }) as unknown as typeof fetch;
+  }
+
+  it("fromAddress=null collects EVERY sender's gas-tank deposit (cron sweep)", async () => {
+    mockGasTankTxs();
+    const scan = await scanNativeDeposits(ETH, null);
+    expect(scan.deposits).toHaveLength(2); // alice + bob; the non-gas-tank tx is excluded
+    const byFrom = Object.fromEntries(scan.deposits.map((d) => [d.fromAddress, d.amount]));
+    expect(byFrom[ALICE]).toBe(1);
+    expect(byFrom[BOB]).toBe(2);
+  });
+
+  it("fromAddress=ALICE filters to that one sender (verify-deposit path unchanged)", async () => {
+    mockGasTankTxs();
+    const scan = await scanNativeDeposits(ETH, ALICE);
+    expect(scan.deposits).toHaveLength(1);
+    expect(scan.deposits[0].fromAddress).toBe(ALICE);
+    expect(scan.deposits[0].amount).toBe(1);
   });
 });
