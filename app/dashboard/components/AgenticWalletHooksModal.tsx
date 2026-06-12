@@ -52,14 +52,6 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
   const [onUnknown, setOnUnknown] = useState<"allow" | "deny">("allow");
   // MultiPayeeSplit
   const [msEnabled, setMsEnabled] = useState(false);
-  // YieldPolicy (deposit guardrails)
-  const [ypEnabled, setYpEnabled] = useState(false);
-  const [ypUsdc, setYpUsdc] = useState(true);
-  const [ypUsdt, setYpUsdt] = useState(true);
-  const [ypMaxAlloc, setYpMaxAlloc] = useState(""); // 0-100
-  // allowedProtocols isn't editable here (Aave-only build) — preserve any
-  // API-set value across a save instead of silently dropping it.
-  const [ypProtocols, setYpProtocols] = useState<("aave" | "morpho")[] | undefined>(undefined);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -131,20 +123,6 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
     if (cfg.multiPayeeSplit) {
       setMsEnabled(!!cfg.multiPayeeSplit.enabled);
     }
-    if (cfg.yieldPolicy) {
-      const yp = cfg.yieldPolicy;
-      setYpEnabled(!!yp.enabled);
-      // Absent/empty allowedAssets = "no asset restriction" → show both ticked.
-      if (Array.isArray(yp.allowedAssets) && yp.allowedAssets.length > 0) {
-        setYpUsdc(yp.allowedAssets.includes("USDC"));
-        setYpUsdt(yp.allowedAssets.includes("USDT"));
-      } else {
-        setYpUsdc(true);
-        setYpUsdt(true);
-      }
-      setYpMaxAlloc(yp.maxAllocationPct != null ? String(yp.maxAllocationPct) : "");
-      setYpProtocols(yp.allowedProtocols);
-    }
   }
 
   // ── Build config from the form (returns string error or the object) ───
@@ -188,23 +166,6 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
       // normal send (consent violation, P1). The split legs are supplied
       // per payment (e.g. in the agent's pay request) instead.
       config.multiPayeeSplit = { enabled: true };
-    }
-
-    if (ypEnabled) {
-      const yp: NonNullable<WalletHookConfig["yieldPolicy"]> = { enabled: true };
-      const assets: ("USDC" | "USDT")[] = [];
-      if (ypUsdc) assets.push("USDC");
-      if (ypUsdt) assets.push("USDT");
-      if (assets.length === 0) return "Allow at least one yield asset (USDC and/or USDT).";
-      // Both ticked = no asset restriction beyond the hard floor → omit.
-      if (assets.length < 2) yp.allowedAssets = assets;
-      if (ypProtocols && ypProtocols.length > 0) yp.allowedProtocols = ypProtocols;
-      if (ypMaxAlloc.trim() !== "") {
-        const n = Number(ypMaxAlloc);
-        if (!Number.isFinite(n) || n < 0 || n > 100) return "Max allocation must be a number 0–100.";
-        yp.maxAllocationPct = n;
-      }
-      config.yieldPolicy = yp;
     }
 
     return config;
@@ -336,32 +297,6 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
                 wallet-wide default split: a stored default would silently
                 override the recipient you name on a normal send.
               </div>
-            </Section>
-
-            {/* YieldPolicy — deposit guardrails (enforced before any Aave deposit) */}
-            <Section title="Yield Policy" enabled={ypEnabled} onToggle={setYpEnabled}>
-              <div>
-                <div className={labelCls}>Allowed deposit assets</div>
-                <div className="flex items-center gap-4 pt-0.5">
-                  <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
-                    <input type="checkbox" checked={ypUsdc} onChange={(e) => setYpUsdc(e.target.checked)} className="accent-emerald-400 w-4 h-4" />
-                    USDC
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
-                    <input type="checkbox" checked={ypUsdt} onChange={(e) => setYpUsdt(e.target.checked)} className="accent-emerald-400 w-4 h-4" />
-                    USDT
-                  </label>
-                </div>
-              </div>
-              <div>
-                <div className={labelCls}>Max allocation (% of stablecoins allowed in yield)</div>
-                <input value={ypMaxAlloc} onChange={(e) => setYpMaxAlloc(e.target.value)} inputMode="decimal" placeholder="50" className={inputCls} style={inputStyle} />
-              </div>
-              {ypProtocols && ypProtocols.length > 0 && (
-                <div className="text-[11px] text-amber-300/85">
-                  Allowed protocols set via API ({ypProtocols.join(", ")}); preserved on save. This build deposits to Aave only.
-                </div>
-              )}
             </Section>
 
             {error && <div className="text-[12px] text-red-300/85">{error}</div>}
