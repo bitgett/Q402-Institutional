@@ -45,6 +45,12 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
   // config set via the API are preserved here and re-attached on save,
   // so saving from this dialog never silently drops them.
   const [extraWindows, setExtraWindows] = useState<Array<{ startHour: number; endHour: number }>>([]);
+  // yieldPolicy is no longer edited in this dialog (its section was removed),
+  // but the save below does a FULL replace — so a policy set via the API must
+  // be preserved here and re-attached on save, exactly like the extra windows
+  // above, or saving any OTHER section silently wipes the yield guardrails.
+  const [preservedYieldPolicy, setPreservedYieldPolicy] =
+    useState<WalletHookConfig["yieldPolicy"]>(undefined);
   const [perCallApproval, setPerCallApproval] = useState("");
   // ReputationGate
   const [rgEnabled, setRgEnabled] = useState(false);
@@ -123,6 +129,8 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
     if (cfg.multiPayeeSplit) {
       setMsEnabled(!!cfg.multiPayeeSplit.enabled);
     }
+    // Preserve any API-set yieldPolicy so a save from this dialog keeps it.
+    if (cfg.yieldPolicy) setPreservedYieldPolicy(cfg.yieldPolicy);
   }
 
   // ── Build config from the form (returns string error or the object) ───
@@ -167,6 +175,11 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
       // per payment (e.g. in the agent's pay request) instead.
       config.multiPayeeSplit = { enabled: true };
     }
+
+    // Re-attach the preserved yieldPolicy (managed via API, not this UI) so the
+    // full-replace save keeps it intact. The owner signs keccak(config), so the
+    // signed hash still matches exactly what the server persists.
+    if (preservedYieldPolicy) config.yieldPolicy = preservedYieldPolicy;
 
     return config;
   }
