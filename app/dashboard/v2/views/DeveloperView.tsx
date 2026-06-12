@@ -706,6 +706,12 @@ function KeyCard({
     }
   }
 
+  // The "active scope" treatment (glow ring + halo + "Active scope" badge) must
+  // NEVER land on a locked card. A trial user whose scope defaults to multichain
+  // would otherwise see "Active scope" on the locked, upgrade-gated Multichain
+  // key. Gate the whole hero treatment on the card actually being usable.
+  const isActiveScope = active && !locked;
+
   return (
     <div
       className="v2-lift"
@@ -717,18 +723,18 @@ function KeyCard({
         padding: 19,
         display: "flex",
         flexDirection: "column",
-        opacity: active ? 1 : 0.72,
-        borderColor: active ? "rgba(245,202,22,.45)" : v2.line,
+        opacity: isActiveScope ? 1 : 0.72,
+        borderColor: isActiveScope ? "rgba(245,202,22,.45)" : v2.line,
         // Layered glow on the active scope's key — yellow ring + soft halo +
         // deep drop so it reads as the hero of the surface.
-        boxShadow: active
+        boxShadow: isActiveScope
           ? "0 0 0 2px rgba(245,202,22,.45), 0 0 24px rgba(245,202,22,.15), 0 24px 80px rgba(0,0,0,.34)"
           : glass(15).boxShadow,
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Eyebrow>{eyebrow}</Eyebrow>
-        {active && (
+        {isActiveScope && (
           <span
             style={{
               fontSize: fs.micro,

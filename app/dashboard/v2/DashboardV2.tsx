@@ -32,6 +32,7 @@ import { ActivityView } from "./views/ActivityView";
 import { TreasuryView } from "./views/TreasuryView";
 import { DeveloperView } from "./views/DeveloperView";
 import DashboardBanners from "./DashboardBanners";
+import { useDashboardIdentity } from "./identity-context";
 
 export default function DashboardV2() {
   const { address, signMessage } = useWallet();
@@ -89,6 +90,27 @@ export default function DashboardV2() {
     },
     [writeUrl, view],
   );
+
+  // Entitled-scope default, applied DURING RENDER (React's "adjust state when
+  // data changes" pattern — not an effect, so no cascading render and no
+  // set-state-in-effect). `scope` seeds to "multichain", but a non-paid
+  // (trial / unpaid) wallet's real scope is "trial": leaving them on multichain
+  // mislabels the whole dashboard and lands the "Active scope" badge on the
+  // locked Multichain key. When hasPaid first resolves, snap a non-paid wallet
+  // to "trial" — once, and never over a pinned ?scope=. No URL write: the
+  // default is idempotent, and an explicit toggle still persists via
+  // selectScope.
+  const identity = useDashboardIdentity();
+  const [scopePinned] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).has("scope"),
+  );
+  const [autoScoped, setAutoScoped] = useState(false);
+  if (!autoScoped && !scopePinned && identity.hasPaid != null) {
+    setAutoScoped(true);
+    if (identity.hasPaid === false && scope !== "trial") setScope("trial");
+  }
 
   // Shared props every view consumes. signMessage from WalletContext is
   // already non-null typed; views forward it to the agentic data layer.

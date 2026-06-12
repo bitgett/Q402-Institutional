@@ -753,7 +753,7 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
                 <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em" }}>
                   Settlement activity
                 </div>
-                {demoMode && <PreviewChip />}
+                {demoMode && <PreviewChip connected={!!ownerAddress} />}
                 {demoMode && <ScopeChip label={scope === "trial" ? "Trial · BNB" : "Multichain · 10 chains"} />}
               </div>
               <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, maxWidth: 460, lineHeight: 1.5 }}>
@@ -1354,8 +1354,11 @@ function StatusPill({ kind, label }: { kind: "success" | "pending" | "failed"; l
 }
 
 // ── Preview chip ─────────────────────────────────────────────────────────────
-/** Shown only in demo mode, beside the view title — signals example data. */
-function PreviewChip() {
+/** Shown only in demo mode, beside the view title — signals example data.
+ *  Copy depends on whether a wallet is connected: a connected wallet with no
+ *  settlements yet is in demo mode too, so telling them to "connect your
+ *  wallet" would be wrong — they already did. */
+function PreviewChip({ connected }: { connected: boolean }) {
   return (
     <span
       style={{
@@ -1374,7 +1377,9 @@ function PreviewChip() {
       }}
     >
       <span style={{ width: 5, height: 5, borderRadius: 999, background: v2.yellow }} />
-      Preview · connect your wallet for live data
+      {connected
+        ? "Preview · example data until your first settlement"
+        : "Preview · connect your wallet for live data"}
     </span>
   );
 }

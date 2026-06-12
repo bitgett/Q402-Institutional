@@ -99,6 +99,14 @@ export interface DashboardIdentityValue {
   quota: DashboardQuota | null;
   /** Plan key (e.g. "trial", "starter", "enterprise_flex"). */
   plan: string;
+  /**
+   * Whether the wallet holds an active PAID subscription (= multichain scope).
+   * `null` while the provision read is still loading. The v2 shell uses this to
+   * seed the entitled default scope — a non-paid wallet's scope is "trial", not
+   * the "multichain" fallback — so the "Active scope" badge and the whole view
+   * default to what the user can actually use.
+   */
+  hasPaid: boolean | null;
 
   // ── Action handles ────────────────────────────────────────────────────
   /** Sign out of BOTH the email session and the wallet, then reload. */
@@ -128,6 +136,7 @@ const DEFAULT_IDENTITY: DashboardIdentityValue = {
   daysLeft: null,
   quota: null,
   plan: "starter",
+  hasPaid: null,
   signOut: () => {},
   openTrialActivation: () => {},
   openUsageAlerts: () => {},
