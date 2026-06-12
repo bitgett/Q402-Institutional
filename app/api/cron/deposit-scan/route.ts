@@ -96,13 +96,16 @@ const CURSOR_KEY = "cron:deposit-scan:cursor";
 const SCAN_COUNT = 200;
 
 /**
- * Hard cap on blocks walked per chain per owner per heartbeat — the
- * timeout guard. The walker batches 20 blocks/request behind a 6s
- * per-batch RPC timeout, so N blocks ≈ ceil(N/20) sequential batches
- * worst-case. At 1000 that's ≤50 batches/chain; chains run in parallel
- * per owner, so the per-owner wall time is bounded by the slowest single
- * chain's ~50 batches — comfortably under maxDuration=60 even when one
- * RPC is dragging at its 6s ceiling.
+ * Hard cap on blocks walked per chain per owner per heartbeat. The
+ * walker batches 20 blocks/request behind a 6s per-batch RPC timeout, so
+ * N blocks ≈ ceil(N/20) sequential batches. At 1000 that's ≤50
+ * batches/chain — fine when RPCs are healthy, but a dragging endpoint
+ * (Injective was averaging ~3.9s/batch) makes 50 sequential batches
+ * ≈ 195s, far past the 60s ceiling. So the block cap alone does NOT
+ * bound wall time — the real timeout guard is `SCAN_DEADLINE_MS`, an
+ * absolute deadline passed into every scan that halts the walk well
+ * before 60s. This cap still limits the most-recent window walked per
+ * tick; the overlapping window on the owner's next cycle keeps coverage.
  *
  * Before this cap a single owner walked the FULL window of every chain
  * in one tick — Monad's 6000-block window alone is 300 sequential
@@ -136,6 +139,20 @@ const MAX_USERS_PER_RUN =
  * able to burn the function timeout on raw SCAN iterations.
  */
 const MAX_SCAN_ITERS = 10_000;
+
+/**
+ * Soft wall-clock budget for the per-chain block walk, well below
+ * maxDuration=60 with headroom for the tip fetch (≤5s/chain) + finalize.
+ * Passed as an absolute deadline into every `scanNativeDeposits` call so
+ * the walker stops launching batches once it elapses and returns its
+ * partial range. The function therefore NEVER hard-times-out: the slice
+ * finalizes gracefully (recordCronStatus fires, cursor advances) and the
+ * overlapping recent window carries any unscanned tail to the owner's
+ * next cycle. This is the structural guard that survives ANY single slow
+ * RPC — the Injective endpoint (~3.9s/batch) was dragging the function
+ * into repeated 60s kills (82% error rate) before this existed.
+ */
+const SCAN_DEADLINE_MS = 45_000;
 
 /** `sub:{0x40-hex}` — match address-suffixed subscription record keys. */
 const SUB_KEY_RE = /^sub:(0x[0-9a-fA-F]{40})$/;
@@ -303,9 +320,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       // deposit window stays covered without a one-shot full-window sweep.
       const results = await Promise.allSettled(
         DEPOSIT_CHAINS.map((chain) =>
-          scanNativeDeposits(chain, address, { maxBlocks: PER_CHAIN_BLOCK_CAP }).then(
-            (scan) => ({ chain, scan }),
-          ),
+          scanNativeDeposits(chain, address, {
+            maxBlocks: PER_CHAIN_BLOCK_CAP,
+            deadline: startedAt + SCAN_DEADLINE_MS,
+          }).then((scan) => ({ chain, scan })),
         ),
       );
       for (let i = 0; i < results.length; i++) {

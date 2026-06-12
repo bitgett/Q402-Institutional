@@ -29,7 +29,7 @@ export const DEPOSIT_CHAINS = [
   { key: "bnb",    name: "BNB Chain", token: "BNB",   rpc: "https://bsc-dataseed1.binance.org/",       blockWindow: 800, explorer: "https://bscscan.com/tx/" },
   { key: "eth",    name: "Ethereum",  token: "ETH",   rpc: "https://ethereum.publicnode.com",          blockWindow: 50,  explorer: "https://etherscan.io/tx/" },
   { key: "mantle", name: "Mantle",    token: "MNT",   rpc: "https://rpc.mantle.xyz",                   blockWindow: 500, explorer: "https://mantlescan.xyz/tx/" },
-  { key: "injective", name: "Injective", token: "INJ", rpc: "https://sentry.evm-rpc.injective.network/", blockWindow: 800, explorer: "https://blockscout.injective.network/tx/" },
+  { key: "injective", name: "Injective", token: "INJ", rpc: process.env.INJECTIVE_RPC_URL ?? "https://sentry.evm-rpc.injective.network/", blockWindow: 800, explorer: "https://blockscout.injective.network/tx/" },
   { key: "avax",   name: "Avalanche", token: "AVAX",  rpc: "https://api.avax.network/ext/bc/C/rpc",    blockWindow: 300, explorer: "https://snowtrace.io/tx/" },
   { key: "xlayer", name: "X Layer",   token: "OKB",   rpc: "https://rpc.xlayer.tech",                  blockWindow: 200, explorer: "https://www.oklink.com/xlayer/tx/" },
   { key: "stable", name: "Stable",    token: "USDT0", rpc: "https://rpc.stable.xyz",                   blockWindow: 600, explorer: "https://stablescan.xyz/tx/" },
@@ -101,6 +101,17 @@ export interface ScanOpts {
   fromBlock?: number;
   toBlock?: number;
   maxBlocks?: number;
+  /**
+   * Absolute wall-clock deadline (`Date.now()` ms). When set, the block
+   * walker stops launching new batches once the deadline passes and
+   * returns what it scanned so far (`scannedTo` reflects the last
+   * fully-attempted block). Lets the cron bound total wall time across
+   * all chains so one slow RPC (e.g. Injective at ~3.9s/batch) can never
+   * drag the function into a 60s Vercel timeout; the overlapping recent
+   * window covers any unscanned tail on the owner's next cycle. The
+   * verify-deposit path passes no deadline and is unchanged.
+   */
+  deadline?: number;
 }
 
 export async function scanNativeDeposits(
@@ -148,7 +159,17 @@ export async function scanNativeDeposits(
 
   let chunkFailures = 0;
   let chunkTotal = 0;
+  let scannedTo = current;
   for (let i = 0; i < blockNums.length; i += batchSize) {
+    // Soft wall-clock deadline (cron timeout guard): stop launching new
+    // batches once the caller's deadline passes and report the range we
+    // actually covered. A slow RPC (e.g. Injective ~3.9s/batch) can no
+    // longer drag the per-owner scan past the function's 60s ceiling —
+    // the overlapping recent window covers the unscanned tail next cycle.
+    if (opts.deadline != null && Date.now() >= opts.deadline) {
+      scannedTo = i === 0 ? fromBlock - 1 : blockNums[i - 1];
+      break;
+    }
     chunkTotal++;
     const batch = blockNums.slice(i, i + batchSize).map((n, j) => ({
       jsonrpc: "2.0",
@@ -189,7 +210,7 @@ export async function scanNativeDeposits(
     }
   }
 
-  return { deposits: found, chunkFailures, chunkTotal, scannedFrom: fromBlock, scannedTo: current, tip };
+  return { deposits: found, chunkFailures, chunkTotal, scannedFrom: fromBlock, scannedTo, tip };
 }
 
 // ─── LINK ERC-20 Transfer scanner (CCIP bridge Gas Tank) ────────────────────
@@ -265,12 +286,19 @@ export async function scanLinkDeposits(
   const padded = "0x" + facilitator.toLowerCase().replace(/^0x/, "").padStart(64, "0");
 
   try {
-    const logs = await provider.getLogs({
-      address:   chain.linkToken,
-      fromBlock,
-      toBlock,
-      topics:    [ERC20_TRANSFER_TOPIC, null, padded],
-    });
+    // Bound getLogs the same way getBlockNumber is bounded above — an
+    // unbounded RPC call here could hang the whole deposit-scan function
+    // to its 60s ceiling if a CCIP chain's RPC degrades (the same failure
+    // class the native scanner's deadline guard prevents).
+    const logs = await Promise.race([
+      provider.getLogs({
+        address:   chain.linkToken,
+        fromBlock,
+        toBlock,
+        topics:    [ERC20_TRANSFER_TOPIC, null, padded],
+      }),
+      new Promise<never>((_, r) => setTimeout(() => r(new Error("getLogs timeout")), 8000)),
+    ]);
     const matches: LinkScanMatch[] = [];
     for (const log of logs) {
       const fromTopic = log.topics[1];

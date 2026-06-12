@@ -153,3 +153,34 @@ describe("scanNativeDeposits — resuming forward walk (fromBlock + maxBlocks)",
     expect(range().count).toBe(1); // exactly the tip block, nothing older
   });
 });
+
+describe("scanNativeDeposits — deadline guard (cron timeout safety)", () => {
+  it("launches ZERO batches when the deadline has already passed", async () => {
+    // Mirrors a slow chain (Injective ~3.9s/batch) having already eaten
+    // the function's budget: the walker must bail before any RPC batch
+    // rather than grinding ~50 sequential batches into a 60s Vercel kill.
+    // This is the same branch that fires mid-walk once the deadline lands
+    // between batches — the cron passes `startedAt + SCAN_DEADLINE_MS`.
+    const scan = await scanNativeDeposits(MONAD, "0xabc", {
+      maxBlocks: 1000,
+      deadline: Date.now() - 1,
+    });
+    expect(requestedBlocks.length).toBe(0); // no RPC batch launched
+    expect(scan.deposits).toEqual([]);
+    expect(scan.chunkTotal).toBe(0);
+    // Empty range — nothing walked (scannedTo < scannedFrom).
+    expect(scan.scannedTo).toBeLessThan(scan.scannedFrom);
+  });
+
+  it("is inert when the deadline is far in the future — full walk, no regression", async () => {
+    // The instant mock never lets a 60s deadline elapse mid-walk, so the
+    // window is walked in full. Proves the guard doesn't touch the
+    // healthy-RPC / verify path that passes no (or a distant) deadline.
+    const scan = await scanNativeDeposits(ETH, "0xabc", {
+      deadline: Date.now() + 60_000,
+    });
+    expect(requestedBlocks.length).toBe(ETH.blockWindow + 1); // full 51-block walk
+    expect(scan.scannedFrom).toBe(TIP - ETH.blockWindow);
+    expect(scan.scannedTo).toBe(TIP);
+  });
+});
