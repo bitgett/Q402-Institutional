@@ -259,13 +259,15 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   // Which key/scope this call settles against (relay route's
   // `isTrialScopedKey`): a presented Trial key, OR the owner-sig BNB path
   // resolving to the trial key, is trial-scope; everything else is paid.
-  // For owner-sig BNB with BOTH a trial and a paid key, the trial key wins —
-  // matching /send's `sub?.trialApiKey || sub?.apiKey` precedence — so the
-  // trial expiry AND trial credit pool both gate the action (no expiry/pool
-  // scope mismatch).
+  // For owner-sig BNB the trial key is used ONLY when the owner has no paid
+  // multichain scope. A paid user who still holds a (now-expired) trial key
+  // must NOT resolve to trial scope here — /api/relay scopes a paid BNB pay on
+  // the paid key, so an expired trial would otherwise wrongly TRIAL_EXPIRED a
+  // paid user's Yield deposit. When the trial is the owner's ONLY entitlement
+  // it wins (trial expiry + trial credit pool gate the action), matching /send.
   const usingTrialKey =
     !!(presentedApiKey && presentedApiKey === sub?.trialApiKey) ||
-    (!presentedApiKey && chain === "bnb" && !!sub?.trialApiKey);
+    (!presentedApiKey && chain === "bnb" && !!sub?.trialApiKey && !hasMultichainScope(sub));
   const yieldScope: CreditScope = usingTrialKey ? "trial" : "paid";
 
   if (sub) {

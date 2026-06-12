@@ -57,6 +57,12 @@ interface Props {
   ownerAddress: string;
   walletId: string;
   signMessage: (message: string) => Promise<string | null>;
+  /** Yield deposit is paid-only — gate the deposit control before signing so a
+   *  trial user doesn't sign an Earn challenge only to receive a 402. Optional;
+   *  defaults to allowed (the server still enforces paid-only) so a caller
+   *  without a plan signal doesn't regress, but the dashboard passes the real
+   *  hasPaid so trial users see the gate BEFORE signing. */
+  canDeposit?: boolean;
 }
 
 // Human chain label for the partial-read notice. Yield is BNB-only today;
@@ -95,7 +101,7 @@ function formatUsd(n: number): string {
   return `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }: Props) {
+export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, canDeposit = true }: Props) {
   const [positions, setPositions] = useState<PositionsPayload | null>(null);
   const [markets, setMarkets] = useState<Market[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -279,6 +285,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage }
           walletId={walletId}
           signMessage={signMessage}
           onChanged={() => { void loadPositions(); }}
+          canDeposit={canDeposit}
         />
       )}
     </div>
@@ -304,11 +311,13 @@ function AgenticWalletEarnActions({
   walletId,
   signMessage,
   onChanged,
+  canDeposit,
 }: {
   ownerAddress: string;
   walletId: string;
   signMessage: (message: string) => Promise<string | null>;
   onChanged: () => void;
+  canDeposit: boolean;
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [token, setToken] = useState<"USDC" | "USDT">("USDC");
@@ -339,6 +348,13 @@ function AgenticWalletEarnActions({
     setOkMsg(null);
     if (!amountValid) {
       setErr("Enter a positive amount.");
+      return;
+    }
+    if (mode === "deposit" && !canDeposit) {
+      // Yield is paid-only. Block BEFORE the wallet signature so a trial user
+      // doesn't sign an Earn challenge only to get a 402 back. Withdraw stays
+      // available (the server always allows it).
+      setErr("Yield deposits need a paid Multichain plan — upgrade at /payment. Withdraw is always available.");
       return;
     }
     setBusy(true);
@@ -462,7 +478,7 @@ function AgenticWalletEarnActions({
         <button
           type="button"
           onClick={submit}
-          disabled={busy || !amountValid}
+          disabled={busy || !amountValid || (mode === "deposit" && !canDeposit)}
           className="px-3 py-1.5 rounded-md text-[12px] font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed capitalize"
         >
           {busy ? "…" : mode}
