@@ -170,25 +170,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const startedAt = Date.now();
 
-  // Resume from the saved cursor. Redis SCAN uses "0" to mean "start".
-  const savedCursor = await kv.get<string>(CURSOR_KEY);
-  let cursor: string | number = savedCursor ?? 0;
-  if (cursor === "0") cursor = 0;
-
-  const addresses: string[] = [];
-  let scannedKeys = 0;
+  // ── Owner selection ───────────────────────────────────────────────────
+  // Enumerate ALL sub:* owners this tick, then resume strictly AFTER the last
+  // owner we fully scanned. We persist the owner ADDRESS in CURSOR_KEY — NOT
+  // the Redis SCAN cursor. Saving the SCAN cursor pinned the sweep on owner #1
+  // forever: a keyspace that fits in one COUNT page (177 owners < SCAN_COUNT)
+  // always returns SCAN cursor "0", so the saved cursor never advanced and
+  // every tick re-selected the same first owner — the other ~176 owners'
+  // deposits were never swept. Enumerating ~177 keys costs ~1 SCAN round-trip.
+  const allOwners: string[] = [];
+  let scanCursor: string | number = 0;
   let scanIters = 0;
-  let wrapped = false;
-
   do {
-    let page: string[];
+    let res: [string | number, string[]];
     try {
-      const res: [string | number, string[]] = await kv.scan(cursor, {
-        match: "sub:*",
-        count: SCAN_COUNT,
-      });
-      cursor = res[0];
-      page = res[1];
+      res = await kv.scan(scanCursor, { match: "sub:*", count: SCAN_COUNT });
     } catch (e) {
       console.error("[deposit-scan] kv.scan failed:", e);
       await recordCronStatus(CRON_NAMES.DEPOSIT_SCAN, {
@@ -198,20 +194,26 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       });
       return NextResponse.json({ error: "kv_scan_failed" }, { status: 502 });
     }
-    scanIters++;
-    scannedKeys += page.length;
-
-    for (const key of page) {
+    scanCursor = res[0];
+    for (const key of res[1]) {
       const m = SUB_KEY_RE.exec(key);
-      if (!m) continue;
-      addresses.push(m[1].toLowerCase());
-      if (addresses.length >= MAX_USERS_PER_RUN) break;
+      if (m) allOwners.push(m[1].toLowerCase());
     }
+    scanIters++;
+  } while (String(scanCursor) !== "0" && scanIters <= MAX_SCAN_ITERS);
 
-    if (addresses.length >= MAX_USERS_PER_RUN) break;
-    if (String(cursor) === "0") { wrapped = true; break; }
-    if (scanIters > MAX_SCAN_ITERS) break;
-  } while (true);
+  // Deterministic total order so the per-tick window is stable across ticks
+  // (SCAN page order is not). Resume strictly after the last completed owner.
+  // A stale value from the old SCAN-cursor scheme (a number, or "0") sorts
+  // before every "0x…" address, so `a > lastOwner` matches all of them and we
+  // cleanly restart from the front — graceful migration, no manual reset.
+  allOwners.sort();
+  const scannedKeys = allOwners.length;
+  const lastOwner = (await kv.get<string>(CURSOR_KEY)) ?? "";
+  let startIdx = allOwners.findIndex((a) => a > lastOwner);
+  if (startIdx < 0) startIdx = 0; // past the end (or empty list) → restart
+  const wrapped = startIdx === 0 && lastOwner !== "";
+  const addresses = allOwners.slice(startIdx, startIdx + MAX_USERS_PER_RUN);
 
   // NOTE: the owner cursor is intentionally NOT persisted here. It is
   // advanced only AFTER the per-owner native scan slice below completes
@@ -390,9 +392,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // for an owner does NOT hold the cursor: the original design tolerates
   // that via the overlapping recent window on the owner's next cycle, so
   // a chronically-flaky chain can't wedge the whole sweep on one owner.
-  if (sliceCompleted) {
+  // Persist the LAST owner ADDRESS we fully scanned (or "" to wrap back to the
+  // front when we reached the end of the keyspace). Storing the address — not
+  // the SCAN cursor — is what makes the sweep actually advance one owner per
+  // tick through all owners instead of pinning on the first.
+  const nextOwnerCursor =
+    sliceCompleted && addresses.length > 0
+      ? startIdx + addresses.length >= allOwners.length
+        ? "" // reached the end → next tick restarts the sweep
+        : addresses[addresses.length - 1]
+      : lastOwner; // incomplete slice → hold on the in-flight owner
+  if (sliceCompleted && addresses.length > 0) {
     try {
-      await kv.set(CURSOR_KEY, String(cursor));
+      await kv.set(CURSOR_KEY, nextOwnerCursor);
     } catch (e) {
       console.error("[deposit-scan] owner cursor set failed:", e);
     }
@@ -434,7 +446,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     newDeposits,
     linkDepositsCredited,
     linkFailedChains,
-    cursor: String(cursor),
+    ownerCursor: nextOwnerCursor,
+    totalOwners: allOwners.length,
     ownerCursorAdvanced: sliceCompleted,
     wrapped,
     perOwner: perOwner.slice(0, 50),
