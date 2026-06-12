@@ -179,6 +179,17 @@ export function AgenticWalletBatchModal({
       });
       const data = (await res.json().catch(() => ({}))) as BatchResponse & BackendError;
       if (!res.ok) {
+        // Relay outcome uncertain — some rows may have settled on-chain even
+        // though we lost the response. Tell the user NOT to retry (a re-send
+        // re-signs with a fresh nonce and could double-pay); the server's
+        // idempotency guard already refuses to re-fire THIS exact batch.
+        if ((data as { status?: string }).status === "uncertain") {
+          setError({
+            headline:
+              "Couldn't confirm whether these payments settled. The relay didn't respond after they may have been broadcast — check your wallet history on-chain BEFORE sending again, because re-sending could pay twice.",
+          });
+          return;
+        }
         setError(friendlyError(res.status, data));
         return;
       }

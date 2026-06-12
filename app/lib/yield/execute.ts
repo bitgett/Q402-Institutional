@@ -427,8 +427,21 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
           await releaseLock();
           return NextResponse.json({ status: "ok", idempotent: true, txHash: prior.txHash });
         }
-        // Mismatched fingerprint — same key, different op. Fall through and
-        // execute as a new action instead of replaying a stale, unrelated tx.
+        // Mismatched fingerprint — the client reused an idempotency key for a
+        // DIFFERENT operation (action/chain/token/amount). Reject rather than
+        // silently executing a NEW on-chain action under a key the client
+        // believes is already settled: that's a client bug and could
+        // double-move funds. Standard idempotency-key semantics (409).
+        await releaseLock();
+        return NextResponse.json(
+          {
+            error: "idempotency_key_reused",
+            message:
+              "This idempotency key was already used for a different operation. " +
+              "Use a fresh key for a new action, or repeat the EXACT original request to replay it.",
+          },
+          { status: 409 },
+        );
       }
     }
 

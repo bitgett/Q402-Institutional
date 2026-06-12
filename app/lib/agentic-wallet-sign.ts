@@ -455,6 +455,29 @@ export async function submitToRelay(
   });
 }
 
+/**
+ * Classify a thrown relay fetch as a DEFINITE connect/DNS-phase failure — the
+ * request never reached the relay, so nothing could have broadcast on-chain.
+ * Callers that bracket a relay submit (recurring cron, batch) use this to treat
+ * such throws as a CLEAN pre-broadcast failure (retry, no fired-marker, no
+ * count inflation) rather than the ambiguous "uncertain" path. Anything NOT
+ * matched here (response-phase timeout, reset, unknown) stays uncertain — the
+ * classification fails SAFE toward never double-paying. undici surfaces the
+ * phase via `err.cause.code`; DNS failures can nest under `cause.errors[]`.
+ */
+export function isRelayConnectPhaseError(e: unknown): boolean {
+  const CONNECT = new Set([
+    "ENOTFOUND",               // DNS: host not found
+    "EAI_AGAIN",               // DNS: temporary failure
+    "ECONNREFUSED",            // TCP: connection refused
+    "UND_ERR_CONNECT_TIMEOUT", // undici: connect (not response) timed out
+  ]);
+  const cause = (e as { cause?: { code?: string; errors?: Array<{ code?: string }> } })?.cause;
+  if (cause?.code && CONNECT.has(cause.code)) return true;
+  for (const sub of cause?.errors ?? []) if (sub?.code && CONNECT.has(sub.code)) return true;
+  return false;
+}
+
 /** Resolve the base URL used for internal /api/relay forwards. Mirrors
  *  the convention in the send route so the env precedence stays uniform
  *  across all agentic-wallet endpoints. */

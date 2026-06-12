@@ -159,21 +159,29 @@ export default function DashboardPage() {
   useEffect(() => {
     if (initialViewMatched.current) return;
     if (!subscription && !emailSession) return; // still loading
-    const walletHasTrialSignal =
-      subscription?.plan === "trial" &&
-      !!subscription?.trialExpiresAt &&
-      new Date(subscription.trialExpiresAt) > new Date();
-    const emailHasTrialSignal =
-      !!emailSession && (!!sessionTrial.apiKey || !!sessionTrial.trialExpiresAt);
-    const bridgedTrialSignal =
-      !!boundEmailTrial && (!!boundEmailTrial.apiKey || !!boundEmailTrial.trialExpiresAt);
-    if (walletHasTrialSignal || emailHasTrialSignal || bridgedTrialSignal) {
-      setTrialViewActive(true);
+    if (hasPaid === null) return;               // wait for provision — paid wins
+    // A PAID account defaults to Multichain even if a lingering trial signal
+    // exists (e.g. a paid wallet plus an email-session trial). Otherwise the
+    // quota — which follows trialViewActive — would render the trial pool while
+    // the v2 scope renders multichain, so the two states disagree. Only a
+    // NON-paid account auto-enters the trial view.
+    if (hasPaid !== true) {
+      const walletHasTrialSignal =
+        subscription?.plan === "trial" &&
+        !!subscription?.trialExpiresAt &&
+        new Date(subscription.trialExpiresAt) > new Date();
+      const emailHasTrialSignal =
+        !!emailSession && (!!sessionTrial.apiKey || !!sessionTrial.trialExpiresAt);
+      const bridgedTrialSignal =
+        !!boundEmailTrial && (!!boundEmailTrial.apiKey || !!boundEmailTrial.trialExpiresAt);
+      if (walletHasTrialSignal || emailHasTrialSignal || bridgedTrialSignal) {
+        setTrialViewActive(true);
+      }
     }
     // Otherwise keep the default (multichain). Either way, lock the flip
     // so we don't override the user's subsequent manual choice.
     initialViewMatched.current = true;
-  }, [subscription, emailSession, sessionTrial, boundEmailTrial]);
+  }, [subscription, emailSession, sessionTrial, boundEmailTrial, hasPaid]);
 
   // Phase 1 identity model: wallet binding is no longer auto-fired. The
   // ClaimWalletPrompt component (State D) handles binding via an explicit

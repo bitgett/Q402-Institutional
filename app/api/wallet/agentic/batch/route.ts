@@ -56,6 +56,7 @@ import {
   submitToRelay,
   internalBaseUrl,
   fetchAuthNonce,
+  isRelayConnectPhaseError,
   type AgenticChainKey,
   type AgenticToken,
 } from "@/app/lib/agentic-wallet-sign";
@@ -625,7 +626,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         to: row.to,
         amount: row.amount,
         ok: false,
-        uncertain: broadcastAttempted,
+        // Connect/DNS-phase throws never reached the relay (no broadcast) →
+        // clean failure, NOT uncertain. Only post-connect throws are ambiguous.
+        uncertain: broadcastAttempted && !isRelayConnectPhaseError(e),
         error: e instanceof Error ? e.message : String(e),
       };
     }
