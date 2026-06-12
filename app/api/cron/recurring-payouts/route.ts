@@ -65,6 +65,7 @@ import {
   signAgenticPayment,
   submitToRelay,
   internalBaseUrl,
+  isRelayConnectPhaseError,
 } from "@/app/lib/agentic-wallet-sign";
 import { runHooks } from "@/app/lib/hooks";
 import {
@@ -524,7 +525,15 @@ async function processOneRule(
         // fired) instead of the transient retry path: re-firing would re-sign
         // with a fresh witness nonce and double-pay. A throw BEFORE the fetch
         // (hook / sign error) is pre-broadcast → safe transient retry.
-        if (broadcastAttempted) { relayUncertain = msg; break; }
+        // A connect/DNS-phase throw never reached the relay → clean (no
+        // broadcast). Only a post-connect throw is ambiguous → uncertain.
+        // Without this, a relay DNS/connect blip wrote a fired-marker and the
+        // next tick inflated totalFiredCount / totalSpentUsd for a payout that
+        // never happened.
+        if (broadcastAttempted && !isRelayConnectPhaseError(e)) {
+          relayUncertain = msg;
+          break;
+        }
         firstFailureBeforeAnySuccess = msg;
         break;
       }
