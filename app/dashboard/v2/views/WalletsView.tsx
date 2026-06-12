@@ -606,9 +606,13 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
   // uses): relayer-gas balance per chain × price → total USD + funded chains.
   // Reuses the cached owner-auth (no extra sign prompt).
   const [gasTank, setGasTank] = useState<{ usd: number; funded: string[] } | null>(null);
+  // Distinct from "loaded $0": true when the gas-tank fetch FAILED, so the card
+  // shows "Unavailable" instead of a misleading $0.00 that reads as "empty".
+  const [gasTankError, setGasTankError] = useState(false);
   useEffect(() => {
     if (!addr) {
       setGasTank(null);
+      setGasTankError(false);
       return;
     }
     let cancelled = false;
@@ -630,8 +634,11 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
         const usd = Object.entries(balances).reduce((s, [c, a]) => s + a * (prices[c] ?? 0), 0);
         const funded = Object.entries(balances).filter(([, a]) => a > 0).map(([c]) => c);
         setGasTank({ usd, funded });
+        setGasTankError(false);
       } catch {
-        /* leave null — card shows $0 / top-up hint */
+        // Fetch failed — flag it so the card renders "Unavailable" rather than
+        // a misleading $0.00 (which reads as "your tank is empty").
+        if (!cancelled) setGasTankError(true);
       }
     })();
     return () => {
@@ -1280,10 +1287,14 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           <div style={styles.sub}>Relayer gas · pre-funded · sponsors every settlement</div>
                         </div>
                       </div>
-                      <div style={{ font: `600 19px ${displayFont}` }}>{fmtUsd(vmGasTank.usd)}</div>
+                      <div style={{ font: `600 19px ${displayFont}` }}>{!demoMode && gasTankError ? "—" : fmtUsd(vmGasTank.usd)}</div>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 14, flexWrap: "wrap" }}>
-                      {vmGasTank.funded.length > 0 ? (
+                      {!demoMode && gasTankError ? (
+                        <span style={{ color: v2.muted, fontSize: fs.label }}>
+                          Balance unavailable — couldn&apos;t reach the gas-tank service. Retry shortly.
+                        </span>
+                      ) : vmGasTank.funded.length > 0 ? (
                         <>
                           {vmGasTank.funded.slice(0, 10).map((c) => (
                             <ChainIcon key={c} chain={c} size={20} />

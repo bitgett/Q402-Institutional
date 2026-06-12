@@ -289,7 +289,12 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
         if (typeof data.hasMultichainScope === "boolean") {
           setHasMultichainScopeSrv(data.hasMultichainScope);
         }
-        const first = Array.isArray(data.wallets) ? data.wallets[0] : null;
+        // Prefer the first NON-archived wallet (the endpoint also returns
+        // soft-deleted ones); fall back to index 0 only if all are archived, so
+        // Treasury Yield/Bridge never default to a deleted wallet.
+        const first = Array.isArray(data.wallets)
+          ? (data.wallets.find((w: { deletedAt?: number | null }) => !w.deletedAt) ?? data.wallets[0])
+          : null;
         if (first && typeof first.walletId === "string") {
           setAgentWallet({
             address: first.address,

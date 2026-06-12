@@ -80,11 +80,25 @@ export async function fetchNonce(addr: string): Promise<string | null> {
 }
 
 /**
+ * In-flight de-dup. The sessionStorage cache only collapses SEQUENTIAL calls —
+ * but on first dashboard load several views call getAuthCreds CONCURRENTLY
+ * before any has cached, so each would prompt its OWN wallet signature (the
+ * "5 popups on connect" bug). Sharing the first in-flight sign across all
+ * concurrent callers for the same address collapses that to one prompt.
+ */
+const inFlightAuth = new Map<
+  string,
+  Promise<{ nonce: string; signature: string } | null>
+>();
+
+/**
  * Returns a valid { nonce, signature } pair for `addr`.
  *
  * 1. Returns cached pair if still fresh.
  * 2. Otherwise fetches a new nonce, asks the wallet to sign, caches result.
  * 3. Returns null if the user rejects the signature request or on network error.
+ *
+ * Concurrent callers during step 2 share ONE signature prompt (see inFlightAuth).
  *
  * @param addr        - wallet address (checksummed or lowercase, normalised internally)
  * @param signMessage - async function that prompts wallet and returns signature string, or null on rejection
@@ -96,15 +110,25 @@ export async function getAuthCreds(
   const cached = loadCache(addr);
   if (cached) return { nonce: cached.nonce, signature: cached.signature };
 
-  const nonce = await fetchNonce(addr);
-  if (!nonce) return null;
+  const key = addr.toLowerCase();
+  const pending = inFlightAuth.get(key);
+  if (pending) return pending; // a sign is already in flight for this addr
 
-  const msg = `Q402 Institutional\nSign in to prove wallet ownership.\n\nAddress: ${addr.toLowerCase()}\nNonce: ${nonce}`;
-  const signature = await signMessage(msg);
-  if (!signature) return null;
-
-  saveCache(addr, nonce, signature);
-  return { nonce, signature };
+  const task = (async () => {
+    const nonce = await fetchNonce(addr);
+    if (!nonce) return null;
+    const msg = `Q402 Institutional\nSign in to prove wallet ownership.\n\nAddress: ${addr.toLowerCase()}\nNonce: ${nonce}`;
+    const signature = await signMessage(msg);
+    if (!signature) return null;
+    saveCache(addr, nonce, signature);
+    return { nonce, signature };
+  })();
+  inFlightAuth.set(key, task);
+  try {
+    return await task;
+  } finally {
+    inFlightAuth.delete(key);
+  }
 }
 
 /**
