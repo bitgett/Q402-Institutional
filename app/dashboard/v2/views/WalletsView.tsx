@@ -200,7 +200,7 @@ interface PolicyRow {
 
 function policyRowsFromConfig(cfg: WalletHookConfig | null): PolicyRow[] {
   const sc = cfg?.spendCap;
-  const yp = cfg?.yieldPolicy;
+  const rg = cfg?.reputationGate;
   const approval = sc?.perCallApprovalUsd;
   const allow = sc?.allowedRecipients;
   return [
@@ -220,13 +220,13 @@ function policyRowsFromConfig(cfg: WalletHookConfig | null): PolicyRow[] {
       on: Boolean(sc?.enabled) && approval != null,
     },
     {
-      key: "yield-alloc",
-      label: "Yield allocation",
+      key: "reputation",
+      label: "Reputation Gate",
       detail:
-        yp?.maxAllocationPct != null
-          ? `Max ${yp.maxAllocationPct}% in yield`
-          : "No allocation cap",
-      on: Boolean(yp?.enabled),
+        rg?.enabled && rg.minScore != null
+          ? `Min ERC-8004 score ${rg.minScore}`
+          : "No reputation requirement",
+      on: Boolean(rg?.enabled),
     },
     {
       key: "allowlist",
@@ -316,7 +316,7 @@ const DEMO = {
     rows: [
       { key: "compliance", label: "Compliance gate", detail: "Sanction screening · always on", on: true },
       { key: "spend-approval", label: "Spend approval", detail: "Human review at $50+", on: true },
-      { key: "yield-alloc", label: "Yield allocation", detail: "Max 35% in yield", on: true },
+      { key: "reputation", label: "Reputation Gate", detail: "Min ERC-8004 score 1", on: true },
       { key: "allowlist", label: "Recipient allowlist", detail: "No restriction", on: false },
     ] as PolicyRow[],
   },
