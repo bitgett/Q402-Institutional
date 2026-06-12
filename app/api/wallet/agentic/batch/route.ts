@@ -97,6 +97,9 @@ interface BatchResultRow {
   ok: boolean;
   txHash?: string;
   error?: string;
+  /** Relay fetch threw AFTER it may have broadcast — outcome unknown (the
+   *  transfer may have settled). NOT a clean failure: must not be retried. */
+  uncertain?: boolean;
 }
 
 interface BatchRecord {
@@ -108,7 +111,7 @@ interface BatchRecord {
   results: BatchResultRow[];
   startedAt: number;
   finishedAt?: number;
-  status: "processing" | "complete" | "partial" | "failed";
+  status: "processing" | "complete" | "partial" | "failed" | "uncertain";
   /**
    * True when row 0 failed and the rest of the batch was marked
    * ABORTED_AFTER_ROW_0_FAILURE without firing. Persisted on the
@@ -374,7 +377,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         startedAt: replay.startedAt,
         finishedAt: replay.finishedAt,
       },
-      { status: replay.status === "partial" ? 207 : replay.status === "failed" ? 502 : 200 },
+      {
+        status:
+          replay.status === "partial"
+            ? 207
+            : replay.status === "failed" || replay.status === "uncertain"
+              ? 502
+              : 200,
+      },
     );
   }
 
@@ -534,6 +544,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   async function processRow(row: { to: string; amount: string }): Promise<BatchResultRow> {
+    // Whether the relay fetch was dispatched for this row. A throw past that
+    // point may have broadcast on-chain (ambiguous) — see the catch below.
+    let broadcastAttempted = false;
     try {
       // ── Q402 Hooks — beforeSettle, per row, BEFORE this row settles ───────
       // Mirrors send/route.ts: beforeAuthorize gates (OFAC/SpendCap) ran up
@@ -586,6 +599,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         facilitator,
         authorizationNonce: authNonce,
       });
+      // Past this line the relay may broadcast on-chain; a throw is ambiguous.
+      broadcastAttempted = true;
       const resp = await submitToRelay(baseUrl, apiKey, signed, {
         source: "batch",
         internalTrustToken: process.env.CRON_SECRET,
@@ -600,10 +615,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           : `relay_http_${resp.status}`;
       return { to: row.to, amount: row.amount, ok: false, error: errMsg };
     } catch (e) {
+      // A throw AFTER the relay fetch was dispatched is AMBIGUOUS — the
+      // transfer may have settled on-chain even though we lost the response.
+      // Flag it uncertain so the batch keeps a durable replay guard and never
+      // auto-retries this row (a retry re-signs with a fresh witness nonce and
+      // would double-send). A throw BEFORE the fetch (hook / sign) is a clean
+      // pre-broadcast failure (broadcastAttempted false).
       return {
         to: row.to,
         amount: row.amount,
         ok: false,
+        uncertain: broadcastAttempted,
         error: e instanceof Error ? e.message : String(e),
       };
     }
@@ -640,8 +662,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Honest terminal status: a batch with failed rows is NOT "complete".
   // Direct API users key on HTTP status + this field, so report partial
   // (207) when some rows failed and failed (502) when none settled.
-  const batchStatus: BatchRecord["status"] =
-    successful.length === results.length
+  // An ambiguous (broadcast-then-threw) row makes the WHOLE batch's outcome
+  // unknown — surface "uncertain" so the durable guard is armed and the client
+  // is told to verify on-chain rather than retry.
+  const anyUncertain = results.some((r) => r.uncertain);
+  const batchStatus: BatchRecord["status"] = anyUncertain
+    ? "uncertain"
+    : successful.length === results.length
       ? "complete"
       : successful.length > 0
         ? "partial"
@@ -679,7 +706,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // settled rows. A write failure here is NOT swallowed — it pages ops,
   // because losing this marker is exactly the post-TTL double-settle the
   // marker exists to prevent.
-  if (successful.length > 0) {
+  if (successful.length > 0 || anyUncertain) {
     let markerOk = false;
     for (let attempt = 0; attempt < 3 && !markerOk; attempt++) {
       try {
@@ -699,11 +726,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Reconcile the daily-cap reservation against the actual settled
-  // total. We reserved `totalAmount` up front; refund the failed rows
-  // so retries (different recipient set) keep their budget.
+  // Page ops on any ambiguous row so a human verifies on-chain — the durable
+  // marker (written above) already prevents the idempotency guard from
+  // re-firing this batch.
+  if (anyUncertain) {
+    const u = results.filter((r) => r.uncertain);
+    void sendOpsAlert(
+      `agentic-wallet/batch relay FETCH threw — outcome UNCERTAIN for ${u.length} row(s). ` +
+        `owner=${owner} walletId=${walletId} batchId=${batchId} chain=${body.chain} token=${body.token}. ` +
+        `Recipients: ${u.map((r) => `${r.to}:${r.amount}`).join(", ")}. Verify on-chain BEFORE any ` +
+        `retry — a re-fire re-signs with a fresh witness nonce and double-sends if the relay actually ` +
+        `broadcast. The batch is marked uncertain (502) so the idempotency guard refuses to re-fire it.`,
+      "critical",
+    );
+  }
+
+  // Reconcile the daily-cap reservation against the actual settled total. We
+  // reserved `totalAmount` up front; refund the CLEAN-failed rows so retries
+  // (different recipient set) keep their budget. Uncertain rows may have
+  // settled on-chain — keep their reservation so a same-day re-attempt can't
+  // over-spend the daily cap.
   const successfulSum = successful.reduce((s, r) => s + Number(r.amount), 0);
-  const refundAmount = totalAmount - successfulSum;
+  const uncertainSum = results
+    .filter((r) => r.uncertain)
+    .reduce((s, r) => s + Number(r.amount), 0);
+  const refundAmount = totalAmount - successfulSum - uncertainSum;
   if (refundAmount > 0) {
     await refundDailySpend(owner, walletId, refundAmount).catch(() => {});
   }
@@ -720,6 +767,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       startedAt: finalRecord.startedAt,
       finishedAt: finalRecord.finishedAt,
     },
-    { status: batchStatus === "partial" ? 207 : batchStatus === "failed" ? 502 : 200 },
+    {
+      status:
+        batchStatus === "partial"
+          ? 207
+          : batchStatus === "failed" || batchStatus === "uncertain"
+            ? 502
+            : 200,
+    },
   );
 }
