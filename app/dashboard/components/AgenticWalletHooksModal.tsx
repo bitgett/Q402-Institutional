@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ethers } from "ethers";
 import { getAuthCreds, getActionAuth } from "@/app/lib/auth-client";
 import { canonicalHookConfig } from "@/app/lib/hooks/canonical";
@@ -69,6 +70,9 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
   // wallet's real policy with the form's default-OFF state — silently
   // wiping it. Gate the save on this.
   const [loadOk, setLoadOk] = useState(false);
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const inFlightRef = useRef(false);
   useModalEscape(onClose, saving);
 
@@ -245,7 +249,8 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
   const inputCls = "w-full rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25";
   const inputStyle = { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" } as const;
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
@@ -369,7 +374,8 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

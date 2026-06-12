@@ -97,7 +97,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "eth",       name: "Ethereum",   token: "ETH",   color: "#627EEA", depositable: true },
   { key: "avax",      name: "Avalanche",  token: "AVAX",  color: "#E84142", depositable: true },
   { key: "xlayer",    name: "X Layer",    token: "OKB",   color: "#A0A0A0", depositable: true },
-  { key: "stable",    name: "Stable",     token: "USDT0", color: "#26a17b", depositable: true },
+  { key: "stable",    name: "Stable",     token: "USDT0", color: "#7d8aa0", depositable: true },
   { key: "mantle",    name: "Mantle",     token: "MNT",   color: "#bcbcbc", depositable: true },
   { key: "injective", name: "Injective",  token: "INJ",   color: "#0082FA", depositable: true },
   { key: "monad",     name: "Monad",      token: "MON",   color: "#836EF9", depositable: true },
@@ -1401,7 +1401,7 @@ function CopyRow({
         padding: 11,
       }}
     >
-      <Eyebrow style={{ marginBottom: 7, color: accent ? v2.yellow : v2.muted2, fontSize: fs.label }}>{label}</Eyebrow>
+      <Eyebrow style={{ marginBottom: 7, color: accent ? v2.yellow : v2.muted, fontSize: fs.label }}>{label}</Eyebrow>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <code style={{ flex: 1, minWidth: 0, fontSize: fs.body, color: v2.text, wordBreak: "break-all" }}>
           {value}

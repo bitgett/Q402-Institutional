@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ethers } from "ethers";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
@@ -161,6 +162,9 @@ export function AgenticWalletRecurringModal({
   }, [kind, hourlyN]);
 
   const [submitting, setSubmitting] = useState(false);
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   useModalEscape(onClose, submitting);
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
@@ -301,7 +305,8 @@ export function AgenticWalletRecurringModal({
     }
   }
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-md rounded-2xl border bg-[#0F1929] p-5"
         style={{ borderColor: "rgba(255,255,255,0.08)" }}
@@ -549,7 +554,8 @@ export function AgenticWalletRecurringModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

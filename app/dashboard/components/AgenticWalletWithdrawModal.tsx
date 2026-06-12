@@ -17,6 +17,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { ethers } from "ethers";
 import { getAuthCreds } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
@@ -134,6 +135,9 @@ export function AgenticWalletWithdrawModal({
   onPickBucket,
 }: Props) {
   const [loading, setLoading] = useState(true);
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   // Withdraw is read-only (just lists buckets) so Escape is always
   // safe — pass `false` for disabled.
   useModalEscape(onClose, false);
@@ -202,7 +206,8 @@ export function AgenticWalletWithdrawModal({
   }
   rows.sort((a, b) => b.bucket.usd - a.bucket.usd);
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
@@ -299,6 +304,7 @@ export function AgenticWalletWithdrawModal({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

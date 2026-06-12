@@ -28,6 +28,7 @@ import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import { bindWallet } from "../lib/auth-client";
 import WalletModal from "../components/WalletModal";
+import { SparkIcon } from "./v2/logos";
 
 interface Props {
   email: string;
@@ -125,8 +126,8 @@ export default function ClaimWalletPrompt({
         {/* Claim card */}
         <div className="rounded-2xl border border-yellow/30 p-8"
              style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.07) 0%, rgba(255,255,255,0.02) 100%)" }}>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-3">
-            ✦ One step left — claim this account
+          <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-yellow font-bold mb-3">
+            <SparkIcon size={13} /> One step left — claim this account
           </div>
           <h1 className="text-2xl font-bold mb-3">Bind this wallet permanently?</h1>
           <p className="text-white/55 text-sm mb-6 leading-relaxed">

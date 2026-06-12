@@ -21,6 +21,7 @@
  */
 
 import Link from "next/link";
+import { WarnTriangleIcon } from "./v2/logos";
 
 interface Props {
   email: string;
@@ -69,8 +70,8 @@ export default function WrongWalletHardBlock({
         {/* Hard-block card */}
         <div className="rounded-2xl border border-red-400/30 p-8"
              style={{ background: "linear-gradient(135deg, rgba(248,113,113,0.06) 0%, rgba(0,0,0,0.2) 100%)" }}>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-red-400 font-bold mb-3">
-            ⚠ Wrong wallet connected
+          <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-red-400 font-bold mb-3">
+            <WarnTriangleIcon size={13} /> Wrong wallet connected
           </div>
           <h1 className="text-2xl font-bold mb-3">This isn&apos;t the wallet bound to your account</h1>
           <p className="text-white/55 text-sm mb-6 leading-relaxed">

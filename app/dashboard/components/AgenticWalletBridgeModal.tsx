@@ -29,6 +29,7 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
 import { ThemedSelect } from "./ThemedSelect";
@@ -202,6 +203,10 @@ export function AgenticWalletBridgeModal({
   }, [src, dst, amount, feeToken]);
 
   useModalEscape(onClose, submitting);
+
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // Auto-pick a compatible destination if the user flips src to a chain
   // that doesn't support the currently-selected dst (can't happen with
@@ -521,7 +526,8 @@ export function AgenticWalletBridgeModal({
   const srcMeta = chainMeta(src);
   const dstMeta = chainMeta(dst);
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
@@ -804,7 +810,8 @@ export function AgenticWalletBridgeModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

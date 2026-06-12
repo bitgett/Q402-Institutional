@@ -42,7 +42,7 @@ export const v2 = {
   inputFill: "#07111f", // .field input / .keybox / .code background
   ringTrack: "#19273b",
   ringInner: "#0c1829",
-  coinUsdt: "#26a17b", // stablecoin coin chip
+  coinUsdt: "#1f2b40", // stablecoin coin chip — neutral glass navy (the USDT logo already carries Tether green; chip is just the backing circle)
   chartViolet: "#747fff", // chainbar 3rd segment
   toggleOff: "#1a293c",
   toggleKnob: "#748096",

@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
@@ -101,6 +102,9 @@ export function AgenticWalletBatchModal({
     if (!allowedTokens.includes(token)) setToken(allowedTokens[0]);
   }, [allowedTokens, token]);
   const [rows, setRows] = useState<Row[]>([{ to: "", amount: "" }]);
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [submitting, setSubmitting] = useState(false);
   useModalEscape(onClose, submitting);
   const [error, setError] = useState<FriendlyError | null>(null);
@@ -190,7 +194,8 @@ export function AgenticWalletBatchModal({
   const settled = resp?.settled ?? 0;
   const failed = resp?.failed ?? 0;
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
@@ -221,7 +226,10 @@ export function AgenticWalletBatchModal({
 
         {resp ? (
           <div className="space-y-3">
-            <div className="rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2 text-sm text-green-200">
+            <div
+              className="rounded-md border px-3 py-2 text-sm"
+              style={{ border: "1px solid rgba(85,230,165,.30)", background: "rgba(85,230,165,.06)", color: "#9af0c9" }}
+            >
               Batch processed — {settled} settled, {failed} failed.
               {resp.idempotent ? " (Returned from idempotency cache.)" : ""}
             </div>
@@ -413,6 +421,7 @@ export function AgenticWalletBatchModal({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

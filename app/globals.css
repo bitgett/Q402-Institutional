@@ -241,6 +241,11 @@ html { scroll-behavior: smooth; }
 
 /* a11y: visible yellow focus ring inside the v2 surface */
 .v2-app :focus-visible { outline: 2px solid rgba(247,202,22,.72); outline-offset: 2px; border-radius: inherit; }
+/* a11y: same focus ring for modals moved to a body-root portal (createPortal) —
+   those escape the .v2-app scope above, so keyboard focus rings would vanish on
+   modal inputs/close buttons. Portaled overlays keep their .fixed.inset-0
+   wrapper, so target focusables inside it without weakening the v2 rule. */
+.fixed.inset-0 :focus-visible { outline: 2px solid rgba(247,202,22,.72); outline-offset: 2px; border-radius: inherit; }
 
 /* "Wallet management" disclosure — hide the native marker, add a rotating chevron */
 .v2-manage-summary::-webkit-details-marker { display: none; }
