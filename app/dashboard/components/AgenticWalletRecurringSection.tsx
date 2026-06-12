@@ -265,16 +265,11 @@ export function AgenticWalletRecurringSection({
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <ClockIcon className="w-3.5 h-3.5 text-emerald-300" />
-            <div className="text-[12px] uppercase tracking-[0.18em] text-emerald-300 font-semibold">
-              Recurring payments
-            </div>
-          </div>
-          <div className="text-[11.5px] text-white/82 leading-snug">
-            Payouts, subscriptions, or treasury sweeps — your AI fires each with a cancel window first.
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <ClockIcon className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+          <div className="text-[12px] uppercase tracking-[0.18em] text-emerald-300 font-semibold">
+            Recurring payments
           </div>
         </div>
         <button
@@ -297,6 +292,9 @@ export function AgenticWalletRecurringSection({
         >
           + New schedule {!hasMultichainScope && !walletArchived && <span className="text-[10px] opacity-70">(Paid)</span>}
         </button>
+      </div>
+      <div className="text-[11.5px] text-white/82 leading-snug mb-3">
+        Payouts, subscriptions, or treasury sweeps — your AI fires each with a cancel window first.
       </div>
 
       {loading && (
