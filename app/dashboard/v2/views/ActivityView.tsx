@@ -555,13 +555,13 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
   }, [scope, router]);
 
   // ── Demo fallback ─────────────────────────────────────────────────────────
-  // When no wallet is connected, OR a connected owner hasn't surfaced any real
-  // rows yet (still loading / genuinely empty), fall back to in-file DEMO data
-  // so the SAME layout/table renders fully populated instead of an empty
-  // "connect a wallet" placeholder. The moment a connected owner has real
-  // settlements or bridges, the live data wins and demo mode switches off.
-  const hasRealData = txs.length > 0 || bridges.length > 0;
-  const demoMode = !ownerAddress || (!hasRealData && !loading && !err);
+  // Demo fill is MARKETING fill — shown ONLY to a DISCONNECTED visitor so the
+  // landing-style preview reads as populated instead of an empty placeholder.
+  // A CONNECTED owner with zero settlements gets their REAL (empty) ledger and
+  // an honest empty state — NOT six fabricated dollar-amount rows that read as
+  // real movement on their account. (loading / err render their own states via
+  // the !demoMode branches in the table below.)
+  const demoMode = !ownerAddress;
 
   // Source the table inputs from demo or live data behind one switch so the
   // downstream scope/rail/filter pipeline is identical for both paths.

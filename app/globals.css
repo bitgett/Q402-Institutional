@@ -272,7 +272,21 @@ html { scroll-behavior: smooth; }
 @media (max-width: 760px) {
   .v2-topbar { height: auto !important; flex-wrap: wrap !important; row-gap: 9px !important; padding: 10px 0 !important; }
   .v2-workspace, .v2-view-shell { display: block !important; }
-  .v2-wallet-rail, .v2-context { display: none !important; }
+  /* Keep the wallet rail VISIBLE on mobile (hiding it stranded multi-wallet
+     users with no way to switch). Collapse it to a horizontal scroll strip
+     above the console instead of the desktop sidebar. Only .v2-context (the
+     secondary activity/help rail) stays hidden on mobile. */
+  .v2-context { display: none !important; }
+  .v2-wallet-rail {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    gap: 8px !important;
+    width: 100% !important;
+    margin-bottom: 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .v2-wallet-rail > * { flex: 0 0 auto !important; }
   .v2-right { display: block !important; }
   .v2-console, .v2-view-main, .v2-side-card { width: 100% !important; margin-bottom: 12px; }
 }
