@@ -123,7 +123,7 @@ export default function WalletButton() {
 
   const emailChip = session && (
     <div className="flex items-center gap-1.5 bg-white/[0.06] border border-white/12 text-white/85 text-xs px-3 py-2 rounded-full max-w-[180px]">
-      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#55e6a5", boxShadow: "0 0 5px #55e6a5" }} />
+      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: "#cbd3dd" }} />
       <span className="truncate">{session.email}</span>
     </div>
   );

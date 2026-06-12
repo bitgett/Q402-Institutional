@@ -151,6 +151,27 @@ export function CheckIcon({ size = 16, color }: IconProps) {
   );
 }
 
+/** Email alerts — a notification bell. */
+export function BellIcon({ size = 16, color }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth={1.7 * (size / 16)} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M18 8.5a6 6 0 0 0-12 0c0 6-2.5 7.5-2.5 7.5h17S18 14.5 18 8.5Z" />
+      <path d="M10.3 20a2 2 0 0 0 3.4 0" />
+    </svg>
+  );
+}
+
+/** Warning / critical — a triangle with an exclamation (replaces ⚠). */
+export function WarnTriangleIcon({ size = 16, color }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth={1.7 * (size / 16)} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M10.3 3.2 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+
 /** Failed test mark — an X. */
 export function XIcon({ size = 16, color }: IconProps) {
   return (

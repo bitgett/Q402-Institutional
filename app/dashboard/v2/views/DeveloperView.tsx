@@ -427,8 +427,8 @@ function InlineCopy({
       }}
       style={{
         border: 0,
-        background: copied ? "rgba(85,230,165,.10)" : "rgba(255,255,255,.05)",
-        color: copied ? v2.mint : v2.muted,
+        background: copied ? "rgba(245,197,24,.10)" : "rgba(255,255,255,.05)",
+        color: copied ? v2.yellow : v2.muted,
         fontSize: fs.micro,
         fontWeight: 700,
         letterSpacing: ".08em",
@@ -1246,20 +1246,17 @@ function WebhookConfig({
     outline: "none",
   };
 
-  // Configure-zone state: saved (webhook live) reads mint; an edited-but-not-
-  // yet-saved URL reads yellow ("unsaved"); idle reads neutral glass.
+  // Configure-zone state: an edited-but-not-yet-saved URL reads yellow
+  // ("unsaved"); saved (webhook live) and idle both read neutral glass — mint
+  // is reserved for settlement success, not a configured-webhook state.
   const saved = !!webhookUrl;
   const unsaved = !!urlInput && urlInput !== webhookUrl;
   const zoneBorder = unsaved
     ? "rgba(245,202,22,.45)"
-    : saved
-      ? "rgba(85,230,165,.35)"
-      : v2.line;
+    : v2.line;
   const zoneShadow = unsaved
     ? "0 0 22px rgba(245,202,22,.10), 0 24px 80px rgba(0,0,0,.23)"
-    : saved
-      ? "0 0 22px rgba(85,230,165,.08), 0 24px 80px rgba(0,0,0,.23)"
-      : glass(15).boxShadow;
+    : glass(15).boxShadow;
 
   return (
     <Surface
@@ -1292,8 +1289,8 @@ function WebhookConfig({
       >
         Signed POST after every relay.
         {saved && (
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: v2.mint }}>
-            · <CheckIcon size={12} color={v2.mint} /> Active
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: v2.yellow }}>
+            · <CheckIcon size={12} color={v2.yellow} /> Active
           </span>
         )}
         {unsaved && !saved && (
@@ -1755,7 +1752,7 @@ function Playground({
             style={{
               border: 0,
               background: "none",
-              color: keyCopied ? v2.mint : v2.muted2,
+              color: keyCopied ? v2.yellow : v2.muted,
               fontSize: fs.label,
               fontWeight: 600,
               letterSpacing: ".12em",

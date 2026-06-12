@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { ensureWalletChain, getActiveProvider } from "@/app/lib/wallet";
 import type { WalletChainKey } from "@/app/lib/wallet";
@@ -99,6 +100,9 @@ export function AgenticWalletAgentModal({
    */
   const aliveRef = useRef(true);
   useEffect(() => () => { aliveRef.current = false; }, []);
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   // Block Escape while ANY of the multi-step flow is in flight —
   // closing mid-mint would orphan an on-chain NFT (gas already paid,
   // confirm never runs) and the next open of the modal mints a
@@ -392,7 +396,8 @@ export function AgenticWalletAgentModal({
     return { message, numericCode, stringCode, rejected };
   }
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
@@ -544,7 +549,10 @@ export function AgenticWalletAgentModal({
 
         {stage === "done" && result && (
           <div className="space-y-3">
-            <div className="rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2 text-sm text-green-200">
+            <div
+              className="rounded-md border px-3 py-2 text-sm"
+              style={{ border: "1px solid rgba(85,230,165,.30)", background: "rgba(85,230,165,.06)", color: "#9af0c9" }}
+            >
               Registered as Agent <span className="font-mono">#{result.agentId}</span>.
             </div>
             <a
@@ -637,7 +645,8 @@ export function AgenticWalletAgentModal({
           );
         })()}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

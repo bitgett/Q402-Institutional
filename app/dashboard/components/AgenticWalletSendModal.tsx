@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import {
   friendlyError,
@@ -145,6 +146,12 @@ export function AgenticWalletSendModal({
     }
   }, [allowedChains, chain]);
 
+  // Portal mount guard — these modals render only after a client
+  // interaction, but keep the SSR-safe check so we never touch
+  // document.body during server render / hydration.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const [submitting, setSubmitting] = useState(false);
   useModalEscape(onClose, submitting);
   const [error, setError] = useState<FriendlyError | null>(null);
@@ -253,7 +260,8 @@ export function AgenticWalletSendModal({
     }
   }
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
@@ -311,7 +319,10 @@ export function AgenticWalletSendModal({
           </div>
         ) : success ? (
           <div className="space-y-3">
-            <div className="rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2 text-sm text-green-200">
+            <div
+              className="rounded-md border px-3 py-2 text-sm"
+              style={{ border: "1px solid rgba(85,230,165,.30)", background: "rgba(85,230,165,.06)", color: "#9af0c9" }}
+            >
               Sent.
             </div>
             {success.txHash !== "(pending)" && (
@@ -483,6 +494,7 @@ export function AgenticWalletSendModal({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

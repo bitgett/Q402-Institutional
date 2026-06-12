@@ -20,6 +20,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useModalEscape } from "./useModalEscape";
 
 interface Props {
@@ -61,6 +62,9 @@ export function AgenticWalletArchiveModal({
   const [typed, setTyped] = useState("");
   const armed = typed.trim().toUpperCase() === TYPED_CONFIRM;
   const hasBalance = balanceUsd !== null && balanceUsd > 0;
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   useModalEscape(onClose, archiving);
 
   // Force a fresh balance read on mount — the card's 5-min polling
@@ -87,7 +91,8 @@ export function AgenticWalletArchiveModal({
     }),
   );
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.78)" }}
@@ -193,6 +198,7 @@ export function AgenticWalletArchiveModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

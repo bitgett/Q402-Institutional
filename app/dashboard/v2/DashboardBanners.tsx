@@ -35,25 +35,16 @@ import { useState } from "react";
 import { useDashboardIdentity } from "./identity-context";
 import { v2, fs } from "./theme";
 import { displayFont, bodyFont } from "./primitives";
+import { WarnTriangleIcon } from "./logos";
 
 /* ──────────────────────────────────────────────────────────────────────────
  * Local inline icons — no emoji (legacy used ⚠ / 📅). Same stroke contract as
  * logos.tsx: viewBox 0 0 24 24, stroke-based, round caps/joins, aria-hidden,
- * color via stroke. Kept local since logos.tsx has no warning/calendar mark.
+ * color via stroke. WarnTriangleIcon now lives in logos.tsx (shared with the
+ * Wrong-wallet block); the calendar/close marks stay local.
  * ────────────────────────────────────────────────────────────────────────── */
 
 type IconProps = { size?: number; color?: string };
-
-/** Warning / critical — a triangle with an exclamation (replaces ⚠). */
-function WarnTriangleIcon({ size = 16, color }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth={1.7 * (size / 16)} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M10.3 3.2 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0Z" />
-      <path d="M12 9v4" />
-      <path d="M12 17h.01" />
-    </svg>
-  );
-}
 
 /** Renewal date — a calendar (replaces 📅). */
 function CalendarIcon({ size = 16, color }: IconProps) {

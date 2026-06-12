@@ -20,7 +20,8 @@
  * layers can auth via getAuthCreds.
  */
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWallet } from "@/app/context/WalletContext";
 import Link from "next/link";
 import { BrandMark, ScopeChip, TopNav, bodyFont } from "./primitives";
@@ -34,8 +35,12 @@ import DashboardBanners from "./DashboardBanners";
 
 export default function DashboardV2() {
   const { address, signMessage } = useWallet();
+  const router = useRouter();
   // Initial view is deep-linkable via ?view= (e.g. friendly-error CTAs that
   // point at the Treasury gas tank or the Wallets clear-delegation action).
+  // Seeded from window.location.search (not useSearchParams) so the shell stays
+  // free of a Suspense boundary — only router.replace is used for writes, which
+  // needs none. SSR-safe via the typeof window guard (defaults to "wallets").
   const [view, setView] = useState<V2ViewId>(() => {
     if (typeof window === "undefined") return "wallets";
     const v = new URLSearchParams(window.location.search).get("view");
@@ -43,8 +48,47 @@ export default function DashboardV2() {
       ? (v as V2ViewId)
       : "wallets";
   });
-  // KEY IA DECISION: scope is shell-level state, threaded to every view.
-  const [scope, setScope] = useState<Scope>("multichain");
+  // KEY IA DECISION: scope is shell-level state, threaded to every view. Also
+  // deep-linkable + restored on reload via ?scope= (read like ?view= above).
+  const [scope, setScope] = useState<Scope>(() => {
+    if (typeof window === "undefined") return "multichain";
+    const s = new URLSearchParams(window.location.search).get("scope");
+    return s === "trial" || s === "multichain" ? s : "multichain";
+  });
+
+  // URL persistence — mirror in-app view/scope changes back into the query so a
+  // reload / share / back lands on the same view+scope instead of resetting to
+  // wallets+multichain. We use router.replace (not push) so navigation doesn't
+  // pollute the back stack, and { scroll: false } so switching views never
+  // jumps the page. Writes go through these wrapped setters; the initializers
+  // above handle the read side. (router.replace needs no Suspense boundary,
+  // unlike useSearchParams — that's why the shell reads from window instead.)
+  const writeUrl = useCallback(
+    (nextView: V2ViewId, nextScope: Scope) => {
+      if (typeof window === "undefined") return;
+      const params = new URLSearchParams(window.location.search);
+      params.set("view", nextView);
+      params.set("scope", nextScope);
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router],
+  );
+
+  const selectView = useCallback(
+    (next: V2ViewId) => {
+      setView(next);
+      writeUrl(next, scope);
+    },
+    [writeUrl, scope],
+  );
+
+  const selectScope = useCallback(
+    (next: Scope) => {
+      setScope(next);
+      writeUrl(view, next);
+    },
+    [writeUrl, view],
+  );
 
   // Shared props every view consumes. signMessage from WalletContext is
   // already non-null typed; views forward it to the agentic data layer.
@@ -143,10 +187,10 @@ export default function DashboardV2() {
             </span>
           </Link>
 
-          <TopNav active={view} onChange={setView} />
+          <TopNav active={view} onChange={selectView} />
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <ScopeChip scope={scope} onChange={setScope} />
+            <ScopeChip scope={scope} onChange={selectScope} />
             {/* Real connect flow (MetaMask / OKX modal) — same component the
                 landing nav uses, so disconnected users can actually connect. */}
             <WalletButton />

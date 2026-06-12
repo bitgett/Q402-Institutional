@@ -12,6 +12,7 @@
  */
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { ChainKey } from "@/app/lib/relayer";
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
 import { useModalEscape } from "./useModalEscape";
@@ -58,7 +59,11 @@ export function AgenticWalletReceiveModal({ walletAddress, onClose }: Props) {
     }
   }
 
-  return (
+  // Portal escapes the v2 glass Surface's filter/transform ancestor so the
+  // overlay centers on the real viewport. SSR-safe: this modal renders only
+  // after a client interaction, so document is always present here.
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
@@ -175,6 +180,7 @@ export function AgenticWalletReceiveModal({ walletAddress, onClose }: Props) {
           A deposit from another network can&apos;t be recovered.
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -64,7 +64,7 @@ export function Eyebrow({
   return (
     <div
       style={{
-        color: v2.muted2,
+        color: v2.muted,
         fontSize: fs.label,
         letterSpacing: ".16em",
         textTransform: "uppercase",

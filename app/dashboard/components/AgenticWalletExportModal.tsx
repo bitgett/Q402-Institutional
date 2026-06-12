@@ -19,6 +19,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
 
@@ -52,6 +53,9 @@ export function AgenticWalletExportModal({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [remaining, setRemaining] = useState(Math.floor(AUTO_CLEAR_MS / 1000));
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   /**
    * Double-click guard. Without it, a fast double-tap on
    * "Sign challenge and reveal" mints two action-challenges, opens
@@ -148,7 +152,8 @@ export function AgenticWalletExportModal({
     }
   }
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.78)" }}
@@ -304,6 +309,7 @@ export function AgenticWalletExportModal({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

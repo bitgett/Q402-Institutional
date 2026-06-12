@@ -27,12 +27,13 @@
 import Link from "next/link";
 import { useWallet } from "../context/WalletContext";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import WalletModal from "../components/WalletModal";
 import TrialActivationModal from "../components/TrialActivationModal";
 import ClaimWalletPrompt from "./ClaimWalletPrompt";
 import WrongWalletHardBlock from "./WrongWalletHardBlock";
 import DashboardV2 from "./v2/DashboardV2";
+import { BellIcon, CheckIcon, SparkIcon } from "./v2/logos";
 import {
   DashboardIdentityProvider,
   type DashboardIdentityValue,
@@ -295,7 +296,12 @@ export default function DashboardPage() {
     return () => clearTimeout(t);
   }, [mounted, authChecked, isConnected, emailSession, router]);
 
-  useEffect(() => {
+  // Provision fetch, extracted into a callable so it can be re-run on tab
+  // focus / visibility (quota + credits otherwise go stale while the tab
+  // stays open). The guards make it a safe no-op when there's no
+  // wallet/auth, or when the connected wallet doesn't match the bound email
+  // session — so the focus/visibility triggers never pull the wrong record.
+  const refreshProvision = useCallback(() => {
     if (!address) return;
     // Wait for /api/auth/me to resolve before issuing /api/keys/provision
     // — without this, a localStorage-rehydrated wallet can race the
@@ -401,11 +407,35 @@ export default function DashboardPage() {
     }
 
     provision();
-  // emailSession + authChecked are read inside the Phase 1 wallet-match
-  // gate above — include them in the deps so a late session resolution
-  // re-evaluates whether this address should still be provisioned.
+  // address / authChecked / emailSession drive the Phase 1 wallet-match gate
+  // above; a late session resolution must rebuild this callback so the next
+  // refresh re-evaluates whether this address should still be provisioned.
+  // signMessage is intentionally omitted (matches the prior effect) to avoid
+  // re-signing churn — getAuthCreds caches the signature.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address, authChecked, emailSession]);
+
+  // Run the provision fetch on mount + whenever the identity inputs change.
+  useEffect(() => {
+    refreshProvision();
+  }, [refreshProvision]);
+
+  // Keep quota / credits fresh: re-run the provision fetch when the user
+  // returns to the tab (window focus) or the document becomes visible again.
+  // refreshProvision is internally guarded, so these fire harmlessly when
+  // there's no wallet/auth or on a mismatched wallet.
+  useEffect(() => {
+    const onFocus = () => refreshProvision();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refreshProvision();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [refreshProvision]);
 
   // ── Phase 1 identity-model early returns ──────────────────────────────
   // The 4-state machine routes the user before any multichain data is
@@ -536,9 +566,9 @@ export default function DashboardPage() {
           <div className="mb-8 inline-flex items-center gap-1 bg-white/4 border border-white/10 rounded-full p-1">
             <button
               disabled
-              className="px-5 py-2 rounded-full text-xs font-bold bg-yellow text-navy shadow-lg shadow-yellow/15 cursor-default"
+              className="inline-flex items-center gap-1.5 px-5 py-2 rounded-full text-xs font-bold bg-yellow text-navy shadow-lg shadow-yellow/15 cursor-default"
             >
-              ✦ Free Trial
+              <SparkIcon size={13} /> Free Trial
             </button>
             <button
               onClick={() => setShowWalletConnectFromEmail(true)}
@@ -556,7 +586,7 @@ export default function DashboardPage() {
 
           {/* Trial summary card — sponsored TX gauge + days left + chain badge */}
           <div className="rounded-2xl border border-yellow/25 p-6 mb-6"
-               style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(74,222,128,0.04) 100%)" }}>
+               style={{ background: "linear-gradient(135deg, rgba(245,197,24,0.06) 0%, rgba(85,230,165,0.05) 100%)" }}>
             <div className="flex items-baseline justify-between mb-4">
               <div>
                 <div className="text-[10px] uppercase tracking-widest text-yellow font-bold mb-1">Sponsored TX</div>
@@ -577,7 +607,7 @@ export default function DashboardPage() {
                 className="h-full rounded-full transition-all"
                 style={{
                   width: `${creditsPct}%`,
-                  background: "linear-gradient(90deg, #F5C518, #4ade80)",
+                  background: "linear-gradient(90deg, #F5C518, #55e6a5)",
                 }}
               />
             </div>
@@ -937,7 +967,9 @@ export default function DashboardPage() {
               ×
             </button>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-xl">🔔</span>
+              <span className="text-yellow">
+                <BellIcon size={20} />
+              </span>
               <div className="text-[10px] uppercase tracking-[0.2em] text-yellow font-bold">
                 Email alerts
               </div>
@@ -979,7 +1011,17 @@ export default function DashboardPage() {
                 disabled={alertSaving || !address || !alertEmailInput}
                 className="flex-1 bg-yellow text-navy font-bold text-sm py-3 rounded-full hover:bg-yellow-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {alertSaving ? "Saving…" : emailSaved ? "Saved ✓" : alertEmail ? "Update" : "Save"}
+                {alertSaving ? (
+                  "Saving…"
+                ) : emailSaved ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    Saved <CheckIcon size={14} />
+                  </span>
+                ) : alertEmail ? (
+                  "Update"
+                ) : (
+                  "Save"
+                )}
               </button>
             </div>
 

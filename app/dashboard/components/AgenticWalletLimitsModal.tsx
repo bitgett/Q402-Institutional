@@ -13,7 +13,8 @@
  * message so the signature is provably tied to *this* exact change.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
 
@@ -38,6 +39,9 @@ export function AgenticWalletLimitsModal({
   const [perTx, setPerTx] = useState<string>(initial.perTxMaxUsd?.toString() ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Portal mount guard (SSR-safe) — see SendModal for rationale.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const inFlightRef = useRef(false);
   useModalEscape(onClose, saving);
 
@@ -109,7 +113,8 @@ export function AgenticWalletLimitsModal({
     }
   }
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: "rgba(2,6,15,0.72)" }}
@@ -183,6 +188,7 @@ export function AgenticWalletLimitsModal({
           individual sends + every row in a batch.
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
