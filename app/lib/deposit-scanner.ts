@@ -66,7 +66,7 @@ export type DepositChain = typeof DEPOSIT_CHAINS[number];
  * time would burn the function timeout for free.
  */
 export interface ScanResult {
-  deposits: { txHash: string; amount: number }[];
+  deposits: { txHash: string; amount: number; fromAddress: string }[];
   chunkFailures: number;
   chunkTotal: number;
   /** Inclusive block range actually walked this call. Lets the cron's
@@ -116,7 +116,9 @@ export interface ScanOpts {
 
 export async function scanNativeDeposits(
   chain: DepositChain,
-  fromAddress: string,
+  // `null` collects EVERY sender's gas-tank deposit in the window (the cron's
+  // per-chain sweep). A concrete address filters to that sender (verify path).
+  fromAddress: string | null,
   opts: ScanOpts = {},
 ): Promise<ScanResult> {
   const provider = new ethers.JsonRpcProvider(chain.rpc);
@@ -150,7 +152,7 @@ export async function scanNativeDeposits(
     }
   }
 
-  const found: { txHash: string; amount: number }[] = [];
+  const found: { txHash: string; amount: number; fromAddress: string }[] = [];
 
   const rpcUrl = chain.rpc;
   const batchSize = 20;
@@ -191,13 +193,15 @@ export async function scanNativeDeposits(
       for (const block of blocks) {
         if (!block?.result?.transactions) continue;
         for (const tx of block.result.transactions) {
+          const txFrom = tx.from?.toLowerCase();
           if (
             tx.to?.toLowerCase() === GASTANK_ADDRESS_LC &&
-            tx.from?.toLowerCase() === fromAddress.toLowerCase() &&
+            !!txFrom &&
+            (fromAddress === null || txFrom === fromAddress.toLowerCase()) &&
             tx.value !== "0x0"
           ) {
             const amount = parseFloat(ethers.formatEther(BigInt(tx.value)));
-            if (amount > 0) found.push({ txHash: tx.hash, amount });
+            if (amount > 0) found.push({ txHash: tx.hash, amount, fromAddress: txFrom });
           }
         }
       }
