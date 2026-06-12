@@ -320,9 +320,13 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   if (!wallet) {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
   }
-  // Soft-deleted (archived) wallets must not move funds — resolveWallet
-  // doesn't filter them, so re-check here like /send does.
-  if (wallet.deletedAt && Date.now() >= wallet.deletedAt) {
+  // Archived (soft-deleted) wallets must not DEPOSIT, but WITHDRAW must always
+  // be allowed so an owner can recover Aave funds from an archived wallet even
+  // after the 7-day restore grace lapses. The GC keeps the key while the Aave
+  // balance > 0 (funds are never destroyed), but blocking withdraw here left
+  // recovery ops-only — exempting withdraw makes it self-serve. Mirrors the
+  // supply-only entitlement gate above (withdraw is exempt from those too).
+  if (action === "supply" && wallet.deletedAt && Date.now() >= wallet.deletedAt) {
     return NextResponse.json({ error: "AGENTIC_WALLET_ARCHIVED" }, { status: 410 });
   }
   const walletAddr = wallet.address.toLowerCase();
