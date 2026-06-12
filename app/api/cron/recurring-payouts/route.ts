@@ -71,6 +71,7 @@ import {
   pullDueRules,
   markRulePending,
   recordRuleFired,
+  markSlotFired,
   recordRuleFireLog,
   recordRuleCapExceeded,
   recordRuleTransientError,
@@ -83,6 +84,7 @@ import {
   type RecurringRule,
 } from "@/app/lib/agentic-wallet-recurring";
 import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -107,6 +109,7 @@ interface PerRuleOutcome {
     | "skipped-daily-cap-full"
     | "skipped-hook-denied"
     | "transient-error"
+    | "uncertain-after-broadcast"
     | "recovered-missed-bookkeeping";
   txHash?: string;
   /** Multi-recipient rules: number of rows that successfully settled. */
@@ -433,9 +436,16 @@ async function processOneRule(
   const settledRows: Array<{ to: string; amount: string; txHash: string }> = [];
   const failedRows: Array<{ to: string; amount: string; reason: string; index: number }> = [];
   let firstFailureBeforeAnySuccess: string | null = null;
+  // Set when the relay fetch threw AFTER it may have broadcast on-chain
+  // (ambiguous). Distinct from a clean pre-broadcast failure: it must NOT
+  // release the lock / refund / retry, or the next tick double-pays.
+  let relayUncertain: string | null = null;
 
   for (let i = 0; i < rule.recipients.length; i++) {
     const row = rule.recipients[i];
+    // Whether the relay fetch for THIS row was dispatched. A throw past that
+    // point may have broadcast on-chain (see the catch's uncertain branch).
+    let broadcastAttempted = false;
     try {
       // Q402 Hooks — beforeSettle, per recipient (security audit FIX
       // 2026-06-10). Runs after all native gating (per-tx, daily cap,
@@ -487,6 +497,8 @@ async function processOneRule(
       // what /api/relay checks before honouring the source/ruleId body
       // fields — external customers calling /api/relay directly can't
       // forge the tag without it.
+      // Past this line the relay may broadcast on-chain; a throw is ambiguous.
+      broadcastAttempted = true;
       const resp = await submitToRelay(internalBaseUrl(), apiKey, signed, {
         source: "recurring",
         ruleId: rule.ruleId,
@@ -506,11 +518,50 @@ async function processOneRule(
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (settledRows.length === 0) {
+        // A throw AFTER the relay fetch was dispatched is AMBIGUOUS — the
+        // transfer may have settled on-chain even though we lost the response.
+        // Route it to the uncertain handler (keep the lock + mark the slot
+        // fired) instead of the transient retry path: re-firing would re-sign
+        // with a fresh witness nonce and double-pay. A throw BEFORE the fetch
+        // (hook / sign error) is pre-broadcast → safe transient retry.
+        if (broadcastAttempted) { relayUncertain = msg; break; }
         firstFailureBeforeAnySuccess = msg;
         break;
       }
       failedRows.push({ to: row.to, amount: row.amount, reason: msg, index: i });
     }
+  }
+
+  // Case (uncertain) — the relay fetch threw AFTER it may have broadcast. The
+  // transfer might have settled on-chain. KEEP the fire-lock held and write the
+  // durable fired-marker so the NEXT tick recovers via claimFireSlot →
+  // advanceAfterMissedBookkeeping (advances the schedule, NO re-relay, NO
+  // double-pay) instead of re-firing. Do NOT refund the reservation (the funds
+  // may have moved). Page ops to verify on-chain. Mirrors
+  // /api/wallet/agentic/send's relay_unreachable_uncertain handling.
+  if (relayUncertain !== null && settledRows.length === 0) {
+    await markSlotFired(rule.ruleId, rule.nextRunAt);
+    await recordRuleTransientError(
+      rule,
+      `relay outcome uncertain (may have settled on-chain): ${relayUncertain}`,
+      nowMs,
+    );
+    void sendOpsAlert(
+      `recurring-payouts relay FETCH threw — outcome UNCERTAIN. ` +
+        `owner=${rule.ownerAddr} walletId=${rule.walletId} ruleId=${rule.ruleId} ` +
+        `slot=${rule.nextRunAt} chain=${rule.chain} token=${rule.token}. Verify on-chain ` +
+        `BEFORE any manual re-send — a re-fire re-signs with a fresh witness nonce and ` +
+        `double-pays if the relay actually broadcast. The slot is marked fired so the ` +
+        `cron will NOT auto re-fire. Error: ${relayUncertain}`,
+      "critical",
+    );
+    fireStateWebhook(rule, "recurring.error", `relay outcome uncertain: ${relayUncertain}`, nowMs);
+    return {
+      ruleKey,
+      walletId: rule.walletId,
+      outcome: "uncertain-after-broadcast",
+      error: relayUncertain,
+    };
   }
 
   // Case (a) — zero recipients settled. Release lock, transient retry.
