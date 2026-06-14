@@ -73,6 +73,27 @@ const mockKv = vi.hoisted(() => ({
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
 
+// signReceiptFields routes through loadRelayerKey(), whose real impl asserts the
+// key derives to the production RELAYER_ADDRESS. Mock it to mirror the env this
+// test toggles, minus that assertion, so the test relayer key is accepted.
+vi.mock("@/app/lib/relayer-key", async () => {
+  const { Wallet } = await import("ethers");
+  return {
+    loadRelayerKey: () => {
+      const pk = process.env.RELAYER_PRIVATE_KEY;
+      if (!pk || pk === "your_private_key_here") {
+        return { ok: false, reason: "missing", detail: "RELAYER_PRIVATE_KEY not set" };
+      }
+      const key = pk.startsWith("0x") ? pk : `0x${pk}`;
+      try {
+        return { ok: true, privateKey: key, address: new Wallet(key).address };
+      } catch {
+        return { ok: false, reason: "missing", detail: "invalid key" };
+      }
+    },
+  };
+});
+
 import {
   queueReceiptBackfill,
   listBackfillQueue,

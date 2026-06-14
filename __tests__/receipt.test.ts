@@ -35,6 +35,28 @@ import {
   type ReceiptSignedFields,
 } from "@/app/lib/receipt";
 
+// signReceiptFields now routes through loadRelayerKey(), whose real impl asserts
+// the key derives to the *production* RELAYER_ADDRESS. Mock it to mirror the
+// env the existing tests already toggle, minus that address assertion, so test
+// keys are accepted and the missing-key branch still surfaces.
+vi.mock("@/app/lib/relayer-key", async () => {
+  const { Wallet } = await import("ethers");
+  return {
+    loadRelayerKey: () => {
+      const pk = process.env.RELAYER_PRIVATE_KEY;
+      if (!pk || pk === "your_private_key_here") {
+        return { ok: false, reason: "missing", detail: "RELAYER_PRIVATE_KEY not set" };
+      }
+      const key = pk.startsWith("0x") ? pk : `0x${pk}`;
+      try {
+        return { ok: true, privateKey: key, address: new Wallet(key).address };
+      } catch {
+        return { ok: false, reason: "missing", detail: "invalid key" };
+      }
+    },
+  };
+});
+
 // Stable test key — never used anywhere else in the codebase.
 const TEST_RELAYER_KEY     = "0x" + "11".repeat(32);
 const TEST_RELAYER_ADDRESS = new Wallet(TEST_RELAYER_KEY).address.toLowerCase();
