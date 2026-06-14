@@ -56,7 +56,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">3. What We Do NOT Collect</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li>Private keys — we never ask for, store, or have access to any private keys</li>
+              <li>Private keys for personal connected wallets (MetaMask / OKX) — we never ask for, store, or access these. Agent Wallets created in Mode C are different: Q402 stores an AES-256-GCM-encrypted signing key on your behalf so it can sign for your autonomous agent, and you can export or delete it at any time (see the Terms &ldquo;Custody&rdquo; section)</li>
               <li>Passwords — authentication is signature-based (EIP-191), no passwords exist</li>
               <li>Personal identity information (name, ID, address) — not required</li>
               <li>Browser cookies for tracking — we use no third-party analytics cookies</li>
