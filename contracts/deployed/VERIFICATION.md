@@ -1,12 +1,12 @@
 # Deployed contract source — on-chain verification
 
-> **Superseded for 5 chains (2026-06-15):** Mantle, Injective, Monad, Scroll, and
-> Arbitrum were redeployed to a refreshed implementation — see
-> [`contracts/IMPL_REFRESH_RUNBOOK.md`](../IMPL_REFRESH_RUNBOOK.md) for the current
-> addresses. The snapshots below record the PREVIOUS deployments on those chains
-> and remain accurate as a historical verification record; the new impls have not
-> yet been re-verified on Sourcify. BNB / AVAX / ETH / Stable / X Layer are
-> unchanged.
+> **Refreshed for 5 chains (2026-06-15):** Mantle, Injective, Monad, Scroll, and
+> Arbitrum were redeployed to the guarded implementation with the correct per-chain
+> EIP-712 domain `NAME`. Their current addresses are in
+> [`contracts/IMPL_REFRESH_RUNBOOK.md`](../IMPL_REFRESH_RUNBOOK.md); each new impl is
+> confirmed byte-for-byte equal to the locally-compiled guarded build and is pending
+> re-verification on Sourcify / the native explorer. BNB / AVAX / ETH / Stable /
+> X Layer are unchanged and covered below.
 
 The Solidity source under `contracts/deployed/<chain>/` is the **exact source the
 deployed bytecode was compiled from**, fetched from Sourcify (decentralized
@@ -26,8 +26,9 @@ match independently from Sourcify.
 | Avalanche | 43114 | `0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c` | Q402PaymentImplementation.sol | full |
 | BNB Chain | 56 | `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` | Q402PaymentImplementationBNB.sol | full |
 | Ethereum | 1 | `0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD` | Q402PaymentImplementationETH.sol | full |
-| Scroll | 534352 | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Q402PaymentImplementationScroll.sol | full |
-| Arbitrum | 42161 | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Q402PaymentImplementationArbitrum.sol | full |
+
+(Scroll and Arbitrum were redeployed 2026-06-15 — see the refresh runbook for their
+current addresses; Sourcify re-verification is pending.)
 
 Re-verify any row:
 `curl https://sourcify.dev/server/files/any/<chainId>/<address>`
@@ -36,24 +37,18 @@ Re-verify any row:
 
 These chains aren't indexed by Sourcify; the impls are verified on each chain's
 native explorer, but those explorers need an API key (or manual page export) to
-pull the source into the repo. NOTE: the `0x2fb2…` address recurs across chains
-via plain-CREATE determinism (same deployer + nonce 0) — the *address* matches
-but the *source is chain-specific* (Scroll's and Arbitrum's verified sources at
-that address differ, 252 vs 259 lines), so each chain below must be fetched and
-re-verified separately; they do NOT inherit the Scroll/Arbitrum source.
+pull the source into the repo.
 
 | Chain | chainId | Impl address | Verified at | To complete |
 |---|---|---|---|---|
 | X Layer | 196 | `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | OKLink / X Layer explorer | explorer API key |
 | Stable | 988 | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Stable explorer | explorer API key |
-| Mantle | 5000 | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | MantleScan | explorer API key |
-| Injective | 1776 | `0x2fb2B2D110b6c5664e701666B3741240242bf350` | Injective EVM explorer | explorer API key |
-| Monad | 143 | `0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC` | Monad explorer | explorer API key |
 | Yield (Aave, BNB) | 56 | `0x968DfEeDA554b2aB1a43944520CE2aB1e40f84A4` | BscScan | Etherscan-V2 key (covers chainId 56) |
 
-(The Stable/Mantle/Injective deployments reuse the `0x2fb2…` *address* but carry
-their own chain-specific source — they are NOT covered by the Scroll/Arbitrum
-exports above and still need a per-chain fetch.)
+(Mantle / Injective / Monad were redeployed 2026-06-15 — see the refresh runbook
+for their current addresses; explorer re-verification is pending. Each impl address
+is a CREATE address per (chain, nonce), so the same address can recur across chains
+as distinct contracts — resolve by (chain, address), never by address alone.)
 
 ## Note for due diligence
 

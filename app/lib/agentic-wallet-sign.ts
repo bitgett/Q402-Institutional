@@ -130,7 +130,7 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     id: 5000,
     name: "Mantle",
     rpc: process.env.MANTLE_RPC_URL ?? "https://rpc.mantle.xyz",
-    impl: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
+    impl: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
     domainName: "Q402 Mantle",
     domainVersion: "1",
     tokens: {
@@ -147,7 +147,7 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     id: 1776,
     name: "Injective",
     rpc: process.env.INJECTIVE_RPC_URL ?? "https://sentry.evm-rpc.injective.network/",
-    impl: "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
+    impl: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
     domainName: "Q402 Injective",
     domainVersion: "1",
     tokens: {
@@ -160,7 +160,7 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     id: 143,
     name: "Monad",
     rpc: process.env.MONAD_RPC_URL ?? "https://rpc.monad.xyz",
-    impl: "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
+    impl: "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f",
     domainName: "Q402 Monad",
     domainVersion: "1",
     tokens: {
@@ -173,7 +173,7 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     id: 534352,
     name: "Scroll",
     rpc: process.env.SCROLL_RPC_URL ?? "https://rpc.scroll.io",
-    impl: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+    impl: "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1",
     domainName: "Q402 Scroll",
     domainVersion: "1",
     tokens: {
@@ -186,7 +186,7 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     id: 42161,
     name: "Arbitrum",
     rpc: process.env.ARBITRUM_RPC_URL ?? "https://arb1.arbitrum.io/rpc",
-    impl: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
+    impl: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     domainName: "Q402 Arbitrum",
     domainVersion: "1",
     tokens: {

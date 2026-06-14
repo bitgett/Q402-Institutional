@@ -99,7 +99,7 @@ export const CHAIN_CONFIG = {
     // env var added and remains in existing Vercel projects. New deployments
     // should use `AVAX_IMPLEMENTATION_CONTRACT` (matches BNB/ETH/XLAYER/STABLE
     // naming and what .env.example documents). Both are read here for compat.
-    implContract: process.env.AVAX_IMPLEMENTATION_CONTRACT ?? process.env.IMPLEMENTATION_CONTRACT ?? "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
+    implContract: process.env.AVAX_IMPLEMENTATION_CONTRACT?.trim() || process.env.IMPLEMENTATION_CONTRACT?.trim() || "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
     usdc: { address: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", decimals: 6, symbol: "USDC" },
     usdt: { address: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", decimals: 6, symbol: "USDT" },
   },
@@ -108,7 +108,7 @@ export const CHAIN_CONFIG = {
     rpc: process.env.BNB_RPC_URL ?? "https://bsc-dataseed1.binance.org/",
     chainId: 56,
     token: "BNB",
-    implContract: process.env.BNB_IMPLEMENTATION_CONTRACT ?? "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
+    implContract: process.env.BNB_IMPLEMENTATION_CONTRACT?.trim() || "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
     usdc: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18, symbol: "USDC" },
     usdt: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18, symbol: "USDT" },
   },
@@ -117,7 +117,7 @@ export const CHAIN_CONFIG = {
     rpc: process.env.ETH_RPC_URL ?? "https://ethereum.publicnode.com",
     chainId: 1,
     token: "ETH",
-    implContract: process.env.ETH_IMPLEMENTATION_CONTRACT ?? "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
+    implContract: process.env.ETH_IMPLEMENTATION_CONTRACT?.trim() || "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
     usdc: { address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, symbol: "USDC" },
     usdt: { address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, symbol: "USDT" },
     // Ripple USD — NY DFS regulated stablecoin. ERC-20 + EIP-2612 permit, decimals 18.
@@ -131,7 +131,7 @@ export const CHAIN_CONFIG = {
     rpc: process.env.XLAYER_RPC_URL ?? "https://rpc.xlayer.tech",
     chainId: 196,
     token: "OKB",
-    implContract: process.env.XLAYER_IMPLEMENTATION_CONTRACT ?? "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+    implContract: process.env.XLAYER_IMPLEMENTATION_CONTRACT?.trim() || "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     usdc: { address: "0x74b7F16337b8972027F6196A17a631aC6dE26d22", decimals: 6, symbol: "USDC" },
     usdt: { address: "0x1E4a5963aBFD975d8c9021ce480b42188849D41D", decimals: 6, symbol: "USDT" },
   },
@@ -141,7 +141,7 @@ export const CHAIN_CONFIG = {
     chainId: 988,
     token: "USDT0",
     // Q402PaymentImplementationStable deployed on Stable Mainnet (Chain ID: 988)
-    implContract: process.env.STABLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    implContract: process.env.STABLE_IMPLEMENTATION_CONTRACT?.trim() || "0x2fb2B2D110b6c5664e701666B3741240242bf350",
     // USDT0 is the native gas token and primary transfer token on Stable
     usdc: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0" },
     usdt: { address: "0x779ded0c9e1022225f8e0630b35a9b54be713736", decimals: 18, symbol: "USDT0" },
@@ -151,8 +151,9 @@ export const CHAIN_CONFIG = {
     rpc: process.env.MANTLE_RPC_URL ?? "https://rpc.mantle.xyz",
     chainId: 5000,
     token: "MNT",
-    // Q402PaymentImplementationMantle deployed on Mantle Mainnet (Chain ID: 5000)
-    implContract: process.env.MANTLE_IMPLEMENTATION_CONTRACT ?? "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
+    // Q402PaymentImplementationMantle (guarded) on Mantle mainnet (chainId 5000),
+    // on-chain NAME() = "Q402 Mantle". Empty env falls back to the default address.
+    implContract: process.env.MANTLE_IMPLEMENTATION_CONTRACT?.trim() || "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
     usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6, symbol: "USDC" },
     // USDT0 (LayerZero OFT) — Mantle's ecosystem default per the 2025-11-27 official
     // announcement. Legacy canonical-bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE)
@@ -167,9 +168,9 @@ export const CHAIN_CONFIG = {
     rpc: process.env.INJECTIVE_RPC_URL ?? "https://sentry.evm-rpc.injective.network/",
     chainId: 1776,
     token: "INJ",
-    // Q402PaymentImplementationInjective deployed on Injective EVM Mainnet (Chain ID: 1776,
-    // guarded impl deployed 2026-06-15).
-    implContract: process.env.INJECTIVE_IMPLEMENTATION_CONTRACT ?? "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
+    // Q402PaymentImplementationInjective (guarded) on Injective EVM mainnet
+    // (chainId 1776), deployed 2026-06-15, on-chain NAME() = "Q402 Injective".
+    implContract: process.env.INJECTIVE_IMPLEMENTATION_CONTRACT?.trim() || "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
     // Native Circle USDC (CCTP, live since 2026-06) + canonical Tether (USDT0), both 6 dec.
     // Cosmos and EVM share one balance via the MultiVM Token Standard.
     usdc: { address: "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", decimals: 6, symbol: "USDC" },
@@ -180,9 +181,9 @@ export const CHAIN_CONFIG = {
     rpc: process.env.MONAD_RPC_URL ?? "https://rpc.monad.xyz",
     chainId: 143,
     token: "MON",
-    // Q402PaymentImplementationMonad deployed on Monad Mainnet (Chain ID: 143)
-    // by deployer 0xfe7bA1cdc7077f71855627F9983A70188826726F.
-    implContract: process.env.MONAD_IMPLEMENTATION_CONTRACT ?? "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
+    // Q402PaymentImplementationMonad (guarded) on Monad mainnet (chainId 143),
+    // deployed 2026-06-15 by 0xfc77...f466, on-chain NAME() = "Q402 Monad".
+    implContract: process.env.MONAD_IMPLEMENTATION_CONTRACT?.trim() || "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f",
     // Native Circle USDC via CCTP V2 (not bridged) — 6 decimals.
     usdc: { address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6, symbol: "USDC" },
     // USDT0 (LayerZero OFT) — Tether omnichain standard on Monad. Same OFT family as
@@ -195,11 +196,12 @@ export const CHAIN_CONFIG = {
     rpc: process.env.SCROLL_RPC_URL ?? "https://rpc.scroll.io",
     chainId: 534352,
     token: "ETH",
-    // Q402PaymentImplementationScroll — deterministic CREATE address from
-    // deployer 0xfc77...f466 at nonce 0 on Scroll mainnet, matching the
-    // shared address used by Stable / Mantle / Injective. EIP-7702 became
-    // live on Scroll mainnet 2025-04-22 via the Euclid Phase 2 upgrade.
-    implContract: process.env.SCROLL_IMPLEMENTATION_CONTRACT ?? "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+    // Q402PaymentImplementationScroll (guarded) redeployed on Scroll mainnet
+    // (chainId 534352) 2026-06-15 by 0xfc77...f466, on-chain NAME() = "Q402 Scroll".
+    // The impl address is per-chain (CREATE depends on the deployer nonce) — not
+    // shared across chains. EIP-7702 live on Scroll since the Euclid Phase 2 upgrade
+    // (2025-04-22).
+    implContract: process.env.SCROLL_IMPLEMENTATION_CONTRACT?.trim() || "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1",
     // Native Circle USDC + canonical Tether on Scroll, both 6 decimals
     // (confirmed with the Scroll team for the integration handshake).
     usdc: { address: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6, symbol: "USDC" },
@@ -210,12 +212,12 @@ export const CHAIN_CONFIG = {
     rpc: process.env.ARBITRUM_RPC_URL ?? "https://arb1.arbitrum.io/rpc",
     chainId: 42161,
     token: "ETH",
-    // Q402PaymentImplementationArbitrum — deterministic CREATE address from
-    // deployer 0xfc77...f466 at nonce 0 on Arbitrum One mainnet, matching the
-    // shared address used by Stable / Mantle / Injective / Scroll. EIP-7702
-    // live on Arbitrum One since ArbOS 40 "Callisto"; ArbOS 51 "Dia" activated
-    // 2026-01-08 refined precompile delegation behavior per spec.
-    implContract: process.env.ARBITRUM_IMPLEMENTATION_CONTRACT ?? "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
+    // Q402PaymentImplementationArbitrum (guarded) redeployed on Arbitrum One
+    // (chainId 42161) 2026-06-15 by 0xfc77...f466, on-chain NAME() = "Q402 Arbitrum".
+    // The impl address is per-chain (CREATE depends on the deployer nonce) — not
+    // shared across chains. EIP-7702 live on Arbitrum One since ArbOS 40 "Callisto";
+    // ArbOS 51 "Dia" (2026-01-08) refined precompile delegation per spec.
+    implContract: process.env.ARBITRUM_IMPLEMENTATION_CONTRACT?.trim() || "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     // Native Circle USDC (CCTP) + canonical Tether on Arbitrum One. The legacy
     // bridged USDC.e (0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8) is NOT supported
     // — Q402 stays on native Circle USDC to avoid the bridged/native confusion

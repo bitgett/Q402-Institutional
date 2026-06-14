@@ -1,7 +1,7 @@
 {
   "$schema": "./contracts.manifest.schema.json",
-  "version": "1.10.0",
-  "updatedAt": "2026-06-05",
+  "version": "1.11.0",
+  "updatedAt": "2026-06-15",
   "notes": [
     "Single source of truth for Q402 deployed contracts and EIP-712 signing conventions.",
     "If values in this file differ from app/lib/relayer.ts, public/q402-sdk.js, or README.md — this file wins.",
@@ -95,7 +95,7 @@
       "name": "Mantle",
       "chainId": 5000,
       "relayMode": "eip7702",
-      "implContract": "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
+      "implContract": "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
@@ -109,20 +109,20 @@
         "USDT": { "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", "decimals": 6, "notes": "USDT0 (LayerZero OFT) — Mantle ecosystem's default USDT implementation per official 2025-11-27 announcement. Legacy canonical-bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) deposits sunset 2026-02-03; on-chain supply of USDT0 is ~12.5x the legacy. USDT0 shares this 0x779Ded... address with Stable via CREATE3 deterministic deployment; decimals differ per chain (Mantle 6, Stable 18)." }
       },
       "explorer": "https://explorer.mantle.xyz",
-      "verifyUrl": "https://explorer.mantle.xyz/address/0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e"
+      "verifyUrl": "https://explorer.mantle.xyz/address/0xE5b90D564650bdcE7C2Bb4344F777f6582e05699"
     },
     "injective": {
       "name": "Injective",
       "chainId": 1776,
       "relayMode": "eip7702",
-      "implContract": "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
+      "implContract": "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
         "domainName": "Q402 Injective",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
-        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). Same impl address as Stable/Mantle via deterministic CREATE (deployer 0xfc77...f466, nonce 0); distinguished at signing time by chainId 1776 + domainName 'Q402 Injective'."
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). Impl deployed 2026-06-15 by 0xfc77...f466; on-chain NAME() = 'Q402 Injective'. The impl address is distinct per chain (CREATE depends on the deployer nonce on each chain); it must not be assumed equal across chains. Distinguished at signing time by chainId 1776 + domainName 'Q402 Injective'."
       },
       "tokens": {
         "USDC": { "address": "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", "decimals": 6, "notes": "Native Circle USDC (CCTP) on Injective EVM. Verified on-chain: symbol='USDC', name='USDC', decimals=6." },
@@ -130,7 +130,7 @@
       },
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://blockscout.injective.network",
-      "verifyUrl": "https://blockscout.injective.network/address/0x892E647FbbAdc8Ee8342710244931ea98529EA9C"
+      "verifyUrl": "https://blockscout.injective.network/address/0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e"
     },
     "stable": {
       "name": "Stable",
@@ -158,7 +158,7 @@
       "name": "Monad",
       "chainId": 143,
       "relayMode": "eip7702",
-      "implContract": "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
+      "implContract": "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
@@ -173,20 +173,20 @@
       },
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://monadscan.com",
-      "verifyUrl": "https://monadscan.com/address/0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8"
+      "verifyUrl": "https://monadscan.com/address/0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f"
     },
     "scroll": {
       "name": "Scroll",
       "chainId": 534352,
       "relayMode": "eip7702",
-      "implContract": "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+      "implContract": "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
         "domainName": "Q402 Scroll",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
-        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Scroll mainnet via the Euclid upgrade (phase 1 2025-04-16, phase 2 2025-04-22 — see docs.scroll.io/en/technology/overview/scroll-upgrades/euclid-upgrade). Same impl address as Stable/Mantle/Injective via deterministic CREATE (deployer 0xfc77...f466, nonce 0); distinguished at signing time by chainId 534352 + domainName 'Q402 Scroll'. Deployed 2026-05-20 in tx 0xa31456ab4bb9d6f8e44b21e4050affb1a5529e8a6189ae2cce296895f5ac6e64 (block 33770350); verified on Sourcify (full_match) and auto-mirrored on Scroll Blockscout."
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Scroll mainnet via the Euclid upgrade (phase 1 2025-04-16, phase 2 2025-04-22 — see docs.scroll.io/en/technology/overview/scroll-upgrades/euclid-upgrade). Impl redeployed 2026-06-15 by 0xfc77...f466; on-chain NAME() = 'Q402 Scroll'. The impl address is distinct per chain (CREATE depends on the deployer nonce on each chain); it must not be assumed equal across chains. Distinguished at signing time by chainId 534352 + domainName 'Q402 Scroll'."
       },
       "tokens": {
         "USDC": { "address": "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", "decimals": 6, "notes": "Native Circle USDC on Scroll mainnet (confirmed with Scroll team)." },
@@ -194,20 +194,20 @@
       },
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://scrollscan.com",
-      "verifyUrl": "https://scrollscan.com/address/0x8D854436ab0426F5BC6Cc70865C90576AD523E73"
+      "verifyUrl": "https://scrollscan.com/address/0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1"
     },
     "arbitrum": {
       "name": "Arbitrum",
       "chainId": 42161,
       "relayMode": "eip7702",
-      "implContract": "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
+      "implContract": "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
         "domainName": "Q402 Arbitrum",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
-        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Arbitrum One mainnet since ArbOS 40 'Callisto'; ArbOS 51 'Dia' (activated 2026-01-08) refined precompile delegation behavior to align with the EIP-7702 spec. Same impl address as Stable/Mantle/Injective/Scroll via deterministic CREATE (deployer 0xfc77...f466, nonce 0); distinguished at signing time by chainId 42161 + domainName 'Q402 Arbitrum'."
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Arbitrum One mainnet since ArbOS 40 'Callisto'; ArbOS 51 'Dia' (activated 2026-01-08) refined precompile delegation behavior to align with the EIP-7702 spec. Impl redeployed 2026-06-15 by 0xfc77...f466; on-chain NAME() = 'Q402 Arbitrum'. The impl address is distinct per chain (CREATE depends on the deployer nonce on each chain); it must not be assumed equal across chains. Distinguished at signing time by chainId 42161 + domainName 'Q402 Arbitrum'."
       },
       "tokens": {
         "USDC": { "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "decimals": 6, "notes": "Native Circle USDC on Arbitrum One — issued by Circle via CCTP, not the legacy bridged USDC.e (0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8). Q402 intentionally rejects USDC.e to avoid the bridged/native confusion that surfaced during Mantle's USDT migration." },
@@ -215,7 +215,7 @@
       },
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://arbiscan.io",
-      "verifyUrl": "https://arbiscan.io/address/0xE5b90D564650bdcE7C2Bb4344F777f6582e05699"
+      "verifyUrl": "https://arbiscan.io/address/0x8D854436ab0426F5BC6Cc70865C90576AD523E73"
     }
   },
   "authorizationGuard": {

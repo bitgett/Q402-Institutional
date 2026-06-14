@@ -945,11 +945,11 @@ const CONTRACTS = {
   eth:    "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD", // Q402 Ethereum  (chainId: 1)
   xlayer: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 X Layer   (chainId: 196)
   stable: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Stable    (chainId: 988)
-  mantle: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e", // Q402 Mantle    (chainId: 5000)
-  injective: "0x892E647FbbAdc8Ee8342710244931ea98529EA9C", // Q402 Injective (chainId: 1776)
-  monad:  "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8", // Q402 Monad     (chainId: 143)
-  scroll: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 Scroll    (chainId: 534352)
-  arbitrum: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699", // Q402 Arbitrum  (chainId: 42161)
+  mantle: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699", // Q402 Mantle    (chainId: 5000)
+  injective: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e", // Q402 Injective (chainId: 1776)
+  monad:  "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f", // Q402 Monad     (chainId: 143)
+  scroll: "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1", // Q402 Scroll    (chainId: 534352)
+  arbitrum: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 Arbitrum  (chainId: 42161)
 };
 
 // EIP-712 domain name — must match contract NAME constant exactly
