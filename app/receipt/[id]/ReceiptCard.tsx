@@ -221,7 +221,7 @@ function VerifyBlock({
   state, signedBy, onVerify,
 }: { state: VerifyState; signedBy: string; onVerify: () => void }) {
   const colorClass =
-    state.kind === "ok"        ? "border-green-400/40 bg-green-400/10"
+    state.kind === "ok"        ? "border-yellow/40 bg-yellow/10"
   : state.kind === "fail"      ? "border-red-400/40 bg-red-400/10"
   : state.kind === "verifying" ? "border-yellow/40 bg-yellow/10"
   :                              "border-white/10 bg-white/[0.02]";
@@ -232,7 +232,7 @@ function VerifyBlock({
         <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl shrink-0
                         border border-white/15"
              style={{
-               background: state.kind === "ok"   ? "rgba(74,229,74,0.18)"
+               background: state.kind === "ok"   ? "rgba(245,197,24,0.18)"
                         :  state.kind === "fail" ? "rgba(244,99,99,0.18)"
                         :                          "rgba(245,197,24,0.10)"
              }}>
@@ -455,7 +455,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 function TraceStep({
   state, label, detail,
 }: { state: "done" | "pending" | "failed" | "muted"; label: string; detail: string }) {
-  const icon = state === "done"    ? <span className="text-green-400">✓</span>
+  const icon = state === "done"    ? <span className="text-yellow">✓</span>
             :  state === "pending" ? <Spinner small />
             :  state === "failed"  ? <span className="text-red-400">✗</span>
             :                        <span className="text-white/30">○</span>;

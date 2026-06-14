@@ -54,9 +54,12 @@ import { v2, glass, subCard, fs, type Scope } from "../theme";
 import { CheckIcon, XIcon, SparkIcon, TimerIcon } from "../logos";
 import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
+import { MCP_VERSION as MCP_PKG_VERSION } from "@/app/lib/version";
 
-/** Published @quackai/q402-mcp version surfaced on the MCP setup card. */
-const MCP_VERSION = "v0.8.21";
+/** Published @quackai/q402-mcp version surfaced on the MCP setup card.
+ *  Derived from the single source of truth in app/lib/version.ts so a
+ *  publish bump can't leave this card stale (the `v` prefix is local). */
+const MCP_VERSION = `v${MCP_PKG_VERSION}`;
 const MCP_INSTALL = "npx -y @quackai/q402-mcp";
 
 /** npm + GitHub source for the MCP package (surfaced on the tool-reference grid). */

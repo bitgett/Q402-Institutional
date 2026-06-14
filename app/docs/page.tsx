@@ -61,7 +61,7 @@ function Callout({ type, children }: { type: "info" | "warn" | "tip"; children: 
   const styles = {
     info: { border: "rgba(98,126,234,0.25)", bg: "rgba(98,126,234,0.05)", dot: "#627EEA", label: "Note" },
     warn: { border: "rgba(245,197,24,0.25)", bg: "rgba(245,197,24,0.05)", dot: "#F5C518", label: "Important" },
-    tip:  { border: "rgba(74,222,128,0.25)", bg: "rgba(74,222,128,0.05)", dot: "#4ade80", label: "Tip" },
+    tip:  { border: "rgba(245,197,24,0.25)", bg: "rgba(245,197,24,0.05)", dot: "#F5C518", label: "Tip" },
   }[type];
   return (
     <div className="rounded-xl p-4 mb-5 text-sm leading-relaxed" style={{ border: `1px solid ${styles.border}`, background: styles.bg }}>
@@ -241,7 +241,7 @@ export default function DocsPage() {
                   desc: "You pass the user's signature to Q402's API. That's it — one HTTP call. Q402 verifies the signature, constructs the on-chain transaction, and submits it."
                 },
                 {
-                  step: "C", color: "#4ade80",
+                  step: "C", color: "#94a3b8",
                   title: "Gas is deducted from your gas pool, USDC lands in recipient wallet",
                   desc: "Q402 uses your pre-funded gas pool to pay the network fee. The USDC moves on-chain, verifiable on BscScan / Snowtrace / Etherscan. User sees zero gas cost."
                 },
@@ -269,10 +269,10 @@ export default function DocsPage() {
               <div>
                 <span className="text-blue-400">Your backend</span>
                 <span className="text-white/25">  →  POST /api/relay  →  </span>
-                <span className="text-green-400">Q402 API</span>
+                <span className="text-yellow">Q402 API</span>
               </div>
               <div>
-                <span className="text-green-400">Q402</span>
+                <span className="text-yellow">Q402</span>
                 <span className="text-white/25">       →  uses gas pool  →  </span>
                 <span className="text-white/60">on-chain TX</span>
               </div>
@@ -442,7 +442,7 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
               Three paths. <code className="text-yellow text-xs">q402_doctor</code> asks once; change later in <code className="text-yellow text-xs">~/.q402/mcp.env</code>.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-              <div className="rounded-xl border p-6 relative" style={{ background: "rgba(74,222,128,0.04)", borderColor: "rgba(74,222,128,0.30)" }}>
+              <div className="rounded-xl border p-6 relative" style={{ background: "rgba(245,197,24,0.04)", borderColor: "rgba(245,197,24,0.30)" }}>
                 <div className="absolute -top-2.5 right-4 text-[10px] uppercase tracking-widest font-bold px-2.5 py-0.5 rounded bg-emerald-500 text-black">Recommended</div>
                 <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300/85 font-semibold mb-1.5">Mode C</div>
                 <div className="text-white font-semibold text-base mb-3">Server-managed</div>
@@ -649,7 +649,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
                 <p className="text-xs text-white/65 leading-relaxed">Per-relay native-token deduction, real-time balance.</p>
               </div>
               <div className="p-4 rounded-xl border border-white/8 bg-white/[0.02]">
-                <div className="text-green-400 text-xs font-semibold mb-2">Withdraw</div>
+                <div className="text-yellow text-xs font-semibold mb-2">Withdraw</div>
                 <p className="text-xs text-white/65 leading-relaxed">Manual via business@quackai.ai. Funds remain yours.</p>
               </div>
             </div>
@@ -749,7 +749,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
             {/* POST /relay */}
             <div className="mb-12">
               <div className="flex items-center gap-3 mb-2">
-                <Badge color="#4ade80">POST</Badge>
+                <Badge color="#F5C518">POST</Badge>
                 <span className="font-mono text-sm text-white/70">/relay</span>
               </div>
               <p className="text-white/65 text-sm mb-4">Submit a signed EIP-712 + EIP-7702 payload. Q402 verifies and relays on-chain.</p>
@@ -829,12 +829,12 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
                       <td className="py-3 pr-6 font-mono text-white/50 text-xs">{chain.param}</td>
                       <td className="py-3 pr-6 font-mono text-white/30 text-xs">{chain.id}</td>
                       <td className="py-3 pr-6">
-                        <span className={`font-mono text-xs ${chain.stableNote ? "text-green-400 font-bold" : "text-white/40"}`}>
+                        <span className={`font-mono text-xs ${chain.stableNote ? "text-yellow font-bold" : "text-white/40"}`}>
                           {chain.gasToken}
                         </span>
                       </td>
                       <td className="py-3 pr-6">
-                        <span className="text-green-400 text-xs font-semibold bg-green-400/10 px-2 py-0.5 rounded-full">Mainnet Live</span>
+                        <span className="text-yellow text-xs font-semibold bg-yellow/10 px-2 py-0.5 rounded-full">Mainnet Live</span>
                       </td>
                       <td className="py-3 font-mono text-yellow text-xs">{chain.gas}</td>
                     </tr>

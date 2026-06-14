@@ -96,7 +96,7 @@ export default function Image() {
 
         {/* Chain pills */}
         <div style={{ display: "flex", gap: "12px" }}>
-          {["BNB", "Ethereum", "Avalanche", "X Layer", "Stable", "Mantle", "Injective", "Monad", "Scroll"].map((chain) => (
+          {["BNB", "Ethereum", "Avalanche", "X Layer", "Stable", "Mantle", "Injective", "Monad", "Scroll", "Arbitrum"].map((chain) => (
             <div
               key={chain}
               style={{

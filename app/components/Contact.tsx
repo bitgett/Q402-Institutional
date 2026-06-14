@@ -141,10 +141,10 @@ export default function Contact() {
             because the headline is long. */}
         <div className="text-center max-w-5xl mx-auto mb-10">
 
-          <div className="inline-flex items-center gap-2.5 text-[11px] font-mono text-green-400/90 mb-5 uppercase tracking-[0.28em]">
+          <div className="inline-flex items-center gap-2.5 text-[11px] font-mono text-yellow/90 mb-5 uppercase tracking-[0.28em]">
             <span
-              className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"
-              style={{ boxShadow: "0 0 8px #4ade80" }}
+              className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse"
+              style={{ boxShadow: "0 0 8px #F5C518" }}
             />
             Ask your agent
           </div>
@@ -199,8 +199,8 @@ export default function Contact() {
                   </span>
                 </div>
                 {p.status === "LIVE" ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-green-400/30 bg-green-400/5 text-green-400 text-[9px] font-mono font-bold uppercase tracking-[0.18em]">
-                    <span className="w-1 h-1 rounded-full bg-green-400" />
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-yellow/30 bg-yellow/5 text-yellow text-[9px] font-mono font-bold uppercase tracking-[0.18em]">
+                    <span className="w-1 h-1 rounded-full bg-yellow" />
                     Live
                   </span>
                 ) : (

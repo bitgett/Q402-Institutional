@@ -2,6 +2,7 @@ import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
 import TrustedBy from "./components/TrustedBy";
 import HowItWorks from "./components/HowItWorks";
+import LaunchHighlights from "./components/LaunchHighlights";
 import UseCases from "./components/UseCases";
 import Pricing from "./components/Pricing";
 import Contact from "./components/Contact";
@@ -15,6 +16,7 @@ export default function Home() {
         <Hero />
         <TrustedBy />
         <HowItWorks />
+        <LaunchHighlights />
         <UseCases />
         <Pricing />
         <Contact />

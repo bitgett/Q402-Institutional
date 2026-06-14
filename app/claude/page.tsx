@@ -157,7 +157,7 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
       }}
       className={`text-[11px] px-2.5 py-1 rounded-md font-semibold transition-all ${
         copied
-          ? "bg-green-400/15 text-green-400"
+          ? "bg-yellow/15 text-yellow"
           : "bg-white/5 text-white/45 hover:bg-yellow/15 hover:text-yellow"
       }`}
     >
@@ -424,9 +424,9 @@ export default function ClaudePage() {
             {/* doctor-first call-to-action — the actual setup prompt */}
             <div
               className="mt-5 px-4 py-3 rounded-lg flex items-start gap-3"
-              style={{ background: "rgba(74,222,128,0.05)", border: "1px solid rgba(74,222,128,0.20)" }}
+              style={{ background: "rgba(245,197,24,0.05)", border: "1px solid rgba(245,197,24,0.20)" }}
             >
-              <span className="text-green-400/90 text-xs font-bold mt-0.5">→</span>
+              <span className="text-yellow/90 text-xs font-bold mt-0.5">→</span>
               <p className="text-white/80 text-sm leading-relaxed">
                 Restart, ask:{" "}
                 <span className="text-white font-semibold">&ldquo;Set up Q402&rdquo;</span>.{" "}
@@ -459,8 +459,8 @@ export default function ClaudePage() {
             <div
               className="rounded-lg border p-5 relative"
               style={{
-                background: "rgba(74,222,128,0.04)",
-                borderColor: "rgba(74,222,128,0.30)",
+                background: "rgba(245,197,24,0.04)",
+                borderColor: "rgba(245,197,24,0.30)",
               }}
             >
               <div className="absolute -top-2 right-3 text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded bg-emerald-500 text-black">
@@ -662,7 +662,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
                     >
                       ${c.approxGasCostUsd.toFixed(c.approxGasCostUsd >= 1 ? 2 : 4)}
                     </span>
-                    <span className="w-16 text-right text-green-400/85 font-bold text-xs">
+                    <span className="w-16 text-right text-yellow/85 font-bold text-xs">
                       $0.00
                     </span>
                   </motion.li>

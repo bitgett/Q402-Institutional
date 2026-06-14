@@ -72,7 +72,7 @@ function GridBacker() {
       className="absolute inset-0 pointer-events-none opacity-[0.06]"
       style={{
         backgroundImage:
-          "linear-gradient(rgba(74,222,128,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(74,222,128,0.6) 1px, transparent 1px)",
+          "linear-gradient(rgba(245,197,24,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(245,197,24,0.6) 1px, transparent 1px)",
         backgroundSize: "60px 60px",
         maskImage: "radial-gradient(ellipse at center, black 35%, transparent 75%)",
         WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 75%)",
@@ -92,14 +92,14 @@ function Hero() {
       className="max-w-3xl mx-auto text-center mb-16"
     >
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.22em] font-bold mb-6"
-        style={{ background: "rgba(74,222,128,0.10)", color: "#86efac", border: "1px solid rgba(74,222,128,0.22)" }}
+        style={{ background: "rgba(245,197,24,0.10)", color: "#f9d64a", border: "1px solid rgba(245,197,24,0.22)" }}
       >
         <span>✦</span>
         Agent Wallet
       </div>
       <h1 className="text-5xl md:text-6xl font-semibold tracking-tight mb-5 leading-[1.05]">
         Give your AI a wallet
-        <span style={{ color: "#86efac" }}> it can actually use.</span>
+        <span style={{ color: "#f9d64a" }}> it can actually use.</span>
       </h1>
       <p className="text-base md:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(226,232,240,0.75)" }}>
         A wallet your AI signs through. Your MetaMask is untouched. Per-tx and per-day caps, 10 EVM chains, keys exportable anytime.
@@ -164,7 +164,7 @@ function PromptExamplesSection() {
         transition={{ duration: 0.45 }}
         className="text-center mb-7"
       >
-        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#86efac" }}>
+        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#f9d64a" }}>
           Try saying this
         </div>
         <div className="text-2xl md:text-3xl font-semibold tracking-tight mb-2">
@@ -186,12 +186,12 @@ function PromptExamplesSection() {
             className="rounded-2xl border p-5 flex items-start gap-4"
             style={{
               background: "rgba(226,232,240,0.025)",
-              borderColor: "rgba(74,222,128,0.18)",
+              borderColor: "rgba(245,197,24,0.18)",
             }}
           >
             <div
               className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[14px] font-semibold"
-              style={{ background: "rgba(74,222,128,0.10)", color: "#86efac", border: "1px solid rgba(74,222,128,0.25)" }}
+              style={{ background: "rgba(245,197,24,0.10)", color: "#f9d64a", border: "1px solid rgba(245,197,24,0.25)" }}
               aria-hidden
             >
               ❝
@@ -228,7 +228,7 @@ function ConsoleMockupSection() {
         transition={{ duration: 0.45 }}
         className="text-center mb-6"
       >
-        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#86efac" }}>
+        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#f9d64a" }}>
           What an agent run looks like
         </div>
         <div className="text-2xl font-semibold tracking-tight">
@@ -253,7 +253,7 @@ function ConsoleMockup() {
   }, [visible]);
 
   const colorFor = (tone?: "muted" | "good" | "accent" | "warn") => {
-    if (tone === "good") return "#86efac";
+    if (tone === "good") return "#f9d64a";
     if (tone === "accent") return "#E2E8F0";
     if (tone === "warn") return "#FCD34D";
     return "rgba(226,232,240,0.45)";
@@ -267,15 +267,15 @@ function ConsoleMockup() {
       className="rounded-2xl border p-5 font-mono text-[13px] leading-relaxed relative"
       style={{
         background: "rgba(8,17,30,0.85)",
-        borderColor: "rgba(74,222,128,0.22)",
-        boxShadow: "0 0 0 1px rgba(74,222,128,0.05), 0 30px 80px rgba(0,0,0,0.35)",
+        borderColor: "rgba(245,197,24,0.22)",
+        boxShadow: "0 0 0 1px rgba(245,197,24,0.05), 0 30px 80px rgba(0,0,0,0.35)",
       }}
     >
       {/* Window chrome */}
       <div className="flex items-center gap-1.5 mb-4">
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(239,68,68,0.55)" }} />
         <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(234,179,8,0.55)" }} />
-        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(74,222,128,0.55)" }} />
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(245,197,24,0.55)" }} />
         <span className="ml-3 text-[10px] uppercase tracking-[0.22em]" style={{ color: "rgba(226,232,240,0.35)" }}>
           mcp · q402_pay · live
         </span>
@@ -288,7 +288,7 @@ function ConsoleMockup() {
           </div>
         ))}
         {visible < CONSOLE_LINES.length && (
-          <div className="inline-block w-2 h-4 align-middle" style={{ background: "#86efac" }} />
+          <div className="inline-block w-2 h-4 align-middle" style={{ background: "#f9d64a" }} />
         )}
       </div>
 
@@ -297,7 +297,7 @@ function ConsoleMockup() {
         style={{ borderColor: "rgba(226,232,240,0.06)", color: "rgba(226,232,240,0.4)" }}
       >
         <span>Real flow · sandboxed in this mockup</span>
-        <span style={{ color: "#86efac" }}>● connected</span>
+        <span style={{ color: "#f9d64a" }}>● connected</span>
       </div>
     </motion.div>
   );
@@ -329,7 +329,7 @@ function ProofRow() {
           <div className="text-[10px] uppercase tracking-[0.18em] font-semibold mb-2" style={{ color: "rgba(226,232,240,0.4)" }}>
             {r.label}
           </div>
-          <div className="text-xl font-semibold mb-1" style={{ color: "#86efac" }}>
+          <div className="text-xl font-semibold mb-1" style={{ color: "#f9d64a" }}>
             {r.value}
           </div>
           <div className="text-[11px] leading-snug" style={{ color: "rgba(226,232,240,0.5)" }}>
@@ -397,7 +397,7 @@ function FlowSection() {
             className="grid md:grid-cols-[120px_1fr_1.05fr] gap-5 items-start rounded-2xl border p-5"
             style={{ background: "rgba(226,232,240,0.02)", borderColor: "rgba(226,232,240,0.07)" }}
           >
-            <div className="text-2xl font-mono font-semibold" style={{ color: "#86efac" }}>{s.n}</div>
+            <div className="text-2xl font-mono font-semibold" style={{ color: "#f9d64a" }}>{s.n}</div>
             <div>
               <div className="text-lg font-semibold mb-2">{s.title}</div>
               <div className="text-sm leading-relaxed" style={{ color: "rgba(226,232,240,0.6)" }}>
@@ -409,7 +409,7 @@ function FlowSection() {
               style={{
                 background: "rgba(8,17,30,0.7)",
                 color: "#cbd5e1",
-                border: "1px solid rgba(74,222,128,0.16)",
+                border: "1px solid rgba(245,197,24,0.16)",
               }}
             >
               {s.code}
@@ -464,7 +464,7 @@ function PatternsSection() {
             className="rounded-2xl border p-6"
             style={{ background: "rgba(226,232,240,0.02)", borderColor: "rgba(226,232,240,0.07)" }}
           >
-            <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-3" style={{ color: "#86efac" }}>
+            <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-3" style={{ color: "#f9d64a" }}>
               {p.eyebrow}
             </div>
             <div className="text-lg font-semibold mb-3">{p.headline}</div>
@@ -491,7 +491,7 @@ function Closing() {
       style={{
         background:
           "linear-gradient(135deg, rgba(34,197,94,0.10) 0%, rgba(8,17,30,0.6) 70%)",
-        borderColor: "rgba(74,222,128,0.22)",
+        borderColor: "rgba(245,197,24,0.22)",
       }}
     >
       <div>

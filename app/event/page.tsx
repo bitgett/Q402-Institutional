@@ -163,7 +163,7 @@ export default function EventPage() {
             className="relative z-10 text-lg text-white/55 font-light tracking-wide max-w-2xl mb-10"
           >
             {TRIAL_CREDITS.toLocaleString()} gasless transactions on BNB Chain (USDC + USDT) for
-            the next {TRIAL_DURATION_DAYS} days. <span className="text-green-400 font-semibold">Q402 covers the gas</span> —
+            the next {TRIAL_DURATION_DAYS} days. <span className="text-yellow font-semibold">Q402 covers the gas</span> —
             no card, no gas tank. Sign up with Google, email, or wallet to get your live
             and sandbox API&nbsp;keys in 30&nbsp;seconds.
           </motion.p>
@@ -198,10 +198,10 @@ export default function EventPage() {
                   Connect →
                 </button>
               ) : (
-                <div className="rounded-xl border border-green-400/30 bg-green-400/5 p-4">
+                <div className="rounded-xl border border-yellow/30 bg-yellow/5 p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" style={{ boxShadow: "0 0 6px #4ade80" }} />
-                    <span className="text-green-400 text-xs font-bold uppercase tracking-widest">
+                    <span className="w-2 h-2 rounded-full bg-yellow animate-pulse" style={{ boxShadow: "0 0 6px #F5C518" }} />
+                    <span className="text-yellow text-xs font-bold uppercase tracking-widest">
                       Signed in
                     </span>
                     <span className="text-white/70 text-xs ml-1 truncate">{identityLabel}</span>
@@ -268,8 +268,8 @@ export default function EventPage() {
                 </ul>
               </div>
 
-              <div className="rounded-xl border border-white/8 px-4 py-3" style={{ background: "rgba(74,222,128,0.04)" }}>
-                <p className="text-green-400 text-xs font-semibold mb-1">After the trial</p>
+              <div className="rounded-xl border border-white/8 px-4 py-3" style={{ background: "rgba(245,197,24,0.04)" }}>
+                <p className="text-yellow text-xs font-semibold mb-1">After the trial</p>
                 <p className="text-white/45 text-xs leading-relaxed">
                   Trial credits don&apos;t roll over — top up at <Link href="/payment" className="text-yellow hover:underline">Pricing</Link> to
                   keep gasless payments live. Live key auto-expires {TRIAL_DURATION_DAYS} days
@@ -293,7 +293,7 @@ export default function EventPage() {
             <div className="flex items-center gap-5 text-xs text-white/40">
               <Link href="/docs" className="hover:text-white">Docs</Link>
               <Link href="/claude" className="hover:text-orange-300">Claude × Q402</Link>
-              <Link href="/agents" className="hover:text-green-400">Agents</Link>
+              <Link href="/agents" className="hover:text-yellow">Agents</Link>
             </div>
           </motion.div>
         </div>
