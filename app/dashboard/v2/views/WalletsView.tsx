@@ -1058,6 +1058,15 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                         </span>
                       )}
                     </div>
+                    {/* ERC-8004 registration CTA — directly under the Owner EOA
+                        status badges (once registered, the "ERC-8004 #{agentNum}"
+                        badge above replaces it). */}
+                    {!demoMode && !agentNum && activeWallet && !archived && (
+                      <button type="button" onClick={() => setAgentOpen(true)} style={styles.agentLink}>
+                        <AgentBadgeIcon size={14} />
+                        Register this wallet on ERC-8004 →
+                      </button>
+                    )}
                   </div>
                   <div style={styles.heroBal}>
                     <span style={styles.heroBalLabel}>Total portfolio</span>
@@ -1571,12 +1580,6 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                 </b>
               </div>
             </div>
-            {!demoMode && !agentNum && activeWallet && !archived && (
-              <button type="button" onClick={() => setAgentOpen(true)} style={styles.agentLink}>
-                <AgentBadgeIcon size={14} />
-                Register this wallet on ERC-8004 →
-              </button>
-            )}
           </Surface>
           </>
           )}
