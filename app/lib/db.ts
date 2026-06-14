@@ -1624,8 +1624,11 @@ export async function recordOrphanFund(rec: OrphanFundRecord): Promise<boolean> 
   if (!isCCIPLinkChain(rec.chain)) return true; // no-op chains don't write
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      // NO TTL — orphan rows must survive long enough for ops to triage.
-      await kv.set(orphanFundKey(rec.txHash), rec);
+      // Long TTL (365d) — orphan rows must survive for ops to triage, but the
+      // ccip-pending-fund-reconcile cron normally clears them within minutes.
+      // Bounding growth at a year (vs unbounded no-TTL) can't drop a still-
+      // relevant row without a year-long reconcile outage (separately alerted).
+      await kv.set(orphanFundKey(rec.txHash), rec, { ex: 365 * 24 * 60 * 60 });
       return true;
     } catch (e) {
       console.error("[recordOrphanFund] write failed", {

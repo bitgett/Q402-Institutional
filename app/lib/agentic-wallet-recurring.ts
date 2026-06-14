@@ -182,6 +182,11 @@ export interface RecurringRecipient {
 export const MAX_RECIPIENTS_TRIAL = 5;
 /** Paid Multichain subscribers: same cap as batch send (20). */
 export const MAX_RECIPIENTS_PAID = 20;
+/** Max active recurring rules per (owner, walletId). The fire-time daily cap
+ *  already bounds aggregate SPEND across all rules; this bounds the rule COUNT
+ *  so the engine can't be flooded (KV growth + per-tick processing). Well above
+ *  any legitimate setup — normal use is single-digit rules per wallet. */
+export const MAX_RULES_PER_WALLET = 50;
 
 export interface RecurringRule {
   ruleId: string;
@@ -630,6 +635,17 @@ export async function createRecurringRule(
   }
   if (typeof input.label === "string" && input.label.length > 64) {
     throw new RecurringValidationError("INVALID_LABEL", "label must be ≤64 chars.");
+  }
+
+  // ── Per-wallet rule-count cap. Checked after validation so a typo doesn't
+  //    count, and before the idempotency claim. Bounds the resource/abuse
+  //    surface; the daily cap (enforced at fire time) bounds spend separately.
+  const existingRules = await listRecurringRules(input.ownerAddr, input.walletId);
+  if (existingRules.length >= MAX_RULES_PER_WALLET) {
+    throw new RecurringValidationError(
+      "TOO_MANY_RULES",
+      `This Agent Wallet already has the maximum of ${MAX_RULES_PER_WALLET} recurring rules. Cancel one before adding another.`,
+    );
   }
 
   // ── Idempotency claim — AFTER validation ─────────────────────────────
