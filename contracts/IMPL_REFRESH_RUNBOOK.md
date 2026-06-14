@@ -1,12 +1,26 @@
 # Implementation refresh — Mantle / Injective / Monad / Scroll / Arbitrum
 
-**Status: redeployed + verified 2026-06-15; re-enable gated.** All five chains
-were redeployed to the guarded implementation with the correct per-chain EIP-712
-domain `NAME`, verified on-chain (NAME + bytecode equivalence to the guarded
-build), and wired through every config surface. They remain in `DISABLED_CHAINS`
-([`app/lib/chain-status.ts`](../app/lib/chain-status.ts)) until
-`scripts/verify-contracts.mjs` passes against the new addresses and old
-delegations are cleared/re-pointed; re-enabled per chain thereafter.
+**Status: redeployed + verified + re-enabled 2026-06-15.** All five chains were
+redeployed to the guarded implementation with the correct per-chain EIP-712 domain
+`NAME`, verified on-chain (NAME + domainSeparator + bytecode equivalence to the
+guarded build), wired through every config surface, the stale Vercel
+`*_IMPLEMENTATION_CONTRACT` overrides removed, and re-enabled in
+[`app/lib/chain-status.ts`](../app/lib/chain-status.ts) (`DISABLED_CHAINS` empty).
+New settlements route to the guarded build on every chain.
+
+**Caveat — pre-existing delegations are NOT auto-migrated by re-enabling.** An EOA
+that delegated to an OLDER impl before the refresh stays on it until it next pays
+(auto re-delegate) or is explicitly cleared; until then an attacker can call its
+delegated code directly (the attack bypasses Q402, so chain-status doesn't gate
+it). As of 2026-06-15 three **owner-controlled test EOAs** are still on retired,
+owner-binding-MISSING impls and remain drain-exploitable (confirmed via eth_call
+sim; all owner's own accounts, dust balances — owner clears them separately):
+Monad `0x7039…f7b7` + `0xbd35…47af` → `0x39ba95…2acc`; Scroll `0x8266…b6c2` →
+`0x2fb2b2…f350`. The official clear path now accepts RETIRED impls (`RETIRED_IMPLS`
++ `isClearableQ402Impl` in [`app/lib/eip7702.ts`](../app/lib/eip7702.ts)), so these
+clear via `q402_clear_delegation` / `scripts/undelegate-7702.mjs`. A full migration
+scan of ALL historical payer EOAs (custodial + external) per chain is still the
+correct way to claim "complete".
 
 The guarded `transferWithAuthorization` enforces, in order: `msg.sender ==
 facilitator`, `owner != address(0)`, `owner == address(this)`, deadline, nonce,
@@ -37,6 +51,23 @@ same address can recur across chains — e.g. injective's current impl equals
 mantle's retired address, and arbitrum's current impl equals X Layer's live impl.
 These are distinct contracts on distinct chains. Always resolve impl by (chain,
 address), never by address alone.
+
+### Retired impls — known inventory (for migration / clear)
+
+The "retired" column above is only the immediately-previous generation. EOAs can
+still be delegated to OLDER generations that are not one step back, so a migration
+scan built only from that column misses them. Complete *known* retired set per
+chain (this list + the table's retired column is exactly what `RETIRED_IMPLS` in
+[`app/lib/eip7702.ts`](../app/lib/eip7702.ts) accepts for CLEARING — append as more
+are discovered; "known", not provably exhaustive):
+
+| chain     | retired impls (per chain)                                                        | notes |
+|-----------|----------------------------------------------------------------------------------|-------|
+| monad     | `0x39ba9520718eE069D7f72882FF4C28a5Ea8a2acC`, `0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8` | `0x39ba95…` is owner-binding **MISSING**; live owner test delegations still point here |
+| scroll    | `0x2fb2b2D110b6c5664e701666B3741240242bf350`, `0x8D854436ab0426F5BC6Cc70865C90576AD523E73` | `0x2fb2b2…` is owner-binding **MISSING** + live owner delegations point here. NB: `0x2fb2b2…` is Stable's CURRENT impl on chainId 988 — per (chain, address) |
+| mantle    | `0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e`                                      | guarded but wrong-`NAME` prior deploy |
+| injective | `0x892E647FbbAdc8Ee8342710244931ea98529EA9C`                                      | prior deploy |
+| arbitrum  | `0xE5b90D564650bdcE7C2Bb4344F777f6582e05699`                                      | guarded but wrong-`NAME` prior deploy |
 
 ## Procedure used (for reference, if a chain ever needs a re-deploy)
 

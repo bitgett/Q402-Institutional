@@ -28,7 +28,7 @@ import { rateLimit } from "@/app/lib/ratelimit";
 import {
   broadcastClear,
   getDelegationState,
-  isOfficialQ402Impl,
+  isClearableQ402Impl,
   recoverAuthorizationAddress,
   CHAIN_IDS,
   Q402_IMPL_PER_CHAIN,
@@ -143,7 +143,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // recovery) let a malicious caller burn a victim's quota by submitting
   // garbage sigs targeting the victim's address.
   const rlKey = `${body.address.toLowerCase()}:${body.chain}`;
-  const allowed = await rateLimit(rlKey, "wallet-clear-delegation", 1, 3600);
+  // PEEK only (consume=false): reject if the owner already used their 1/hour, but
+  // do NOT burn the quota here — a failed / zero-cost attempt (stale nonce, RPC
+  // error, wrong impl) must not block an immediate retry. The quota is consumed
+  // only after a clear actually lands (below).
+  const allowed = await rateLimit(rlKey, "wallet-clear-delegation", 1, 3600, false, false);
   if (!allowed) {
     return NextResponse.json(
       { error: "RATE_LIMITED", retryAfterSec: 3600 },
@@ -167,11 +171,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 409 },
     );
   }
-  if (!isOfficialQ402Impl(body.chain, state.impl)) {
+  // Accept the CURRENT impl OR any known RETIRED Q402 impl. Clearing is always
+  // the EOA owner's own action (sig recovery proved it above), so sponsoring the
+  // un-delegation of an older Q402 impl is legitimate — and necessary, since
+  // EOAs delegated to a retired impl are exactly the ones that need migrating.
+  // (Settlement still requires the CURRENT impl elsewhere; this is clear-only.)
+  if (!isClearableQ402Impl(body.chain, state.impl)) {
     return NextResponse.json(
       {
         error:    "NOT_Q402_DELEGATION",
-        reason:   `EOA is delegated to ${state.impl}, which is not Q402's official impl on ${body.chain}. This endpoint only sponsors cleanup of Q402 delegations.`,
+        reason:   `EOA is delegated to ${state.impl}, which is not a Q402 impl (current or known-retired) on ${body.chain}. This endpoint only sponsors cleanup of Q402 delegations.`,
         expected: Q402_IMPL_PER_CHAIN[body.chain],
         actual:   state.impl,
       },
@@ -219,6 +228,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 422 },
       );
     }
+    // Clear landed — consume the 1/hour quota now (only a successful clear counts).
+    await rateLimit(rlKey, "wallet-clear-delegation", 1, 3600);
     return NextResponse.json(responseBody, { status: 200 });
   } catch (e) {
     console.error(`[wallet/clear-delegation] broadcast failed`, {

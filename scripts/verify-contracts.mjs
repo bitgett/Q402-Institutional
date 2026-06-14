@@ -258,6 +258,11 @@ console.log(JSON.stringify({
 // ── Required-invariant gate ─────────────────────────────────────────────────
 const failures = [];
 const warnings = [];
+// Count chains we ACTUALLY verified: a successful read (hasCode true) where at
+// least one invariant was evaluated (NAME, typehash, or the BNB-derived
+// bytecode compare), as opposed to a connectivity skip (row.error). The gate
+// must not go GREEN if this is zero — e.g. every RPC down → every row a warning.
+let verifiedCount = 0;
 for (const row of results) {
   const c = row.checks ?? {};
   if (row.error) {
@@ -267,6 +272,9 @@ for (const row of results) {
     // getCode returning "0x"), which stays a hard failure below.
     warnings.push(`${row.chain}: RPC read error (connectivity, not an invariant) — ${row.error}`);
     continue;
+  }
+  if (c.hasCode && (c.nameMatch !== undefined || c.typehashMatchesTransferAuth !== undefined || c.bytecodeMatch !== undefined)) {
+    verifiedCount++;
   }
   if (!c.hasCode) {
     failures.push(`${row.chain}: no bytecode at ${row.address}`);
@@ -321,6 +329,13 @@ if (warnings.length > 0) {
 if (failures.length > 0) {
   console.error(`\n✖ verify-contracts: ${failures.length} invariant failure${failures.length > 1 ? "s" : ""}:`);
   for (const msg of failures) console.error(`  - ${msg}`);
+  process.exit(1);
+}
+if (verifiedCount === 0) {
+  // All-failed backstop: no invariant failures only because nothing could be
+  // read (every chain became a connectivity warning). A release gate must not
+  // pass on zero verification.
+  console.error("\n✖ verify-contracts: 0 chains could be verified (all RPC reads failed) — the gate cannot pass without verifying any contract.");
   process.exit(1);
 }
 console.error("\n✓ verify-contracts: all required invariants pass (incl. owner-binding guard).");
