@@ -31,9 +31,10 @@ export default function TermsPage() {
               fees on the customer&apos;s behalf.
             </p>
             <p>
-              Supported chains include Avalanche, BNB Chain, Ethereum, X Layer, Stable, Mantle, Injective
-              EVM, Monad, and Scroll (subject to change). RLUSD is supported only on Ethereum mainnet. Q402 does not custody,
-              hold, or control any customer or end-user funds at any time.
+              Supported chains span multiple EVM networks (the current list is in the documentation and is
+              subject to change). RLUSD is supported only on Ethereum mainnet. Q402 does not custody, hold, or
+              control funds in your personal connected wallets at any time. Agent Wallets (Mode C) are managed
+              accounts whose encrypted signing key Q402 holds on your behalf, as described in Section 10 (Custody).
             </p>
           </section>
 
