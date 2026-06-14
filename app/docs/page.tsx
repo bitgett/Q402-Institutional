@@ -6,6 +6,7 @@ import { SDK_VERSION, MCP_VERSION } from "@/app/lib/version";
 
 const NAV = [
   { id: "overview",       label: "Overview",        icon: "○" },
+  { id: "whats-new",      label: "What's New",      icon: "○" },
   { id: "how-it-works",   label: "How It Works",    icon: "○" },
   { id: "quickstart",     label: "Quick Start",     icon: "○" },
   { id: "claude-mcp",     label: "MCP for AI Clients", icon: "○" },
@@ -219,6 +220,49 @@ export default function DocsPage() {
                 <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
                   <div className="text-xs text-white/30 mb-1">{item.label}</div>
                   <div className="text-sm font-mono text-white/80">{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          {/* ── WHAT'S NEW ── */}
+          <Section id="whats-new" title="What's New">
+            <p className="text-white/75 text-base leading-relaxed mb-6">
+              Three launches, one gasless rail. Agentic Wallet v2, Aave V3 yield,
+              and the Chainlink CCIP bridge all run on the same EIP-712 + EIP-7702
+              settlement layer — no new keys, no new gas.
+            </p>
+            <div className="grid md:grid-cols-3 gap-4">
+              {[
+                {
+                  tag: "Agentic Wallet v2",
+                  title: "Wallets your agents can actually be trusted with",
+                  body: "A dedicated purse per agent with hard guardrails: per-transaction and daily spend caps, multi-payee batches, and on-chain ERC-8004 reputation gates. Up to 10 wallets per owner, all gasless.",
+                  chips: ["Spend caps", "Reputation gate", "Batch × 20"],
+                },
+                {
+                  tag: "Aave V3 Yield",
+                  title: "Idle stablecoins earn — without touching gas",
+                  body: "Supply and withdraw on Aave V3 over BNB Chain straight from the Agent Wallet. The same EIP-7702 relay sponsors the gas, so your treasury compounds while paying $0 to move.",
+                  chips: ["Gasless supply", "Withdraw anytime", "BNB Chain"],
+                },
+                {
+                  tag: "Chainlink CCIP Bridge",
+                  title: "Move USDC across chains in one signed request",
+                  body: "Native USDC bridging over Chainlink CCIP across the Ethereum, Avalanche, and Arbitrum triangle. Quote, send, and track from the dashboard or MCP — no manual bridge hops.",
+                  chips: ["ETH · AVAX · ARB", "Native USDC", "CCIP"],
+                },
+              ].map((f) => (
+                <div key={f.tag} className="rounded-xl p-5 border border-white/8 flex flex-col" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge color="#F5C518">New</Badge>
+                    <span className="text-sm font-semibold text-white/90">{f.tag}</span>
+                  </div>
+                  <div className="text-[13px] font-medium text-white/80 mb-2">{f.title}</div>
+                  <p className="text-white/50 text-[13px] leading-relaxed mb-4">{f.body}</p>
+                  <div className="mt-auto flex flex-wrap gap-1.5">
+                    {f.chips.map((c) => <Badge key={c} color="#F5C518">{c}</Badge>)}
+                  </div>
                 </div>
               ))}
             </div>
