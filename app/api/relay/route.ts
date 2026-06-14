@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { ethers } from "ethers";
+import { kv } from "@vercel/kv";
 import {
   getApiKeyRecord,
   getGasBalance,
@@ -398,6 +399,22 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Too many requests for this API key" }, { status: 429 });
   }
 
+  // F1: per-key on-chain FAILURE limit (distinct from the 30/min attempt cap).
+  // A (trial) key + a self-delegated EOA can loop INVALID witness signatures:
+  // each reverts on-chain, Q402 pays the gas, and the credit is refunded below
+  // — an unpriced drain bounded only by the attempt cap. Block a key that racks
+  // up reverts (15-min window) so the bleed can't continue. Fail-open on a KV
+  // blip so a transient storage error can't lock out legitimate users.
+  const relayFailKey = `relay-fail:${keyRecord.address.toLowerCase()}`;
+  let recentRelayFails = 0;
+  try { recentRelayFails = Number((await kv.get<number>(relayFailKey)) ?? 0); } catch { /* fail-open */ }
+  if (recentRelayFails >= 12) {
+    return NextResponse.json(
+      { error: "Too many failed relays on this key — temporarily blocked. Verify your signature and retry later." },
+      { status: 429, headers: { "Retry-After": "900" } },
+    );
+  }
+
   // ── 4. Key matches current subscription + not expired ────────────────────
   // After the Phase 1 trial/paid key separation, a subscription may carry
   // FOUR key slots (apiKey + sandboxApiKey for paid scope, trialApiKey +
@@ -758,6 +775,12 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     }
     // Don't leak internal RPC errors or contract revert reasons to callers
     console.error(`[relay] failed chain=${chain} from=${from}: ${result.error}`);
+    // F1: count this on-chain failure toward the per-key block threshold so a
+    // signature-revert loop can't bleed gas indefinitely. Best-effort.
+    try {
+      const n = await kv.incr(relayFailKey);
+      if (n === 1) await kv.expire(relayFailKey, 900);
+    } catch { /* counter is best-effort */ }
     return NextResponse.json({ error: "Relay failed. Check your signature and parameters." }, { status: 400 });
   }
 
