@@ -117,8 +117,17 @@ export async function invalidateNonce(addr: string): Promise<void> {
 
 // ── Fresh challenge (high-risk actions) ────────────────────────────────────
 
-function challengeKvKey(addr: string) {
-  return `auth_challenge:${addr.toLowerCase()}`;
+// F8: keyed by BOTH the address AND the challenge value, not a single
+// per-address slot. The old single-slot key let anyone who knew a victim's
+// address mint a fresh challenge that OVERWROTE the victim's pending one, so
+// the victim's already-signed challenge would never match on submit — a
+// trivially-triggered lockout of every fund-moving action. With the challenge
+// in the key, concurrently-issued challenges each live independently and a new
+// mint can't evict an outstanding one. The challenge is 128-bit random, so its
+// presence in the key is unguessable; single-use is still enforced by the
+// separate SET NX "consumed" marker below.
+function challengeKvKey(addr: string, challenge: string) {
+  return `auth_challenge:${addr.toLowerCase()}:${challenge}`;
 }
 
 /** Message the client must sign for high-risk actions.  Must stay in sync with auth-client.ts. */
@@ -181,7 +190,7 @@ export async function verifyAndConsumeIntent(
   signature: string,
   expectedMessage: string,
 ): Promise<{ ok: true } | { ok: false; code: "NONCE_EXPIRED" | "SIG_MISMATCH" }> {
-  const key = challengeKvKey(addr);
+  const key = challengeKvKey(addr, challenge);
   const consumedKey = `auth_challenge_consumed:${addr.toLowerCase()}:${challenge}`;
 
   try {
@@ -191,17 +200,15 @@ export async function verifyAndConsumeIntent(
     return { ok: false, code: "NONCE_EXPIRED" };
   }
 
-  let storedChallenge: string | null;
+  // The challenge is embedded in the key, so its mere presence proves the
+  // server issued THIS exact challenge for THIS address (no value compare).
+  let issued: string | null;
   try {
-    storedChallenge = await kv.get<string>(key);
+    issued = await kv.get<string>(key);
   } catch {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
-  if (
-    !storedChallenge ||
-    storedChallenge.length !== challenge.length ||
-    !timingSafeEqual(Buffer.from(storedChallenge), Buffer.from(challenge))
-  ) {
+  if (!issued) {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
 
@@ -250,16 +257,19 @@ export async function requireIntentAuth(args: {
 
 /**
  * Issue a one-time challenge for `addr`.
- * Overwrites any existing challenge (only the latest is valid).
+ *
+ * F8: stored under a per-challenge key, so issuing a new challenge does NOT
+ * evict outstanding ones. Each is independently valid until used or expired —
+ * a caller who knows the address can no longer overwrite a victim's pending
+ * challenge to lock them out of every fund-moving action.
  */
 export async function createFreshChallenge(
   addr: string,
 ): Promise<{ challenge: string; ttlSec: number }> {
-  const key = challengeKvKey(addr);
   try {
     const { randomBytes } = await import("crypto");
     const challenge = randomBytes(16).toString("hex");
-    await kv.set(key, challenge, { ex: CHALLENGE_TTL_SEC });
+    await kv.set(challengeKvKey(addr, challenge), "1", { ex: CHALLENGE_TTL_SEC });
     return { challenge, ttlSec: CHALLENGE_TTL_SEC };
   } catch {
     throw new Error("Auth service unavailable. Please try again shortly.");
@@ -288,7 +298,7 @@ export async function verifyAndConsumeChallenge(
   challenge: string,
   signature: string,
 ): Promise<{ ok: true } | { ok: false; code: "NONCE_EXPIRED" | "SIG_MISMATCH" }> {
-  const key         = challengeKvKey(addr);
+  const key         = challengeKvKey(addr, challenge);
   // Consumed marker includes both addr and the challenge value so different challenges
   // don't interfere with each other.
   const consumedKey = `auth_challenge_consumed:${addr.toLowerCase()}:${challenge}`;
@@ -306,18 +316,16 @@ export async function verifyAndConsumeChallenge(
     return { ok: false, code: "NONCE_EXPIRED" };
   }
 
-  // ── Step 2: Confirm the challenge exists and matches ─────────────────────
-  let storedChallenge: string | null;
+  // ── Step 2: Confirm the challenge was issued ─────────────────────────────
+  // The challenge is part of the key (F8), so a present key proves the server
+  // minted THIS exact challenge for THIS address — no value comparison needed.
+  let issued: string | null;
   try {
-    storedChallenge = await kv.get<string>(key);
+    issued = await kv.get<string>(key);
   } catch {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
-  if (
-    !storedChallenge ||
-    storedChallenge.length !== challenge.length ||
-    !timingSafeEqual(Buffer.from(storedChallenge), Buffer.from(challenge))
-  ) {
+  if (!issued) {
     return { ok: false, code: "NONCE_EXPIRED" };
   }
 
