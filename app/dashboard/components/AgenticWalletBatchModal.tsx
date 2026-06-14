@@ -5,9 +5,8 @@
  *
  * Up to 20 rows per submission, one chain + token for the whole batch.
  * The batch is multichain-tier — the backend rejects BNB-only trial
- * subscriptions with 402 SUBSCRIPTION_REQUIRED. The same Injective
- * USDT-only constraint applies as in the single-send modal: USDC is
- * disabled when the chain doesn't support it. Submission idempotency
+ * subscriptions with 402 SUBSCRIPTION_REQUIRED. As in the single-send
+ * modal, a token is disabled on chains that don't support it. Submission idempotency
  * is server-side (keccak fingerprint of owner+chain+token+rows), so the
  * "Submit" button doubles as a safe retry if the network blips.
  */
@@ -46,7 +45,7 @@ const CHAIN_OPTIONS: ChainOption[] = [
   { key: "xlayer",    label: "X Layer",   tokens: ["USDT", "USDC"] },
   { key: "stable",    label: "Stable",    tokens: ["USDT", "USDC"] },
   { key: "mantle",    label: "Mantle",    tokens: ["USDT", "USDC"] },
-  { key: "injective", label: "Injective", tokens: ["USDT"] },
+  { key: "injective", label: "Injective", tokens: ["USDT", "USDC"] },
   { key: "monad",     label: "Monad",     tokens: ["USDT", "USDC"] },
   { key: "scroll",    label: "Scroll",    tokens: ["USDT", "USDC"] },
   { key: "arbitrum",  label: "Arbitrum",  tokens: ["USDT", "USDC"] },

@@ -99,9 +99,9 @@ async function readChainBalances(
   } as const;
   const client = createPublicClient({ chain: viemChain, transport: http(cfg.rpc) });
 
-  // Some chains use the same address for both USDC and USDT (Stable's
-  // USDT0, Injective's USDT-only mirror). Reading them twice would waste
-  // an RPC; collapse to a single read in that case and split the result.
+  // Some chains use the same address for both USDC and USDT (e.g. Stable's
+  // USDT0). Reading them twice would waste an RPC; collapse to a single
+  // read in that case and split the result.
   const sameToken = cfg.tokens.USDC.address.toLowerCase() === cfg.tokens.USDT.address.toLowerCase();
 
   try {
@@ -112,9 +112,9 @@ async function readChainBalances(
         functionName: "balanceOf",
         args: [walletAddr],
       }) as bigint;
-      // Decide which token slot the chain actually settles. Injective is
-      // USDT-only; Stable's USDT0 maps under both keys but USDT is the
-      // canonical surface. We report under USDT and leave USDC null so
+      // Decide which token slot the chain actually settles. Stable's USDT0
+      // maps under both keys but USDT is the canonical surface. We report
+      // under USDT and leave USDC null so
       // the UI doesn't double-count.
       const tb = tokenBalanceFromRaw(raw, cfg.tokens.USDT.decimals);
       return { chain, usdc: null, usdt: tb, totalUsd: tb.usd };

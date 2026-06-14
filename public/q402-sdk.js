@@ -19,8 +19,7 @@
  *
  * Multi-chain coverage:
  *   - RLUSD (Ripple USD, NY DFS regulated, decimals 18) is Ethereum-only.
- *   - Injective EVM (chainId 1776) is USDT-only until Circle CCTP native
- *     USDC ships (announced for Q2 2026).
+ *   - Injective EVM (chainId 1776) supports native Circle USDC (CCTP) + USDT.
  *   - Mantle USDT routes through USDT0 (LayerZero OFT) per the
  *     2025-11-27 ecosystem migration; legacy bridged USDT deposits
  *     sunset 2026-02-03.
@@ -42,7 +41,7 @@
  *  xlayer     TransferAuthorization  "Q402 X Layer"      user's EOA          6
  *  stable     TransferAuthorization  "Q402 Stable"       user's EOA          18  ← USDT0 only
  *  mantle     TransferAuthorization  "Q402 Mantle"       user's EOA          6
- *  injective  TransferAuthorization  "Q402 Injective"    user's EOA          6  ← USDT only
+ *  injective  TransferAuthorization  "Q402 Injective"    user's EOA          6
  *  monad      TransferAuthorization  "Q402 Monad"        user's EOA          6
  *  scroll     TransferAuthorization  "Q402 Scroll"       user's EOA          6
  *  arbitrum   TransferAuthorization  "Q402 Arbitrum"     user's EOA          6
@@ -303,16 +302,16 @@ class Q402Client {
    *                               18-decimal tokens.
    * @param {"USDC"|"USDT"|"RLUSD"} opts.token
    *   - USDC / USDT: supported on all chains except where the per-chain
-   *     supportedTokens list excludes them (e.g. Injective is USDT-only).
+   *     supportedTokens list excludes them.
    *   - RLUSD: Ripple USD, NY DFS regulated, decimals 18 — Ethereum mainnet only.
    * @returns {Promise<{success, txHash, blockNumber, tokenAmount, token, chain, method}>}
    * @throws  When amount is empty, malformed, negative, zero, or has more
    *          decimal places than the target token supports.
    */
   async pay({ to, amount, token = "USDC" }) {
-    // Per-chain token gating. Injective only supports USDT until Circle CCTP
-    // native USDC ships (Q2 2026); rejecting "USDC" here surfaces the constraint
-    // immediately instead of routing the call to a non-existent contract.
+    // Per-chain token gating via supportedTokens — rejecting an unsupported
+    // token here surfaces the constraint immediately instead of routing the
+    // call to a non-existent contract.
     // RLUSD is Ethereum-only — other chains' supportedTokens list omits it,
     // so this same guard catches `chain="bnb", token="RLUSD"` etc.
     if (this.chainCfg.supportedTokens && !this.chainCfg.supportedTokens.includes(token)) {

@@ -76,7 +76,7 @@ interface ChainMeta {
   label: string;
   multichainOnly?: boolean;
   /** Tokens this chain accepts. Used to disable the picker for tokens
-   *  the chain doesn't actually support (e.g. Injective USDT-only). */
+   *  the chain doesn't actually support. */
   tokens: readonly Token[];
   explorerTxBase: string;
   explorerLabel: string;
@@ -89,7 +89,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "xlayer",    label: "X Layer",    multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://www.oklink.com/xlayer/tx/",          explorerLabel: "OKLink" },
   { key: "stable",    label: "Stable",     multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://stablescan.xyz/tx/",                 explorerLabel: "StableScan" },
   { key: "mantle",    label: "Mantle",     multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://explorer.mantle.xyz/tx/",            explorerLabel: "Mantle Explorer" },
-  { key: "injective", label: "Injective",  multichainOnly: true, tokens: ["USDT"],         explorerTxBase: "https://blockscout.injective.network/tx/",   explorerLabel: "Blockscout" },
+  { key: "injective", label: "Injective",  multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://blockscout.injective.network/tx/",   explorerLabel: "Blockscout" },
   { key: "monad",     label: "Monad",      multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://monadscan.com/tx/",                  explorerLabel: "MonadScan" },
   { key: "scroll",    label: "Scroll",     multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://scrollscan.com/tx/",                 explorerLabel: "ScrollScan" },
   { key: "arbitrum",  label: "Arbitrum",   multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://arbiscan.io/tx/",                    explorerLabel: "Arbiscan" },
@@ -130,8 +130,8 @@ export function AgenticWalletSendModal({
   const [recipient, setRecipient] = useState(prefillTo ?? "");
   const [amount, setAmount] = useState(prefillAmount ?? "");
 
-  // Keep token consistent with the selected chain — if the user picks
-  // Injective (USDT-only) while USDC is highlighted, snap to USDT.
+  // Keep token consistent with the selected chain — if the highlighted
+  // token isn't supported on the picked chain, snap to a supported one.
   // Migrated from `queueMicrotask(setState)`-in-render to a proper
   // effect so React 19 doesn't warn about setState during render.
   useEffect(() => {
