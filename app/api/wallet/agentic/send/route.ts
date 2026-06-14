@@ -31,6 +31,7 @@ import { randomBytes } from "node:crypto";
 
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
 import {
   decryptPrivateKey,
   isKeystoreReady,
@@ -339,6 +340,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   if (!isAgenticChainKey(body.chain)) {
     return NextResponse.json({ error: "INVALID_CHAIN" }, { status: 400 });
+  }
+  // Held chains (chain-status.ts) — also gated on the Mode C path.
+  if (isChainDisabled(body.chain)) {
+    return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
   if (body.token !== "USDC" && body.token !== "USDT") {
     return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });

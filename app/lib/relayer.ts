@@ -10,6 +10,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { loadRelayerKey } from "./relayer-key";
+import { isChainDisabled } from "./chain-status";
 
 // ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
 // All 10 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad / scroll / arbitrum) default to EIP-7702 Type 4 TXs.
@@ -547,6 +548,13 @@ export interface SettleResult {
  *  2. Calls pay() on the owner's EOA address, which runs the implementation.
  */
 export async function settlePayment(params: PayParams): Promise<SettleResult> {
+  // Held chains (chain-status.ts) — settlement is paused until the on-chain
+  // impl is refreshed. This is the universal EIP-7702 chokepoint, so every
+  // caller (relay route, recurring cron, …) is covered here at once.
+  if (isChainDisabled(params.chainKey)) {
+    return { success: false, error: `Chain ${params.chainKey} is temporarily unavailable` };
+  }
+
   const key = loadRelayerKey();
   if (!key.ok) {
     return { success: false, error: key.reason === "mismatch" ? "Relayer key/address mismatch" : "RELAYER_PRIVATE_KEY not set" };
