@@ -7,7 +7,7 @@ if (!/^0x[0-9a-fA-F]{40}$/.test(PAYER) || !/^0x[0-9a-fA-F]{40}$/.test(RECIPIENT)
   console.error("Set Q402_PAYER and Q402_TEST_RECIPIENT (40-hex 0x addresses) before running.");
   process.exit(1);
 }
-const CONTRACT  = "0x2fb2B2D110b6c5664e701666B3741240242bf350";
+const CONTRACT  = "0x8D854436ab0426F5BC6Cc70865C90576AD523E73";
 
 const provider = new ethers.JsonRpcProvider("https://rpc.xlayer.tech");
 const usdc = new ethers.Contract(
