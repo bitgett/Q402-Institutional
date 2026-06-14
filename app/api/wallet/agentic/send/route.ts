@@ -37,6 +37,8 @@ import {
   chargeAgainstDailyLimit,
   refundDailySpend,
   resolveWallet,
+  acquireWalletChainLock,
+  releaseWalletChainLock,
 } from "@/app/lib/agentic-wallet";
 import { getSubscription, hasMultichainScope, getApiKeyRecord } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
@@ -645,14 +647,41 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 403 },
     );
   }
-  // Compose refund + release so every relay-failure path releases BOTH
-  // the daily-spend reservation AND the SET NX idempotency claim. A
-  // surviving claim with no relay would shadow-lock the user from
-  // retrying the same (recipient, amount) for the full TTL.
+  // Compose refund + release so every relay-failure path releases the
+  // daily-spend reservation, the SET NX idempotency claim, AND the per-
+  // wallet+chain execution lock acquired just below. A surviving claim with
+  // no relay would shadow-lock the user from retrying the same (recipient,
+  // amount) for the full TTL.
+  const lockChain = body.chain; // narrowed AgenticChainKey; captured so the closure keeps the type
+  let wcLockToken: string | null = null;
+  const releaseWcLock = async () => {
+    if (!wcLockToken) return;
+    const t = wcLockToken;
+    wcLockToken = null;
+    await releaseWalletChainLock(walletId, lockChain, t).catch(() => {});
+  };
   const refundAndRelease = async () => {
     await refundDailySpend(owner, walletId, numAmount).catch(() => {});
     await releaseClaim();
+    await releaseWcLock();
   };
+
+  // Serialize the sign+broadcast critical section per (wallet, chain). Two
+  // concurrent DISTINCT sends — or a send racing a yield/recurring op — on the
+  // same wallet would otherwise read the same EIP-7702 auth nonce and one tx
+  // reverts (relayer eats refunded gas). Yield already holds this lease;
+  // adopting it here closes the send-vs-* race. Acquired AFTER the
+  // reservation+claim so a busy bail refunds both; the 90s TTL self-heals if a
+  // release path is ever missed (worst case is a brief WALLET_BUSY, not a stuck
+  // wallet).
+  wcLockToken = await acquireWalletChainLock(walletId, lockChain);
+  if (!wcLockToken) {
+    await refundAndRelease();
+    return NextResponse.json(
+      { error: "WALLET_BUSY", message: "Another action on this wallet+chain is in flight. Retry in a moment." },
+      { status: 409 },
+    );
+  }
 
   // Subscription gate — BNB free, others require multichain.
   //
@@ -971,6 +1000,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const httpStatus = uncertain ? 502 : allSettled ? 200 : settledLegs.length > 0 ? 207 : 502;
+    await releaseWcLock();
     return NextResponse.json(
       {
         sendId,
@@ -1072,6 +1102,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       "critical",
     );
     console.error("[agentic-wallet/send] relay forward failed:", e);
+    await releaseWcLock();
     return NextResponse.json(
       {
         error: "relay_outcome_uncertain",
@@ -1173,6 +1204,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  await releaseWcLock();
   return NextResponse.json(
     relayBody ?? { error: "relay_response_unreadable" },
     { status: relayResponse.status },

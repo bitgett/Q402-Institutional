@@ -62,6 +62,8 @@ import {
   decryptPrivateKey,
   chargeAgainstDailyLimit,
   refundDailySpend,
+  acquireWalletChainLock,
+  releaseWalletChainLock,
 } from "@/app/lib/agentic-wallet";
 import {
   signAgenticPayment,
@@ -417,6 +419,27 @@ async function processOneRule(
     return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: "relay_unavailable" };
   }
 
+  // Serialize against concurrent send/batch/yield ops on the SAME wallet+chain
+  // so a recurring fire can't collide with a user send on the EIP-7702 auth
+  // nonce. On contention treat exactly like a transient relayer-unavailable:
+  // release the fire-slot + refund the reservation so the rule retries cleanly
+  // next tick (no double-fire — the slot was NOT marked fired). 90s TTL
+  // backstop releases the lease if a completion path is ever missed.
+  let wcLockToken: string | null = null;
+  const releaseWcLock = async () => {
+    if (!wcLockToken) return;
+    const t = wcLockToken;
+    wcLockToken = null;
+    await releaseWalletChainLock(rule.walletId, rule.chain, t).catch(() => {});
+  };
+  wcLockToken = await acquireWalletChainLock(rule.walletId, rule.chain);
+  if (!wcLockToken) {
+    await releaseFireSlot(rule);
+    await refundDailyIfReserved();
+    await recordRuleTransientError(rule, "wallet+chain busy (concurrent op in flight)", nowMs);
+    return { ruleKey, walletId: rule.walletId, outcome: "transient-error", error: "wallet_busy" };
+  }
+
   // 5. Sign + submit, sequentially per recipient. Two failure modes:
   //
   //    (a) FIRST recipient fails before any settles → treat as a
@@ -567,6 +590,7 @@ async function processOneRule(
       "critical",
     );
     fireStateWebhook(rule, "recurring.error", `relay outcome uncertain: ${relayUncertain}`, nowMs);
+    await releaseWcLock();
     return {
       ruleKey,
       walletId: rule.walletId,
@@ -582,6 +606,7 @@ async function processOneRule(
     await refundDailyIfReserved();
     await recordRuleTransientError(rule, firstFailureBeforeAnySuccess, nowMs);
     fireStateWebhook(rule, "recurring.error", firstFailureBeforeAnySuccess, nowMs);
+    await releaseWcLock();
     return {
       ruleKey,
       walletId: rule.walletId,
@@ -664,6 +689,7 @@ async function processOneRule(
     }).catch((e) => console.error(`[cron/recurring-payouts] webhook dispatch failed for ${rule.ruleId}:`, e)),
   );
 
+  await releaseWcLock();
   return {
     ruleKey,
     walletId: rule.walletId,
