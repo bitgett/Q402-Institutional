@@ -68,7 +68,15 @@ function rawSafeRequest(
 
     const req = doRequest(
       url,
-      { method: init.method, headers: init.headers, agent },
+      {
+        method: init.method,
+        headers: init.headers,
+        agent,
+        // Bounds the WHOLE request incl. the DNS lookup + connect, which
+        // req.setTimeout (socket-inactivity only) does not — a slow resolver
+        // can't hang us past timeoutMs.
+        signal: AbortSignal.timeout(init.timeoutMs),
+      },
       (res) => {
         const status = res.statusCode ?? 0;
         // Never follow redirects — a 30x could point at an internal host.
