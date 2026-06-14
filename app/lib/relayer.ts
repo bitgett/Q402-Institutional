@@ -185,7 +185,7 @@ export const CHAIN_CONFIG = {
     token: "MON",
     // Q402PaymentImplementationMonad deployed on Monad Mainnet (Chain ID: 143)
     // by deployer 0xfe7bA1cdc7077f71855627F9983A70188826726F.
-    implContract: process.env.MONAD_IMPLEMENTATION_CONTRACT ?? "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+    implContract: process.env.MONAD_IMPLEMENTATION_CONTRACT ?? "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
     // Native Circle USDC via CCTP V2 (not bridged) — 6 decimals.
     usdc: { address: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6, symbol: "USDC" },
     // USDT0 (LayerZero OFT) — Tether omnichain standard on Monad. Same OFT family as
@@ -202,7 +202,7 @@ export const CHAIN_CONFIG = {
     // deployer 0xfc77...f466 at nonce 0 on Scroll mainnet, matching the
     // shared address used by Stable / Mantle / Injective. EIP-7702 became
     // live on Scroll mainnet 2025-04-22 via the Euclid Phase 2 upgrade.
-    implContract: process.env.SCROLL_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    implContract: process.env.SCROLL_IMPLEMENTATION_CONTRACT ?? "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     // Native Circle USDC + canonical Tether on Scroll, both 6 decimals
     // (confirmed with the Scroll team for the integration handshake).
     usdc: { address: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6, symbol: "USDC" },
@@ -218,7 +218,7 @@ export const CHAIN_CONFIG = {
     // shared address used by Stable / Mantle / Injective / Scroll. EIP-7702
     // live on Arbitrum One since ArbOS 40 "Callisto"; ArbOS 51 "Dia" activated
     // 2026-01-08 refined precompile delegation behavior per spec.
-    implContract: process.env.ARBITRUM_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    implContract: process.env.ARBITRUM_IMPLEMENTATION_CONTRACT ?? "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
     // Native Circle USDC (CCTP) + canonical Tether on Arbitrum One. The legacy
     // bridged USDC.e (0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8) is NOT supported
     // — Q402 stays on native Circle USDC to avoid the bridged/native confusion

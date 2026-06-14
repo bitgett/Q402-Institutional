@@ -13,11 +13,11 @@
  */
 
 export const DISABLED_CHAINS: ReadonlySet<string> = new Set([
+  // monad / scroll / arbitrum now run the guarded implementation (redeployed
+  // 2026-06-15) and are active again. Still held: mantle (pending a deploy-gas
+  // top-up) and injective (pending deploy-gas funding).
   "mantle",
   "injective",
-  "monad",
-  "scroll",
-  "arbitrum",
 ]);
 
 /** True when settlement/delegation on this chain is currently held. */
