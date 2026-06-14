@@ -1052,21 +1052,37 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           : "Trial · BNB"}
                       </span>
                       {agentNum && <span style={styles.badge}>ERC-8004 #{agentNum}</span>}
+                      {/* ERC-8004 registration CTA — a clickable pill in the badge
+                          row, right next to "Trial · BNB"; once registered the
+                          "ERC-8004 #{agentNum}" badge above takes its place. */}
+                      {!demoMode && !agentNum && activeWallet && !archived && (
+                        <button
+                          type="button"
+                          onClick={() => setAgentOpen(true)}
+                          title="Register this Agent Wallet as an ERC-8004 identity"
+                          style={{
+                            ...styles.badge,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            border: `1px solid ${v2.yellow}`,
+                            color: v2.yellow,
+                            background: "transparent",
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            lineHeight: 1,
+                          }}
+                        >
+                          <AgentBadgeIcon size={12} />
+                          Register on ERC-8004
+                        </button>
+                      )}
                       {(identity.subscription?.amountUSD ?? 0) > 0 && (
                         <span style={{ ...styles.badge, ...styles.badgePlan }}>
                           {planLabel(identity.plan)} Plan · ${identity.subscription?.amountUSD} paid
                         </span>
                       )}
                     </div>
-                    {/* ERC-8004 registration CTA — directly under the Owner EOA
-                        status badges (once registered, the "ERC-8004 #{agentNum}"
-                        badge above replaces it). */}
-                    {!demoMode && !agentNum && activeWallet && !archived && (
-                      <button type="button" onClick={() => setAgentOpen(true)} style={styles.agentLink}>
-                        <AgentBadgeIcon size={14} />
-                        Register this wallet on ERC-8004 →
-                      </button>
-                    )}
                   </div>
                   <div style={styles.heroBal}>
                     <span style={styles.heroBalLabel}>Total portfolio</span>

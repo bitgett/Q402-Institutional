@@ -159,30 +159,30 @@ export default function DashboardV2({
         }}
       />
 
-      <div
+      {/* ── Top bar — full-bleed (direct child of .v2-app) so the bar
+          background spans the whole viewport width; the inner wrapper keeps
+          content aligned to the 1500px column. Constraining the bar to the
+          content column left the page background + top-right glow showing past
+          the bar's right edge, which read as a seam beside the wallet button. */}
+      <header
+        className="v2-topbar"
         style={{
-          maxWidth: 1500,
-          margin: "auto",
-          padding: "0 22px 28px",
-          position: "relative",
-          zIndex: 1,
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          background: v2.topbarFill,
+          borderBottom: `1px solid ${v2.line}`,
         }}
       >
-        {/* ── Top bar ──────────────────────────────────────────────── */}
-        <header
-          className="v2-topbar"
+        <div
           style={{
+            maxWidth: 1500,
+            margin: "auto",
+            padding: "0 22px",
             height: 68,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            borderBottom: `1px solid ${v2.line}`,
-            position: "sticky",
-            top: 0,
-            zIndex: 20,
-            background: v2.topbarFill,
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
           }}
         >
           {/* Brand — exact copy of the landing navbar (Poppins Bold, the
@@ -227,7 +227,18 @@ export default function DashboardV2({
                 landing nav uses, so disconnected users can actually connect. */}
             <WalletButton />
           </div>
-        </header>
+        </div>
+      </header>
+
+      <div
+        style={{
+          maxWidth: 1500,
+          margin: "auto",
+          padding: "0 22px 28px",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
 
         {/* Banners slot — top-of-shell mount point for the expiry / quota /
             plan lifecycle banners, driven by the dashboard identity context
