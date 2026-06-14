@@ -215,7 +215,7 @@
       },
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://arbiscan.io",
-      "verifyUrl": "https://arbiscan.io/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
+      "verifyUrl": "https://arbiscan.io/address/0xE5b90D564650bdcE7C2Bb4344F777f6582e05699"
     }
   },
   "authorizationGuard": {

@@ -416,8 +416,7 @@ const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
   chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective" | "monad" | "scroll" | "arbitrum"
 });
-// Note: when chain is "injective", only token: "USDT" is supported.
-// Native USDC via Circle CCTP is announced for Q2 2026.
+// Note: Injective supports both USDC and USDT (native Circle USDC via CCTP).
 
 // Wallet popup appears — user signs, Q402 relays on-chain
 // amount MUST be a human-readable decimal STRING (e.g. "50.00", "0.123456").
@@ -443,7 +442,7 @@ const result = await q402.pay({
 const result = await q402.pay({
   to:     recipientAddress,
   amount: "50.00",
-  token:  "USDT",   // required — USDC not yet supported on Injective
+  token:  "USDC",   // USDC and USDT both supported on Injective
 });`} />
 
             <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">4 · Ethereum RLUSD (NY DFS regulated)</h3>
@@ -1073,7 +1072,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "Which tokens are supported?",
-                a: "USDC + USDT on every chain except Injective (USDT only — Circle CCTP USDC Q2 2026). RLUSD on Ethereum only (18 decimals, NY DFS regulated)."
+                a: "USDC + USDT on every chain (Injective added native Circle USDC via CCTP). RLUSD on Ethereum only (18 decimals, NY DFS regulated)."
               },
               {
                 q: "How do I get an API key?",
