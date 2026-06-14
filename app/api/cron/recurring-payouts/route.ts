@@ -81,6 +81,7 @@ import {
   recordRuleCapExceeded,
   recordRuleTransientError,
   claimFireSlot,
+  getRecurringRule,
   advanceAfterMissedBookkeeping,
   releaseFireSlot,
   removeFromActionZset,
@@ -104,6 +105,7 @@ interface PerRuleOutcome {
     | "alert-sent"
     | "fired"
     | "skipped-stale-slot"
+    | "skipped-status-changed"
     | "skipped-fire-lock-held"
     | "skipped-wallet-missing"
     | "skipped-wallet-archived"
@@ -404,6 +406,23 @@ async function processOneRule(
       walletId: rule.walletId,
       outcome: "skipped-fire-lock-held",
       error: claim.reason,
+    };
+  }
+
+  // F2: pullDueRules snapshotted this rule; a cancel/pause could have landed
+  // between the pull and now (the ZSET zrem only stops FUTURE pulls). Reload
+  // under the fire-lock and refuse to fire anything not still active on this
+  // exact slot — otherwise a just-cancelled rule pays AND gets resurrected by
+  // the bookkeeping write below.
+  const freshRule = await getRecurringRule(rule.ownerAddr, rule.walletId, rule.ruleId);
+  if (!freshRule || freshRule.status !== "active" || freshRule.nextRunAt !== rule.nextRunAt) {
+    await releaseFireSlot(rule);
+    await refundDailyIfReserved();
+    return {
+      ruleKey,
+      walletId: rule.walletId,
+      outcome: "skipped-status-changed",
+      error: `rule no longer active on this slot (status=${freshRule?.status ?? "deleted"})`,
     };
   }
 
