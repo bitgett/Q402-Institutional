@@ -46,6 +46,8 @@ import {
   chargeAgainstDailyLimit,
   refundDailySpend,
   resolveWallet,
+  acquireWalletChainLock,
+  releaseWalletChainLock,
 } from "@/app/lib/agentic-wallet";
 import { getSubscription, hasMultichainScope, getApiKeyRecord } from "@/app/lib/db";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
@@ -487,9 +489,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Without it, an `auth_nonce_failed` leaves the claim cached for the
   // full TTL even though no work happened — retries would see an empty
   // "processing" record forever.
+  const lockChain = body.chain; // narrowed AgenticChainKey; captured so the closure keeps the type
+  let wcLockToken: string | null = null;
+  const releaseWcLock = async () => {
+    if (!wcLockToken) return;
+    const t = wcLockToken;
+    wcLockToken = null;
+    await releaseWalletChainLock(walletId, lockChain, t).catch(() => {});
+  };
   const releaseClaim = async () => {
     await kv.del(key).catch(() => {});
+    await releaseWcLock();
   };
+
+  // Serialize the whole batch's shared-nonce fan-out per (wallet, chain) so a
+  // concurrent batch / send / yield op on the same wallet can't collide on the
+  // EIP-7702 auth nonce. Acquired before the reservation so a busy bail has
+  // nothing to refund; the 90s TTL self-heals a missed release.
+  wcLockToken = await acquireWalletChainLock(walletId, lockChain);
+  if (!wcLockToken) {
+    await releaseClaim();
+    return NextResponse.json(
+      { error: "WALLET_BUSY", message: "Another action on this wallet+chain is in flight. Retry in a moment." },
+      { status: 409 },
+    );
+  }
 
   // ── Daily-cap reservation (atomic, per-wallet). Refund on any downstream fail. ──
   const reservation = await chargeAgainstDailyLimit(owner, walletId, totalAmount, wallet.dailyLimitUsd);
@@ -758,6 +782,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await refundDailySpend(owner, walletId, refundAmount).catch(() => {});
   }
 
+  await releaseWcLock();
   return NextResponse.json(
     {
       batchId,
