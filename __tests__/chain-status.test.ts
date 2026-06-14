@@ -5,16 +5,24 @@ import {
   CHAIN_DISABLED_MESSAGE,
 } from "@/app/lib/chain-status";
 
-// All 10 chains now run the guarded implementation, so the held set is empty.
-// The kill-switch stays in place as the mechanism for re-holding a chain.
+// Held: the 5 chains whose 2026-06-15 redeploy compiled with the wrong domain
+// NAME. Held until a corrected impl is deployed + verified + delegations cleared.
 describe("chain-status — settlement allow-list", () => {
-  it("holds no chains — every chain runs the guarded implementation", () => {
-    expect([...DISABLED_CHAINS]).toEqual([]);
+  it("holds exactly the 5 chains pending the corrected redeploy", () => {
+    expect([...DISABLED_CHAINS].sort()).toEqual(
+      ["arbitrum", "injective", "mantle", "monad", "scroll"],
+    );
   });
 
-  it("treats every supported chain as active", () => {
-    for (const c of ["bnb", "avax", "eth", "stable", "xlayer", "monad", "scroll", "arbitrum", "mantle", "injective"]) {
+  it("keeps the guarded chains active", () => {
+    for (const c of ["bnb", "avax", "eth", "stable", "xlayer"]) {
       expect(isChainDisabled(c)).toBe(false);
+    }
+  });
+
+  it("holds every chain in the list", () => {
+    for (const c of ["mantle", "injective", "monad", "scroll", "arbitrum"]) {
+      expect(isChainDisabled(c)).toBe(true);
     }
   });
 
@@ -23,6 +31,7 @@ describe("chain-status — settlement allow-list", () => {
     expect(isChainDisabled(undefined)).toBe(false);
     expect(isChainDisabled("")).toBe(false);
     expect(isChainDisabled("BNB")).toBe(false);
+    expect(isChainDisabled("Scroll")).toBe(true);
   });
 
   it("exposes a caller-safe message constant", () => {
