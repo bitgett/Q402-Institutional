@@ -82,7 +82,7 @@ export const Q402_IMPL_PER_CHAIN: Record<ChainKey, string> = {
   xlayer:    "0x8d854436ab0426f5bc6cc70865c90576ad523e73",
   stable:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
   mantle:    "0xa9a7dce76def2ac36057fef0d8103df10581d61e",
-  injective: "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+  injective: "0x892e647fbbadc8ee8342710244931ea98529ea9c",
   monad:     "0x5a8fde1851491d9ed512a9eda1c63ca7627becb8",
   scroll:    "0x8d854436ab0426f5bc6cc70865c90576ad523e73",
   arbitrum:  "0xe5b90d564650bdce7c2bb4344f777f6582e05699",

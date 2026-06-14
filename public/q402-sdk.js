@@ -158,11 +158,11 @@ const Q402_CHAIN_CONFIG = {
     chainId:      1776,
     mode:         "eip7702",
     domainName:   "Q402 Injective",
-    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
-    // USDT only on Injective. Native CCTP USDC is announced for Q2 2026 — Q402
-    // adds USDC then. SDK rejects token: "USDC" for chain: "injective" explicitly.
+    implContract: "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
+    // Native Circle USDC (CCTP, 6 dec) + canonical Tether (USDT0, 6 dec).
+    usdc: { address: "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", decimals: 6 },
     usdt: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
-    supportedTokens: ["USDT"],
+    supportedTokens: ["USDC", "USDT"],
   },
   monad: {
     name:         "Monad",
@@ -322,11 +322,9 @@ class Q402Client {
       throw new Error(
         `Token "${token}" is not supported on chain "${this.chain}". ` +
         `Supported tokens for ${this.chain}: ${this.chainCfg.supportedTokens.join(", ")}.` +
-        (this.chain === "injective" && token === "USDC"
-          ? " Native USDC via Circle CCTP is announced for Q2 2026; until then, use USDT on Injective."
-          : token === "RLUSD"
-            ? " RLUSD is only supported on Ethereum mainnet — pass `chain: \"eth\"`."
-            : "")
+        (token === "RLUSD"
+          ? " RLUSD is only supported on Ethereum mainnet — pass `chain: \"eth\"`."
+          : "")
       );
     }
     const ethereum = window.ethereum || window.okxwallet;

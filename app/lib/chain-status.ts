@@ -13,10 +13,8 @@
  */
 
 export const DISABLED_CHAINS: ReadonlySet<string> = new Set([
-  // monad / scroll / arbitrum / mantle now run the guarded implementation
-  // (redeployed 2026-06-15) and are active again. Injective stays held until
-  // its deploy-gas (bridged INJ) lands.
-  "injective",
+  // All 10 chains now run the guarded implementation (the five that had the
+  // unguarded build were redeployed + re-delegated 2026-06-15). Nothing held.
 ]);
 
 /** True when settlement/delegation on this chain is currently held. */
