@@ -81,7 +81,7 @@ export const Q402_IMPL_PER_CHAIN: Record<ChainKey, string> = {
   eth:       "0x8e67a64989cfcb0c40556b13ea302709ccfd6aad",
   xlayer:    "0x8d854436ab0426f5bc6cc70865c90576ad523e73",
   stable:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
-  mantle:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+  mantle:    "0xa9a7dce76def2ac36057fef0d8103df10581d61e",
   injective: "0x2fb2b2d110b6c5664e701666b3741240242bf350",
   monad:     "0x5a8fde1851491d9ed512a9eda1c63ca7627becb8",
   scroll:    "0x8d854436ab0426f5bc6cc70865c90576ad523e73",

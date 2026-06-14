@@ -95,7 +95,7 @@
       "name": "Mantle",
       "chainId": 5000,
       "relayMode": "eip7702",
-      "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+      "implContract": "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
@@ -109,7 +109,7 @@
         "USDT": { "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", "decimals": 6, "notes": "USDT0 (LayerZero OFT) — Mantle ecosystem's default USDT implementation per official 2025-11-27 announcement. Legacy canonical-bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) deposits sunset 2026-02-03; on-chain supply of USDT0 is ~12.5x the legacy. USDT0 shares this 0x779Ded... address with Stable via CREATE3 deterministic deployment; decimals differ per chain (Mantle 6, Stable 18)." }
       },
       "explorer": "https://explorer.mantle.xyz",
-      "verifyUrl": "https://explorer.mantle.xyz/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
+      "verifyUrl": "https://explorer.mantle.xyz/address/0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e"
     },
     "injective": {
       "name": "Injective",
