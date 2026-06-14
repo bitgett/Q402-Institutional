@@ -365,15 +365,13 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
   );
 
   // ── Demo mode ──────────────────────────────────────────────────────────
-  // Show the fully-populated DEMO surface (instead of an empty "connect a
-  // wallet" state) when there is no connected owner OR live reads haven't
-  // produced any gas-tank balance / price data yet. Falling back at the data
-  // level means the SAME layout renders in both modes; only the source of the
-  // numbers differs. The instant a wallet connects and real balances/prices
-  // land, `demoMode` flips false and the live path is unchanged.
-  const hasLiveTankData =
-    totalGasUsd > 0 || Object.keys(userGasBalance).length > 0 || Object.keys(tokenPrices).length > 0;
-  const demoMode = !ownerAddress || (!tankLoading && !hasLiveTankData);
+  // Show the fully-populated DEMO surface ONLY when NO wallet is connected — a
+  // marketing preview for logged-out visitors. A CONNECTED wallet, even one
+  // with an empty gas tank / no balances yet, renders its REAL state (zeros,
+  // loading spinner) so a fresh-wallet visitor can never mistake fabricated
+  // sample numbers for live balances. (Previously a connected-but-empty wallet
+  // also fell into demo mode and surfaced placeholder figures.)
+  const demoMode = !ownerAddress;
 
   // Card + table values, sourced from DEMO when in demo mode so the existing
   // layout populates without any "connect" placeholder branch.

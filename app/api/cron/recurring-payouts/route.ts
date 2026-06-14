@@ -4,8 +4,10 @@
  * Vercel Cron sweep. Drives the alert → fire → reschedule lifecycle
  * for every recurring rule attached to an Agent Wallet.
  *
- * Cron cadence: every 15 minutes (see vercel.json). The cron only
- * touches rules whose `nextActionAt` ZSET score is ≤ now — so even at
+ * Cron cadence: ~hourly via the Render recurring-trigger heartbeat, with a
+ * Vercel daily backstop (see vercel.json); the cron-watchdog pages ops if it
+ * goes stale. The cron only touches rules whose `nextActionAt` ZSET score is
+ * ≤ now — so even at
  * scale (10k+ rules) the work is bounded by what's actually due.
  *
  * Per-rule lifecycle inside one tick:

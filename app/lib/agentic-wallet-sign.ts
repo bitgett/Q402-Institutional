@@ -482,8 +482,13 @@ export function isRelayConnectPhaseError(e: unknown): boolean {
  *  the convention in the send route so the env precedence stays uniform
  *  across all agentic-wallet endpoints. */
 export function internalBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://127.0.0.1:${process.env.PORT ?? 3000}`)
-  );
+  if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  // No base URL configured. Silently forwarding agentic settlements to
+  // localhost in production would make every send/yield/bridge fail opaquely
+  // — fail loud so the misconfiguration is caught at the first request.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("internalBaseUrl: NEXT_PUBLIC_BASE_URL / VERCEL_URL unset in production");
+  }
+  return `http://127.0.0.1:${process.env.PORT ?? 3000}`;
 }

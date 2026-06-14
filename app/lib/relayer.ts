@@ -90,7 +90,7 @@ export function getFallbackRpcs(chain: string): string[] {
 export const CHAIN_CONFIG = {
   avax: {
     name: "Avalanche",
-    rpc: "https://api.avax.network/ext/bc/C/rpc",
+    rpc: process.env.AVAX_RPC_URL ?? "https://api.avax.network/ext/bc/C/rpc",
     chainId: 43114,
     token: "AVAX",
     // Q402PaymentImplementation deployed on Avalanche mainnet.
@@ -104,7 +104,7 @@ export const CHAIN_CONFIG = {
   },
   bnb: {
     name: "BNB Chain",
-    rpc: "https://bsc-dataseed1.binance.org/",
+    rpc: process.env.BNB_RPC_URL ?? "https://bsc-dataseed1.binance.org/",
     chainId: 56,
     token: "BNB",
     implContract: process.env.BNB_IMPLEMENTATION_CONTRACT ?? "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
@@ -113,7 +113,7 @@ export const CHAIN_CONFIG = {
   },
   eth: {
     name: "Ethereum",
-    rpc: "https://ethereum.publicnode.com",
+    rpc: process.env.ETH_RPC_URL ?? "https://ethereum.publicnode.com",
     chainId: 1,
     token: "ETH",
     implContract: process.env.ETH_IMPLEMENTATION_CONTRACT ?? "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
@@ -127,7 +127,7 @@ export const CHAIN_CONFIG = {
   },
   xlayer: {
     name: "X Layer",
-    rpc: "https://rpc.xlayer.tech",
+    rpc: process.env.XLAYER_RPC_URL ?? "https://rpc.xlayer.tech",
     chainId: 196,
     token: "OKB",
     implContract: process.env.XLAYER_IMPLEMENTATION_CONTRACT ?? "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
@@ -136,7 +136,7 @@ export const CHAIN_CONFIG = {
   },
   stable: {
     name: "Stable",
-    rpc: "https://rpc.stable.xyz",
+    rpc: process.env.STABLE_RPC_URL ?? "https://rpc.stable.xyz",
     chainId: 988,
     token: "USDT0",
     // Q402PaymentImplementationStable deployed on Stable Mainnet (Chain ID: 988)
@@ -147,7 +147,7 @@ export const CHAIN_CONFIG = {
   },
   mantle: {
     name: "Mantle",
-    rpc: "https://rpc.mantle.xyz",
+    rpc: process.env.MANTLE_RPC_URL ?? "https://rpc.mantle.xyz",
     chainId: 5000,
     token: "MNT",
     // Q402PaymentImplementationMantle deployed on Mantle Mainnet (Chain ID: 5000)
@@ -163,7 +163,7 @@ export const CHAIN_CONFIG = {
   },
   injective: {
     name: "Injective",
-    rpc: "https://sentry.evm-rpc.injective.network/",
+    rpc: process.env.INJECTIVE_RPC_URL ?? "https://sentry.evm-rpc.injective.network/",
     chainId: 1776,
     token: "INJ",
     // Q402PaymentImplementationInjective deployed on Injective EVM Mainnet (Chain ID: 1776).
@@ -179,7 +179,7 @@ export const CHAIN_CONFIG = {
   },
   monad: {
     name: "Monad",
-    rpc: "https://rpc.monad.xyz",
+    rpc: process.env.MONAD_RPC_URL ?? "https://rpc.monad.xyz",
     chainId: 143,
     token: "MON",
     // Q402PaymentImplementationMonad deployed on Monad Mainnet (Chain ID: 143)
@@ -194,7 +194,7 @@ export const CHAIN_CONFIG = {
   },
   scroll: {
     name: "Scroll",
-    rpc: "https://rpc.scroll.io",
+    rpc: process.env.SCROLL_RPC_URL ?? "https://rpc.scroll.io",
     chainId: 534352,
     token: "ETH",
     // Q402PaymentImplementationScroll — deterministic CREATE address from
@@ -209,7 +209,7 @@ export const CHAIN_CONFIG = {
   },
   arbitrum: {
     name: "Arbitrum",
-    rpc: "https://arb1.arbitrum.io/rpc",
+    rpc: process.env.ARBITRUM_RPC_URL ?? "https://arb1.arbitrum.io/rpc",
     chainId: 42161,
     token: "ETH",
     // Q402PaymentImplementationArbitrum — deterministic CREATE address from
