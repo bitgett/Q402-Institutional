@@ -138,6 +138,45 @@ describe("encrypt — failure modes", () => {
   });
 });
 
+describe("AAD binding (F5)", () => {
+  const aadA = Buffer.from("aw:kpk:v1:0xowner-a:0xaddr-a", "utf8");
+  const aadB = Buffer.from("aw:kpk:v1:0xowner-b:0xaddr-b", "utf8");
+  const SECRET = "0x" + "ab".repeat(32);
+
+  it("round-trips when encrypt + decrypt use the same AAD", () => {
+    const blob = encrypt(SECRET, aadA);
+    expect(decrypt(blob, aadA)).toBe(SECRET);
+  });
+
+  it("rejects a blob decrypted under a DIFFERENT AAD (record swap)", () => {
+    // A blob encrypted for record A, copied into record B, must not open:
+    // wrong AAD fails the bound attempt, and the no-AAD fallback fails too
+    // because the blob is AAD-bound. This is the cryptographic swap defense.
+    const blob = encrypt(SECRET, aadA);
+    expect(() => decrypt(blob, aadB)).toThrow();
+  });
+
+  it("rejects a bound blob decrypted with NO AAD", () => {
+    const blob = encrypt(SECRET, aadA);
+    expect(() => decrypt(blob)).toThrow();
+  });
+
+  it("legacy fallback: a no-AAD blob still opens when decrypt is given an AAD", () => {
+    // Existing wallets were encrypted before AAD binding. decrypt must
+    // transparently rescue them so live funds never lock out.
+    const legacyBlob = encrypt(SECRET); // no AAD — pre-migration shape
+    expect(decrypt(legacyBlob, aadA)).toBe(SECRET);
+    // …and the plain no-AAD path still works too.
+    expect(decrypt(legacyBlob)).toBe(SECRET);
+  });
+
+  it("a tampered bound blob still fails (AAD path doesn't weaken integrity)", () => {
+    const blob = encrypt(SECRET, aadA);
+    const bogusTag = "0".repeat(blob.tag.length);
+    expect(() => decrypt({ ...blob, tag: bogusTag }, aadA)).toThrow();
+  });
+});
+
 describe("constantTimeEqualHex", () => {
   it("returns true for identical hex strings of equal length", () => {
     expect(constantTimeEqualHex("deadbeef", "deadbeef")).toBe(true);

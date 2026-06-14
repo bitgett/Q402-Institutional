@@ -92,6 +92,19 @@ function lower(addr: string): string {
   return addr.toLowerCase();
 }
 
+/**
+ * AES-GCM Additional Authenticated Data binding a wallet's encrypted private
+ * key to its identity (owner + wallet address). Encrypting and decrypting with
+ * this AAD means a ciphertext blob can only be opened in the context of the
+ * exact record it was written for — a blob copied into another owner's (or
+ * another address's) record fails to authenticate. Defense-in-depth beneath
+ * the post-decrypt owner-address assertion in the signing path. Versioned
+ * prefix so the binding scheme can evolve without ambiguity. (F5)
+ */
+function walletKeyAad(ownerAddr: string, address: string): Buffer {
+  return Buffer.from(`aw:kpk:v1:${lower(ownerAddr)}:${lower(address)}`, "utf8");
+}
+
 const recordKey = (owner: string, walletId: string) =>
   `aw:${lower(owner)}:${lower(walletId)}`;
 const listKey = (owner: string) => `aw:list:${lower(owner)}`;
@@ -431,7 +444,7 @@ export async function createAgenticWallet(
     }
 
     const wallet = ethers.Wallet.createRandom();
-    const encryptedPK = encrypt(wallet.privateKey);
+    const encryptedPK = encrypt(wallet.privateKey, walletKeyAad(owner, wallet.address));
     const walletId = lower(wallet.address);
 
     const record: AgenticWalletRecord = {
@@ -514,7 +527,9 @@ export async function getActiveAgenticWallet(
  * string. Hand off immediately to the signer; do not log or persist.
  */
 export function decryptPrivateKey(record: AgenticWalletRecord): Hex {
-  const pk = decrypt(record.encryptedPK);
+  // Bind decryption to this record's identity (F5). New blobs authenticate
+  // with the AAD; legacy blobs fall back transparently inside `decrypt`.
+  const pk = decrypt(record.encryptedPK, walletKeyAad(record.ownerAddr, record.address));
   return (pk.startsWith("0x") ? pk : `0x${pk}`) as Hex;
 }
 
