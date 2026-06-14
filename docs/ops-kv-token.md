@@ -6,7 +6,7 @@ make in application code to shrink this — it's an Upstash dashboard
 configuration. This note exists so the operator knows the residual
 risk and the (out-of-code) mitigations.
 
-## What an attacker with the token can do
+## Blast radius of a leaked token
 
 1. **Overwrite any KV record.** Including `aw:{owner}:{walletId}`
    keystore blobs. They CANNOT read existing private keys without

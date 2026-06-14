@@ -167,14 +167,11 @@ export const CHAIN_CONFIG = {
     rpc: process.env.INJECTIVE_RPC_URL ?? "https://sentry.evm-rpc.injective.network/",
     chainId: 1776,
     token: "INJ",
-    // Q402PaymentImplementationInjective deployed on Injective EVM Mainnet (Chain ID: 1776).
-    // Same impl address as Stable/Mantle via deterministic CREATE (deployer + nonce 0).
+    // Q402PaymentImplementationInjective deployed on Injective EVM Mainnet (Chain ID: 1776,
+    // guarded impl deployed 2026-06-15).
     implContract: process.env.INJECTIVE_IMPLEMENTATION_CONTRACT ?? "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
-    // USDT only on Injective for now. Native USDC via Circle CCTP is announced for
-    // Q2 2026 mainnet rollout — Q402 will add USDC then. The IBC-bridged USDC at
-    // 0x2a25fbD67b3aE485e461fe55d9DbeF302B7D3989 is intentionally not supported to
-    // avoid the legacy/migration cycle. usdc field below mirrors usdt so chain-keyed
-    // lookups don't crash; SDK gates the exposed token list separately.
+    // Native Circle USDC (CCTP, live since 2026-06) + canonical Tether (USDT0), both 6 dec.
+    // Cosmos and EVM share one balance via the MultiVM Token Standard.
     usdc: { address: "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", decimals: 6, symbol: "USDC" },
     usdt: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6, symbol: "USDT" },
   },

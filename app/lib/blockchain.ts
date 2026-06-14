@@ -110,10 +110,9 @@ const CHAINS = [
       "https://1776.rpc.thirdweb.com",
     ],
     blockWindow: 1500,   // ~30 min (~1s effective block time on Injective EVM)
-    // USDT only on Injective for now. Native CCTP USDC is announced for Q2 2026
-    // — Q402 defers USDC integration until then to avoid the legacy/migration cycle
-    // Mantle had to do for USDT0. The IBC-bridged USDC at 0x2a25fbD6... is not Q402-supported.
+    // Injective supports native Circle USDC (CCTP, live since 2026-06) + USDT, both 6 dec.
     tokens: [
+      { symbol: "USDC", address: "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", decimals: 6 },
       { symbol: "USDT", address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
     ],
   },

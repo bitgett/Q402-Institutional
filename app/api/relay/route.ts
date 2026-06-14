@@ -228,7 +228,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // 10-chain entries stay in this file so flipping the flag back to false
   // (current default) restores the full surface with zero code churn.
   //
-  //   - Injective: USDT only. Native USDC via Circle CCTP is announced for Q2 2026.
+  //   - Injective: USDC + USDT (native Circle USDC via CCTP, live since 2026-06).
   //   - Ethereum:  USDC / USDT / RLUSD (Ripple USD, NY DFS regulated, decimals 18).
   //   - RLUSD is intentionally Ethereum-only — Ripple has not deployed RLUSD on
   //     the XRPL EVM Sidechain yet, and Q402 is EVM-only so XRPL native is
@@ -259,11 +259,9 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
         error:
           BNB_FOCUS_MODE && (chain !== "bnb" || !["USDC", "USDT"].includes(token))
             ? BNB_FOCUS_REJECTION_MESSAGE
-            : chain === "injective" && token === "USDC"
-              ? "USDC is not yet supported on Injective. Native USDC via Circle CCTP is announced for Q2 2026; until then use USDT on Injective."
-              : token === "RLUSD"
-                ? `RLUSD is only supported on Ethereum mainnet. Tried chain="${chain}".`
-                : `Token "${token}" is not supported on chain "${chain}".${allowedTokens ? ` Supported: ${allowedTokens.join(", ")}.` : ""}`,
+            : token === "RLUSD"
+              ? `RLUSD is only supported on Ethereum mainnet. Tried chain="${chain}".`
+              : `Token "${token}" is not supported on chain "${chain}".${allowedTokens ? ` Supported: ${allowedTokens.join(", ")}.` : ""}`,
         code: "TOKEN_NOT_SUPPORTED_ON_CHAIN",
       },
       { status: 400 }

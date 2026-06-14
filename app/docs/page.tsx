@@ -431,9 +431,9 @@ const result = await q402.pay({
 // result → { success: true, txHash: "0xabc...", tokenAmount: "50", chain: "bnb" }
 `} />
 
-            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">3 · Injective EVM (USDT-only)</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">3 · Injective EVM</h3>
             <p className="text-white/70 text-sm mb-3">
-              USDT only until Circle CCTP USDC (announced Q2 2026). SDK + server both reject <code className="text-orange-300">token: &quot;USDC&quot;</code> on Injective.
+              Native Circle USDC (CCTP) and USDT are both supported on Injective EVM. Cosmos and EVM share one balance via the MultiVM Token Standard.
             </p>
             <CodeBlock lang="javascript" code={`const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
@@ -946,11 +946,11 @@ const CONTRACTS = {
   eth:    "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD", // Q402 Ethereum  (chainId: 1)
   xlayer: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 X Layer   (chainId: 196)
   stable: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Stable    (chainId: 988)
-  mantle: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Mantle    (chainId: 5000)
-  injective: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Injective (chainId: 1776)
-  monad:  "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC", // Q402 Monad     (chainId: 143)
-  scroll: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Scroll    (chainId: 534352)
-  arbitrum: "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Arbitrum  (chainId: 42161)
+  mantle: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e", // Q402 Mantle    (chainId: 5000)
+  injective: "0x892E647FbbAdc8Ee8342710244931ea98529EA9C", // Q402 Injective (chainId: 1776)
+  monad:  "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8", // Q402 Monad     (chainId: 143)
+  scroll: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 Scroll    (chainId: 534352)
+  arbitrum: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699", // Q402 Arbitrum  (chainId: 42161)
 };
 
 // EIP-712 domain name — must match contract NAME constant exactly
