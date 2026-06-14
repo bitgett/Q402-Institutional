@@ -80,16 +80,22 @@ export function loadMasterKey(): KeystoreLoadResult {
  * Encrypt `plaintext` under the loaded master key. Generates a fresh
  * random nonce per call — never reuse a nonce with the same key.
  *
+ * `aad` (Additional Authenticated Data) is bound into the GCM tag but NOT
+ * stored in the ciphertext. Pass the record's identity (owner|address) so the
+ * blob can only ever be decrypted in the context of THAT record — a ciphertext
+ * copied into a different wallet record fails the tag. See `decrypt`.
+ *
  * Throws if the master key is unavailable. Callers in route handlers
  * should call `loadMasterKey()` first and surface a 503 cleanly; this
  * function assumes the env is configured.
  */
-export function encrypt(plaintext: string): EncryptedBlob {
+export function encrypt(plaintext: string, aad?: Buffer): EncryptedBlob {
   const k = loadMasterKey();
   if (!k.ok) throw new Error(`keystore: master key unavailable (${k.reason}: ${k.detail})`);
 
   const nonce = randomBytes(NONCE_BYTES);
   const cipher = createCipheriv(ALGO, k.key, nonce);
+  if (aad) cipher.setAAD(aad);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
 
@@ -105,8 +111,18 @@ export function encrypt(plaintext: string): EncryptedBlob {
  * ciphertext) or any field-length anomaly. Never returns garbled bytes —
  * GCM authenticates, so a corrupt blob fails loud rather than silently
  * producing wrong plaintext.
+ *
+ * AAD binding + legacy fallback (F5): when `aad` is supplied we first try to
+ * authenticate the blob WITH it (the path every new blob is written on). If
+ * that fails we retry WITHOUT aad to rescue legacy ciphertext written before
+ * AAD binding existed. This fallback never weakens a bound blob: a blob
+ * encrypted WITH aad also fails to authenticate without it, so the only
+ * ciphertext the no-aad retry can decrypt is genuinely-legacy ciphertext —
+ * which the caller-side owner-address assertion still protects against record
+ * swaps. A blob swapped between two records under different aad therefore
+ * fails outright (wrong aad → first attempt fails; bound blob → retry fails).
  */
-export function decrypt(blob: EncryptedBlob): string {
+export function decrypt(blob: EncryptedBlob, aad?: Buffer): string {
   const k = loadMasterKey();
   if (!k.ok) throw new Error(`keystore: master key unavailable (${k.reason}: ${k.detail})`);
 
@@ -116,10 +132,22 @@ export function decrypt(blob: EncryptedBlob): string {
   if (nonce.length !== NONCE_BYTES) throw new Error("keystore: bad nonce length");
   if (tag.length !== TAG_BYTES) throw new Error("keystore: bad auth-tag length");
 
-  const decipher = createDecipheriv(ALGO, k.key, nonce);
-  decipher.setAuthTag(tag);
-  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-  return plaintext.toString("utf8");
+  const attempt = (withAad: boolean): string => {
+    const decipher = createDecipheriv(ALGO, k.key, nonce);
+    if (withAad && aad) decipher.setAAD(aad);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+  };
+
+  if (aad) {
+    try {
+      return attempt(true);
+    } catch {
+      // Legacy blob (pre-AAD) — retry unbound. Throws if it's also bad.
+      return attempt(false);
+    }
+  }
+  return attempt(false);
 }
 
 /**
