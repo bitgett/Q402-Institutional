@@ -48,6 +48,7 @@ import {
 } from "@/app/lib/relayer";
 import { BNB_FOCUS_MODE, BNB_FOCUS_REJECTION_MESSAGE } from "@/app/lib/feature-flags";
 import type { Hex, Address } from "viem";
+import { witnessSignerMatches, type WitnessValue } from "@/app/lib/witness-verify";
 
 // Valid Ethereum address pattern
 const ETH_ADDR = /^0x[0-9a-fA-F]{40}$/;
@@ -415,7 +416,20 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // blip so a transient storage error can't lock out legitimate users.
   const relayFailKey = `relay-fail:${keyRecord.address.toLowerCase()}`;
   let recentRelayFails = 0;
-  try { recentRelayFails = Number((await kv.get<number>(relayFailKey)) ?? 0); } catch { /* fail-open */ }
+  try {
+    recentRelayFails = Number((await kv.get<number>(relayFailKey)) ?? 0);
+  } catch {
+    // Fail-CLOSED for trial keys: the gas-drain-via-bad-signature vector runs
+    // on free trial identities, so if KV is down and we can't bound failures,
+    // refuse the trial attempt rather than relay it unmetered. Paid keys
+    // fail-open (a KV blip shouldn't block a paying customer).
+    if (keyRecord.plan === "trial") {
+      return NextResponse.json(
+        { error: "Relay temporarily unavailable — please retry shortly." },
+        { status: 503, headers: { "Retry-After": "30" } },
+      );
+    }
+  }
   if (recentRelayFails >= 12) {
     return NextResponse.json(
       { error: "Too many failed relays on this key — temporarily blocked. Verify your signature and retry later." },
@@ -633,6 +647,36 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
 
   const tokenCfg = getTokenConfig(chain, token);
   let result: import("@/app/lib/relayer").SettleResult = { success: false, error: "No relay path matched" };
+
+  // ── 6c. Off-chain witness pre-check (before any credit/gas is spent) ──────
+  // The EIP-7702 witness path signs a TransferAuthorization; recover its signer
+  // here and reject a clear mismatch up front, so an invalid signature costs
+  // neither a quota credit nor relayer gas (a sybil gas-drain vector). Skipped
+  // for the EIP-3009 fallback (different scheme) and sandbox. Fail-open by
+  // construction — see witnessSignerMatches.
+  if (!isSandbox && !isXLayerEIP3009) {
+    const witnessValue: WitnessValue = {
+      owner:       from,
+      facilitator: relayerAddress,
+      token:       tokenCfg.address,
+      recipient:   to,
+      amount:      BigInt(amount),
+      nonce:       paymentNonce,
+      deadline:    BigInt(deadline),
+    };
+    if (!witnessSignerMatches(chain, chainCfg.chainId, witnessValue, witnessSig)) {
+      // Count it toward the per-key failure limit (same as an on-chain revert),
+      // then reject without reserving credit or relaying.
+      try {
+        const n = await kv.incr(relayFailKey);
+        if (n === 1) await kv.expire(relayFailKey, 900);
+      } catch { /* counter is best-effort */ }
+      return NextResponse.json(
+        { error: "Signature does not match the payment parameters." },
+        { status: 400 },
+      );
+    }
+  }
 
   // ── 7c. Atomic credit reservation (just before relay — race-safe) ────────
   // initScopedQuotaIfNeeded: SET NX with a seed pulled from legacy. On a
