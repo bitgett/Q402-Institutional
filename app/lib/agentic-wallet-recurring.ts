@@ -1151,28 +1151,35 @@ export async function recordRuleFired(
   nowMs: number,
   partialFailureNote: string | null = null,
 ): Promise<RecurringRule> {
-  const baseline = Math.max(nowMs, rule.nextRunAt);
   const firedSlot = rule.nextRunAt;
+  // Write the durable fired-marker FIRST — the load-bearing guard against an
+  // on-chain double-send, independent of the bookkeeping below.
+  await markSlotFired(rule.ruleId, firedSlot);
+  // F2: re-read the CURRENT rule and MERGE bookkeeping onto it instead of
+  // spreading the stale snapshot — a cancel/pause that landed during the relay
+  // must NOT be clobbered back to "active" and re-queued. The fire already
+  // moved funds, so we still record the count/spend, but we advance + re-queue
+  // ONLY if the rule is still active; if it was deleted, we don't recreate it.
+  const current = await getRecurringRule(rule.ownerAddr, rule.walletId, rule.ruleId);
+  if (!current) return rule;
+  const stillActive = current.status === "active";
+  const baseline = Math.max(nowMs, firedSlot);
   const next: RecurringRule = {
-    ...rule,
+    ...current,
     lastRunAt: nowMs,
     lastError: partialFailureNote,
     pendingFireAt: null,
-    totalFiredCount: rule.totalFiredCount + 1,
-    totalSpentUsd: rule.totalSpentUsd + amountUsd,
-    nextRunAt: computeNextFireAt(rule.frequency, baseline),
+    totalFiredCount: current.totalFiredCount + 1,
+    totalSpentUsd: current.totalSpentUsd + amountUsd,
+    nextRunAt: stillActive ? computeNextFireAt(current.frequency, baseline) : current.nextRunAt,
   };
-  // Write the durable fired-marker BEFORE the rule-state update so a
-  // failure here (KV blip, function timeout) doesn't leave the rule
-  // looking "still pending" to a re-entering heartbeat. The marker
-  // is the load-bearing guard against on-chain double-send; the rule
-  // update is bookkeeping for the dashboard.
-  await markSlotFired(rule.ruleId, firedSlot);
   await kv.set(ruleKey(rule.ownerAddr, rule.walletId, rule.ruleId), next);
-  await kv.zadd(RECURRING_NEXT_ACTION_ZSET, {
-    score: computeNextActionAt(next),
-    member: zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId),
-  });
+  if (stillActive) {
+    await kv.zadd(RECURRING_NEXT_ACTION_ZSET, {
+      score: computeNextActionAt(next),
+      member: zsetMember(rule.ownerAddr, rule.walletId, rule.ruleId),
+    });
+  }
   return next;
 }
 
