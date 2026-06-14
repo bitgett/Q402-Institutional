@@ -13,6 +13,7 @@
 import { kv } from "@vercel/kv";
 import { Wallet, getBytes } from "ethers";
 import { randomBytes, createHash } from "node:crypto";
+import { loadRelayerKey } from "@/app/lib/relayer-key";
 import {
   canonicalize,
   receiptDigest,
@@ -61,16 +62,24 @@ export function apiKeyFingerprint(apiKey: string): string {
 
 /**
  * Sign a receipt's settlement fields with the relayer's private key.
- * Throws if RELAYER_PRIVATE_KEY is unset.
+ *
+ * F9: routes through loadRelayerKey() instead of reading RELAYER_PRIVATE_KEY
+ * directly. The raw-env path would sign receipts with WHATEVER key is deployed
+ * — including a misconfigured wallet — minting attestations whose `signedBy`
+ * is an unexpected address. loadRelayerKey asserts the key derives to the
+ * canonical RELAYER_ADDRESS (app/lib/wallets.ts) and throws otherwise, so a
+ * receipt can never be signed by a key the relay itself wouldn't accept. The
+ * relay path already gates on this same loader, so by the time we sign here the
+ * key is known-valid; this just closes the receipt-only bypass.
  */
 export async function signReceiptFields(fields: ReceiptSignedFields): Promise<{
   signature: string;
   signedBy:  string;
   signedAt:  string;
 }> {
-  const pk = process.env.RELAYER_PRIVATE_KEY;
-  if (!pk) throw new Error("RELAYER_PRIVATE_KEY unset; cannot sign receipt");
-  const wallet    = new Wallet(pk);
+  const key = loadRelayerKey();
+  if (!key.ok) throw new Error(`Cannot sign receipt: relayer key ${key.reason} (${key.detail})`);
+  const wallet    = new Wallet(key.privateKey);
   const canonical = canonicalize(fields);
   const digest    = receiptDigest(canonical);
   const signature = await wallet.signMessage(getBytes(digest));

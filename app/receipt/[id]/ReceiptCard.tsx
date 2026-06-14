@@ -8,6 +8,7 @@ import {
   type Receipt,
   type ReceiptSignedFields,
 } from "@/app/lib/receipt-shared";
+import { RELAYER_ADDRESS } from "@/app/lib/wallets";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -129,10 +130,18 @@ export default function ReceiptCard({ initialReceipt }: { initialReceipt: Receip
     // ECDSA recovery is sub-millisecond, which feels instant and skips the
     // visual moment we want for the demo.
     setTimeout(() => {
-      const ok = verifyReceiptSignature(signedFields, receipt.signature, receipt.signedBy);
+      // F9: anchor the recovery to the KNOWN relayer address, not the receipt's
+      // own self-reported signedBy. Passing receipt.signedBy made Verify a
+      // self-consistency check — a forged receipt signed by any key and labelled
+      // with a matching signedBy would show "Verified". We also require the
+      // receipt's signedBy to equal the relayer, so a mismatch is surfaced.
+      const anchored = RELAYER_ADDRESS.toLowerCase();
+      const ok =
+        receipt.signedBy.toLowerCase() === anchored &&
+        verifyReceiptSignature(signedFields, receipt.signature, anchored);
       setVerify(ok
         ? { kind: "ok" }
-        : { kind: "fail", reason: "Signature does not recover to the relayer address." });
+        : { kind: "fail", reason: "Signature does not recover to the Q402 relayer address." });
     }, 400);
   };
 
