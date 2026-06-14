@@ -37,7 +37,7 @@ export const v2 = {
   // One-off literals the prototype uses inline — surfaced so views don't
   // re-discover them.
   surfaceFill: "rgba(9,20,36,.78)", // .surface background
-  topbarFill: "rgba(7,16,31,.86)", // sticky topbar glass
+  topbarFill: "#08121f", // sticky topbar — opaque (near-bg) so the page's corner radial glows don't bleed through the translucent bar unevenly, which tinted the right end teal vs the neutral left end
   modalFill: "#0c1829", // .modal background
   inputFill: "#07111f", // .field input / .keybox / .code background
   ringTrack: "#19273b",
