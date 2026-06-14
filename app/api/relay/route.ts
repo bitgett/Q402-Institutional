@@ -105,8 +105,12 @@ export async function POST(req: NextRequest) {
     const stack = err instanceof Error
       ? (err.stack ?? "").split("\n").slice(0, 6).map((s) => s.trim()).join(" | ")
       : "";
+    // The error message + step name stay (downstream consumers parse them),
+    // but the stack is an internal diagnostic — don't return it to external
+    // callers in production. The console.error above always retains it.
+    const includeStack = process.env.NODE_ENV !== "production";
     return NextResponse.json(
-      { error: `relay_failed at step=${lastRelayStep}: ${message}`, step: lastRelayStep, stack },
+      { error: `relay_failed at step=${lastRelayStep}: ${message}`, step: lastRelayStep, ...(includeStack ? { stack } : {}) },
       { status: 500 },
     );
   }

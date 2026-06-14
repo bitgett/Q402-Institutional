@@ -84,6 +84,7 @@ export const CRON_NAMES = {
   CCIP_PENDING_FUND_RECONCILE: "ccip-pending-fund-reconcile",
   TREASURY_REBALANCE: "treasury-rebalance",
   OFAC_REFRESH: "ofac-refresh",
+  CRON_WATCHDOG: "cron-watchdog",
 } as const;
 export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
 
@@ -159,5 +160,14 @@ export const CRON_META: Record<CronName, CronMeta> = {
   [CRON_NAMES.OFAC_REFRESH]: {
     expectedIntervalMs: 24 * 60 * 60 * 1000,
     staleAfterMs: 50 * 60 * 60 * 1000,
+  },
+  // Vercel-native staleness watchdog — runs every 10 min on Vercel infra
+  // (independent of the Render heartbeat that drives most other crons), so
+  // a Render outage that silently stops deposit-scan / ofac / treasury is
+  // DETECTED and paged here. 35-min stale window (~3× cadence) tolerates a
+  // deploy blip without self-noise.
+  [CRON_NAMES.CRON_WATCHDOG]: {
+    expectedIntervalMs: 10 * 60 * 1000,
+    staleAfterMs: 35 * 60 * 1000,
   },
 };

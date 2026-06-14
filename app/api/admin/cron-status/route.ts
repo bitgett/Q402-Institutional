@@ -54,6 +54,7 @@ const TRACKED: CronName[] = [
   CRON_NAMES.CCIP_PENDING_FUND_RECONCILE,
   CRON_NAMES.TREASURY_REBALANCE,
   CRON_NAMES.OFAC_REFRESH,
+  CRON_NAMES.CRON_WATCHDOG,
 ];
 
 function checkAdminAuth(req: NextRequest): NextResponse | null {
