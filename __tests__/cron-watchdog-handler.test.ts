@@ -57,7 +57,7 @@ describe("cron-watchdog handler", () => {
     expect(body.staleCount).toBe(1);
     expect(body.stale.map((s: { name: string }) => s.name)).toContain("deposit-scan");
     expect(mockAlerts.sendOpsAlert).toHaveBeenCalledTimes(1);
-    const [message, severity] = mockAlerts.sendOpsAlert.mock.calls[0];
+    const [message, severity] = mockAlerts.sendOpsAlert.mock.calls[0] as unknown as [string, string];
     expect(severity).toBe("critical");
     expect(message).toContain("deposit-scan");
   });
