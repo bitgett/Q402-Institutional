@@ -103,11 +103,11 @@ describe("dashboard — data fetch gating (no leak from mismatched wallets)", ()
     // `!walletMatches` early return — so a mismatched wallet is hard-blocked
     // before DashboardV2 (and ActivityView's tx fetch) ever mounts. This
     // ordering IS the no-leak guard now; assert it can't be reordered.
-    // Match the actual render JSX (`<DashboardV2 />`, with the space before
-    // the self-close) — NOT the `<DashboardV2/>` mention in the file's
-    // docstring, which appears earlier.
+    // Match the actual render JSX (`<DashboardV2 ` — the open tag now carries
+    // an onScopeChange prop, so match the tag name + trailing space) — NOT the
+    // `<DashboardV2/>` (no space) mention in the file's docstring above.
     const gReturnIdx = dashboardSource.indexOf("<WrongWalletHardBlock\n");
-    const v2RenderIdx = dashboardSource.indexOf("<DashboardV2 />");
+    const v2RenderIdx = dashboardSource.indexOf("<DashboardV2 ");
     expect(gReturnIdx).toBeGreaterThan(-1);
     expect(v2RenderIdx).toBeGreaterThan(-1);
     expect(v2RenderIdx).toBeGreaterThan(gReturnIdx);

@@ -549,7 +549,7 @@ async function processOneRule(
   // may have moved). Page ops to verify on-chain. Mirrors
   // /api/wallet/agentic/send's relay_unreachable_uncertain handling.
   if (relayUncertain !== null && settledRows.length === 0) {
-    await markSlotFired(rule.ruleId, rule.nextRunAt);
+    await markSlotFired(rule.ruleId, rule.nextRunAt, "uncertain");
     await recordRuleTransientError(
       rule,
       `relay outcome uncertain (may have settled on-chain): ${relayUncertain}`,

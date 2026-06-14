@@ -91,7 +91,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (typeof body.apiKey !== "string" || body.apiKey.length === 0) {
     return NextResponse.json({ error: "API_KEY_REQUIRED" }, { status: 400 });
   }
-  if (body.apiKey.startsWith("q402_test_")) {
+  // Reject BOTH sandbox prefixes (q402_test_ and the legacy q402_sandbox_)
+  // — db.ts treats both as sandbox, and rec.isSandbox is the defence-in-depth
+  // backstop for any record flagged sandbox regardless of prefix. Mirrors the
+  // send / bridge / recurring / yield routes (which all gate both).
+  if (body.apiKey.startsWith("q402_test_") || body.apiKey.startsWith("q402_sandbox_")) {
     return NextResponse.json(
       { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey to read wallet info." },
       { status: 401 },
@@ -99,7 +103,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const rec = await getApiKeyRecord(body.apiKey);
-  if (!rec || !rec.active) {
+  if (!rec || !rec.active || rec.isSandbox) {
     return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
   }
   const owner = rec.address.toLowerCase();

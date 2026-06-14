@@ -213,6 +213,10 @@ interface SettledMarker {
   txHash?: string;
   legs?: SendRecord["legs"];
   settledAt: number;
+  /** Content fingerprint this idempotency key first settled. A later request
+   *  reusing the SAME key with a DIFFERENT payload (different fp) is rejected
+   *  409 instead of being replayed the wrong settlement. */
+  fp?: string;
 }
 
 /**
@@ -511,7 +515,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     /^[A-Za-z0-9_.:-]{8,200}$/.test(body.idempotencyKey)
       ? body.idempotencyKey
       : null;
-  const settledKey = clientIdemKey ? sendSettledKey(`idem:${clientIdemKey}`) : null;
+  // Namespace the durable key by owner+walletId so two different owners (or
+  // two wallets) that pass the SAME idempotencyKey string can never collide
+  // on one global slot (cross-account replay). Content binding via fp (stored
+  // in the marker, checked below) catches same-key/different-payload reuse.
+  const settledKey = clientIdemKey ? sendSettledKey(`${owner}:${walletId}:idem:${clientIdemKey}`) : null;
 
   // ── Durable settled-marker replay guard ────────────────────────────────
   // ONLY active when a client idempotency key scoped the marker (settledKey
@@ -531,6 +539,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
     if (priorSettled) {
+      // Same idempotency key, DIFFERENT payment payload → reject instead of
+      // replaying the wrong settlement back to the caller.
+      if (priorSettled.fp && priorSettled.fp !== fp) {
+        return NextResponse.json(
+          {
+            error: "idempotency_key_reused",
+            message:
+              "This idempotency key already settled a different payment. " +
+              "Use a fresh idempotency key for a new payment.",
+          },
+          { status: 409 },
+        );
+      }
       const isPartial = priorSettled.status === "partial";
       const isUncertain = priorSettled.status === "relay_unreachable_uncertain";
       return NextResponse.json(
@@ -934,6 +955,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         txHash: settledLegs[0]?.txHash,
         legs: splitRecord.legs,
         settledAt: Date.now(),
+        fp,
       };
       const ok = await writeSettledMarker(settledKey, marker);
       if (!ok) {
@@ -1135,6 +1157,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       status: "complete",
       txHash: finalRecord.txHash,
       settledAt: Date.now(),
+      fp,
     };
     const ok = await writeSettledMarker(settledKey, marker);
     if (!ok) {

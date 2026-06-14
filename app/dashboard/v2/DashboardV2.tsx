@@ -34,7 +34,14 @@ import { DeveloperView } from "./views/DeveloperView";
 import DashboardBanners from "./DashboardBanners";
 import { useDashboardIdentity } from "./identity-context";
 
-export default function DashboardV2() {
+export default function DashboardV2({
+  onScopeChange,
+}: {
+  /** Notifies the host (app/dashboard/page.tsx) when the user toggles the
+   *  scope chip, so the credit-quota source (trialViewActive) stays in sync
+   *  with the on-screen scope instead of frozen at its mount value. */
+  onScopeChange?: (scope: Scope) => void;
+} = {}) {
   const { address, signMessage } = useWallet();
   const router = useRouter();
   // Initial view is deep-linkable via ?view= (e.g. friendly-error CTAs that
@@ -87,8 +94,11 @@ export default function DashboardV2() {
     (next: Scope) => {
       setScope(next);
       writeUrl(view, next);
+      // Keep the host's credit-quota scope (trialViewActive) in lockstep with
+      // the chip, so the quota + banner never lag a scope toggle.
+      onScopeChange?.(next);
     },
-    [writeUrl, view],
+    [writeUrl, view, onScopeChange],
   );
 
   // Entitled-scope default, applied DURING RENDER (React's "adjust state when

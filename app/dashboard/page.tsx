@@ -941,8 +941,11 @@ export default function DashboardPage() {
   return (
     <DashboardIdentityProvider value={identityValue}>
       {/* The v2 dashboard shell. It owns its own scope chip + view router and
-          reads identity/subscription/lifecycle from the context above. */}
-      <DashboardV2 />
+          reads identity/subscription/lifecycle from the context above.
+          onScopeChange keeps the credit-quota scope (trialViewActive, which
+          drives remainingCredits/baseCredits + the banner) in sync with the
+          chip so a scope toggle never leaves the quota on the old scope. */}
+      <DashboardV2 onScopeChange={(s) => setTrialViewActive(s === "trial")} />
 
       {showAutoTrial && (
         <TrialActivationModal
