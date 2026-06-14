@@ -3,10 +3,9 @@
 /**
  * /agents — Q402 Agent Wallet landing.
  *
- * Brand-distinct surface: deep slate base, emerald accent for the
- * Agent-Wallet feature line, console mockup right of the hero. Avoids
- * the navy/yellow gradient that the main landing uses while staying
- * inside the broader "developer infrastructure" voice.
+ * Brand-distinct surface: deep slate base, yellow (#F5C518) accent for
+ * the Agent-Wallet feature line, console mockup right of the hero —
+ * aligned with the Q402 brand accent used across the rest of the app.
  *
  * No pricing tier on this page; the trial promise (2,000 sponsored TX on
  * BNB Chain) appears in the proof row, and the page funnels into the
@@ -41,7 +40,7 @@ export default function AgentsPage() {
         className="pt-24 pb-24 px-6 relative overflow-hidden"
         style={{
           background:
-            "radial-gradient(900px 500px at 70% 0%, rgba(34,197,94,0.12), transparent 60%), linear-gradient(180deg, #060B14 0%, #08111E 100%)",
+            "radial-gradient(900px 500px at 70% 0%, rgba(245,197,24,0.12), transparent 60%), linear-gradient(180deg, #060B14 0%, #08111E 100%)",
           color: "#E2E8F0",
         }}
       >
@@ -108,7 +107,7 @@ function Hero() {
         <Link
           href="/dashboard"
           className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-semibold transition-colors"
-          style={{ background: "#22C55E", color: "#0B1A12" }}
+          style={{ background: "#F5C518", color: "#0B1A12" }}
         >
           Open dashboard →
         </Link>
@@ -490,7 +489,7 @@ function Closing() {
       className="rounded-2xl border p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-5"
       style={{
         background:
-          "linear-gradient(135deg, rgba(34,197,94,0.10) 0%, rgba(8,17,30,0.6) 70%)",
+          "linear-gradient(135deg, rgba(245,197,24,0.10) 0%, rgba(8,17,30,0.6) 70%)",
         borderColor: "rgba(245,197,24,0.22)",
       }}
     >
@@ -504,7 +503,7 @@ function Closing() {
         <Link
           href="/dashboard"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold"
-          style={{ background: "#22C55E", color: "#0B1A12" }}
+          style={{ background: "#F5C518", color: "#0B1A12" }}
         >
           Create Agent Wallet →
         </Link>

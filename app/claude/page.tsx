@@ -450,7 +450,7 @@ export default function ClaudePage() {
             </h2>
             <p className="text-white/75 text-sm md:text-base max-w-2xl leading-relaxed">
               Two modes use a local PK; one lets Q402 sign server-side. Most users want{" "}
-              <span className="text-emerald-300 font-semibold">Mode C</span> — no PK, just an API key.
+              <span className="text-yellow font-semibold">Mode C</span> — no PK, just an API key.
             </p>
           </div>
 
@@ -463,22 +463,22 @@ export default function ClaudePage() {
                 borderColor: "rgba(245,197,24,0.30)",
               }}
             >
-              <div className="absolute -top-2 right-3 text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded bg-emerald-500 text-black">
+              <div className="absolute -top-2 right-3 text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded bg-yellow text-black">
                 Recommended
               </div>
-              <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/85 font-semibold mb-1">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-yellow/85 font-semibold mb-1">
                 Mode C
               </div>
               <div className="text-white font-semibold text-base mb-2">
                 Server signs for you
               </div>
               <div className="text-[12.5px] text-white/75 leading-relaxed mb-3">
-                <span className="text-emerald-300 font-medium">No PK in env.</span> No MetaMask popup. Best for AI agents.
+                <span className="text-yellow font-medium">No PK in env.</span> No MetaMask popup. Best for AI agents.
               </div>
               <div className="text-[10.5px] text-white/45 leading-relaxed">
                 Set in <code className="text-yellow text-[10px]">~/.q402/mcp.env</code>:
               </div>
-              <pre className="mt-1 text-[10.5px] text-emerald-300/85 font-mono bg-black/30 rounded px-2 py-1 leading-tight">
+              <pre className="mt-1 text-[10.5px] text-yellow/85 font-mono bg-black/30 rounded px-2 py-1 leading-tight">
 {`Q402_MULTICHAIN_API_KEY=q402_live_…`}
               </pre>
             </div>
