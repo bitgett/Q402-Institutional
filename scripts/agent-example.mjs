@@ -119,7 +119,7 @@ const CHAINS = {
   mantle: {
     id: 5000, name: "Mantle", domainName: "Q402 Mantle",
     rpc: envVars.MANTLE_RPC_URL ?? "https://rpc.mantle.xyz",
-    impl: envVars.MANTLE_IMPLEMENTATION_CONTRACT ?? "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
+    impl: envVars.MANTLE_IMPLEMENTATION_CONTRACT ?? "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
     tokens: {
       USDC: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
       // USDT on Mantle is served via USDT0 OFT (0x779Ded...) per 2025-11 migration.
@@ -132,10 +132,12 @@ const CHAINS = {
   injective: {
     id: 1776, name: "Injective", domainName: "Q402 Injective",
     rpc: envVars.INJECTIVE_RPC_URL ?? "https://sentry.evm-rpc.injective.network/",
-    impl: envVars.INJECTIVE_IMPLEMENTATION_CONTRACT ?? "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
-    // Injective EVM (chainId 1776, launched 2025-11-11). USDT only for now —
-    // native CCTP USDC announced for Q2 2026; Q402 will add USDC then.
+    impl: envVars.INJECTIVE_IMPLEMENTATION_CONTRACT ?? "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
+    // Injective EVM (chainId 1776). Native Circle USDC (CCTP, live since 2026-06)
+    // + canonical Tether (USDT0). Cosmos and EVM share one balance via the
+    // MultiVM Token Standard.
     tokens: {
+      USDC: { address: "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", decimals: 6 },
       USDT: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
     },
     nativeCurrency: { name: "Injective", symbol: "INJ", decimals: 18 },
@@ -145,7 +147,7 @@ const CHAINS = {
   monad: {
     id: 143, name: "Monad", domainName: "Q402 Monad",
     rpc: envVars.MONAD_RPC_URL ?? "https://rpc.monad.xyz",
-    impl: envVars.MONAD_IMPLEMENTATION_CONTRACT ?? "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
+    impl: envVars.MONAD_IMPLEMENTATION_CONTRACT ?? "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f",
     // Monad mainnet (chainId 143). Native Circle USDC via CCTP V2 + USDT0 (LayerZero OFT).
     // EIP-7702 fully supported (note: delegated EOAs can't dip below 10 MON in a single TX
     // — Q402 only moves ERC-20s so the user's MON balance is unchanged and the rule
@@ -161,7 +163,7 @@ const CHAINS = {
   scroll: {
     id: 534352, name: "Scroll", domainName: "Q402 Scroll",
     rpc: envVars.SCROLL_RPC_URL ?? "https://rpc.scroll.io",
-    impl: envVars.SCROLL_IMPLEMENTATION_CONTRACT ?? "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+    impl: envVars.SCROLL_IMPLEMENTATION_CONTRACT ?? "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1",
     // Scroll mainnet (chainId 534352). Native Circle USDC + canonical Tether USDT,
     // both 6 decimals (addresses confirmed with the Scroll team during the
     // integration handshake). EIP-7702 is live on Scroll mainnet via the Euclid
@@ -179,7 +181,7 @@ const CHAINS = {
   arbitrum: {
     id: 42161, name: "Arbitrum", domainName: "Q402 Arbitrum",
     rpc: envVars.ARBITRUM_RPC_URL ?? "https://arb1.arbitrum.io/rpc",
-    impl: envVars.ARBITRUM_IMPLEMENTATION_CONTRACT ?? "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
+    impl: envVars.ARBITRUM_IMPLEMENTATION_CONTRACT ?? "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     // Arbitrum One mainnet (chainId 42161). Native Circle USDC (CCTP) + canonical
     // Tether USDT, both 6 decimals. EIP-7702 live on Arbitrum since ArbOS 40
     // "Callisto"; ArbOS 51 "Dia" (activated 2026-01-08) refined precompile

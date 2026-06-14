@@ -90,7 +90,7 @@ const CHAINS = {
   mantle: {
     id: 5000, name: "Mantle", domainName: "Q402 Mantle",
     rpc: "https://rpc.mantle.xyz",
-    impl: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
+    impl: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
     // USDT on Mantle = USDT0 OFT (0x779Ded...) as of the 2025-11 ecosystem migration.
     token: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", decimals: 6, symbol: "USDT",
     explorer: "https://explorer.mantle.xyz/tx/",
@@ -98,15 +98,15 @@ const CHAINS = {
   injective: {
     id: 1776, name: "Injective", domainName: "Q402 Injective",
     rpc: "https://sentry.evm-rpc.injective.network/",
-    impl: "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
-    // Injective EVM: USDT only (native CCTP USDC pending Q2 2026 rollout).
-    token: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6, symbol: "USDT",
+    impl: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
+    // Default to native Circle USDC (CCTP, live since 2026-06) on Injective. USDT also supported.
+    token: "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", decimals: 6, symbol: "USDC",
     explorer: "https://blockscout.injective.network/tx/",
   },
   monad: {
     id: 143, name: "Monad", domainName: "Q402 Monad",
     rpc: "https://rpc.monad.xyz",
-    impl: "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
+    impl: "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f",
     // Default to USDC (native Circle CCTP) on Monad. USDT0 also supported.
     token: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", decimals: 6, symbol: "USDC",
     explorer: "https://monadscan.com/tx/",
@@ -114,7 +114,7 @@ const CHAINS = {
   scroll: {
     id: 534352, name: "Scroll", domainName: "Q402 Scroll",
     rpc: "https://rpc.scroll.io",
-    impl: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+    impl: "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1",
     // Default to USDC (native Circle) on Scroll. USDT also supported.
     token: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", decimals: 6, symbol: "USDC",
     explorer: "https://scrollscan.com/tx/",
@@ -122,7 +122,7 @@ const CHAINS = {
   arbitrum: {
     id: 42161, name: "Arbitrum", domainName: "Q402 Arbitrum",
     rpc: "https://arb1.arbitrum.io/rpc",
-    impl: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
+    impl: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     // Default to USDC (native Circle CCTP) on Arbitrum One. USDT also supported.
     token: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6, symbol: "USDC",
     explorer: "https://arbiscan.io/tx/",

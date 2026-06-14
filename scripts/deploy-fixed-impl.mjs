@@ -52,11 +52,15 @@ const domainName = manifest.chains?.[chain]?.witness?.domainName;
 const chainId = manifest.chains?.[chain]?.chainId;
 if (!domainName || !chainId) { console.error(`manifest has no domainName/chainId for ${chain}`); process.exit(1); }
 
-// Guarded reference source → swap only the NAME constant for this chain.
+// Guarded reference source → swap ONLY the NAME constant DECLARATION for this
+// chain. Anchor on `constant NAME    = "…"` so we hit line 47, not the first
+// quoted "Q402 BNB Chain" (a doc-comment higher up).
 const refPath = resolve(root, "contracts/deployed/bnb/Q402PaymentImplementationBNB.sol");
 let source = readFileSync(refPath, "utf8");
-if (!source.includes('"Q402 BNB Chain"')) { console.error("reference NAME marker not found — source changed?"); process.exit(1); }
-source = source.replace('"Q402 BNB Chain"', `"${domainName}"`);
+const NAME_DECL = 'constant NAME    = "Q402 BNB Chain"';
+if (!source.includes(NAME_DECL)) { console.error("reference NAME constant declaration not found — source changed?"); process.exit(1); }
+source = source.replace(NAME_DECL, `constant NAME    = "${domainName}"`);
+if (!source.includes(`constant NAME    = "${domainName}"`)) { console.error("NAME constant replacement failed"); process.exit(1); }
 
 // ── Compile (solc 0.8.20, optimizer 200, london — matches the verified metadata)
 const solc = require("solc");
@@ -89,6 +93,23 @@ const provider = new ethers.JsonRpcProvider(rpc);
 const wallet = new ethers.Wallet(pk, provider);
 console.error(`Deploying guarded impl to ${chain} (chainId ${chainId}, NAME="${domainName}") from ${wallet.address} …`);
 const factory = new ethers.ContractFactory(abi, bytecode, wallet);
+
+// ── Gas preflight: estimate deploy cost and confirm the wallet can cover it
+// (avoids a half-spent / failed tx on a thin balance like Scroll/Arbitrum).
+const deployTx = await factory.getDeployTransaction();
+const [estGas, feeData, balance] = await Promise.all([
+  provider.estimateGas({ from: wallet.address, data: deployTx.data }),
+  provider.getFeeData(),
+  provider.getBalance(wallet.address),
+]);
+const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+const estCost = (estGas * gasPrice * 12n) / 10n; // +20% headroom
+console.error(`Preflight: estGas=${estGas} gasPrice=${ethers.formatUnits(gasPrice, "gwei")}gwei estCost≈${ethers.formatEther(estCost)} balance=${ethers.formatEther(balance)}`);
+if (balance < estCost) {
+  console.error(`\n! insufficient balance on ${chain}: need ≈${ethers.formatEther(estCost)}, have ${ethers.formatEther(balance)} — fund ${wallet.address} and re-run.`);
+  process.exit(1);
+}
+
 const contract = await factory.deploy();
 await contract.waitForDeployment();
 const address = await contract.getAddress();
@@ -109,9 +130,24 @@ try {
   ownerGuardOk = typeof d === "string" && d.slice(0, 10).toLowerCase() === SEL_OWNER_MISMATCH;
 }
 
-console.log(JSON.stringify({ chain, chainId, address, deployer: wallet.address, ownerGuardConfirmed: ownerGuardOk }, null, 2));
-if (!ownerGuardOk) {
-  console.error("\n! owner-binding probe did NOT confirm OwnerMismatch on the new address — do NOT wire it in; investigate.");
+// ── Verify the on-chain EIP-712 domain identity. The domain separator derives
+// from NAME, so a wrong NAME means every real signature fails to verify. Assert
+// NAME() == domainName and VERSION() == "1" before reporting success.
+const idc = new ethers.Contract(address, [
+  "function NAME() view returns (string)",
+  "function VERSION() view returns (string)",
+], provider);
+const onchainName = await idc.NAME();
+const onchainVersion = await idc.VERSION();
+const nameOk = onchainName === domainName;
+const versionOk = onchainVersion === "1";
+
+console.log(JSON.stringify({
+  chain, chainId, address, deployer: wallet.address,
+  onchainName, onchainVersion, nameOk, versionOk, ownerGuardConfirmed: ownerGuardOk,
+}, null, 2));
+if (!nameOk || !versionOk || !ownerGuardOk) {
+  console.error(`\n! deploy verification FAILED (nameOk=${nameOk} versionOk=${versionOk} ownerGuard=${ownerGuardOk}) — do NOT wire it in.`);
   process.exit(1);
 }
-console.error(`\n✓ owner-binding confirmed on ${chain}. Next: set Q402_IMPL_PER_CHAIN["${chain}"] + manifest implContract to ${address}, re-delegate, then remove "${chain}" from DISABLED_CHAINS (chain-status.ts + verify-contracts.mjs).`);
+console.error(`\n✓ ${chain}: NAME()="${onchainName}" + owner-binding confirmed. Next: wire ${address} into Q402_IMPL_PER_CHAIN + manifest + relayer + SDK + agentic-sign + MCP, re-delegate, then remove "${chain}" from DISABLED_CHAINS. Run scripts/verify-contracts.mjs to confirm.`);

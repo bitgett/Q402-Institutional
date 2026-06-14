@@ -145,7 +145,7 @@ const Q402_CHAIN_CONFIG = {
     chainId:      5000,
     mode:         "eip7702",
     domainName:   "Q402 Mantle",
-    implContract: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
+    implContract: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
     usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
     // USDT0 (LayerZero OFT) — Mantle ecosystem default since the 2025-11-27 migration.
     // Legacy bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) sunset 2026-02-03.
@@ -157,7 +157,7 @@ const Q402_CHAIN_CONFIG = {
     chainId:      1776,
     mode:         "eip7702",
     domainName:   "Q402 Injective",
-    implContract: "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
+    implContract: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
     // Native Circle USDC (CCTP, 6 dec) + canonical Tether (USDT0, 6 dec).
     usdc: { address: "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", decimals: 6 },
     usdt: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
@@ -168,7 +168,7 @@ const Q402_CHAIN_CONFIG = {
     chainId:      143,
     mode:         "eip7702",
     domainName:   "Q402 Monad",
-    implContract: "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
+    implContract: "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f",
     // Native Circle USDC (CCTP V2, 6 dec) + USDT0 (LayerZero OFT, 6 dec).
     // Monad fully supports EIP-7702. Reserve-balance rule (delegated EOA can't
     // dip below 10 MON in a single TX) does not affect ERC-20 transfers since
@@ -182,7 +182,7 @@ const Q402_CHAIN_CONFIG = {
     chainId:      534352,
     mode:         "eip7702",
     domainName:   "Q402 Scroll",
-    implContract: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+    implContract: "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1",
     // Native Circle USDC + canonical Tether on Scroll mainnet, both 6 dec.
     // EIP-7702 is live on Scroll mainnet since the Euclid Phase 2 upgrade
     // (2025-04-22). zkEVM byte-level equivalence makes the witness path
@@ -196,11 +196,11 @@ const Q402_CHAIN_CONFIG = {
     chainId:      42161,
     mode:         "eip7702",
     domainName:   "Q402 Arbitrum",
-    implContract: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
+    implContract: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     // Native Circle USDC (CCTP) + canonical Tether on Arbitrum One, both 6 dec.
     // EIP-7702 live on Arbitrum One since ArbOS 40 "Callisto"; ArbOS 51 "Dia"
-    // (2026-01-08) refined precompile delegation. Same impl address as
-    // Stable/Mantle/Injective/Scroll via deterministic CREATE.
+    // (2026-01-08) refined precompile delegation. The impl address is per-chain
+    // (CREATE depends on the deployer nonce) — not shared across chains.
     // The legacy bridged USDC.e (0xFF970A61...) is NOT supported.
     usdc: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
     usdt: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
