@@ -6,7 +6,9 @@ import { SDK_VERSION, MCP_VERSION } from "@/app/lib/version";
 
 const NAV = [
   { id: "overview",       label: "Overview",        icon: "○" },
-  { id: "whats-new",      label: "What's New",      icon: "○" },
+  { id: "agentic-wallet", label: "Agentic Wallet",  icon: "○" },
+  { id: "yield",          label: "Yield · Aave V3", icon: "○" },
+  { id: "bridge",         label: "Bridge · CCIP",   icon: "○" },
   { id: "how-it-works",   label: "How It Works",    icon: "○" },
   { id: "quickstart",     label: "Quick Start",     icon: "○" },
   { id: "claude-mcp",     label: "MCP for AI Clients", icon: "○" },
@@ -225,47 +227,84 @@ export default function DocsPage() {
             </div>
           </Section>
 
-          {/* ── WHAT'S NEW ── */}
-          <Section id="whats-new" title="What's New">
+          {/* ── AGENTIC WALLET ── */}
+          <Section id="agentic-wallet" title="Agentic Wallet">
             <p className="text-white/75 text-base leading-relaxed mb-6">
-              Three launches, one gasless rail. Agentic Wallet v2, Aave V3 yield,
-              and the Chainlink CCIP bridge all run on the same EIP-712 + EIP-7702
-              settlement layer — no new keys, no new gas.
+              A dedicated signing wallet for each AI agent, with on-chain guardrails so an agent
+              can transact without holding your main keys. Each owner can provision up to 10 agent
+              wallets; every payment settles gaslessly through the same EIP-712 + EIP-7702 relay.
             </p>
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid sm:grid-cols-3 gap-4 mb-6">
               {[
-                {
-                  tag: "Agentic Wallet v2",
-                  title: "Wallets your agents can actually be trusted with",
-                  body: "A dedicated purse per agent with hard guardrails: per-transaction and daily spend caps, multi-payee batches, and on-chain ERC-8004 reputation gates. Up to 10 wallets per owner, all gasless.",
-                  chips: ["Spend caps", "Reputation gate", "Batch × 20"],
-                },
-                {
-                  tag: "Aave V3 Yield",
-                  title: "Idle stablecoins earn — without touching gas",
-                  body: "Supply and withdraw on Aave V3 over BNB Chain straight from the Agent Wallet. The same EIP-7702 relay sponsors the gas, so your treasury compounds while paying $0 to move.",
-                  chips: ["Gasless supply", "Withdraw anytime", "BNB Chain"],
-                },
-                {
-                  tag: "Chainlink CCIP Bridge",
-                  title: "Move USDC across chains in one signed request",
-                  body: "Native USDC bridging over Chainlink CCIP across the Ethereum, Avalanche, and Arbitrum triangle. Quote, send, and track from the dashboard or MCP — no manual bridge hops.",
-                  chips: ["ETH · AVAX · ARB", "Native USDC", "CCIP"],
-                },
-              ].map((f) => (
-                <div key={f.tag} className="rounded-xl p-5 border border-white/8 flex flex-col" style={{ background: "rgba(255,255,255,0.02)" }}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge color="#F5C518">New</Badge>
-                    <span className="text-sm font-semibold text-white/90">{f.tag}</span>
-                  </div>
-                  <div className="text-[13px] font-medium text-white/80 mb-2">{f.title}</div>
-                  <p className="text-white/50 text-[13px] leading-relaxed mb-4">{f.body}</p>
-                  <div className="mt-auto flex flex-wrap gap-1.5">
-                    {f.chips.map((c) => <Badge key={c} color="#F5C518">{c}</Badge>)}
-                  </div>
+                { label: "Spend limits", value: "Per-transaction + daily caps" },
+                { label: "Multi-payee",  value: "Up to 20 recipients / batch" },
+                { label: "Trust gate",   value: "On-chain ERC-8004 reputation" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <div className="text-xs text-white/30 mb-1">{item.label}</div>
+                  <div className="text-sm font-mono text-white/80">{item.value}</div>
                 </div>
               ))}
             </div>
+            <p className="text-white/55 text-sm leading-relaxed">
+              Manage wallets, caps, and reputation gates from{" "}
+              <Link href="/dashboard" className="text-yellow hover:underline">/dashboard</Link>, or
+              introspect them from an MCP client with{" "}
+              <code className="text-yellow text-xs">q402_agentic_info</code>.
+            </p>
+          </Section>
+
+          {/* ── YIELD ── */}
+          <Section id="yield" title="Yield · Aave V3">
+            <p className="text-white/75 text-base leading-relaxed mb-6">
+              Supply and withdraw stablecoins on Aave V3 over BNB Chain straight from an Agent
+              Wallet. The EIP-7702 relay sponsors the gas, so idle balances compound while you pay
+              $0 to move them.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-4 mb-6">
+              {[
+                { label: "Protocol", value: "Aave V3" },
+                { label: "Chain",    value: "BNB Chain" },
+                { label: "Actions",  value: "Gasless supply / withdraw" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <div className="text-xs text-white/30 mb-1">{item.label}</div>
+                  <div className="text-sm font-mono text-white/80">{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <p className="text-white/55 text-sm leading-relaxed">
+              From an MCP client: <code className="text-yellow text-xs">q402_yield_reserves</code>,{" "}
+              <code className="text-yellow text-xs">q402_yield_positions</code>,{" "}
+              <code className="text-yellow text-xs">q402_yield_deposit</code>,{" "}
+              <code className="text-yellow text-xs">q402_yield_withdraw</code>.
+            </p>
+          </Section>
+
+          {/* ── BRIDGE ── */}
+          <Section id="bridge" title="Bridge · Chainlink CCIP">
+            <p className="text-white/75 text-base leading-relaxed mb-6">
+              Move native USDC across chains in a single signed request over Chainlink CCIP. Quote,
+              send, and track a transfer from the dashboard or an MCP client — no manual bridge hops.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-4 mb-6">
+              {[
+                { label: "Protocol", value: "Chainlink CCIP" },
+                { label: "Lanes",    value: "Ethereum · Avalanche · Arbitrum" },
+                { label: "Asset",    value: "Native USDC" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <div className="text-xs text-white/30 mb-1">{item.label}</div>
+                  <div className="text-sm font-mono text-white/80">{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <p className="text-white/55 text-sm leading-relaxed">
+              From an MCP client: <code className="text-yellow text-xs">q402_bridge_quote</code>,{" "}
+              <code className="text-yellow text-xs">q402_bridge_send</code>,{" "}
+              <code className="text-yellow text-xs">q402_bridge_history</code>,{" "}
+              <code className="text-yellow text-xs">q402_bridge_gas_tank</code>.
+            </p>
           </Section>
 
           {/* ── HOW IT WORKS ── */}
