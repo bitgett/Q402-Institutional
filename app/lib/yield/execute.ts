@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
 import {
   decryptPrivateKey,
   resolveWallet,
@@ -153,6 +154,11 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
 
   if (!isAgenticChainKey(body.chain)) {
     return NextResponse.json({ error: "INVALID_CHAIN" }, { status: 400 });
+  }
+  // Held chains (chain-status.ts): yield settles via its own EIP-7702 path
+  // (yield/relay.ts), separate from settlePayment, so it needs its own gate.
+  if (isChainDisabled(body.chain)) {
+    return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
   if (body.token !== "USDC" && body.token !== "USDT") {
     return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });

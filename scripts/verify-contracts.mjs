@@ -122,8 +122,16 @@ async function probeOwnerGuard(provider, impl) {
     return { state: "unsafe", reason: "call did NOT revert with a garbage signature" };
   } catch (err) {
     const sel = extractRevertSelector(err);
-    if (sel === SEL_OWNER_MISMATCH || sel === SEL_UNAUTH_FACILITATOR) {
+    if (sel === SEL_OWNER_MISMATCH) {
+      // Probe sets from == facilitator, so the facilitator gate passes and the
+      // owner-binding check is the one that fires. OwnerMismatch is the proof.
       return { state: "safe", selector: sel };
+    }
+    if (sel === SEL_UNAUTH_FACILITATOR) {
+      // The facilitator gate fired first (e.g. the RPC dropped the eth_call
+      // `from`), so this run did NOT exercise the owner-binding check — can't
+      // conclude it's present. Inconclusive, not safe.
+      return { state: "inconclusive", selector: sel, reason: "facilitator gate fired before owner check — owner-binding not exercised" };
     }
     if (sel === SEL_INVALID_SIGNATURE || sel === SEL_INVALID_SIG_LENGTH) {
       return {
@@ -218,7 +226,14 @@ for (const row of results) {
       : "(NOT in the chain-status.ts hold list — investigate before launch)";
     failures.push(`${row.chain}: owner-binding check not enforced ${tag} — ${c.ownerGuardDetail ?? ""}`);
   } else if (c.ownerGuard === "inconclusive") {
-    warnings.push(`${row.chain}: owner-guard probe inconclusive (${c.ownerGuardDetail}) — re-run against an RPC that returns revert data`);
+    // Fail-CLOSED for chains that are supposed to be live: a launch gate that
+    // can't confirm the owner-binding check must not pass it. Held chains only
+    // warn (they're already gated off in chain-status.ts).
+    if (DISABLED_CHAINS.has(row.chain)) {
+      warnings.push(`${row.chain}: owner-guard probe inconclusive (${c.ownerGuardDetail}) — chain already held`);
+    } else {
+      failures.push(`${row.chain}: owner-guard probe INCONCLUSIVE (${c.ownerGuardDetail}) — cannot confirm the owner-binding check; re-run against an RPC that returns revert data before treating this chain as launch-ready`);
+    }
   }
 }
 

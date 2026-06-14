@@ -486,6 +486,26 @@ async function processOneRule(
   // release the lock / refund / retry, or the next tick double-pays.
   let relayUncertain: string | null = null;
 
+  // Final status re-check immediately before broadcast. The reload above runs
+  // right after the fire-lock claim, but the prologue between it and here
+  // (relayer-key load, daily reservation, wallet-chain lock) takes long enough
+  // for a cancel/pause to land — and the per-slot lease a cancel claims is a
+  // no-op once we already hold it. Re-reading here shrinks the "UI says
+  // cancelled but a payout still fires" window to sub-millisecond.
+  {
+    const lastCheck = await getRecurringRule(rule.ownerAddr, rule.walletId, rule.ruleId);
+    if (!lastCheck || lastCheck.status !== "active" || lastCheck.nextRunAt !== rule.nextRunAt) {
+      await releaseFireSlot(rule);
+      await refundDailyIfReserved();
+      return {
+        ruleKey,
+        walletId: rule.walletId,
+        outcome: "skipped-status-changed",
+        error: `rule cancelled/paused just before broadcast (status=${lastCheck?.status ?? "deleted"})`,
+      };
+    }
+  }
+
   for (let i = 0; i < rule.recipients.length; i++) {
     const row = rule.recipients[i];
     // Whether the relay fetch for THIS row was dispatched. A throw past that
