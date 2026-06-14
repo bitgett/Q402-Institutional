@@ -146,7 +146,7 @@ const Q402_CHAIN_CONFIG = {
     chainId:      5000,
     mode:         "eip7702",
     domainName:   "Q402 Mantle",
-    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    implContract: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
     usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6 },
     // USDT0 (LayerZero OFT) — Mantle ecosystem default since the 2025-11-27 migration.
     // Legacy bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) sunset 2026-02-03.

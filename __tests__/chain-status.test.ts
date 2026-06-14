@@ -9,23 +9,23 @@ import {
 // guarded chains carry, so settlement is held until the impl is refreshed.
 describe("chain-status — settlement allow-list", () => {
   it("holds exactly the chains still pending an impl refresh", () => {
-    expect([...DISABLED_CHAINS].sort()).toEqual(["injective", "mantle"]);
+    expect([...DISABLED_CHAINS].sort()).toEqual(["injective"]);
   });
 
-  it("keeps the guarded chains active (incl. the refreshed monad/scroll/arbitrum)", () => {
-    for (const c of ["bnb", "avax", "eth", "stable", "xlayer", "monad", "scroll", "arbitrum"]) {
+  it("keeps the guarded chains active (incl. the refreshed monad/scroll/arbitrum/mantle)", () => {
+    for (const c of ["bnb", "avax", "eth", "stable", "xlayer", "monad", "scroll", "arbitrum", "mantle"]) {
       expect(isChainDisabled(c)).toBe(false);
     }
   });
 
   it("holds every chain in the list", () => {
-    for (const c of ["mantle", "injective"]) {
+    for (const c of ["injective"]) {
       expect(isChainDisabled(c)).toBe(true);
     }
   });
 
   it("is case-insensitive and null/undefined-safe", () => {
-    expect(isChainDisabled("Mantle")).toBe(true);
+    expect(isChainDisabled("Injective")).toBe(true);
     expect(isChainDisabled("INJECTIVE")).toBe(true);
     expect(isChainDisabled(null)).toBe(false);
     expect(isChainDisabled(undefined)).toBe(false);

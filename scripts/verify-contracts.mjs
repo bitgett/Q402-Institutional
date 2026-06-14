@@ -50,7 +50,7 @@ const RPCS = {
 // Keep in sync with app/lib/chain-status.ts — chains held until their impl is
 // refreshed. The probe still runs on them; this list only changes the message
 // (expected-hold vs unexpected).
-const DISABLED_CHAINS = new Set(["mantle", "injective"]);
+const DISABLED_CHAINS = new Set(["injective"]);
 
 // Human-readable TransferAuthorization typehash (matches local source)
 const TRANSFER_AUTH_TYPEHASH = ethers.keccak256(ethers.toUtf8Bytes(

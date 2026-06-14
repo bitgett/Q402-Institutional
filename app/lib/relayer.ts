@@ -152,7 +152,7 @@ export const CHAIN_CONFIG = {
     chainId: 5000,
     token: "MNT",
     // Q402PaymentImplementationMantle deployed on Mantle Mainnet (Chain ID: 5000)
-    implContract: process.env.MANTLE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    implContract: process.env.MANTLE_IMPLEMENTATION_CONTRACT ?? "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
     usdc: { address: "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", decimals: 6, symbol: "USDC" },
     // USDT0 (LayerZero OFT) — Mantle's ecosystem default per the 2025-11-27 official
     // announcement. Legacy canonical-bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE)
