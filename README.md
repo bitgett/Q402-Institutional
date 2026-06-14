@@ -107,7 +107,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_batch_pay` | live mode | Up to 20 recipients per call (trial: 5) |
 | `q402_receipt` | none | Fetch + verify a Trust Receipt |
 | `q402_wallet_status` | private key | Per-chain EIP-7702 state |
-| `q402_clear_delegation` | private key | Reset delegation; Q402-sponsored gas |
+| `q402_clear_delegation` | private key | Reset delegation; sponsored on BNB, charged to your Gas Tank on CCIP chains (ETH/AVAX/ARB) |
 | `q402_agentic_info` | api key | Agent Wallet info (caps, ERC-8004) |
 | `q402_recurring_list` | api key | List scheduled rules |
 | `q402_recurring_create` | api key | Author a rule (paid Multichain only) |
