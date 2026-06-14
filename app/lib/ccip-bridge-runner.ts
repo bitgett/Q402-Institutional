@@ -215,13 +215,12 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
   // Wallet's caps were designed for "spending" (third-party recipient).
   // Bridge `destReceiver` is hard-bound to `wallet.address` server-side
   // — the user cannot pick a different receiver, so funds stay in the
-  // SAME EOA they were already in, just on a different chain. Attacker
-  // with a compromised key cannot redirect USDC anywhere it isn't
-  // already going.
+  // SAME EOA they were already in, just on a different chain — funds can't
+  // be redirected anywhere they weren't already going.
   //
-  // BUT: attacker can still drain the Gas Tank LINK + native via
-  // repeated bridges (each one pays CCIP fee + auto-fund tx gas).
-  // This rate limit caps that exposure to 10 bridges/hour per
+  // Separately, repeated bridges could deplete the Gas Tank's LINK + native
+  // (each one pays the CCIP fee + auto-fund tx gas), so this rate limit caps
+  // that to 10 bridges/hour per
   // (walletId, src) lane. fail-OPEN: KV blip shouldn't shadow-lock
   // legitimate bridges; the lower-level idempotency claim still
   // prevents same-intent double-spend, so degraded KV is bounded.

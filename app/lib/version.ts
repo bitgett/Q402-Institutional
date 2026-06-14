@@ -9,7 +9,7 @@
  * /docs version badge, the /claude hero pill, README cover row, etc.
  *
  * Why a TypeScript module instead of inlined strings:
- *   Past release rounds (Mantle v1.18, the v1.23 hardening pass, RLUSD
+ *   Past release rounds (Mantle v1.18, v1.23, RLUSD
  *   v1.27) each shipped with at least one screen still rendering the
  *   previous version. The pattern is always the same — a hand-written
  *   "v1.x.0" buried in a marketing component nobody grep'd. Forcing
@@ -26,4 +26,4 @@ export const SDK_VERSION = "1.8.0-scroll" as const;
  * registry.npmjs.org, but UI labels reference *this* constant — so a
  * forgotten label after publish trips on screenshot review, not silently.
  */
-export const MCP_VERSION = "0.8.29" as const;
+export const MCP_VERSION = "0.8.30" as const;
