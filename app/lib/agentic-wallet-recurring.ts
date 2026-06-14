@@ -834,6 +834,19 @@ export async function applyUserStatusAction(
       break;
     }
     case "cancel": {
+      // Serialize with the cron fire on the SAME fire-slot lease (keyed by
+      // ruleId + the scheduled nextRunAt). Claiming it here blocks any tick
+      // that hasn't started its fire yet — that tick's claimFireSlot then
+      // returns "lock held" and it skips. If a tick already holds the lease
+      // (a fire is mid-flight), this claim no-ops and that one fire completes,
+      // which is the intended cancel-window behaviour. Best-effort: the ZSET
+      // removal below still stops all future pulls even if KV hiccups here.
+      try {
+        await kv.set(fireLockKey(ruleId, next.nextRunAt), "cancelled", {
+          nx: true,
+          ex: FIRE_LOCK_TTL_SEC,
+        });
+      } catch { /* best-effort */ }
       next.status = "cancelled";
       next.cancelledAt = now;
       next.pendingFireAt = null;
