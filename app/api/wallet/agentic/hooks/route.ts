@@ -151,26 +151,25 @@ export async function PUT(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Auth: Mode C apiKey OR owner-sig intent-bound on { walletId, configHash }.
-  let owner: string;
-  const fromKey = await ownerFromApiKey(body.apiKey);
-  if (fromKey instanceof NextResponse) return fromKey;
-  if (typeof fromKey === "string") {
-    owner = fromKey;
-  } else {
-    const configHash = ethers.keccak256(ethers.toUtf8Bytes(canonicalHookConfig(config)));
-    const auth = await requireIntentAuth({
-      address: body.address ?? null,
-      challenge: body.nonce ?? null,
-      signature: body.signature ?? null,
-      action: "agentic.hooks_config",
-      intent: { walletId: body.walletId.toLowerCase(), configHash },
-    });
-    if (typeof auth !== "string") {
-      return NextResponse.json({ error: auth.error, code: auth.code }, { status: auth.status });
-    }
-    owner = auth;
+  // F4: policy MUTATION requires an OWNER SIGNATURE — never an API key. An API
+  // key may READ policy (GET) and submit payments, but must not be able to
+  // weaken the controls (recipient allowlist, spend caps, approval thresholds)
+  // that govern itself — otherwise a stolen Mode C key could strip the guards
+  // and drain with the same credential. Intent-bound on { walletId, configHash }
+  // so a signature can't be replayed onto a different wallet or a different
+  // config.
+  const configHash = ethers.keccak256(ethers.toUtf8Bytes(canonicalHookConfig(config)));
+  const auth = await requireIntentAuth({
+    address: body.address ?? null,
+    challenge: body.nonce ?? null,
+    signature: body.signature ?? null,
+    action: "agentic.hooks_config",
+    intent: { walletId: body.walletId.toLowerCase(), configHash },
+  });
+  if (typeof auth !== "string") {
+    return NextResponse.json({ error: auth.error, code: auth.code }, { status: auth.status });
   }
+  const owner = auth;
 
   // Ownership check.
   const wallet = await resolveWallet(owner, body.walletId);

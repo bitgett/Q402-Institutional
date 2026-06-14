@@ -21,6 +21,7 @@ import { kv } from "@vercel/kv";
 
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { safeMetadataFetch } from "@/app/lib/safe-fetch";
 import {
   getActiveAgenticWallet,
   setErc8004AgentId,
@@ -239,10 +240,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let metadataFetchOk = false;
   let metadataServiceFound = false;
   try {
-    const metaRes = await fetch(parsed.agentURI, { method: "GET" });
+    // SSRF-safe: the agentURI is user-minted on-chain data. Force HTTPS, block
+    // private/link-local/IMDS + redirects, cap body + time (F6).
+    const metaRes = await safeMetadataFetch(parsed.agentURI, { timeoutMs: 5_000, maxBytes: 64 * 1024 });
     if (metaRes.ok) {
       metadataFetchOk = true;
-      const meta = (await metaRes.json()) as FetchedMetadata;
+      const meta = metaRes.json as FetchedMetadata;
       const q402Svc = meta.services?.find((s) => s?.name === "q402");
       if (q402Svc) metadataServiceFound = true;
       metadataWalletAddr =
