@@ -169,7 +169,7 @@ const Q402_CHAIN_CONFIG = {
     chainId:      143,
     mode:         "eip7702",
     domainName:   "Q402 Monad",
-    implContract: "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+    implContract: "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
     // Native Circle USDC (CCTP V2, 6 dec) + USDT0 (LayerZero OFT, 6 dec).
     // Monad fully supports EIP-7702. Reserve-balance rule (delegated EOA can't
     // dip below 10 MON in a single TX) does not affect ERC-20 transfers since
@@ -183,7 +183,7 @@ const Q402_CHAIN_CONFIG = {
     chainId:      534352,
     mode:         "eip7702",
     domainName:   "Q402 Scroll",
-    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    implContract: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
     // Native Circle USDC + canonical Tether on Scroll mainnet, both 6 dec.
     // EIP-7702 is live on Scroll mainnet since the Euclid Phase 2 upgrade
     // (2025-04-22). zkEVM byte-level equivalence makes the witness path
@@ -197,7 +197,7 @@ const Q402_CHAIN_CONFIG = {
     chainId:      42161,
     mode:         "eip7702",
     domainName:   "Q402 Arbitrum",
-    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    implContract: "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
     // Native Circle USDC (CCTP) + canonical Tether on Arbitrum One, both 6 dec.
     // EIP-7702 live on Arbitrum One since ArbOS 40 "Callisto"; ArbOS 51 "Dia"
     // (2026-01-08) refined precompile delegation. Same impl address as

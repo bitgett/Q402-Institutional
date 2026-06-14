@@ -161,7 +161,7 @@
       "name": "Monad",
       "chainId": 143,
       "relayMode": "eip7702",
-      "implContract": "0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC",
+      "implContract": "0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
@@ -176,13 +176,13 @@
       },
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://monadscan.com",
-      "verifyUrl": "https://monadscan.com/address/0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC"
+      "verifyUrl": "https://monadscan.com/address/0x5a8fde1851491D9eD512a9eDa1c63CA7627BECb8"
     },
     "scroll": {
       "name": "Scroll",
       "chainId": 534352,
       "relayMode": "eip7702",
-      "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+      "implContract": "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
@@ -197,13 +197,13 @@
       },
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://scrollscan.com",
-      "verifyUrl": "https://scrollscan.com/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
+      "verifyUrl": "https://scrollscan.com/address/0x8D854436ab0426F5BC6Cc70865C90576AD523E73"
     },
     "arbitrum": {
       "name": "Arbitrum",
       "chainId": 42161,
       "relayMode": "eip7702",
-      "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+      "implContract": "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],

@@ -83,9 +83,9 @@ export const Q402_IMPL_PER_CHAIN: Record<ChainKey, string> = {
   stable:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
   mantle:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
   injective: "0x2fb2b2d110b6c5664e701666b3741240242bf350",
-  monad:     "0x39ba9520718ee069d7f72882ff4c28a5ea8a2acc",
-  scroll:    "0x2fb2b2d110b6c5664e701666b3741240242bf350",
-  arbitrum:  "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+  monad:     "0x5a8fde1851491d9ed512a9eda1c63ca7627becb8",
+  scroll:    "0x8d854436ab0426f5bc6cc70865c90576ad523e73",
+  arbitrum:  "0xe5b90d564650bdce7c2bb4344f777f6582e05699",
 };
 
 export function isOfficialQ402Impl(chain: ChainKey, impl: string | undefined): boolean {
