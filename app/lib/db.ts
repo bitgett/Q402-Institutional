@@ -1135,9 +1135,20 @@ export async function decrementScopedCredit(
   // would start at 0 and incorrectly 429 them.
   await initScopedQuotaIfNeeded(address, scope, await seedFromLegacy(address, scope));
   const key = scopedQuotaKey(address, scope);
-  const newVal = await kv.decrby(key, 1);
-  if (newVal < 0) {
-    await kv.incrby(key, 1);
+  // Atomic decrement-or-reject. A plain DECRBY-then-INCRBY pair (the prior
+  // shape) could transiently expose a -1 under concurrent decrements at the
+  // floor; this single EVAL keeps the floor exact. Returns the new value, or
+  // -1 when the decrement would underflow (insufficient credit — no charge
+  // applied). Same eval primitive used by the lock CAS helpers.
+  const script =
+    "local v = redis.call('DECRBY', KEYS[1], 1) " +
+    "if v < 0 then redis.call('INCRBY', KEYS[1], 1) return -1 end " +
+    "return v";
+  const res = await (kv as unknown as {
+    eval: (s: string, keys: string[], args: string[]) => Promise<unknown>;
+  }).eval(script, [key], []);
+  const newVal = typeof res === "number" ? res : Number(res);
+  if (!Number.isFinite(newVal) || newVal < 0) {
     return { ok: false, remaining: 0 };
   }
   return { ok: true, remaining: newVal };
