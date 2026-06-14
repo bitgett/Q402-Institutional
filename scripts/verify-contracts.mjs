@@ -50,11 +50,10 @@ const RPCS = {
 };
 
 // Keep in sync with app/lib/chain-status.ts — chains held in the settlement
-// allow-list. The five redeployed chains stay held until production env points
-// at the new addresses + old delegations are cleared; this set only softens the
-// message for a held chain (expected-hold vs unexpected). The on-chain checks
-// (NAME, typehash, owner-binding/bytecode) still run on held chains.
-const DISABLED_CHAINS = new Set(["mantle", "injective", "monad", "scroll", "arbitrum"]);
+// allow-list. Empty now that all ten run the verified guarded build and the
+// stale prod env overrides were removed; this set only softens the message for a
+// held chain (expected-hold vs unexpected).
+const DISABLED_CHAINS = new Set([]);
 
 // Chains deployed from the BNB reference source via scripts/deploy-fixed-impl.mjs
 // (same logic, only the NAME constant differs per chain). For these we hold the

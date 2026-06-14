@@ -1,29 +1,22 @@
 /**
  * chain-status.ts — settlement allow-list.
  *
- * The guarded implementation for Mantle, Injective, Monad, Scroll, and Arbitrum
- * was redeployed 2026-06-15 with the correct per-chain EIP-712 domain NAME and
- * verified on-chain (NAME + owner-binding via bytecode equivalence to the guarded
- * source — see scripts/verify-contracts.mjs). The new addresses are wired into
- * this repo, BUT these five stay held until BOTH are true in production:
- *   1. the production env (Vercel *_IMPLEMENTATION_CONTRACT) points at the new
- *      addresses — a stale override would route settlement to a retired impl;
- *   2. the EOAs still delegated to a retired impl have been cleared/re-pointed.
- * Re-enable per chain only after `node scripts/verify-contracts.mjs` passes
- * against the production-resolved addresses for that chain.
+ * All ten chains run the guarded EIP-7702 implementation (the
+ * `owner == address(this)` binding present on every build). Mantle, Injective,
+ * Monad, Scroll, and Arbitrum were redeployed 2026-06-15 with the correct
+ * per-chain EIP-712 domain NAME, verified on-chain (NAME() + domainSeparator()
+ * match each chain's domain; runtime byte-identical to the guarded source — see
+ * scripts/verify-contracts.mjs), re-wired across every surface, and the stale
+ * Vercel *_IMPLEMENTATION_CONTRACT overrides were removed so production resolves
+ * the new addresses from code. The allow-list is therefore empty.
  *
  * Enforced server-side at every settlement entrypoint. This gates NEW
- * settlements only — an EOA already delegated to a retired impl is unaffected by
- * a backend change and must have its delegation cleared/refreshed.
+ * settlements only — an EOA still delegated to a retired impl keeps that
+ * delegation until its next payment re-delegates it to the guarded build
+ * automatically. To hold a chain, add its key here.
  */
 
-export const DISABLED_CHAINS: ReadonlySet<string> = new Set([
-  "mantle",
-  "injective",
-  "monad",
-  "scroll",
-  "arbitrum",
-]);
+export const DISABLED_CHAINS: ReadonlySet<string> = new Set([]);
 
 /** True when settlement/delegation on this chain is currently held. */
 export function isChainDisabled(chain: string | null | undefined): boolean {

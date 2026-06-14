@@ -5,38 +5,33 @@ import {
   CHAIN_DISABLED_MESSAGE,
 } from "@/app/lib/chain-status";
 
-// Mantle/Injective/Monad/Scroll/Arbitrum were redeployed + verified 2026-06-15
-// (correct per-chain NAME + owner-binding), but stay held until production env
-// points at the new addresses and old delegations are cleared. The guarded
-// production chains stay active.
+// All ten chains run the verified guarded build (owner-binding + correct
+// per-chain EIP-712 NAME). Mantle/Injective/Monad/Scroll/Arbitrum were
+// redeployed + verified 2026-06-15 and the stale prod env overrides removed, so
+// the allow-list holds nothing.
 describe("chain-status — settlement allow-list", () => {
-  it("holds exactly the five chains pending production cutover", () => {
-    expect([...DISABLED_CHAINS].sort()).toEqual(
-      ["arbitrum", "injective", "mantle", "monad", "scroll"],
-    );
+  it("holds no chains — all ten run the verified guarded build", () => {
+    expect(DISABLED_CHAINS.size).toBe(0);
   });
 
-  it("keeps the production chains active", () => {
-    for (const c of ["bnb", "avax", "eth", "stable", "xlayer"]) {
+  it("keeps every chain active", () => {
+    for (const c of [
+      "bnb", "avax", "eth", "stable", "xlayer",
+      "mantle", "injective", "monad", "scroll", "arbitrum",
+    ]) {
       expect(isChainDisabled(c)).toBe(false);
     }
   });
 
-  it("holds every chain in the list (case-insensitive)", () => {
-    for (const c of ["mantle", "injective", "monad", "scroll", "arbitrum"]) {
-      expect(isChainDisabled(c)).toBe(true);
-    }
-    expect(isChainDisabled("Scroll")).toBe(true);
-  });
-
-  it("is null/undefined/empty-safe", () => {
+  it("is null/undefined/empty-safe and case-insensitive", () => {
     expect(isChainDisabled(null)).toBe(false);
     expect(isChainDisabled(undefined)).toBe(false);
     expect(isChainDisabled("")).toBe(false);
     expect(isChainDisabled("BNB")).toBe(false);
+    expect(isChainDisabled("Scroll")).toBe(false);
   });
 
-  it("exposes a caller-safe message constant", () => {
+  it("exposes a caller-safe message constant for future holds", () => {
     expect(CHAIN_DISABLED_MESSAGE).toMatch(/temporarily|unavailable|disabled/i);
   });
 });
