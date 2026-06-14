@@ -13,8 +13,16 @@
  */
 
 export const DISABLED_CHAINS: ReadonlySet<string> = new Set([
-  // All 10 chains now run the guarded implementation (the five that had the
-  // unguarded build were redeployed + re-delegated 2026-06-15). Nothing held.
+  // Held: the 2026-06-15 redeploy compiled with the wrong EIP-712 domain NAME
+  // (all five returned "Q402 BNB Chain"), so settlement reverts there, and the
+  // previous delegations on these chains have not been re-pointed. Held until a
+  // corrected impl is deployed, verified on-chain (NAME + owner-binding), and
+  // existing delegations are cleared/re-pointed.
+  "mantle",
+  "injective",
+  "monad",
+  "scroll",
+  "arbitrum",
 ]);
 
 /** True when settlement/delegation on this chain is currently held. */
