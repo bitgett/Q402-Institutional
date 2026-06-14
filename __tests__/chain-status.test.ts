@@ -5,34 +5,27 @@ import {
   CHAIN_DISABLED_MESSAGE,
 } from "@/app/lib/chain-status";
 
-// The impl deployed on these 5 chains is missing the owner-binding check the
-// guarded chains carry, so settlement is held until the impl is refreshed.
+// All 10 chains now run the guarded implementation, so the held set is empty.
+// The kill-switch stays in place as the mechanism for re-holding a chain.
 describe("chain-status — settlement allow-list", () => {
-  it("holds exactly the chains still pending an impl refresh", () => {
-    expect([...DISABLED_CHAINS].sort()).toEqual(["injective"]);
+  it("holds no chains — every chain runs the guarded implementation", () => {
+    expect([...DISABLED_CHAINS]).toEqual([]);
   });
 
-  it("keeps the guarded chains active (incl. the refreshed monad/scroll/arbitrum/mantle)", () => {
-    for (const c of ["bnb", "avax", "eth", "stable", "xlayer", "monad", "scroll", "arbitrum", "mantle"]) {
+  it("treats every supported chain as active", () => {
+    for (const c of ["bnb", "avax", "eth", "stable", "xlayer", "monad", "scroll", "arbitrum", "mantle", "injective"]) {
       expect(isChainDisabled(c)).toBe(false);
     }
   });
 
-  it("holds every chain in the list", () => {
-    for (const c of ["injective"]) {
-      expect(isChainDisabled(c)).toBe(true);
-    }
-  });
-
-  it("is case-insensitive and null/undefined-safe", () => {
-    expect(isChainDisabled("Injective")).toBe(true);
-    expect(isChainDisabled("INJECTIVE")).toBe(true);
+  it("is null/undefined/empty-safe and case-insensitive", () => {
     expect(isChainDisabled(null)).toBe(false);
     expect(isChainDisabled(undefined)).toBe(false);
     expect(isChainDisabled("")).toBe(false);
+    expect(isChainDisabled("BNB")).toBe(false);
   });
 
-  it("exposes a caller-safe disabled message", () => {
-    expect(CHAIN_DISABLED_MESSAGE).toMatch(/disabled|security|temporarily/i);
+  it("exposes a caller-safe message constant", () => {
+    expect(CHAIN_DISABLED_MESSAGE).toMatch(/temporarily|unavailable|disabled/i);
   });
 });

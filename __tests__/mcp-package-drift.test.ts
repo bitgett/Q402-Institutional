@@ -220,12 +220,12 @@ describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)"
     expect(usdt!.toLowerCase()).toBe(m.tokens.USDT.address.toLowerCase());
   });
 
-  it("Injective declares supportedTokens: [\"USDT\"] in chains.ts", async () => {
+  it("Injective declares supportedTokens: [\"USDC\",\"USDT\"] in chains.ts", async () => {
     await loadMcpChainsSource();
     if (skipIfOffline()) return;
-    // The supportedTokens whitelist is the SDK + MCP gate that mirrors the
-    // manifest's supportedApiTokens. Easier to grep than to extract structurally.
-    expect(mcpSource).toMatch(/injective:\s*\{[\s\S]*?supportedTokens:\s*\[\s*"USDT"\s*\][\s\S]*?\}/);
+    // Native Circle USDC (CCTP) shipped on Injective EVM 2026-06; both tokens
+    // are now supported. Mirrors the manifest's supportedApiTokens.
+    expect(mcpSource).toMatch(/injective:\s*\{[\s\S]*?supportedTokens:\s*\[\s*"USDC"\s*,\s*"USDT"\s*\][\s\S]*?\}/);
   });
 
   // ── RLUSD Ethereum-only invariant (cross-repo drift guard) ──────────────

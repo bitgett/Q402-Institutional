@@ -235,7 +235,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   //     out of scope. Non-Ethereum chains reject RLUSD via the absence of the
   //     token from their allowlist entry.
   const FULL_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
-    injective: ["USDT"],
+    injective: ["USDT", "USDC"],
     eth:       ["USDC", "USDT", "RLUSD"],
     bnb:       ["USDC", "USDT"],
     avax:      ["USDC", "USDT"],

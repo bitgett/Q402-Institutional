@@ -147,12 +147,11 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     id: 1776,
     name: "Injective",
     rpc: process.env.INJECTIVE_RPC_URL ?? "https://sentry.evm-rpc.injective.network/",
-    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    impl: "0x892E647FbbAdc8Ee8342710244931ea98529EA9C",
     domainName: "Q402 Injective",
     domainVersion: "1",
     tokens: {
-      // Injective is USDT-only — USDC mirrors USDT to keep the type uniform.
-      USDC: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
+      USDC: { address: "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", decimals: 6 },
       USDT: { address: "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", decimals: 6 },
     },
   },
