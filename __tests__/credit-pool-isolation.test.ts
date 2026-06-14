@@ -33,6 +33,7 @@ const mockKv = vi.hoisted(() => ({
   hget: vi.fn(),
   hgetall: vi.fn(),
   hincrbyfloat: vi.fn(),
+  eval: vi.fn(),
 }));
 
 vi.mock("@vercel/kv", () => ({ kv: mockKv }));
@@ -83,6 +84,17 @@ beforeEach(() => {
   mockKv.decrby.mockImplementation((key: string, n: number) => {
     const cur = (store.get(key) as number | undefined) ?? 0;
     const next = cur - n;
+    store.set(key, next);
+    return Promise.resolve(next);
+  });
+
+  // Simulates the decrementScopedCredit Lua: DECRBY 1, floor at 0 (return -1
+  // on underflow without persisting a negative).
+  mockKv.eval.mockImplementation((_script: string, keys: string[]) => {
+    const key = keys[0];
+    const cur = (store.get(key) as number | undefined) ?? 0;
+    const next = cur - 1;
+    if (next < 0) return Promise.resolve(-1);
     store.set(key, next);
     return Promise.resolve(next);
   });
