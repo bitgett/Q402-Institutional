@@ -774,7 +774,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
               Why we use it
             </h3>
             <p className="text-white/70 text-sm leading-relaxed">
-              One primitive, 10 chains, no per-user contract deploy. Impl source-verified on Sourcify, identical across chains.
+              One primitive, 10 chains, no per-user contract deploy. Each chain&apos;s impl is source-verified on Sourcify.
               The delegation marker is the only on-chain trace.
             </p>
 
