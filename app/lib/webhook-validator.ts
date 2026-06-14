@@ -26,6 +26,7 @@ function isPrivateIPv4(ip: string): boolean {
     a === 0 ||
     a === 10 ||
     a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 CGNAT (RFC 6598)
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
@@ -33,8 +34,32 @@ function isPrivateIPv4(ip: string): boolean {
   );
 }
 
+/**
+ * Extract the embedded IPv4 from an IPv4-mapped IPv6 address, in either the
+ * dotted (`::ffff:10.0.0.1`) or hex (`::ffff:0a00:0001`, or the fully expanded
+ * `0:0:0:0:0:ffff:0a00:0001`) form. Returns null when not IPv4-mapped. Without
+ * this, the hex/expanded forms slip past the `::ffff:` string-prefix check and
+ * a mapped private address reads as a public IPv6.
+ */
+function ipv4MappedToV4(ip: string): string | null {
+  const lower = ip.toLowerCase();
+  const dotted = lower.match(/:ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (dotted) return dotted[1];
+  const hex = lower.match(/:ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (hex) {
+    const hi = parseInt(hex[1], 16);
+    const lo = parseInt(hex[2], 16);
+    if (Number.isNaN(hi) || Number.isNaN(lo)) return null;
+    return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+  }
+  return null;
+}
+
 function isPrivateIPv6(ip: string): boolean {
   const lower = ip.toLowerCase();
+  // IPv4-mapped (any notation) → judge by the embedded IPv4.
+  const mapped = ipv4MappedToV4(lower);
+  if (mapped) return isPrivateIPv4(mapped);
   return (
     lower === "::1" ||
     lower === "::" ||
