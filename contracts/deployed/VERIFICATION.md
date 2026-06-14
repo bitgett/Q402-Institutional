@@ -1,5 +1,13 @@
 # Deployed contract source — on-chain verification
 
+> **Superseded for 5 chains (2026-06-15):** Mantle, Injective, Monad, Scroll, and
+> Arbitrum were redeployed to a refreshed implementation — see
+> [`contracts/IMPL_REFRESH_RUNBOOK.md`](../IMPL_REFRESH_RUNBOOK.md) for the current
+> addresses. The snapshots below record the PREVIOUS deployments on those chains
+> and remain accurate as a historical verification record; the new impls have not
+> yet been re-verified on Sourcify. BNB / AVAX / ETH / Stable / X Layer are
+> unchanged.
+
 The Solidity source under `contracts/deployed/<chain>/` is the **exact source the
 deployed bytecode was compiled from**, fetched from Sourcify (decentralized
 source verification). `status: full` = a *full* bytecode match (the deployed
