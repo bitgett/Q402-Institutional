@@ -39,7 +39,7 @@ import {
   refundYieldOpBudget,
 } from "./relay";
 import { enforceYieldPolicy } from "./policy";
-import type { Hex } from "viem";
+import type { Hex, Address } from "viem";
 
 interface YieldBody {
   walletId?: string;
@@ -496,7 +496,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       return NextResponse.json({ error: "key_decrypt_failed" }, { status: 503 });
     }
 
-    const signed = await signYieldAction({ privateKey, chain, token, action, amount, facilitator });
+    const signed = await signYieldAction({ privateKey, expectedOwner: wallet.address as Address, chain, token, action, amount, facilitator });
     const result = await settleYieldAction(signed);
 
     // Broadcast-but-unconfirmed: the action MAY have settled. Do NOT release

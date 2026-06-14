@@ -96,6 +96,9 @@ export interface SignedYieldAction {
 
 interface SignYieldParams {
   privateKey: Hex;
+  /** Wallet RECORD address; the derived signer is asserted to equal it before
+   *  signing (F5 — a swapped key blob can't sign from another record). */
+  expectedOwner: Address;
   chain: AgenticChainKey;
   token: AgenticToken;
   action: YieldAction;
@@ -145,6 +148,9 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
 
   const account = privateKeyToAccount(p.privateKey);
   const fromAddr = account.address as Address;
+  if (fromAddr.toLowerCase() !== p.expectedOwner.toLowerCase()) {
+    throw new Error("KEY_RECORD_MISMATCH");
+  }
 
   const viemChain = {
     id: cfg.id,

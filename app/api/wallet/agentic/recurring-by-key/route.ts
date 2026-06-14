@@ -149,7 +149,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
   const rec = await getApiKeyRecord(body.apiKey);
-  if (!rec || !rec.active) {
+  if (!rec || !rec.active || rec.isSandbox) {
     return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
   }
   const owner = rec.address.toLowerCase();

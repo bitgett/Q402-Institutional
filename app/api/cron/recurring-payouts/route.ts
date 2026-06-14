@@ -511,6 +511,7 @@ async function processOneRule(
       const pk = decryptPrivateKey(wallet);
       const signed = await signAgenticPayment({
         privateKey: pk as Hex,
+        expectedOwner: wallet.address as Address,
         chain: rule.chain,
         token: rule.token,
         to: row.to as Address,
