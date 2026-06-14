@@ -246,6 +246,12 @@ export interface SignedPayment {
 
 interface SignParams {
   privateKey: Hex;
+  /** The wallet RECORD's address. The signer is derived from privateKey and
+   *  asserted to equal this BEFORE signing — so a KV-swapped / mismatched key
+   *  blob can never sign from a record it doesn't belong to (defence-in-depth
+   *  over the keystore; closes the "copy a victim's encrypted blob into another
+   *  record" vector). Required. */
+  expectedOwner: Address;
   chain: AgenticChainKey;
   token: AgenticToken;
   to: Address;
@@ -287,6 +293,15 @@ export async function signAgenticPayment(p: SignParams): Promise<SignedPayment> 
 
   const account = privateKeyToAccount(p.privateKey);
   const fromAddr = account.address as Address;
+
+  // F5 defence-in-depth: the address the decrypted key derives to MUST match
+  // the wallet record this payment is for. Without this, an attacker with KV
+  // write access (but not the keystore master key) could swap a funded
+  // victim's encrypted blob into another record and have the server sign from
+  // the victim's address. Fail closed.
+  if (fromAddr.toLowerCase() !== p.expectedOwner.toLowerCase()) {
+    throw new Error("KEY_RECORD_MISMATCH");
+  }
 
   const viemChain = {
     id: cfg.id,

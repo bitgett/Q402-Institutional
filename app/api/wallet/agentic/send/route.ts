@@ -306,7 +306,7 @@ async function resolveOwner(
       );
     }
     const rec = await getApiKeyRecord(body.apiKey);
-    if (!rec || !rec.active) {
+    if (!rec || !rec.active || rec.isSandbox) {
       return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
     }
     if (typeof body.ownerAddress === "string" && body.ownerAddress.length > 0) {
@@ -893,6 +893,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       try {
         signedLeg = await signAgenticPayment({
           privateKey: pkSplit as Hex,
+          expectedOwner: wallet.address as Address,
           chain: body.chain,
           token: body.token,
           to: leg.recipient as Address,
@@ -1031,6 +1032,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     signed = await signAgenticPayment({
       privateKey: pk as Hex,
+      expectedOwner: wallet.address as Address,
       chain: body.chain,
       token: body.token,
       to: body.to as Address,

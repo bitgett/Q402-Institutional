@@ -532,6 +532,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Sign + submit ──────────────────────────────────────────────────────
   const pk = decryptPrivateKey(wallet);
+  const walletAddress = wallet.address as Address; // captured non-null for the per-row sign loop (F5)
   const baseUrl = internalBaseUrl();
   const facilitator = relayerKey.address as Address;
 
@@ -617,6 +618,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
       const signed = await signAgenticPayment({
         privateKey: pk as Hex,
+        expectedOwner: walletAddress,
         chain: body.chain as AgenticChainKey,
         token: body.token as AgenticToken,
         to: row.to as Address,
