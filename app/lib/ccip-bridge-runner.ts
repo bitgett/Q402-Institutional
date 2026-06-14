@@ -261,6 +261,20 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
         },
       );
     }
+    // Lost the SET NX claim but the winner's record is momentarily
+    // unreadable (transient KV GET error / eventual-consistency miss /
+    // evicted record). We cannot prove this intent isn't already in
+    // flight, so FAIL CLOSED instead of falling through to a second
+    // bridge execution of the same intent.
+    return NextResponse.json(
+      {
+        error: "CLAIM_RACE_UNRESOLVED",
+        message:
+          "A concurrent bridge holds this idempotency claim but its state " +
+          "is momentarily unreadable. Retry in ~10s.",
+      },
+      { status: 503, headers: { "Retry-After": "10" } },
+    );
   }
 
   async function finaliseClaim(
@@ -290,8 +304,16 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
   }
   const releaseLock = async (): Promise<void> => {
     try {
-      const held = await kv.get<string>(lockKey);
-      if (held === sendId) await kv.del(lockKey);
+      // Atomic compare-and-delete: release the lane lock ONLY if THIS
+      // sendId still owns it. A non-atomic GET-then-DEL could, after the
+      // 90s TTL lapsed and another request re-acquired, delete the new
+      // owner's lease (ABA / lease drift). Same primitive as
+      // releasePendingFundReconcileLock in db.ts. (maxDuration 60s < 90s
+      // TTL makes this practically unreachable, but the CAS is free.)
+      const script = "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end";
+      await (kv as unknown as {
+        eval: (s: string, keys: string[], args: string[]) => Promise<unknown>;
+      }).eval(script, [lockKey], [sendId]);
     } catch { /* lock TTL handles cleanup */ }
   };
 
@@ -488,10 +510,11 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
           delegateTarget,
           message:
             "Your Agent Wallet is EIP-7702 delegated to the Q402 payment contract on " +
-            `${src}, which doesn't accept native transfers. Clear the delegation first ` +
-            `(q402_clear_delegation MCP tool, or the Agent Wallet → Clear delegation ` +
-            `button on the dashboard) and retry the bridge. Note: a follow-up Q402 send ` +
-            `will re-delegate the wallet, so prefer bridging before the next /send.`,
+            `${src}, which doesn't accept native transfers. Clear the delegation first, then ` +
+            `retry the bridge. Server-managed Agent Wallets (Mode C, API-key auth) clear it ` +
+            `with the Clear delegation button on the dashboard; local-key modes (A/B, with a ` +
+            `Q402_PRIVATE_KEY set) can use the q402_clear_delegation MCP tool. Note: a ` +
+            `follow-up Q402 send re-delegates the wallet, so prefer bridging before the next /send.`,
         };
         await finaliseClaim("failed", 409, body);
         return NextResponse.json(body, { status: 409 });

@@ -42,9 +42,10 @@ import {
 
 export const runtime = "nodejs";
 
-/** Tracked cron list — derived from CRON_NAMES so adding a new cron
- *  in the lib auto-extends this endpoint. CRON_META supplies the
- *  expectedIntervalMs + staleAfterMs from the single source of truth. */
+/** Tracked cron list. EXPLICIT (not auto-derived) so the watchdog surface
+ *  stays intentional — but it MUST stay in sync with CRON_NAMES: every cron
+ *  that has CRON_META belongs here or it silently escapes the staleness
+ *  watchdog. CRON_META supplies expectedIntervalMs + staleAfterMs. */
 const TRACKED: CronName[] = [
   CRON_NAMES.RECURRING_PAYOUTS,
   CRON_NAMES.DEPOSIT_SCAN,
@@ -52,6 +53,7 @@ const TRACKED: CronName[] = [
   CRON_NAMES.RELAYER_BALANCE,
   CRON_NAMES.CCIP_PENDING_FUND_RECONCILE,
   CRON_NAMES.TREASURY_REBALANCE,
+  CRON_NAMES.OFAC_REFRESH,
 ];
 
 function checkAdminAuth(req: NextRequest): NextResponse | null {

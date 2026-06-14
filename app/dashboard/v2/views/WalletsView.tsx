@@ -215,7 +215,7 @@ function policyRowsFromConfig(cfg: WalletHookConfig | null): PolicyRow[] {
       label: "Spend approval",
       detail:
         approval != null
-          ? `Human review at $${approval}+`
+          ? `Holds payments at $${approval}+`
           : "No soft approval threshold",
       on: Boolean(sc?.enabled) && approval != null,
     },
@@ -733,9 +733,11 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
   const onActiveTrial =
     identity.subscription?.isTrialActive === true ||
     identity.subscription?.plan === "trial";
+  // Canonical paid signal: hasMultichainScope-derived (admin-granted /
+  // sponsored accounts carry amountUSD === 0 but ARE paid-scoped). Keying
+  // off amountUSD would wrongly offer them the free-trial CTA.
   const onActivePaid =
-    !!identity.subscription &&
-    (identity.subscription.amountUSD ?? 0) > 0 &&
+    identity.hasPaid === true &&
     !identity.isExpired;
   const trialCtaEligible = Boolean(addr) && !onActiveTrial && !onActivePaid;
 

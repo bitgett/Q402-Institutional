@@ -312,8 +312,15 @@ function firedMarkerKey(ruleId: string, slotMs: number): string {
  *  "already fired" without overwriting. Exported so callers in the
  *  cron path can write the marker INSIDE the same KV pipeline as
  *  recordRuleFired's other writes. */
-export async function markSlotFired(ruleId: string, slotMs: number): Promise<void> {
-  await kv.set(firedMarkerKey(ruleId, slotMs), "1", { ex: FIRED_MARKER_TTL_SEC });
+export async function markSlotFired(
+  ruleId: string,
+  slotMs: number,
+  status: "confirmed" | "uncertain" = "confirmed",
+): Promise<void> {
+  // "uncertain" marks a slot whose relay broadcast but whose settlement could
+  // NOT be confirmed. The recovery path advances the schedule but must NOT
+  // credit it as a confirmed spend (see advanceAfterMissedBookkeeping).
+  await kv.set(firedMarkerKey(ruleId, slotMs), status === "uncertain" ? "uncertain" : "1", { ex: FIRED_MARKER_TTL_SEC });
 }
 
 /** Check whether a slot has already been fired. Used by claimFireSlot
@@ -1025,6 +1032,13 @@ export async function advanceAfterMissedBookkeeping(
 ): Promise<RecurringRule> {
   const firedSlot = rule.nextRunAt;
   const baseline = Math.max(nowMs, firedSlot);
+  // Distinguish a CONFIRMED settlement (marker "1") from an UNCERTAIN one
+  // (marker "uncertain": relay broadcast but settlement unconfirmed). An
+  // uncertain slot advances the schedule (so the rule isn't stuck) but is NOT
+  // credited to the spend/fire totals — crediting it would finalize an
+  // unconfirmed obligation as paid. Ops was paged at fire time to verify.
+  const firedMarkerVal = await kv.get<string>(firedMarkerKey(rule.ruleId, firedSlot));
+  const isUncertain = firedMarkerVal === "uncertain";
   // Expected amount the rule SHOULD have sent on that slot. The marker
   // proves a settlement happened; we don't have the on-chain receipt
   // hash here, but for a rule whose row amounts haven't changed
@@ -1041,13 +1055,19 @@ export async function advanceAfterMissedBookkeeping(
     ...rule,
     lastRunAt: nowMs,
     pendingFireAt: null,
-    totalFiredCount: rule.totalFiredCount + 1,
-    totalSpentUsd: rule.totalSpentUsd + expectedAmountUsd,
-    lastError:
-      "Auto-recovered: previous fire settled on-chain but bookkeeping write failed. " +
-      "Total spent reflects the rule's expected amount ($" + expectedAmountUsd.toFixed(2) + ") " +
-      "for slot " + firedSlot + "; verify against the explorer if you've edited recipient " +
-      "amounts since.",
+    // Only CONFIRMED fires advance the totals. An uncertain fire keeps the
+    // counters where they were — it must not finalize an unconfirmed payment.
+    totalFiredCount: isUncertain ? rule.totalFiredCount : rule.totalFiredCount + 1,
+    totalSpentUsd: isUncertain ? rule.totalSpentUsd : rule.totalSpentUsd + expectedAmountUsd,
+    lastError: isUncertain
+      ? "Schedule advanced past an UNCERTAIN fire (slot " + firedSlot + "): the relay " +
+        "broadcast but settlement could not be confirmed, so it was NOT added to your spent/" +
+        "fire totals. Verify on-chain — if it did settle, the totals understate by ~$" +
+        expectedAmountUsd.toFixed(2) + "."
+      : "Auto-recovered: previous fire settled on-chain but bookkeeping write failed. " +
+        "Total spent reflects the rule's expected amount ($" + expectedAmountUsd.toFixed(2) + ") " +
+        "for slot " + firedSlot + "; verify against the explorer if you've edited recipient " +
+        "amounts since.",
     nextRunAt: computeNextFireAt(rule.frequency, baseline),
   };
   await kv.set(ruleKey(rule.ownerAddr, rule.walletId, rule.ruleId), next);
@@ -1066,13 +1086,15 @@ export async function advanceAfterMissedBookkeeping(
     await recordRuleFireLog(rule, {
       firedAt: nowMs,
       slot: firedSlot,
-      amountUsd: expectedAmountUsd,
+      amountUsd: isUncertain ? 0 : expectedAmountUsd,
       txHashes: [],
-      settledCount: rule.recipients.length,
+      settledCount: isUncertain ? 0 : rule.recipients.length,
       failedCount: 0,
-      partialFailureNote:
-        "recovered: original tick's bookkeeping write failed; tx hashes were not preserved. " +
-        "On-chain receipts remain in your wallet's relay history.",
+      partialFailureNote: isUncertain
+        ? "uncertain: relay broadcast but settlement could not be confirmed; this slot is " +
+          "NOT counted in totals. Verify on-chain in your wallet's relay history."
+        : "recovered: original tick's bookkeeping write failed; tx hashes were not preserved. " +
+          "On-chain receipts remain in your wallet's relay history.",
     });
   } catch {
     /* swallow: log gap is acceptable, rule state already correct */

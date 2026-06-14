@@ -23,6 +23,14 @@
     {
       "path": "/api/cron/reputation-weekly",
       "schedule": "0 0 * * 0"
+    },
+    {
+      "path": "/api/cron/relayer-balance",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/ccip-pending-fund-reconcile",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
