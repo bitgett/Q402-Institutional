@@ -169,8 +169,8 @@ export default function Hero() {
                 transition={{ duration: 0.6, delay: 0.3 }}
                 className="mt-7 text-base sm:text-lg lg:text-lg xl:text-xl text-white/65 font-light leading-relaxed lg:whitespace-nowrap"
               >
-                <span className="text-[#4AE54A] font-semibold">Zero gas.</span> Ten EVM chains.{" "}
-                <span className="text-[#4AE54A] font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
+                <span className="text-yellow font-semibold">Zero gas.</span> Ten EVM chains.{" "}
+                <span className="text-yellow font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
               </motion.p>
             </div>
 
@@ -230,16 +230,14 @@ export default function Hero() {
                 {[
                   { value: "99.99%",  label: "Uptime",            sub: "180-day rolling",  live: true,  accent: "yellow" },
                   { value: "<0.9 s",  label: "Inclusion time",    sub: "median, all chains", live: true,  accent: "yellow" },
-                  { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "green" },
+                  { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "white" },
                   { value: "10",      label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
                 ].map((s, i) => {
                   const stripeColor =
                     s.accent === "yellow" ? "rgba(245,197,24,0.55)"
-                    : s.accent === "green" ? "rgba(74,229,74,0.55)"
                     : "rgba(255,255,255,0.35)";
                   const dotColor =
                     s.accent === "yellow" ? "#F5C518"
-                    : s.accent === "green" ? "#4ade80"
                     : "rgba(255,255,255,0.5)";
                   return (
                     <motion.div
@@ -272,7 +270,6 @@ export default function Hero() {
                       <div
                         className={`font-display font-extrabold text-3xl leading-none mb-2 tracking-[-0.02em] ${
                           s.accent === "yellow" ? "text-yellow"
-                          : s.accent === "green" ? "text-green-400"
                           : "text-white"
                         }`}
                       >

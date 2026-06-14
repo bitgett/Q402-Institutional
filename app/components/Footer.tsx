@@ -82,8 +82,8 @@ export default function Footer() {
 
             <div className="flex items-center gap-2">
               <span
-                className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"
-                style={{ boxShadow: "0 0 6px #4ade80" }}
+                className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse"
+                style={{ boxShadow: "0 0 6px #F5C518" }}
               />
               <span className="text-white/40 text-[10px] font-mono uppercase tracking-[0.25em]">
                 Live · Mainnet

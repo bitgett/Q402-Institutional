@@ -178,7 +178,7 @@ export default function WalletList({ onConnected }: Props) {
                   <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                 </svg>
               ) : installed ? (
-                <span className="text-[10px] text-green-400 font-semibold bg-green-400/10 border border-green-400/20 px-2 py-0.5 rounded-full flex-shrink-0">
+                <span className="text-[10px] text-yellow font-semibold bg-yellow/10 border border-yellow/20 px-2 py-0.5 rounded-full flex-shrink-0">
                   Detected
                 </span>
               ) : (

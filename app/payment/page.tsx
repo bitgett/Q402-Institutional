@@ -107,7 +107,7 @@ function StepHeader({ n, title, sub, done }: { n: string; title: string; sub: st
   return (
     <div className="flex items-center gap-3 mb-5">
       <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 transition-all ${
-        done ? "bg-green-400 text-navy" : "bg-yellow text-navy"
+        done ? "bg-yellow text-navy" : "bg-yellow text-navy"
       }`}>
         {done ? "✓" : n}
       </span>
@@ -298,7 +298,7 @@ export default function PaymentPage() {
         <div className="flex items-center gap-4">
           {isConnected && address ? (
             <div className="flex items-center gap-2 bg-white/[0.04] border border-white/8 rounded-full px-3 py-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow" style={{ boxShadow: "0 0 5px #F5C518" }} />
               <span className="text-xs text-white/60 font-mono">{shortAddr(address)}</span>
             </div>
           ) : (
@@ -403,7 +403,7 @@ export default function PaymentPage() {
             {/* ── STEP 3: Connect Wallet ─────────────────────────────────── */}
             <div className={`rounded-2xl p-6 border transition-all ${
               payStep !== "idle"
-                ? "border-green-400/20"
+                ? "border-yellow/20"
                 : "border-white/8"
             }`} style={{ background: "rgba(255,255,255,0.02)" }}>
               <StepHeader
@@ -421,10 +421,10 @@ export default function PaymentPage() {
                   Connect Wallet →
                 </button>
               ) : (
-                <div className="flex items-center gap-3 bg-green-400/5 border border-green-400/15 rounded-xl px-4 py-3">
-                  <span className="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" style={{ boxShadow: "0 0 6px #4ade80" }} />
+                <div className="flex items-center gap-3 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3">
+                  <span className="w-2 h-2 rounded-full bg-yellow flex-shrink-0" style={{ boxShadow: "0 0 6px #F5C518" }} />
                   <span className="font-mono text-sm text-white/70 flex-1 truncate">{address}</span>
-                  <span className="text-xs text-green-400 font-semibold flex-shrink-0">Connected</span>
+                  <span className="text-xs text-yellow font-semibold flex-shrink-0">Connected</span>
                 </div>
               )}
             </div>
@@ -432,7 +432,7 @@ export default function PaymentPage() {
             {/* ── STEP 4: Send Payment ───────────────────────────────────── */}
             <div className={`rounded-2xl p-6 border transition-all ${
               payStep === "idle" ? "border-white/5 opacity-50 pointer-events-none"
-              : payStep === "success" ? "border-green-400/20"
+              : payStep === "success" ? "border-yellow/20"
               : "border-white/8"
             }`} style={{ background: "rgba(255,255,255,0.02)" }}>
               <StepHeader
@@ -459,12 +459,12 @@ export default function PaymentPage() {
               {/* Success */}
               {payStep === "success" && (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 bg-green-400/5 border border-green-400/15 rounded-xl px-4 py-3">
-                    <svg className="w-5 h-5 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <div className="flex items-center gap-3 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3">
+                    <svg className="w-5 h-5 text-yellow flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                     </svg>
                     <div>
-                      <p className="text-green-400 font-bold text-sm">Payment Confirmed!</p>
+                      <p className="text-yellow font-bold text-sm">Payment Confirmed!</p>
                       <p className="text-white/40 text-xs capitalize">{activatedPlan} plan is now active</p>
                     </div>
                   </div>
@@ -476,12 +476,12 @@ export default function PaymentPage() {
                   {(activatedPaidCredits !== null || activatedTrialCredits !== null) && (
                     <div className="bg-white/[0.03] border border-white/8 rounded-xl px-4 py-3 space-y-1.5">
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="text-green-400" aria-hidden>✓</span>
+                        <span className="text-yellow" aria-hidden>✓</span>
                         <span className="text-white/80 font-semibold">Multichain API Key unlocked</span>
                       </div>
                       {activatedPaidCredits !== null && (
                         <div className="flex items-center gap-2 text-xs">
-                          <span className="text-green-400" aria-hidden>✓</span>
+                          <span className="text-yellow" aria-hidden>✓</span>
                           <span className="text-white/70">{activatedPaidCredits.toLocaleString()} Multichain credits available</span>
                         </div>
                       )}

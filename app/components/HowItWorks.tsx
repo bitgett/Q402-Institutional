@@ -17,7 +17,7 @@ const steps = [
     tag: "1 transaction total",
   },
   {
-    label: "C", color: "#4ade80",
+    label: "C", color: "#94a3b8",
     title: "Recipient receives",
     description: "Address C receives the USDC instantly. Verifiable on Snowtrace, BscScan, Etherscan — whichever chain you use.",
     tag: "On-chain verified",
@@ -28,9 +28,9 @@ const TERMINAL_LINES = [
   { text: "$ q402 simulate --chain bnb --amount 50", color: "text-white/70", delay: 0 },
   { text: "> Connecting to BNB Chain...", color: "text-white/30", delay: 400 },
   { text: "> Building EIP-712 payload...", color: "text-white/30", delay: 900 },
-  { text: "> User signed  (gas: $0.00000)", color: "text-green-400", delay: 1500 },
+  { text: "> User signed  (gas: $0.00000)", color: "text-yellow", delay: 1500 },
   { text: "> Submitting via facilitator...", color: "text-white/30", delay: 2100 },
-  { text: "> tx: 0xf3c8a2...d91e  CONFIRMED", color: "text-green-400", delay: 2800 },
+  { text: "> tx: 0xf3c8a2...d91e  CONFIRMED", color: "text-yellow", delay: 2800 },
   { text: "> USDC transferred: $50.00", color: "text-yellow", delay: 3400 },
   { text: "> Gas paid by user: $0.000000 ✓", color: "text-yellow", delay: 4000 },
 ];
@@ -62,10 +62,10 @@ function TypingTerminal() {
       <div className="flex items-center gap-2 px-4 py-3 border-b" style={{ background: "rgba(255,255,255,0.025)", borderColor: "rgba(255,255,255,0.06)" }}>
         <span className="w-2.5 h-2.5 rounded-full bg-red-500/60" />
         <span className="w-2.5 h-2.5 rounded-full bg-yellow/50" />
-        <span className="w-2.5 h-2.5 rounded-full bg-green-400/50" />
+        <span className="w-2.5 h-2.5 rounded-full bg-white/20" />
         <span className="ml-3 text-white/20 text-xs font-mono">q402-cli · live simulation</span>
         <div className="ml-auto flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
           <span className="text-[10px] text-white/20 font-mono">running</span>
         </div>
       </div>

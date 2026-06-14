@@ -35,13 +35,13 @@ interface Props {
 
 const ACCENT_CLASS: Record<NonNullable<NavDropdownItem["accent"]>, string> = {
   default: "text-white/85 hover:text-white",
-  green: "text-green-400/85 hover:text-green-300",
+  green: "text-yellow/85 hover:text-yellow",
   orange: "text-orange-300/85 hover:text-orange-200",
   yellow: "text-yellow/85 hover:text-yellow",
 };
 
 const BADGE_CLASS: Record<"green" | "orange" | "yellow", string> = {
-  green: "text-green-400 bg-green-400/15 border-green-400/40",
+  green: "text-yellow bg-yellow/15 border-yellow/40",
   orange: "text-orange-300 bg-orange-300/15 border-orange-300/40",
   yellow: "text-yellow bg-yellow/15 border-yellow/40",
 };

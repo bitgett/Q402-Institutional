@@ -16,7 +16,7 @@ const PLANS = [
   { name: "Scale",   credits: "50,000 txs", highlight: false },
 ];
 
-const CHAIN_OPTIONS = ["BNB Chain", "Ethereum", "Avalanche", "X Layer", "Stable", "Mantle", "Injective", "Monad", "Scroll", "Multi-chain"];
+const CHAIN_OPTIONS = ["BNB Chain", "Ethereum", "Avalanche", "X Layer", "Stable", "Mantle", "Injective", "Monad", "Scroll", "Arbitrum", "Multi-chain"];
 const CATEGORY_OPTIONS = ["DeFi / DEX", "NFT / Gaming", "Payment App", "Wallet", "DAO / Governance", "Other"];
 const VOLUME_OPTIONS = ["< 1,000 txs / 30 days", "1K – 10K txs / 30 days", "10K – 50K txs / 30 days", "50K – 300K txs / 30 days", "300K+ txs / 30 days"];
 
@@ -120,7 +120,7 @@ export default function RegisterModal({ onClose }: Props) {
                 {step === 1 && "Connect your wallet"}
                 {step === 2 && "Project details"}
                 {step === 3 && "Choose a plan"}
-                {step === 4 && "You're live 🎉"}
+                {step === 4 && "You're live"}
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -301,8 +301,8 @@ export default function RegisterModal({ onClose }: Props) {
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
                 <h2 className="text-lg font-bold mb-1">Pick a plan</h2>
                 <div className="flex items-center gap-2 mb-5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-400" style={{ boxShadow: "0 0 5px #4ade80" }} />
-                  <p className="text-white/40 text-sm">We&apos;ll provision a <span className="text-green-400 font-medium">sandbox API key</span> right now. For a live key, either activate the Free Trial at <span className="text-white/70 font-mono">/event</span> (BNB-only, sponsored) or complete on-chain payment on <span className="text-white/70 font-mono">/payment</span> (Multichain).</p>
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow" style={{ boxShadow: "0 0 5px #F5C518" }} />
+                  <p className="text-white/40 text-sm">We&apos;ll provision a <span className="text-yellow font-medium">sandbox API key</span> right now. For a live key, either activate the Free Trial at <span className="text-white/70 font-mono">/event</span> (BNB-only, sponsored) or complete on-chain payment on <span className="text-white/70 font-mono">/payment</span> (Multichain).</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3 mb-5">
@@ -353,7 +353,7 @@ export default function RegisterModal({ onClose }: Props) {
                   <motion.div
                     initial={{ scale: 0 }} animate={{ scale: 1 }}
                     transition={{ type: "spring", delay: 0.1, damping: 12 }}
-                    className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-400/15 border border-green-400/30 flex items-center justify-center text-2xl"
+                    className="w-16 h-16 mx-auto mb-4 rounded-full bg-yellow/15 border border-yellow/30 flex items-center justify-center text-2xl"
                   >
                     ✓
                   </motion.div>
@@ -363,13 +363,13 @@ export default function RegisterModal({ onClose }: Props) {
 
                 <div className="bg-[#060C14] border border-white/8 rounded-xl p-4 mb-5">
                   <div className="text-xs text-white/30 uppercase tracking-widest mb-2">Your Sandbox API Key</div>
-                  <div className="font-mono text-sm text-green-400 break-all">
+                  <div className="font-mono text-sm text-yellow break-all">
                     {realApiKey ?? "Check your dashboard for your API key"}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 bg-yellow/5 border border-yellow/15 rounded-xl px-4 py-3 mb-5">
-                  <span className="text-yellow text-sm">⚡</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" className="text-yellow flex-shrink-0" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" /></svg>
                   <p className="text-xs text-white/50">
                     Test end-to-end with zero gas. When you&apos;re ready for production, complete payment on <a href="/payment" className="text-yellow hover:underline">/payment</a> — your live key is issued automatically on-chain confirmation.
                   </p>

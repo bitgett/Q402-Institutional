@@ -121,8 +121,8 @@ export default function EmailSignupModal({ onClose }: Props) {
 
           {sent && (
             <div>
-              <div className="w-14 h-14 rounded-full bg-green-400/15 flex items-center justify-center mb-4">
-                <span className="text-green-400 text-2xl">✓</span>
+              <div className="w-14 h-14 rounded-full bg-yellow/15 flex items-center justify-center mb-4">
+                <span className="text-yellow text-2xl">✓</span>
               </div>
               <h2 className="text-2xl font-bold mb-2">Check your inbox</h2>
               <p className="text-white/55 text-sm mb-5">

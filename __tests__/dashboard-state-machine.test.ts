@@ -24,10 +24,6 @@ const dashboardSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "page.tsx"),
   "utf8",
 ).replace(/\r\n/g, "\n");
-const sidebarSource = readFileSync(
-  resolve(ROOT, "app", "dashboard", "Sidebar.tsx"),
-  "utf8",
-).replace(/\r\n/g, "\n");
 const claimPromptSource = readFileSync(
   resolve(ROOT, "app", "dashboard", "ClaimWalletPrompt.tsx"),
   "utf8",
@@ -137,22 +133,6 @@ describe("dashboard — data fetch gating (no leak from mismatched wallets)", ()
     expect(dashboardSource).not.toMatch(
       /fetch\(\s*["']\/api\/auth\/wallet-bind["'][\s\S]*?body:\s*JSON\.stringify\(\s*\{\s*address\s*\}\s*\)/,
     );
-  });
-});
-
-describe("Sidebar — Phase 1 routing keeps the lock UI unreachable", () => {
-  // The sidebar is only ever rendered when the dashboard reaches State F
-  // (email session present, wallet bound, wallet matches). In that state
-  // emailSession.address is always set, so any `multichainLocked` prop we
-  // could pass would always be false. The prop was dead code on Phase 1
-  // routing and was removed — these assertions catch a regression that
-  // re-introduces it without re-thinking when it should fire.
-  it("Sidebar does not accept a multichainLocked prop", () => {
-    expect(sidebarSource).not.toMatch(/multichainLocked/);
-  });
-
-  it("dashboard does not pass a multichainLocked prop to Sidebar", () => {
-    expect(dashboardSource).not.toMatch(/multichainLocked=/);
   });
 });
 

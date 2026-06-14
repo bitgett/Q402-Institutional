@@ -181,7 +181,7 @@ export default function TrialActivationModal({ onClose }: Props) {
                 <h2 className="text-2xl font-bold mb-2">Connect your wallet</h2>
                 <p className="text-white/45 text-sm mb-6">
                   The trial issues an API key bound to your wallet. {TRIAL_CREDITS.toLocaleString()} gasless
-                  transactions on BNB Chain (USDC + USDT), good for {TRIAL_DURATION_DAYS} days. <span className="text-green-400 font-semibold">Q402 covers the gas</span> —
+                  transactions on BNB Chain (USDC + USDT), good for {TRIAL_DURATION_DAYS} days. <span className="text-yellow font-semibold">Q402 covers the gas</span> —
                   you do not fund a Gas Tank. One trial per wallet.
                 </p>
                 <button
@@ -202,7 +202,7 @@ export default function TrialActivationModal({ onClose }: Props) {
                   Activate {TRIAL_CREDITS.toLocaleString()} free transactions
                 </h2>
                 <p className="text-white/45 text-sm mb-6">
-                  {TRIAL_DURATION_DAYS} days of gasless USDC + USDT on BNB Chain. <span className="text-green-400 font-semibold">Q402 covers the gas</span> —
+                  {TRIAL_DURATION_DAYS} days of gasless USDC + USDT on BNB Chain. <span className="text-yellow font-semibold">Q402 covers the gas</span> —
                   no card, no upfront payment, no Gas Tank to fund. Your wallet signs once to prove ownership.
                 </p>
 
@@ -245,8 +245,8 @@ export default function TrialActivationModal({ onClose }: Props) {
 
             {step === "success" && (
               <div>
-                <div className="w-14 h-14 rounded-full bg-green-400/15 flex items-center justify-center mb-4">
-                  <span className="text-green-400 text-2xl">✓</span>
+                <div className="w-14 h-14 rounded-full bg-yellow/15 flex items-center justify-center mb-4">
+                  <span className="text-yellow text-2xl">✓</span>
                 </div>
                 <h2 className="text-2xl font-bold mb-2">Trial activated</h2>
                 <p className="text-white/55 text-sm mb-5">
@@ -259,7 +259,7 @@ export default function TrialActivationModal({ onClose }: Props) {
                       <p className="text-white/40">Sending magic-link to {email}…</p>
                     )}
                     {magicLinkState === "sent" && (
-                      <p className="text-green-400/80">
+                      <p className="text-yellow/80">
                         Magic-link sent to {email} — click to confirm your email for trial reminders.
                       </p>
                     )}

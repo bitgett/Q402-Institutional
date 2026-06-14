@@ -67,14 +67,14 @@ export default async function OgImage({
         {/* Verified badge */}
         <div style={{
           display: "flex", alignItems: "center", gap: 18,
-          color: view.sandbox ? "#FFB066" : "#4AE54A",
+          color: view.sandbox ? "#FFB066" : "#F5C518",
           fontSize: 28, fontWeight: 700, marginBottom: 22,
         }}>
           <div style={{
             width: 44, height: 44, borderRadius: 22,
             display: "flex", alignItems: "center", justifyContent: "center",
-            background: view.sandbox ? "rgba(255,176,102,0.16)" : "rgba(74,229,74,0.16)",
-            border: `2px solid ${view.sandbox ? "rgba(255,176,102,0.55)" : "rgba(74,229,74,0.55)"}`,
+            background: view.sandbox ? "rgba(255,176,102,0.16)" : "rgba(245,197,24,0.16)",
+            border: `2px solid ${view.sandbox ? "rgba(255,176,102,0.55)" : "rgba(245,197,24,0.55)"}`,
             fontSize: 26,
           }}>
             {view.sandbox ? "△" : "✓"}

@@ -103,7 +103,7 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
             onClick={() => copy(INSTALL_CMD, "cmd")}
             className={`flex-shrink-0 text-xs px-3 py-1 rounded-lg font-semibold transition-all ${
               copiedCmd
-                ? "bg-green-400/15 text-green-400"
+                ? "bg-yellow/15 text-yellow"
                 : "bg-yellow/10 text-yellow hover:bg-yellow/20"
             }`}
           >
@@ -146,7 +146,7 @@ export default function ClaudeMcpCard({ sandboxApiKey }: Props) {
             onClick={() => copy(config, "json")}
             className={`absolute top-3 right-3 text-[10px] px-2.5 py-1 rounded-md font-semibold transition-all ${
               copiedJson
-                ? "bg-green-400/15 text-green-400"
+                ? "bg-yellow/15 text-yellow"
                 : "bg-white/5 text-white/40 hover:bg-white/10 hover:text-white/80"
             }`}
           >

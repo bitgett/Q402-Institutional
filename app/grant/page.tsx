@@ -9,7 +9,7 @@ const TIERS = [
     name: "Seed",
     credit: "$500",
     txs: "Up to 10,000 txs",
-    color: "#4AE54A",
+    color: "#F5C518",
     desc: "Early-stage projects exploring gasless UX",
     perks: ["$500 relay credit", "Priority support", "Q402 partner badge"],
   },
@@ -33,7 +33,7 @@ const TIERS = [
 ];
 
 const CATEGORIES = ["DeFi", "GameFi", "NFT / Creator", "AI Agent", "DAO / Governance", "Infrastructure", "Social / Community", "Other"];
-const CHAINS     = ["BNB Chain", "Ethereum", "Avalanche", "Mantle", "Injective", "X Layer", "Stable", "Monad", "Scroll", "Multi-chain"];
+const CHAINS     = ["BNB Chain", "Ethereum", "Avalanche", "Mantle", "Injective", "X Layer", "Stable", "Monad", "Scroll", "Arbitrum", "Multi-chain"];
 const CREDITS    = ["$500 (Seed)", "$2,000 (Builder)", "$5,000+", "Custom / discuss"];
 const TX_RANGES  = ["< 1,000 / mo", "1,000 – 10,000 / mo", "10,000 – 100,000 / mo", "100,000+ / mo"];
 
@@ -78,7 +78,7 @@ export default function GrantPage() {
     <div className="min-h-screen" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 60%, #0D1628 100%)" }}>
       {/* Background glows */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-1/4 left-1/3 w-[700px] h-[700px] rounded-full blur-[180px]" style={{ background: "rgba(74,229,74,0.04)" }} />
+        <div className="absolute top-1/4 left-1/3 w-[700px] h-[700px] rounded-full blur-[180px]" style={{ background: "rgba(245,197,24,0.04)" }} />
         <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] rounded-full blur-[150px]" style={{ background: "rgba(245,197,24,0.03)" }} />
       </div>
 
@@ -95,7 +95,7 @@ export default function GrantPage() {
           <div className="hidden md:flex items-center gap-8 text-sm text-white/50">
             <Link href="/#how-it-works" className="hover:text-white transition-colors">How it works</Link>
             <Link href="/#pricing"      className="hover:text-white transition-colors">Pricing</Link>
-            <Link href="/agents"        className="hover:text-green-400 transition-colors text-green-400/70">Agents</Link>
+            <Link href="/agents"        className="hover:text-yellow transition-colors text-yellow/70">Agents</Link>
             <Link href="/grant"         className="text-yellow hover:text-yellow-hover transition-colors font-medium">Grant</Link>
             <Link href="/docs"          className="hover:text-white transition-colors">Docs</Link>
           </div>
@@ -110,13 +110,13 @@ export default function GrantPage() {
         {/* Hero */}
         <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}
           className="text-center mb-20">
-          <div className="inline-flex items-center gap-2 bg-green-400/8 border border-green-400/20 rounded-full px-4 py-1.5 mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-green-400 text-xs font-semibold tracking-wide uppercase">Q402 Grant Program · 2026</span>
+          <div className="inline-flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-1.5 mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
+            <span className="text-yellow text-xs font-semibold tracking-wide uppercase">Q402 Grant Program · 2026</span>
           </div>
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-5 leading-[1.05]">
             Build the Future of<br />
-            <span style={{ background: "linear-gradient(90deg, #F5C518, #4AE54A)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+            <span style={{ background: "linear-gradient(90deg, #F5C518, #FCE38A)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
               Web3 Payments.
             </span>
           </h1>
@@ -210,8 +210,8 @@ export default function GrantPage() {
             {status === "success" ? (
               <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
                 className="px-8 py-16 flex flex-col items-center text-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-green-400/10 border border-green-400/30 flex items-center justify-center text-3xl">✓</div>
-                <h3 className="text-xl font-bold text-green-400">Application Received</h3>
+                <div className="w-16 h-16 rounded-full bg-yellow/10 border border-yellow/30 flex items-center justify-center text-3xl">✓</div>
+                <h3 className="text-xl font-bold text-yellow">Application Received</h3>
                 <p className="text-white/45 text-sm max-w-md">
                   Thanks! We&apos;ll review your application and reach out within 3–5 business days via email or Telegram.
                 </p>

@@ -79,9 +79,10 @@ export const V2_ACCENT_LINE = "rgba(247,202,22,.30)"; // active border
 export const V2_ACCENT_FILL = "rgba(247,202,22,.06)"; // tinted surface fill
 export const V2_ACCENT_TEXT = "#f9d64a"; // selected-row text (lighter than base yellow)
 
-/** Emerald defaults the shared modals fall back to outside a v2 scope. */
-export const OFFBRANCH_ACCENT = "#4ade80";
-export const OFFBRANCH_ACCENT_TEXT = "#86efac";
+/** Brand-yellow defaults the shared modals fall back to outside a v2 scope
+ *  (kept yellow so no green leaks even on the off-branch path). */
+export const OFFBRANCH_ACCENT = "#F5C518";
+export const OFFBRANCH_ACCENT_TEXT = "#f9d64a";
 
 /**
  * Geometry tokens — corner radii, card insets (padding), and rail/column

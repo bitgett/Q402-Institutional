@@ -2,6 +2,19 @@
   "name": "q402-landing",
   "version": "0.1.0",
   "private": true,
+  "description": "Q402 — gasless USDC/USDT/RLUSD payments across 10 EVM chains. Landing + dashboard + relayer for the Q402 institutional gasless payment rail (EIP-712 witness + EIP-7702 delegation).",
+  "keywords": [
+    "q402",
+    "gasless",
+    "stablecoin",
+    "usdc",
+    "evm",
+    "eip-7702",
+    "eip-712",
+    "payments",
+    "web3",
+    "agentic-wallet"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
