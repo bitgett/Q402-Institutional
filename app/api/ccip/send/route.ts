@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { requireIntentAuth } from "@/app/lib/auth";
+import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
 import {
   isCCIPChain,
   CCIP_CONFIG,
@@ -76,6 +77,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const dst = body.dst as CCIPChainKey;
   if (src === dst) {
     return NextResponse.json({ error: "src and dst must differ" }, { status: 400 });
+  }
+  // Held chains (chain-status.ts) — refuse a bridge whose src or dst is held.
+  if (isChainDisabled(src) || isChainDisabled(dst)) {
+    return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
   if (!CCIP_CONFIG[src].supportedDestinations.includes(dst)) {
     return NextResponse.json({ error: `Lane ${src} → ${dst} not supported` }, { status: 400 });

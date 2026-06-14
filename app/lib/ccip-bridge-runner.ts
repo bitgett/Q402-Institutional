@@ -50,6 +50,7 @@ import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
 import { rateLimit } from "@/app/lib/ratelimit";
 import { CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
+import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
 
 export interface BridgeHistoryRecord {
   messageId:    string;
@@ -166,6 +167,11 @@ export interface RunCCIPBridgeArgs {
  */
 export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextResponse> {
   const { owner, walletId, src, dst, feeToken } = args;
+  // Held chains (chain-status.ts) — shared chokepoint for both bridge routes
+  // (/api/ccip/send + /api/wallet/agentic/bridge).
+  if (isChainDisabled(src) || isChainDisabled(dst)) {
+    return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
+  }
   const amount = args.amount;
   const amountRaw = BigInt(amount);
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { ethers } from "ethers";
 import { kv } from "@vercel/kv";
+import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
 import {
   getApiKeyRecord,
   getGasBalance,
@@ -205,6 +206,13 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // ── 1. Required field validation (all chains) ────────────────────────────
   if (!apiKey || !chain || !token || !from || !to || !amount || !deadline || !witnessSig) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+  }
+
+  // ── 1a. Held chains (chain-status.ts) — clean 400 before quota/auth work.
+  // settlePayment() also stops these as the universal chokepoint; this just
+  // returns a tidy error earlier in the request.
+  if (isChainDisabled(chain)) {
+    return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
 
   // ── 1aa. Per-chain token policy (server-side allowlist) ──────────────────
