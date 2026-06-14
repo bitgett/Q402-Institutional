@@ -125,6 +125,8 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_yield_deposit` | live key | Supply the Agent Wallet's USDC / USDT into Aave (Mode C). **Paid Multichain plan only — Trial cannot deposit.** Confirm + sandbox-by-default. |
 | `q402_yield_withdraw` | live key | Withdraw the Agent Wallet's supplied stablecoin out of Aave (`amount="max"` for the full position). Always allowed, even after downgrade. |
 
+The three fund-moving tools — `q402_pay`, `q402_batch_pay`, and `q402_bridge_send` — use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one — `confirm: true` alone no longer fires a payment.
+
 Q402 Yield is a **paid-only** feature: depositing requires a live Multichain plan, Trial accounts cannot supply, and withdrawals are always allowed so deposited funds can always be recovered.
 
 ---
@@ -296,7 +298,7 @@ Persists across payments, reversible anytime.
 
   ```bash
   PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs \
-    --chain <bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll>
+    --chain <bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll|arbitrum>
   ```
 
 Clearing is optional — the next payment recreates the delegation. Full guide: [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation).

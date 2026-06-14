@@ -22,6 +22,7 @@ import {
   PACKAGE_NAME,
   PACKAGE_VERSION,
 } from "@/app/api/mcp/info/version";
+import { MCP_VERSION } from "@/app/lib/version";
 import { buildQ402AgentMetadata } from "@/app/lib/erc8004";
 
 describe("/api/mcp/info — discovery surface drift guard", () => {
@@ -46,6 +47,16 @@ describe("/api/mcp/info — discovery surface drift guard", () => {
   it("returns the canonical package name + version from version.ts", () => {
     expect(PACKAGE_NAME).toBe("@quackai/q402-mcp");
     expect(PACKAGE_VERSION).toMatch(/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/);
+  });
+
+  it("PACKAGE_VERSION matches the single source of truth in app/lib/version.ts", () => {
+    // The /api/mcp/info discovery route and the UI both surface a published
+    // version. They live in two files (api/mcp/info/version.ts can't import the
+    // gitignored mcp-server/ workspace, so it mirrors the constant). This
+    // assertion ties them together so a publish bump can't leave the public
+    // discovery endpoint reporting a stale version — exactly the drift that
+    // shipped 0.8.22 on /api/mcp/info while everything else was 0.8.23.
+    expect(PACKAGE_VERSION).toBe(MCP_VERSION);
   });
 });
 

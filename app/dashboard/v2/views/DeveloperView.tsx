@@ -29,7 +29,8 @@
  *       POST /api/webhook (save → { success, secret? });
  *       POST /api/webhook/test → { success, statusCode | error }.
  *       Same NONCE_EXPIRED handling + clearAuthCache as v1.
- *   - MCP card: install string for @quackai/q402-mcp (v0.8.22) — mirrors
+ *   - MCP card: install string for @quackai/q402-mcp (version from
+ *       app/lib/version.ts) — mirrors
  *       app/components/ClaudeMcpCard.tsx, re-skinned to v2 chrome.
  *   - Playground: ports the v1 <Playground/> simulate logic + per-chain
  *       token allowlist (page.tsx:496) into v2-styled chrome (the v1 one is
