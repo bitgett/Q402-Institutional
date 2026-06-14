@@ -77,6 +77,14 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
         ([, s]) => s.delegated,
       )
     : [];
+  // Chains whose delegation lookup ERRORED (RPC failure) — distinct from "clean,
+  // not delegated". Without this, an all-RPC-failure read collapses to
+  // delegatedChains.length === 0 and we'd falsely claim "not delegated anywhere".
+  const erroredChains = delegationStatus
+    ? (Object.entries(delegationStatus.chains) as Array<[ChainKey, DelegationState]>).filter(
+        ([, s]) => !!s.error,
+      )
+    : [];
 
   async function copy(text: string, setter: (v: boolean) => void) {
     try {
@@ -197,9 +205,16 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
           </div>
         )}
 
-      {delegationStatus && delegatedChains.length === 0 && (
+      {delegationStatus && delegatedChains.length === 0 && erroredChains.length === 0 && (
         <div className="text-[11px] text-white/60">
           ✓ Owner EOA is not EIP-7702-delegated on any supported chain.
+        </div>
+      )}
+
+      {delegationStatus && delegatedChains.length === 0 && erroredChains.length > 0 && (
+        <div className="text-[11px] text-amber-200/70">
+          Could not check delegation on{" "}
+          {erroredChains.map(([c]) => CHAIN_LABEL[c] ?? c).join(", ")} (RPC error) — status unknown for those chains.
         </div>
       )}
     </div>

@@ -32,12 +32,23 @@ export async function rateLimit(
   windowSec: number,
   /** failOpen=false (default): block when KV is down — safer default.
    *  failOpen=true: allow when KV is down — opt in only for low-risk read paths. */
-  failOpen = false
+  failOpen = false,
+  /** consume=true (default): increment the counter (this call counts against the
+   *  quota). consume=false: PEEK — report whether the caller is currently under
+   *  the limit WITHOUT incrementing, so a caller can gate up front and only
+   *  `consume` after the protected work actually succeeds (e.g. so a failed,
+   *  zero-cost attempt doesn't burn the quota and block an immediate retry). */
+  consume = true,
 ): Promise<boolean> {
   try {
     // Bucket key changes every `windowSec` seconds — fixed window
     const bucket = Math.floor(Date.now() / 1000 / windowSec);
     const key    = `rl:${endpoint}:${identifier}:${bucket}`;
+
+    if (!consume) {
+      const current = Number(await kv.get(key)) || 0;
+      return current < limit;
+    }
 
     const count = await kv.incr(key);
     if (count === 1) {

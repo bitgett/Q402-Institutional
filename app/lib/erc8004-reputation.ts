@@ -375,6 +375,16 @@ export interface ReputationSummaryView {
 const REPUTATION_CACHE_TTL_SEC = 5 * 60;
 const reputationCacheKey = (agentId: string) => `aw:rep-cache:${agentId}`;
 
+/** Negative-cache TTL. When an RPC read fails we stash a short-lived
+ *  "miss" marker so the dashboard / MCP polls don't re-hammer a sick
+ *  RPC on every request. Kept deliberately short (30s) so a transient
+ *  outage self-heals on the next poll after the window expires while a
+ *  flapping RPC still gets meaningful relief. Uses the SAME @vercel/kv
+ *  store as the success path, under a distinct key namespace so a
+ *  cached miss can never be mistaken for a real `ReputationSummaryView`. */
+const REPUTATION_NEG_CACHE_TTL_SEC = 30;
+const reputationMissKey = (agentId: string) => `aw:rep-miss:${agentId}`;
+
 /**
  * Cached two-view reputation read. Used by `GET /api/wallet/agentic`
  * and `POST /api/wallet/agentic/info-by-key` (MCP path).
@@ -405,6 +415,11 @@ export async function readReputationSummary(
     if (cached && Date.now() - cached.lastChecked < REPUTATION_CACHE_TTL_SEC * 1000) {
       return cached;
     }
+    // Negative-cache hit: a recent RPC read failed. Return the same
+    // graceful `null` callers already handle WITHOUT re-hitting the RPC.
+    // The key's own TTL expires the miss, so a later retry can succeed.
+    const miss = await kv.get<{ failedAt: number }>(reputationMissKey(agentIdStr));
+    if (miss) return null;
   } catch {
     /* cache failure is non-fatal — fall through to live read */
   }
@@ -419,6 +434,20 @@ export async function readReputationSummary(
     ]);
   } catch (e) {
     console.error("[readReputationSummary] RPC read failed for agent " + agentIdStr + ":", e);
+    // Negative-cache the failure so subsequent polls inside the short
+    // TTL return a graceful `null` instead of re-attempting (and
+    // re-erroring on) the same sick RPC every request. The key's TTL
+    // expires the miss, so a later retry can still succeed.
+    try {
+      const { kv } = await import("@vercel/kv");
+      await kv.set(
+        reputationMissKey(agentIdStr),
+        { failedAt: Date.now() },
+        { ex: REPUTATION_NEG_CACHE_TTL_SEC },
+      );
+    } catch {
+      /* non-fatal */
+    }
     return null;
   }
 

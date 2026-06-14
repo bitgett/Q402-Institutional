@@ -93,6 +93,40 @@ export function isOfficialQ402Impl(chain: ChainKey, impl: string | undefined): b
   return impl.toLowerCase() === Q402_IMPL_PER_CHAIN[chain];
 }
 
+// Retired Q402 impls per chain — earlier generations the relayer once delegated
+// EOAs to. They are NOT the current settlement impl (some lack the owner-binding
+// check), so they must NEVER be accepted for SETTLEMENT (use isOfficialQ402Impl
+// for that — current only). But a delegation pointing at one is still a Q402
+// delegation, so the clear-delegation endpoint SHOULD sponsor un-delegating it
+// (clearing is always the EOA owner's own action, proven by sig recovery).
+// Keyed per (chain, address): the same CREATE address can be a current impl on
+// one chain and retired on another. All lowercased; append as older generations
+// are found (this list is "known retired", not provably exhaustive).
+const RETIRED_IMPLS: Record<ChainKey, readonly string[]> = {
+  avax:      [],
+  bnb:       [],
+  eth:       [],
+  xlayer:    [],
+  stable:    [],
+  mantle:    ["0xa9a7dce76def2ac36057fef0d8103df10581d61e"],
+  injective: ["0x892e647fbbadc8ee8342710244931ea98529ea9c"],
+  monad:     ["0x5a8fde1851491d9ed512a9eda1c63ca7627becb8", "0x39ba9520718ee069d7f72882ff4c28a5ea8a2acc"],
+  scroll:    ["0x8d854436ab0426f5bc6cc70865c90576ad523e73", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
+  arbitrum:  ["0xe5b90d564650bdce7c2bb4344f777f6582e05699"],
+};
+
+/**
+ * True if `impl` is a Q402 impl on `chain` that the clear-delegation endpoint
+ * may sponsor un-delegating — the CURRENT impl OR a known RETIRED impl. This is
+ * the gate for CLEARING only; settlement still requires isOfficialQ402Impl
+ * (current impl only).
+ */
+export function isClearableQ402Impl(chain: ChainKey, impl: string | undefined): boolean {
+  if (!impl) return false;
+  const a = impl.toLowerCase();
+  return a === Q402_IMPL_PER_CHAIN[chain] || RETIRED_IMPLS[chain].includes(a);
+}
+
 export const CHAIN_KEYS: ReadonlyArray<ChainKey> = [
   "avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum",
 ];
