@@ -28,9 +28,11 @@ Re-verify any row:
 
 These chains aren't indexed by Sourcify; the impls are verified on each chain's
 native explorer, but those explorers need an API key (or manual page export) to
-pull the source into the repo. The same shared impl (`0x2fb2…`) on Scroll +
-Arbitrum IS captured above (full match), so the source is byte-identical; the
-rows below are the remaining *deployments* of it plus the chain-specific impls.
+pull the source into the repo. NOTE: the `0x2fb2…` address recurs across chains
+via plain-CREATE determinism (same deployer + nonce 0) — the *address* matches
+but the *source is chain-specific* (Scroll's and Arbitrum's verified sources at
+that address differ, 252 vs 259 lines), so each chain below must be fetched and
+re-verified separately; they do NOT inherit the Scroll/Arbitrum source.
 
 | Chain | chainId | Impl address | Verified at | To complete |
 |---|---|---|---|---|
@@ -41,8 +43,9 @@ rows below are the remaining *deployments* of it plus the chain-specific impls.
 | Monad | 143 | `0x39Ba9520718eE069D7f72882FF4C28a5Ea8a2acC` | Monad explorer | explorer API key |
 | Yield (Aave, BNB) | 56 | `0x968DfEeDA554b2aB1a43944520CE2aB1e40f84A4` | BscScan | Etherscan-V2 key (covers chainId 56) |
 
-The Stable/Mantle/Injective deployments share the `0x2fb2…` source already in
-`contracts/deployed/scroll/` + `/arbitrum/` (same CREATE address, byte-identical).
+(The Stable/Mantle/Injective deployments reuse the `0x2fb2…` *address* but carry
+their own chain-specific source — they are NOT covered by the Scroll/Arbitrum
+exports above and still need a per-chain fetch.)
 
 ## Note for due diligence
 
