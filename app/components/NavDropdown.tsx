@@ -23,8 +23,8 @@ export interface NavDropdownItem {
   href: string;
   label: string;
   description?: string;
-  accent?: "default" | "green" | "orange" | "yellow";
-  badge?: { label: string; color: "green" | "orange" | "yellow" };
+  accent?: "default" | "yellow" | "cyan";
+  badge?: { label: string; color: "yellow" | "cyan" };
   external?: boolean;
 }
 
@@ -35,15 +35,13 @@ interface Props {
 
 const ACCENT_CLASS: Record<NonNullable<NavDropdownItem["accent"]>, string> = {
   default: "text-white/85 hover:text-white",
-  green: "text-yellow/85 hover:text-yellow",
-  orange: "text-orange-300/85 hover:text-orange-200",
   yellow: "text-yellow/85 hover:text-yellow",
+  cyan: "text-[#5BC8FA]/85 hover:text-[#5BC8FA]",
 };
 
-const BADGE_CLASS: Record<"green" | "orange" | "yellow", string> = {
-  green: "text-yellow bg-yellow/15 border-yellow/40",
-  orange: "text-orange-300 bg-orange-300/15 border-orange-300/40",
+const BADGE_CLASS: Record<"yellow" | "cyan", string> = {
   yellow: "text-yellow bg-yellow/15 border-yellow/40",
+  cyan: "text-[#5BC8FA] bg-[#5BC8FA]/15 border-[#5BC8FA]/40",
 };
 
 export default function NavDropdown({ label, items }: Props) {

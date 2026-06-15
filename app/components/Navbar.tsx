@@ -3,6 +3,7 @@
 import Link from "next/link";
 import WalletButton from "./WalletButton";
 import NavDropdown, { type NavDropdownItem } from "./NavDropdown";
+import MobileMenu from "./MobileMenu";
 import { EVENT_MODE } from "@/app/lib/feature-flags";
 
 // Grouped menu structure. Arbitrum-style: a small number of category triggers
@@ -11,14 +12,14 @@ import { EVENT_MODE } from "@/app/lib/feature-flags";
 // destination is without clicking.
 const PRODUCT_ITEMS: NavDropdownItem[] = [
   { href: "/#how-it-works", label: "How it works", description: "EIP-712 signing + facilitator relay, end to end." },
-  { href: "/#use-cases",    label: "Use cases",    description: "DeFi, AI agents, payments, payouts." },
+  { href: "/#use-cases",    label: "AI agents",    description: "One MCP call pays, signs a receipt, sponsors gas." },
   { href: "/#pricing",      label: "Pricing",      description: "Per-30-day credits across all chains." },
 ];
 
 const DEVELOPER_ITEMS: NavDropdownItem[] = [
   { href: "/docs",   label: "Docs",   description: "SDK, API reference, quickstart." },
   { href: "/agents", label: "Agents", description: "Server-side EIP-712 signer for AI pipelines.", accent: "yellow" },
-  { href: "/claude", label: "MCP server", description: "Q402 for Claude, Codex, Cursor, Cline.", accent: "orange", badge: { label: "NEW", color: "orange" } },
+  { href: "/claude", label: "MCP server", description: "Q402 for Claude, Codex, Cursor, Cline.", accent: "cyan", badge: { label: "NEW", color: "cyan" } },
   { href: "https://github.com/bitgett/Q402-Institutional", label: "GitHub", description: "Open source — landing + relayer + SDK.", external: true },
 ];
 
@@ -39,7 +40,7 @@ export default function Navbar() {
           <span className="w-7 h-7 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
             <span className="w-3 h-3 rounded-sm bg-navy/90" />
           </span>
-          <span className="text-yellow font-bold text-lg tracking-tight leading-none">Q402</span>
+          <span className="text-yellow font-display font-bold text-lg tracking-tight leading-none">Q402</span>
           <span className="text-white/30 text-xs font-light hidden sm:block leading-none">by Quack AI</span>
         </Link>
 
@@ -67,9 +68,17 @@ export default function Navbar() {
           </Link>
         </div>
 
-        {/* Right corner — wallet / signin */}
-        <div className="flex-shrink-0">
+        {/* Right corner — wallet / signin + mobile menu (hamburger < md) */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <WalletButton />
+          <MobileMenu
+            eventMode={EVENT_MODE}
+            groups={[
+              { label: "Product", items: PRODUCT_ITEMS },
+              { label: "Developers", items: DEVELOPER_ITEMS },
+              { label: "Community", items: COMMUNITY_ITEMS },
+            ]}
+          />
         </div>
       </div>
     </nav>
