@@ -24,11 +24,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { kv } from "@vercel/kv";
 import { rateLimit } from "@/app/lib/ratelimit";
 import {
   broadcastClear,
   getDelegationState,
   isClearableQ402Impl,
+  isQ402ImplOnChain,
   recoverAuthorizationAddress,
   CHAIN_IDS,
   Q402_IMPL_PER_CHAIN,
@@ -176,14 +178,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // un-delegation of an older Q402 impl is legitimate — and necessary, since
   // EOAs delegated to a retired impl are exactly the ones that need migrating.
   // (Settlement still requires the CURRENT impl elsewhere; this is clear-only.)
-  if (!isClearableQ402Impl(body.chain, state.impl)) {
+  // Static list OR — the authoritative completeness fallback — any impl whose
+  // on-chain NAME() is "Q402 …" (covers an un-enumerated older generation; the
+  // static lists can never be provably exhaustive).
+  if (
+    !isClearableQ402Impl(body.chain, state.impl) &&
+    !(await isQ402ImplOnChain(body.chain, state.impl!))
+  ) {
     return NextResponse.json(
       {
         error:    "NOT_Q402_DELEGATION",
-        reason:   `EOA is delegated to ${state.impl}, which is not a Q402 impl (current or known-retired) on ${body.chain}. This endpoint only sponsors cleanup of Q402 delegations.`,
+        reason:   `EOA is delegated to ${state.impl}, which is not a Q402 impl (current or retired) on ${body.chain}. This endpoint only sponsors cleanup of Q402 delegations.`,
         expected: Q402_IMPL_PER_CHAIN[body.chain],
         actual:   state.impl,
       },
+      { status: 409 },
+    );
+  }
+
+  // ── Concurrency lock ──────────────────────────────────────────────────────
+  // The rate-limit above only PEEKs (it consumes on success), so two concurrent
+  // requests for the same (address, chain) could both pass the peek and both
+  // broadcast. A SET NX lock serialises them so only one broadcast runs at a time.
+  const lockKey = `lock:clear-delegation:${rlKey}`;
+  const gotLock = await kv.set(lockKey, "1", { nx: true, ex: 30 }).catch(() => null);
+  if (!gotLock) {
+    return NextResponse.json(
+      { error: "CLEAR_IN_PROGRESS", reason: "Another clear for this address/chain is in flight. Retry shortly.", retryAfterSec: 30 },
       { status: 409 },
     );
   }
@@ -244,5 +265,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
       { status: 502 },
     );
+  } finally {
+    // Release the concurrency lock. On success the EOA is already undelegated
+    // (a retry is a no-op); on failure the user can retry immediately.
+    await kv.del(lockKey).catch(() => {});
   }
 }

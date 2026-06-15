@@ -258,11 +258,12 @@ console.log(JSON.stringify({
 // ── Required-invariant gate ─────────────────────────────────────────────────
 const failures = [];
 const warnings = [];
-// Count chains we ACTUALLY verified: a successful read (hasCode true) where at
-// least one invariant was evaluated (NAME, typehash, or the BNB-derived
+// Track which chains we ACTUALLY verified: a successful read (hasCode true)
+// where at least one invariant was evaluated (NAME, typehash, or the BNB-derived
 // bytecode compare), as opposed to a connectivity skip (row.error). The gate
-// must not go GREEN if this is zero — e.g. every RPC down → every row a warning.
-let verifiedCount = 0;
+// requires EVERY active (non-held) chain to verify — a release must not pass
+// while some live chain went unchecked (one RPC down is not "verified").
+const verifiedChains = new Set();
 for (const row of results) {
   const c = row.checks ?? {};
   if (row.error) {
@@ -274,7 +275,7 @@ for (const row of results) {
     continue;
   }
   if (c.hasCode && (c.nameMatch !== undefined || c.typehashMatchesTransferAuth !== undefined || c.bytecodeMatch !== undefined)) {
-    verifiedCount++;
+    verifiedChains.add(row.chain);
   }
   if (!c.hasCode) {
     failures.push(`${row.chain}: no bytecode at ${row.address}`);
@@ -331,11 +332,14 @@ if (failures.length > 0) {
   for (const msg of failures) console.error(`  - ${msg}`);
   process.exit(1);
 }
-if (verifiedCount === 0) {
-  // All-failed backstop: no invariant failures only because nothing could be
-  // read (every chain became a connectivity warning). A release gate must not
-  // pass on zero verification.
-  console.error("\n✖ verify-contracts: 0 chains could be verified (all RPC reads failed) — the gate cannot pass without verifying any contract.");
+// Per-chain backstop: every ACTIVE (non-held) chain must have been verified.
+// Connectivity warnings don't fail an individual invariant, but a release gate
+// must not pass while any live chain went unchecked (e.g. its RPC was down).
+// Held chains are exempt — they're already gated off in chain-status.ts.
+const activeChains = Object.keys(manifest.chains).filter((ch) => !DISABLED_CHAINS.has(ch));
+const unverifiedActive = activeChains.filter((ch) => !verifiedChains.has(ch));
+if (unverifiedActive.length > 0) {
+  console.error(`\n✖ verify-contracts: ${unverifiedActive.length} active chain(s) could not be verified (RPC read failed) — re-run when their RPCs are healthy: ${unverifiedActive.join(", ")}. The gate requires every active chain to verify.`);
   process.exit(1);
 }
 console.error("\n✓ verify-contracts: all required invariants pass (incl. owner-binding guard).");

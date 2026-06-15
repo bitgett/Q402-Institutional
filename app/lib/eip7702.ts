@@ -108,11 +108,17 @@ const RETIRED_IMPLS: Record<ChainKey, readonly string[]> = {
   eth:       [],
   xlayer:    [],
   stable:    [],
-  mantle:    ["0xa9a7dce76def2ac36057fef0d8103df10581d61e"],
-  injective: ["0x892e647fbbadc8ee8342710244931ea98529ea9c"],
+  // 0x2fb2b2… was deployed on mantle/injective/scroll/arbitrum (and is Stable's
+  // CURRENT impl) via deterministic nonce-aligned CREATE — it really does carry
+  // code on all of them, so list it everywhere it's retired. The static list is
+  // a fast path; the authoritative completeness check is isQ402ImplOnChain()
+  // below (on-chain NAME() prefix), which clears ANY Q402-shaped impl even if
+  // it's not enumerated here.
+  mantle:    ["0xa9a7dce76def2ac36057fef0d8103df10581d61e", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
+  injective: ["0x892e647fbbadc8ee8342710244931ea98529ea9c", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
   monad:     ["0x5a8fde1851491d9ed512a9eda1c63ca7627becb8", "0x39ba9520718ee069d7f72882ff4c28a5ea8a2acc"],
   scroll:    ["0x8d854436ab0426f5bc6cc70865c90576ad523e73", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
-  arbitrum:  ["0xe5b90d564650bdce7c2bb4344f777f6582e05699"],
+  arbitrum:  ["0xe5b90d564650bdce7c2bb4344f777f6582e05699", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
 };
 
 /**
@@ -125,6 +131,28 @@ export function isClearableQ402Impl(chain: ChainKey, impl: string | undefined): 
   if (!impl) return false;
   const a = impl.toLowerCase();
   return a === Q402_IMPL_PER_CHAIN[chain] || RETIRED_IMPLS[chain].includes(a);
+}
+
+/**
+ * Dynamic completeness check for the clear endpoint. Every Q402 impl — current
+ * OR retired, any generation — returns a "Q402 …" domain name from NAME(), so
+ * this recognises a Q402 delegation even when the static lists above don't
+ * enumerate it (the lists can never be provably exhaustive). Returns false on
+ * RPC error or any non-"Q402 " name (e.g. MetaMask's EIP7702StatelessDeleGator),
+ * so non-Q402 delegations are never sponsored for cleanup.
+ */
+export async function isQ402ImplOnChain(chain: ChainKey, impl: string): Promise<boolean> {
+  try {
+    const provider = new ethers.JsonRpcProvider(getPrimaryRpc(chain));
+    const name = await withTimeout(
+      new ethers.Contract(impl, ["function NAME() view returns (string)"], provider).NAME() as Promise<string>,
+      PROVIDER_CALL_TIMEOUT_MS,
+      `NAME(${chain})`,
+    );
+    return typeof name === "string" && name.startsWith("Q402 ");
+  } catch {
+    return false;
+  }
 }
 
 export const CHAIN_KEYS: ReadonlyArray<ChainKey> = [
