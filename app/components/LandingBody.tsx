@@ -815,12 +815,7 @@ export default function LandingBody() {
 .c1-tier-cta-out{border:1px solid var(--line);color:var(--ink);background:rgba(255,255,255,.02);}
 .c1-tier-cta-out:hover{border-color:rgba(245,197,24,.5);color:var(--acc);}
 
-.c1-agentbar{margin-top:14px;border-radius:16px;border:1px solid var(--line);background:var(--panel);
-  box-shadow:var(--panel-sh);padding:24px 26px;display:flex;align-items:center;justify-content:space-between;
-  gap:24px;flex-wrap:wrap;}
-.c1-agentbar h4{font-family:var(--disp);font-weight:700;font-size:18px;letter-spacing:-.02em;margin:0 0 6px;}
-.c1-agentbar p{color:var(--mut);font-size:13.5px;margin:0;max-width:58ch;}
-.c1-costline{margin-top:20px;color:var(--mut2);font-size:13px;}
+.c1-costline{margin-top:24px;color:var(--mut2);font-size:13px;}
 .c1-costline a{color:var(--mut);transition:color .2s;}
 .c1-costline a:hover{color:var(--acc);}
 
@@ -1111,17 +1106,6 @@ export default function LandingBody() {
                   </a>
                 </div>
               ))}
-            </div>
-
-            <div className="c1-agentbar" data-reveal>
-              <div>
-                <h4>Running AI agents at scale?</h4>
-                <p>
-                  High-volume sponsored-TX quota + your own pre-funded Gas Tank for multichain gas,
-                  all 10 chains. Built for autonomous agent pipelines.
-                </p>
-              </div>
-              <a className="c1-btn c1-btn-out c1-cta-lg" href="/agents">Agent Plan <span className="c1-arrow">→</span></a>
             </div>
 
             <p className="c1-costline" data-reveal>
