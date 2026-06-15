@@ -4,19 +4,23 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMemo, useState } from "react";
 import { MCP_VERSION } from "@/app/lib/version";
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
 
 /**
- * /claude — landing page for @quackai/q402-mcp.
+ * /claude  landing page for @quackai/q402-mcp.
  *
  * URL kept as `/claude` for backlink stability (npm README, Anthropic
  * Registry, prior tweets all link here), but the page itself is MCP-
  * canonical: Claude / Codex / Cursor / Cline are first-class equals.
  *
- * Three sections — hero (4-client tabbed install), live
- * `q402_quote` simulation, 16-tool compact list. Trust Receipt,
- * safety guards, and CTA live on /docs to avoid duplication.
+ * Re-skinned onto the main landing's design system: navy base #070C16,
+ * brand yellow #F5C518, cyan #5BC8FA accent, font-display headings, shared
+ * Navbar + Footer. Three sections plus a wallet-mode picker and a grouped,
+ * iconographic tools grid. Trust Receipt, safety guards, and CTA live on
+ * /docs to avoid duplication.
  *
- * Wider container (`max-w-[88rem]`) than the rest of the site — the
+ * Wider container (`max-w-[88rem]`) than the rest of the site  the
  * live-quote table's 5 columns + the tabbed install snippet both want
  * more horizontal room than `max-w-6xl` gives them.
  */
@@ -39,17 +43,17 @@ const CHAINS: ChainRow[] = [
   { key: "avax",      name: "Avalanche C-Chain", chainId: 43114,  gas: "AVAX",  approxGasCostUsd: 0.003,  tokens: ["USDC", "USDT"] },
   { key: "injective", name: "Injective EVM",     chainId: 1776,   gas: "INJ",   approxGasCostUsd: 0.004,  tokens: ["USDC", "USDT"] },
   { key: "monad",     name: "Monad",             chainId: 143,    gas: "MON",   approxGasCostUsd: 0.002,  tokens: ["USDC", "USDT"] },
-  { key: "scroll",    name: "Scroll",            chainId: 534352, gas: "ETH",   approxGasCostUsd: 0.001,  tokens: ["USDC", "USDT"], note: "zkEVM L2 — EIP-7702 live since Euclid Phase 2 (2025-04-22)." },
-  { key: "eth",       name: "Ethereum Mainnet",  chainId: 1,      gas: "ETH",   approxGasCostUsd: 1.2,    tokens: ["USDC", "USDT", "RLUSD"], note: "L1 — gas is volatile. RLUSD (Ripple USD, NY DFS regulated) Ethereum-only." },
+  { key: "scroll",    name: "Scroll",            chainId: 534352, gas: "ETH",   approxGasCostUsd: 0.001,  tokens: ["USDC", "USDT"], note: "zkEVM L2. EIP-7702 live since Euclid Phase 2 (2025-04-22)." },
+  { key: "eth",       name: "Ethereum Mainnet",  chainId: 1,      gas: "ETH",   approxGasCostUsd: 1.2,    tokens: ["USDC", "USDT", "RLUSD"], note: "L1. Gas is volatile. RLUSD (Ripple USD, NY DFS regulated) Ethereum-only." },
 ];
 
-// ── 4-client install matrix ─────────────────────────────────────────────────
+// 4-client install matrix
 // Each client has either a one-line CLI command (Claude / Codex) or a JSON
 // snippet pasted into a config file (Cursor / Cline). Same npm package
-// underneath — no client-specific server code.
+// underneath  no client-specific server code.
 type ClientKey = "claude" | "codex" | "cursor" | "cline";
 
-// Full mcp.json shape — save as-is when the file does not yet exist.
+// Full mcp.json shape  save as-is when the file does not yet exist.
 const SHARED_JSON_FULL = `{
   "mcpServers": {
     "q402": {
@@ -59,7 +63,7 @@ const SHARED_JSON_FULL = `{
   }
 }`;
 
-// Inner entry — paste INSIDE an existing `mcpServers` object when the
+// Inner entry  paste INSIDE an existing `mcpServers` object when the
 // file already has other MCP servers. We surface this as the safe path
 // for any user who already wired up another MCP server, since pasting
 // the full SHARED_JSON_FULL would clobber whatever else is there.
@@ -69,8 +73,10 @@ interface ClientInstall {
   key:           ClientKey;
   name:          string;
   logo:          string;
+  /** white-on-light logos that need inverting on a white chip */
+  invert?:       boolean;
   kind:          "cli" | "json";
-  /** Primary snippet — the one shown front-and-center in the tab. */
+  /** Primary snippet  the one shown front-and-center in the tab. */
   snippet:       string;
   /** JSON-only: the safer "merge into existing config" variant. */
   innerSnippet?: string;
@@ -95,54 +101,131 @@ const CLIENTS: ClientInstall[] = [
     logo:    "/logos/codex.svg",
     kind:    "cli",
     snippet: "codex mcp add q402 -- npx -y @quackai/q402-mcp",
-    hint:    "OpenAI Codex CLI. Restart Codex (`codex` → quit, then re-launch) after running. On Windows, if `codex mcp add` returns \"Access is denied\", add the equivalent stanza to `~/.codex/config.toml` by hand: `[mcp_servers.q402]` / `command = \"npx\"` / `args = [\"-y\", \"@quackai/q402-mcp\"]`.",
+    hint:    "OpenAI Codex CLI. Restart Codex (`codex`, quit, then re-launch) after running. On Windows, if `codex mcp add` returns \"Access is denied\", add the equivalent stanza to `~/.codex/config.toml` by hand: `[mcp_servers.q402]` / `command = \"npx\"` / `args = [\"-y\", \"@quackai/q402-mcp\"]`.",
   },
   {
     key:          "cursor",
     name:         "Cursor",
     logo:         "/logos/cursor.svg",
+    invert:       true,
     kind:         "json",
     snippet:      SHARED_JSON_FULL,
     innerSnippet: SHARED_JSON_INNER,
     configPath:   "~/.cursor/mcp.json",
-    hint:         "Save the full snippet as ~/.cursor/mcp.json if the file is new. After saving, reload Cursor (Cmd/Ctrl+Shift+P → Developer: Reload Window).",
+    hint:         "Save the full snippet as ~/.cursor/mcp.json if the file is new. After saving, reload Cursor (Cmd/Ctrl+Shift+P, Developer: Reload Window).",
   },
   {
     key:          "cline",
     name:         "Cline",
     logo:         "/logos/cline.svg",
+    invert:       true,
     kind:         "json",
     snippet:      SHARED_JSON_FULL,
     innerSnippet: SHARED_JSON_INNER,
-    configPath:   "Cline → Settings → MCP Servers → Edit JSON",
-    hint:         "Open Cline's MCP servers JSON editor and paste. Reload VS Code (Cmd/Ctrl+Shift+P → Developer: Reload Window) when done.",
+    configPath:   "Cline, Settings, MCP Servers, Edit JSON",
+    hint:         "Open Cline's MCP servers JSON editor and paste. Reload VS Code (Cmd/Ctrl+Shift+P, Developer: Reload Window) when done.",
   },
 ];
 
-// ── tool flat list ──────────────────────────────────────────────────────────
-// Compact row layout (NOT the previous card grid) — the cards burned a lot
-// of vertical space + duplicated content from /docs#claude-mcp.
-const TOOLS: Array<{ name: string; auth: string; note: string }> = [
-  { name: "q402_doctor",              auth: "no auth",     note: "Install + ongoing health check. Call on \"set up Q402\"." },
-  { name: "q402_quote",               auth: "no auth",     note: "Compare gas across 10 chains. Read-only." },
-  { name: "q402_balance",             auth: "api key",     note: "Verify key + remaining quota." },
-  { name: "q402_pay",                 auth: "live mode",   note: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
-  { name: "q402_batch_pay",           auth: "live mode",   note: "Up to 20 recipients in one signed batch (trial: 5)." },
-  { name: "q402_receipt",             auth: "no auth",     note: "Fetch + locally verify a Trust Receipt." },
-  { name: "q402_wallet_status",       auth: "private key", note: "Per-chain EIP-7702 delegation state. Read-only." },
-  { name: "q402_clear_delegation",    auth: "private key", note: "Clear EIP-7702 delegation on a chain. Q402-sponsored gas." },
-  { name: "q402_agentic_info",        auth: "api key",     note: "Agent Wallet info (addresses, caps, ERC-8004 id). Read-only." },
-  { name: "q402_recurring_list",      auth: "api key",     note: "List recurring rules." },
-  { name: "q402_recurring_create",    auth: "api key",     note: "Author a recurring rule (paid Multichain only)." },
-  { name: "q402_recurring_fires",     auth: "api key",     note: "Last 50 fires for one rule (timestamps + txHashes)." },
-  { name: "q402_recurring_pause",     auth: "api key",     note: "Pause a rule. Reversible." },
-  { name: "q402_recurring_resume",    auth: "api key",     note: "Resume a paused / stopped rule." },
-  { name: "q402_recurring_skip_next", auth: "api key",     note: "Skip ONLY the next fire. Cadence preserved." },
-  { name: "q402_recurring_cancel",    auth: "api key",     note: "Permanently stop a rule." },
-  { name: "q402_bridge_quote",        auth: "no auth",     note: "Quote CCIP fee for a USDC bridge on eth/avax/arbitrum." },
-  { name: "q402_bridge_send",         auth: "live key",    note: "Execute a CCIP USDC bridge from your Agent Wallet (Mode C). Sandbox-by-default; sandbox: false + live key fires a real bridge." },
-  { name: "q402_bridge_history",      auth: "owner sig",   note: "List recent CCIP bridges. Owner-sig auth via dashboard." },
-  { name: "q402_bridge_gas_tank",     auth: "owner sig",   note: "LINK + native Gas Tank bucket per CCIP chain." },
+// "works with" logo strip  uniform white chips, in addition to the tab
+// icons. Copilot + Hermes are raster logos, the rest are SVGs; cursor +
+// cline ship white-on-transparent so they get inverted onto a white chip.
+const WORKS_WITH: Array<{ name: string; logo: string; invert?: boolean }> = [
+  { name: "Claude",  logo: "/logos/claude.svg" },
+  { name: "Codex",   logo: "/logos/codex.svg" },
+  { name: "Cursor",  logo: "/logos/cursor.svg", invert: true },
+  { name: "Cline",   logo: "/logos/cline.svg",  invert: true },
+  { name: "Copilot", logo: "/logos/copilot.jpg" },
+  { name: "Hermes",  logo: "/logos/hermes.jpg" },
+];
+
+// 20 tools, grouped by domain. Each group renders as a card with a small
+// inline line-icon header; tool rows keep the mono name + auth + note.
+type ToolGroupKey = "payments" | "wallet" | "recurring" | "bridge" | "diagnostics";
+
+interface Tool { name: string; auth: string; note: string; group: ToolGroupKey }
+
+const TOOLS: Tool[] = [
+  { group: "diagnostics", name: "q402_doctor",              auth: "no auth",     note: "Install + ongoing health check. Call on \"set up Q402\"." },
+  { group: "payments",    name: "q402_quote",               auth: "no auth",     note: "Compare gas across 10 chains. Read-only." },
+  { group: "diagnostics", name: "q402_balance",             auth: "api key",     note: "Verify key + remaining quota." },
+  { group: "payments",    name: "q402_pay",                 auth: "live mode",   note: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
+  { group: "payments",    name: "q402_batch_pay",           auth: "live mode",   note: "Up to 20 recipients in one signed batch (trial: 5)." },
+  { group: "payments",    name: "q402_receipt",             auth: "no auth",     note: "Fetch + locally verify a Trust Receipt." },
+  { group: "wallet",      name: "q402_wallet_status",       auth: "private key", note: "Per-chain EIP-7702 delegation state. Read-only." },
+  { group: "wallet",      name: "q402_clear_delegation",    auth: "private key", note: "Clear EIP-7702 delegation on a chain. Q402-sponsored gas." },
+  { group: "wallet",      name: "q402_agentic_info",        auth: "api key",     note: "Agent Wallet info (addresses, caps, ERC-8004 id). Read-only." },
+  { group: "recurring",   name: "q402_recurring_list",      auth: "api key",     note: "List recurring rules." },
+  { group: "recurring",   name: "q402_recurring_create",    auth: "api key",     note: "Author a recurring rule (paid Multichain only)." },
+  { group: "recurring",   name: "q402_recurring_fires",     auth: "api key",     note: "Last 50 fires for one rule (timestamps + txHashes)." },
+  { group: "recurring",   name: "q402_recurring_pause",     auth: "api key",     note: "Pause a rule. Reversible." },
+  { group: "recurring",   name: "q402_recurring_resume",    auth: "api key",     note: "Resume a paused / stopped rule." },
+  { group: "recurring",   name: "q402_recurring_skip_next", auth: "api key",     note: "Skip ONLY the next fire. Cadence preserved." },
+  { group: "recurring",   name: "q402_recurring_cancel",    auth: "api key",     note: "Permanently stop a rule." },
+  { group: "bridge",      name: "q402_bridge_quote",        auth: "no auth",     note: "Quote CCIP fee for a USDC bridge on eth/avax/arbitrum." },
+  { group: "bridge",      name: "q402_bridge_send",         auth: "live key",    note: "Execute a CCIP USDC bridge from your Agent Wallet (Mode C). Sandbox-by-default; sandbox: false + live key fires a real bridge." },
+  { group: "bridge",      name: "q402_bridge_history",      auth: "owner sig",   note: "List recent CCIP bridges. Owner-sig auth via dashboard." },
+  { group: "bridge",      name: "q402_bridge_gas_tank",     auth: "owner sig",   note: "LINK + native Gas Tank bucket per CCIP chain." },
+];
+
+// Small inline line-icons (inherit currentColor, scale crisply) matching the
+// main landing's icon language. One per tool group.
+function GroupIcon({ group }: { group: ToolGroupKey }) {
+  const common = {
+    width: 20, height: 20, viewBox: "0 0 24 24", fill: "none",
+    stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const, "aria-hidden": true,
+  };
+  switch (group) {
+    case "payments":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8.5" r="4.3" />
+          <path d="M12 6.6v3.8M10.4 8.9 12 10.5l1.6-1.6" />
+          <path d="M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16" />
+        </svg>
+      );
+    case "wallet":
+      return (
+        <svg {...common}>
+          <rect x="2.5" y="5.5" width="19" height="14" rx="2.5" />
+          <path d="M2.5 10h19" />
+          <circle cx="17" cy="14.7" r="1.25" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "recurring":
+      return (
+        <svg {...common}>
+          <path d="M19.6 12a7.6 7.6 0 1 1-2.2-5.4" />
+          <path d="M19.8 4.2v3.6h-3.6" />
+          <path d="M12 8.4v4l2.4 1.5" opacity=".55" />
+        </svg>
+      );
+    case "bridge":
+      return (
+        <svg {...common}>
+          <circle cx="5" cy="12" r="2.3" />
+          <circle cx="19" cy="12" r="2.3" />
+          <path d="M7.3 12h9.4" />
+          <path d="M4 12c0-3 .8-5 8-5s8 2 8 5" opacity=".55" />
+        </svg>
+      );
+    case "diagnostics":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8" />
+          <path d="M8.4 12.2l2.5 2.5 4.6-5.1" />
+        </svg>
+      );
+  }
+}
+
+const TOOL_GROUPS: Array<{ key: ToolGroupKey; label: string; blurb: string }> = [
+  { key: "payments",    label: "Payments",    blurb: "Quote, send, batch, verify." },
+  { key: "wallet",      label: "Wallet",      blurb: "EIP-7702 delegation + Agent Wallet." },
+  { key: "recurring",   label: "Recurring",   blurb: "Author + manage scheduled rules." },
+  { key: "bridge",      label: "Bridge",      blurb: "CCIP cross-chain USDC moves." },
+  { key: "diagnostics", label: "Diagnostics", blurb: "Health, setup, quota." },
 ];
 
 function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
@@ -155,7 +238,7 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
         setCopied(true);
         setTimeout(() => setCopied(false), 1800);
       }}
-      className={`text-[11px] px-2.5 py-1 rounded-md font-semibold transition-all ${
+      className={`font-display text-[11px] px-2.5 py-1 rounded-full font-semibold transition-all ${
         copied
           ? "bg-yellow/15 text-yellow"
           : "bg-white/5 text-white/45 hover:bg-yellow/15 hover:text-yellow"
@@ -166,9 +249,32 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
   );
 }
 
+// uniform white logo chip used by the tab row + the "works with" strip
+function LogoChip({ logo, name, invert, size = "md" }: { logo: string; name: string; invert?: boolean; size?: "sm" | "md" }) {
+  const box = size === "sm" ? "w-5 h-5 rounded bg-white p-0.5" : "w-7 h-7 rounded-md bg-white p-1 shadow-[0_1px_3px_rgba(0,0,0,0.35)]";
+  return (
+    <span className={`inline-flex items-center justify-center flex-shrink-0 overflow-hidden ${box}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={logo}
+        alt={name}
+        className={`w-full h-full object-contain ${invert ? "invert" : ""}`}
+      />
+    </span>
+  );
+}
+
+// shared scroll-reveal props (no once:true, so it re-animates on scroll back)
+const revealProps = (delay = 0) => ({
+  initial:    { opacity: 0, y: 24 },
+  whileInView:{ opacity: 1, y: 0 },
+  viewport:   { amount: 0.2 },
+  transition: { duration: 0.6, delay },
+});
+
 export default function ClaudePage() {
-  const [amount, setAmount]           = useState("50");
-  const [tokenFilter, setTokenFilter] = useState<"USDC" | "USDT" | "RLUSD" | "ANY">("ANY");
+  const [amount, setAmount]             = useState("50");
+  const [tokenFilter, setTokenFilter]   = useState<"USDC" | "USDT" | "RLUSD" | "ANY">("ANY");
   const [activeClient, setActiveClient] = useState<ClientKey>("claude");
 
   const current = CLIENTS.find(c => c.key === activeClient)!;
@@ -181,59 +287,24 @@ export default function ClaudePage() {
   }, [tokenFilter]);
 
   return (
-    <div className="min-h-screen text-white" style={{ background: "#06060C" }}>
-      {/* ── Top nav (slim) ─────────────────────────────────────────────── */}
-      <header
-        className="border-b sticky top-0 z-30 backdrop-blur-md"
-        style={{ background: "rgba(6,6,12,0.82)", borderColor: "rgba(255,255,255,0.06)" }}
-      >
-        <div className="max-w-[88rem] mx-auto px-6 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
-              <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
-            </span>
-            <span className="text-yellow font-bold text-base tracking-tight">Q402</span>
-            <span className="text-white/20 text-xs">/</span>
-            <span className="text-orange-300/70 text-xs font-medium">mcp</span>
-          </Link>
-          <div className="flex items-center gap-4 text-xs text-white/45">
-            <Link href="/docs#claude-mcp" className="hover:text-white">Docs</Link>
-            <Link href="/dashboard" className="hover:text-white">Dashboard</Link>
-            <a
-              href="https://www.npmjs.com/package/@quackai/q402-mcp"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-yellow"
-            >
-              npm
-            </a>
-            <a
-              href="https://github.com/bitgett/q402-mcp"
-              target="_blank"
-              rel="noreferrer"
-              className="hover:text-yellow"
-            >
-              GitHub
-            </a>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen text-white" style={{ background: "#070C16" }}>
+      <Navbar />
 
-      {/* ── HERO ───────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-        {/* Background atmosphere — keep the existing gradient blooms; cheap and on-brand. */}
+      {/* HERO  pt accounts for the 72px fixed navbar */}
+      <section className="relative overflow-hidden border-b pt-[72px]" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        {/* Background atmosphere  yellow + cyan blooms over a faded grid. */}
         <div className="absolute inset-0 pointer-events-none">
           <motion.div
             className="absolute -top-40 -left-40 w-[700px] h-[700px] rounded-full blur-[160px]"
             animate={{ opacity: [0.35, 0.6, 0.35] }}
             transition={{ duration: 8, repeat: Infinity }}
-            style={{ background: "rgba(245,158,11,0.13)" }}
+            style={{ background: "rgba(245,197,24,0.13)" }}
           />
           <motion.div
             className="absolute -bottom-40 -right-32 w-[640px] h-[640px] rounded-full blur-[150px]"
             animate={{ opacity: [0.25, 0.55, 0.25] }}
             transition={{ duration: 10, repeat: Infinity, delay: 2 }}
-            style={{ background: "rgba(139,92,246,0.10)" }}
+            style={{ background: "rgba(91,200,250,0.10)" }}
           />
           <div
             className="absolute inset-0 opacity-[0.05]"
@@ -247,24 +318,24 @@ export default function ClaudePage() {
           />
         </div>
 
-        <div className="relative max-w-[88rem] mx-auto px-6 py-20 md:py-24">
+        <div className="relative max-w-[88rem] mx-auto px-6 py-16 md:py-20">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
             className="inline-flex items-center gap-2 mb-7 px-3 py-1 rounded-full"
             style={{
-              background: "linear-gradient(120deg, rgba(245,158,11,0.10), rgba(139,92,246,0.06))",
-              border:     "1px solid rgba(245,158,11,0.30)",
-              boxShadow:  "0 0 30px rgba(245,158,11,0.10)",
+              background: "linear-gradient(120deg, rgba(245,197,24,0.10), rgba(91,200,250,0.06))",
+              border:     "1px solid rgba(245,197,24,0.30)",
+              boxShadow:  "0 0 30px rgba(245,197,24,0.10)",
             }}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-300 animate-pulse" />
-            <span className="text-[10px] uppercase tracking-[0.22em] text-orange-300/95 font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
+            <span className="font-display text-[10px] uppercase tracking-[0.22em] text-yellow/95 font-bold">
               MCP × Quack AI
             </span>
             <span className="text-white/20 text-xs">·</span>
-            <span className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold">
+            <span className="font-display text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold">
               v{MCP_VERSION} live on npm
             </span>
           </motion.div>
@@ -273,14 +344,14 @@ export default function ClaudePage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.05 }}
-            className="text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.02]"
+            className="font-display text-5xl md:text-7xl font-extrabold tracking-tight leading-[1.02]"
           >
             Your agent <br />
             <span
               className="bg-clip-text text-transparent"
               style={{
                 backgroundImage:
-                  "linear-gradient(120deg, #F59E0B 0%, #F5C518 40%, #FFE599 70%, #C4B5FD 100%)",
+                  "linear-gradient(120deg, #F5C518 0%, #FFE599 45%, #5BC8FA 100%)",
               }}
             >
               has a checking account.
@@ -296,20 +367,40 @@ export default function ClaudePage() {
             10 EVM chains, gasless stablecoin payments, any MCP client. One install. Ask your AI to set it up.
           </motion.p>
 
-          {/* ── Install — 4-client tabs ──────────────────────────────────── */}
+          {/* works-with logo strip */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.26 }}
+            className="mt-7 flex items-center gap-3 flex-wrap"
+          >
+            <span className="font-display text-[10px] uppercase tracking-[0.22em] text-white/35 font-bold">
+              works with
+            </span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {WORKS_WITH.map(c => (
+                <span key={c.name} className="flex items-center gap-2 pr-3 pl-1.5 py-1.5 rounded-full border border-white/10 bg-white/[0.02]">
+                  <LogoChip logo={c.logo} name={c.name} invert={c.invert} />
+                  <span className="text-xs text-white/70 font-medium">{c.name}</span>
+                </span>
+              ))}
+            </div>
+          </motion.div>
+
+          {/* Install  4-client tabs */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.32 }}
+            transition={{ duration: 0.6, delay: 0.34 }}
             className="mt-10 max-w-3xl"
           >
-            <div className="text-[10px] uppercase tracking-[0.22em] text-white/30 font-bold mb-2">
+            <div className="font-display text-[10px] uppercase tracking-[0.22em] text-white/30 font-bold mb-2">
               install · pick your client
             </div>
 
             {/* Tab row */}
             <div
-              className="flex flex-wrap gap-1 p-1 rounded-xl border mb-2"
+              className="flex flex-wrap gap-1 p-1 rounded-2xl border mb-2"
               style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
             >
               {CLIENTS.map(c => {
@@ -319,28 +410,27 @@ export default function ClaudePage() {
                     key={c.key}
                     type="button"
                     onClick={() => setActiveClient(c.key)}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-colors ${
+                    className={`font-display flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-colors ${
                       isActive
                         ? "bg-yellow/20 text-yellow border border-yellow/40"
                         : "text-white/60 hover:text-white/90 border border-transparent"
                     }`}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={c.logo} alt={c.name} className="w-4 h-4" />
+                    <LogoChip logo={c.logo} name={c.name} invert={c.invert} size="sm" />
                     {c.name}
                   </button>
                 );
               })}
             </div>
 
-            {/* Snippet box — same min-h across CLI / JSON so switching tabs
+            {/* Snippet box  same min-h across CLI / JSON so switching tabs
                 doesn't jump the layout. */}
             <div
-              className="relative px-4 py-3.5 rounded-xl font-mono text-sm overflow-hidden min-h-[180px] flex flex-col"
+              className="relative px-4 py-3.5 rounded-2xl font-mono text-sm overflow-hidden min-h-[180px] flex flex-col"
               style={{
-                background: "linear-gradient(120deg, rgba(245,158,11,0.06), rgba(255,255,255,0.02))",
-                border:     "1px solid rgba(245,158,11,0.30)",
-                boxShadow:  "0 0 35px rgba(245,158,11,0.08)",
+                background: "linear-gradient(120deg, rgba(245,197,24,0.06), rgba(255,255,255,0.02))",
+                border:     "1px solid rgba(245,197,24,0.30)",
+                boxShadow:  "0 0 35px rgba(245,197,24,0.08)",
               }}
             >
               <motion.span
@@ -362,10 +452,10 @@ export default function ClaudePage() {
                     <code className="text-white/55">
                       {current.key === "claude" ? "~/.claude.json" : "~/.codex/config.toml"}
                     </code>
-                    {" "}for you — no need to find or edit the file by hand.
+                    {" "}for you. No need to find or edit the file by hand.
                     {current.key === "codex" && (
                       <> If you already have other MCP servers configured there, it&apos;s worth
-                      backing the file up before running — Codex CLI handles the merge but the
+                      backing the file up before running. Codex CLI handles the merge but the
                       behavior is its own to define, not ours.</>
                     )}
                   </div>
@@ -373,7 +463,7 @@ export default function ClaudePage() {
               ) : (
                 <div className="relative flex flex-col flex-1">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] uppercase tracking-widest text-white/35 font-semibold">
+                    <span className="font-display text-[10px] uppercase tracking-widest text-white/35 font-semibold">
                       paste as JSON
                     </span>
                     <CopyButton value={current.snippet} />
@@ -402,15 +492,15 @@ export default function ClaudePage() {
                       </summary>
                       <div className="mt-2 text-[11px] text-white/70 leading-relaxed pl-4 space-y-2">
                         <div>
-                          <div className="text-[10px] uppercase tracking-widest text-white/55 font-semibold mb-1">macOS / Linux</div>
+                          <div className="font-display text-[10px] uppercase tracking-widest text-white/55 font-semibold mb-1">macOS / Linux</div>
                           <pre className="text-[11px] text-white/85 whitespace-pre overflow-x-auto bg-white/[0.02] rounded px-2 py-1.5">{`mkdir -p ~/.cursor && code ~/.cursor/mcp.json`}</pre>
                         </div>
                         <div>
-                          <div className="text-[10px] uppercase tracking-widest text-white/55 font-semibold mb-1">Windows (PowerShell)</div>
+                          <div className="font-display text-[10px] uppercase tracking-widest text-white/55 font-semibold mb-1">Windows (PowerShell)</div>
                           <pre className="text-[11px] text-white/85 whitespace-pre overflow-x-auto bg-white/[0.02] rounded px-2 py-1.5">{`New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cursor" | Out-Null; code "$env:USERPROFILE\\.cursor\\mcp.json"`}</pre>
                         </div>
                         <div className="text-white/55">
-                          Paste the snippet, save, reload. Cline edits config from inside VS Code — no shell.
+                          Paste the snippet, save, reload. Cline edits config from inside VS Code, no shell.
                         </div>
                       </div>
                     </details>
@@ -421,55 +511,56 @@ export default function ClaudePage() {
 
             <p className="text-[11px] text-white/40 mt-2 leading-relaxed">{current.hint}</p>
 
-            {/* doctor-first call-to-action — the actual setup prompt */}
+            {/* doctor-first call-to-action  the actual setup prompt */}
             <div
-              className="mt-5 px-4 py-3 rounded-lg flex items-start gap-3"
+              className="mt-5 px-4 py-3 rounded-2xl flex items-start gap-3"
               style={{ background: "rgba(245,197,24,0.05)", border: "1px solid rgba(245,197,24,0.20)" }}
             >
               <span className="text-yellow/90 text-xs font-bold mt-0.5">→</span>
               <p className="text-white/80 text-sm leading-relaxed">
                 Restart, ask:{" "}
                 <span className="text-white font-semibold">&ldquo;Set up Q402&rdquo;</span>.{" "}
-                It runs <code className="text-yellow text-xs">q402_doctor</code> → creates{" "}
-                <code className="text-yellow text-xs">~/.q402/mcp.env</code> → walks you through pasting keys in your editor, never in chat.
+                It runs <code className="text-yellow text-xs">q402_doctor</code>, creates{" "}
+                <code className="text-yellow text-xs">~/.q402/mcp.env</code>, walks you through pasting keys in your editor, never in chat.
               </p>
             </div>
           </motion.div>
         </div>
       </section>
 
-      {/* ── WALLET MODE PICKER ─────────────────────────────────────────── */}
+      {/* WALLET MODE PICKER */}
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
-          <div className="mb-8">
-            <div className="text-[10px] uppercase tracking-[0.22em] text-yellow/80 font-bold mb-2">
+          <motion.div className="mb-8" {...revealProps()}>
+            <div className="font-display text-[10px] uppercase tracking-[0.22em] text-yellow/80 font-bold mb-2">
               3 wallet modes · pick one
             </div>
-            <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">
+            <h2 className="font-display text-2xl md:text-3xl font-bold text-white mb-3">
               Do I need a private key?
             </h2>
             <p className="text-white/75 text-sm md:text-base max-w-2xl leading-relaxed">
               Two modes use a local PK; one lets Q402 sign server-side. Most users want{" "}
-              <span className="text-yellow font-semibold">Mode C</span> — no PK, just an API key.
+              <span className="text-yellow font-semibold">Mode C</span>, no PK, just an API key.
             </p>
-          </div>
+          </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Mode C — Recommended */}
-            <div
-              className="rounded-lg border p-5 relative"
+            {/* Mode C  Recommended */}
+            <motion.div
+              className="rounded-2xl border p-5 relative"
               style={{
                 background: "rgba(245,197,24,0.04)",
                 borderColor: "rgba(245,197,24,0.30)",
               }}
+              {...revealProps(0.05)}
             >
-              <div className="absolute -top-2 right-3 text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded bg-yellow text-black">
+              <div className="absolute -top-2 right-3 font-display text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded-full bg-yellow text-navy">
                 Recommended
               </div>
-              <div className="text-[10px] uppercase tracking-[0.18em] text-yellow/85 font-semibold mb-1">
+              <div className="font-display text-[10px] uppercase tracking-[0.18em] text-yellow/85 font-semibold mb-1">
                 Mode C
               </div>
-              <div className="text-white font-semibold text-base mb-2">
+              <div className="font-display text-white font-semibold text-base mb-2">
                 Server signs for you
               </div>
               <div className="text-[12.5px] text-white/75 leading-relaxed mb-3">
@@ -481,20 +572,21 @@ export default function ClaudePage() {
               <pre className="mt-1 text-[10.5px] text-yellow/85 font-mono bg-black/30 rounded px-2 py-1 leading-tight">
 {`Q402_MULTICHAIN_API_KEY=q402_live_…`}
               </pre>
-            </div>
+            </motion.div>
 
             {/* Mode B */}
-            <div
-              className="rounded-lg border p-5"
+            <motion.div
+              className="rounded-2xl border p-5"
               style={{
                 background: "rgba(255,255,255,0.02)",
                 borderColor: "rgba(255,255,255,0.08)",
               }}
+              {...revealProps(0.12)}
             >
-              <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">
+              <div className="font-display text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">
                 Mode B
               </div>
-              <div className="text-white font-semibold text-base mb-2">
+              <div className="font-display text-white font-semibold text-base mb-2">
                 Local Agent Wallet PK
               </div>
               <div className="text-[12.5px] text-white/75 leading-relaxed mb-3">
@@ -507,24 +599,25 @@ export default function ClaudePage() {
 {`Q402_AGENTIC_PRIVATE_KEY=0x…
 Q402_MULTICHAIN_API_KEY=q402_live_…`}
               </pre>
-            </div>
+            </motion.div>
 
             {/* Mode A */}
-            <div
-              className="rounded-lg border p-5"
+            <motion.div
+              className="rounded-2xl border p-5"
               style={{
                 background: "rgba(255,255,255,0.02)",
                 borderColor: "rgba(255,255,255,0.08)",
               }}
+              {...revealProps(0.19)}
             >
-              <div className="text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">
+              <div className="font-display text-[10px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1">
                 Mode A
               </div>
-              <div className="text-white font-semibold text-base mb-2">
+              <div className="font-display text-white font-semibold text-base mb-2">
                 Your MetaMask EOA signs
               </div>
               <div className="text-[12.5px] text-white/75 leading-relaxed mb-3">
-                Your MetaMask EOA signs directly via EIP-7702 (shows &quot;Smart account&quot;, reversible). <span className="text-amber-200">Use a fresh wallet.</span>
+                Your MetaMask EOA signs directly via EIP-7702 (shows &quot;Smart account&quot;, reversible). <span className="text-[#5BC8FA]">Use a fresh wallet.</span>
               </div>
               <div className="text-[10.5px] text-white/45 leading-relaxed">
                 Set in <code className="text-yellow text-[10px]">~/.q402/mcp.env</code>:
@@ -533,7 +626,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
 {`Q402_PRIVATE_KEY=0x…
 Q402_MULTICHAIN_API_KEY=q402_live_…`}
               </pre>
-            </div>
+            </motion.div>
           </div>
 
           <div className="mt-6 text-[11px] text-white/60 leading-relaxed max-w-2xl">
@@ -543,15 +636,15 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
         </div>
       </section>
 
-      {/* ── LIVE QUOTE SIMULATION ──────────────────────────────────────── */}
+      {/* LIVE QUOTE SIMULATION */}
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
           <div className="flex items-end justify-between flex-wrap gap-4 mb-2">
             <div>
-              <div className="text-[10px] uppercase tracking-[0.22em] text-yellow/80 font-bold mb-2">
+              <div className="font-display text-[10px] uppercase tracking-[0.22em] text-yellow/80 font-bold mb-2">
                 live demo · q402_quote
               </div>
-              <h2 className="text-2xl md:text-4xl font-bold">
+              <h2 className="font-display text-2xl md:text-4xl font-bold">
                 The exact tool your agent calls.
               </h2>
               <p className="text-white/65 text-sm mt-2 max-w-xl">
@@ -563,11 +656,11 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
           {/* Controls */}
           <div className="flex flex-wrap items-center gap-3 mt-6 mb-5">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-white/35 uppercase tracking-widest font-semibold">
+              <span className="font-display text-xs text-white/35 uppercase tracking-widest font-semibold">
                 Amount
               </span>
               <div
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg font-mono text-sm"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-full font-mono text-sm"
                 style={{
                   background: "rgba(255,255,255,0.04)",
                   border:     "1px solid rgba(255,255,255,0.10)",
@@ -591,7 +684,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
                   key={t}
                   type="button"
                   onClick={() => setTokenFilter(t)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  className={`font-display px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
                     tokenFilter === t
                       ? "bg-yellow/20 text-yellow border border-yellow/40"
                       : "text-white/40 hover:text-white/80 border border-transparent"
@@ -612,7 +705,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
             }}
           >
             <div
-              className="px-5 py-3 flex items-center gap-3 border-b text-[11px] uppercase tracking-[0.18em] text-white/40 font-semibold"
+              className="font-display px-5 py-3 flex items-center gap-3 border-b text-[11px] uppercase tracking-[0.18em] text-white/40 font-semibold"
               style={{ borderColor: "rgba(255,255,255,0.06)" }}
             >
               <span className="w-6">#</span>
@@ -674,68 +767,87 @@ Q402_MULTICHAIN_API_KEY=q402_live_…`}
               style={{ borderColor: "rgba(255,255,255,0.04)" }}
             >
               {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC, USDT, or RLUSD" : tokenFilter}` +
-                ` — your agent picks ${ranked[0]?.name ?? "—"} by default. Sender always pays $0;` +
+                `. Your agent picks ${ranked[0]?.name ?? "any chain"} by default. Sender always pays $0;` +
                 " gas comes from the developer's pre-funded gas tank."}
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── TOOLS — flat row list ─────────────────────────────────────── */}
+      {/* TOOLS  grouped, iconographic card grid */}
       <section className="border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-[88rem] mx-auto px-6 py-16 md:py-20">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-white/55 font-bold mb-2">
-            twenty tools · one package
-          </div>
-          <h2 className="text-2xl md:text-4xl font-bold mb-2">
-            Only what an agent should reach for.
-          </h2>
-          <p className="text-white/65 text-sm max-w-xl mb-10">
-            No hidden admin endpoints. Nothing moves funds outside the confirm-and-sign flow.
-          </p>
+          <motion.div {...revealProps()}>
+            <div className="font-display text-[10px] uppercase tracking-[0.22em] text-white/55 font-bold mb-2">
+              twenty tools · one package
+            </div>
+            <h2 className="font-display text-2xl md:text-4xl font-bold mb-2">
+              Only what an agent should reach for.
+            </h2>
+            <p className="text-white/65 text-sm max-w-xl mb-10">
+              No hidden admin endpoints. Nothing moves funds outside the confirm-and-sign flow.
+            </p>
+          </motion.div>
 
-          <ul className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-            {TOOLS.map(t => (
-              <li
-                key={t.name}
-                className="flex items-baseline gap-4 md:gap-6 py-3.5"
-                style={{ borderTopColor: "rgba(255,255,255,0.04)" }}
-              >
-                <code className="text-yellow font-mono text-xs md:text-sm font-bold whitespace-nowrap min-w-[12rem] md:min-w-[14rem]">
-                  {t.name}
-                </code>
-                <span className="text-white/35 text-[10px] uppercase tracking-widest font-semibold whitespace-nowrap hidden md:inline-block min-w-[6rem]">
-                  {t.auth}
-                </span>
-                <span className="text-white/65 text-sm leading-relaxed flex-1">
-                  {t.note}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
+            {TOOL_GROUPS.map((g, gi) => {
+              const tools = TOOLS.filter(t => t.group === g.key);
+              return (
+                <motion.div
+                  key={g.key}
+                  className="rounded-2xl border p-5"
+                  style={{
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+                    borderColor: "rgba(255,255,255,0.09)",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.07), 0 24px 50px -38px rgba(0,0,0,0.95)",
+                  }}
+                  {...revealProps(0.04 * gi)}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <span
+                      className="w-9 h-9 rounded-xl grid place-items-center flex-shrink-0 text-yellow"
+                      style={{ background: "rgba(245,197,24,0.08)", border: "1px solid rgba(245,197,24,0.18)" }}
+                    >
+                      <GroupIcon group={g.key} />
+                    </span>
+                    <div>
+                      <div className="font-display text-base font-bold text-white leading-tight">{g.label}</div>
+                      <div className="text-[11px] text-white/45">{g.blurb}</div>
+                    </div>
+                    <span className="font-mono text-[10px] text-white/30 ml-auto">{tools.length}</span>
+                  </div>
+                  <ul className="space-y-2.5">
+                    {tools.map(t => (
+                      <li
+                        key={t.name}
+                        className="rounded-xl px-3 py-2.5"
+                        style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}
+                      >
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <code className="text-yellow font-mono text-[12px] font-bold">{t.name}</code>
+                          <span className="font-display text-[9px] uppercase tracking-widest font-semibold text-[#5BC8FA]/70 border border-[#5BC8FA]/20 rounded-full px-1.5 py-0.5">
+                            {t.auth}
+                          </span>
+                        </div>
+                        <div className="text-white/60 text-[12.5px] leading-relaxed">{t.note}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              );
+            })}
+          </div>
 
           <p className="text-[11px] text-white/35 mt-8">
             Full reference, EIP-7702 details, Trust Receipt + safety guards:{" "}
             <Link href="/docs#claude-mcp" className="text-yellow/80 hover:text-yellow underline-offset-2 hover:underline">
-              /docs → MCP for AI Clients
+              /docs, MCP for AI Clients
             </Link>
           </p>
         </div>
       </section>
 
-      {/* ── Footer (minimal) ─────────────────────────────────────────────── */}
-      <footer className="py-10">
-        <div className="max-w-[88rem] mx-auto px-6 text-xs text-white/30 text-center">
-          <a className="text-yellow/70 hover:text-yellow" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
-          {" · "}
-          <a className="text-yellow/70 hover:text-yellow" href="https://github.com/bitgett/q402-mcp">github.com/bitgett/q402-mcp</a>
-          {" · "}
-          <Link className="text-yellow/70 hover:text-yellow" href="/docs#claude-mcp">/docs → MCP for AI Clients</Link>
-          <div className="mt-3 text-white/20">
-            Apache-2.0 · Built by Quack AI Labs · MCP is an open standard from Anthropic.
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
