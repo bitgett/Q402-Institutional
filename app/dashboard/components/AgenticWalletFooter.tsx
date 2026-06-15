@@ -211,7 +211,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
         </div>
       )}
 
-      {delegationStatus && delegatedChains.length === 0 && erroredChains.length > 0 && (
+      {delegationStatus && erroredChains.length > 0 && (
         <div className="text-[11px] text-amber-200/70">
           Could not check delegation on{" "}
           {erroredChains.map(([c]) => CHAIN_LABEL[c] ?? c).join(", ")} (RPC error) — status unknown for those chains.
