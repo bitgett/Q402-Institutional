@@ -1,10 +1,6 @@
 import Navbar from "./components/Navbar";
 import Hero from "./components/Hero";
-import TrustedBy from "./components/TrustedBy";
-import HowItWorks from "./components/HowItWorks";
-import UseCases from "./components/UseCases";
-import Pricing from "./components/Pricing";
-import Contact from "./components/Contact";
+import LandingBody from "./components/LandingBody";
 import Footer from "./components/Footer";
 
 export default function Home() {
@@ -13,11 +9,7 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
-        <TrustedBy />
-        <HowItWorks />
-        <UseCases />
-        <Pricing />
-        <Contact />
+        <LandingBody />
       </main>
       <Footer />
     </>
