@@ -170,7 +170,7 @@ export default function Hero() {
                 className="mt-7 text-base sm:text-lg lg:text-lg xl:text-xl text-white/65 font-light leading-relaxed lg:whitespace-nowrap"
               >
                 <span className="text-yellow font-semibold">Zero gas.</span> Ten EVM chains.{" "}
-                <span className="text-yellow font-semibold">Pure stablecoin flow</span> — users pay in USDC, USDT, or RLUSD, we cover the rest.
+                <span className="text-yellow font-semibold">Pure stablecoin flow.</span> Users pay in USDC, USDT, or RLUSD, and we cover the rest.
               </motion.p>
             </div>
 
@@ -225,11 +225,12 @@ export default function Hero() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.55 }}
-                className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-3xl"
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 max-w-5xl"
               >
                 {[
                   { value: "99.99%",  label: "Uptime",            sub: "180-day rolling",  live: true,  accent: "yellow" },
                   { value: "<0.9 s",  label: "Inclusion time",    sub: "median, all chains", live: true,  accent: "yellow" },
+                  { value: "13K+",    label: "MCP installs",      sub: "and growing",      live: true,  accent: "yellow" },
                   { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "white" },
                   { value: "10",      label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
                 ].map((s, i) => {
