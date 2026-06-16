@@ -56,6 +56,7 @@ import { CheckIcon, XIcon, SparkIcon, TimerIcon } from "../logos";
 import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { MCP_VERSION as MCP_PKG_VERSION } from "@/app/lib/version";
+import { RequestsView } from "./RequestsView";
 
 /** Published @quackai/q402-mcp version surfaced on the MCP setup card.
  *  Derived from the single source of truth in app/lib/version.ts so a
@@ -472,6 +473,7 @@ const SECTIONS = [
   { id: "webhook", label: "Webhook", hint: "Signed settlement POSTs" },
   { id: "playground", label: "API playground", hint: "Simulate a quote" },
   { id: "docs", label: "Documentation", hint: "Full reference" },
+  { id: "requests", label: "Payment requests", hint: "Create · track invoices" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -2091,6 +2093,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
     webhook: useRef<HTMLDivElement>(null),
     playground: useRef<HTMLDivElement>(null),
     docs: useRef<HTMLDivElement>(null),
+    requests: useRef<HTMLDivElement>(null),
   };
 
   const scrollTo = useCallback((id: SectionId) => {
@@ -2311,6 +2314,10 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
           {/* ── Documentation ───────────────────────────────────────── */}
           <div ref={refs.docs} style={section(6)}>
             <DocsCard />
+          </div>
+
+          <div ref={refs.requests} style={section(7)}>
+            <RequestsView ownerAddress={ownerAddress} signMessage={signMessage} scope={scope} />
           </div>
         </main>
       </div>

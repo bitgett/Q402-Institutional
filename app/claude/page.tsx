@@ -11,7 +11,7 @@
  * sticky numbered index gutter, hairline section rules, navy + #F5C518 + #5BC8FA
  * only) so the two product pages read as one family. But the composition is its
  * own: this is the hands-on page, so it leads with an interactive 4-client
- * install, a wallet-mode picker, a live q402_quote ranking, and the 24-tool
+ * install, a wallet-mode picker, a live q402_quote ranking, and the 27-tool
  * surface. No marketing-landing motifs (corner glows, gradient sheen titles).
  */
 
@@ -154,7 +154,7 @@ const MODES: { tag: string; title: string; desc: React.ReactNode; env: string[];
   },
 ];
 
-// ── the 24-tool surface (grouped, with auth + one-line note) ────────────────
+// ── the 27-tool surface (grouped, with auth + one-line note) ────────────────
 const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: string }[] }[] = [
   {
     label: "Setup and read",
@@ -215,8 +215,16 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
       { name: "q402_clear_delegation", auth: "private key", note: "Clear EIP-7702 delegation on a chain. Q402-sponsored gas." },
     ],
   },
+  {
+    label: "Requests",
+    tools: [
+      { name: "q402_request_create", auth: "api key", note: "Publish a payment request (invoice). No funds move; returns a /pay link + req_ id." },
+      { name: "q402_request_status", auth: "no auth", note: "Look up a request by req_ id: amount, recipient, status. Read-only." },
+      { name: "q402_request_pay", auth: "live mode", note: "Pay a request gaslessly from your own Agent Wallet. Terms locked to the request." },
+    ],
+  },
 ];
-const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 24
+const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 27
 
 const rise = {
   initial: { opacity: 0, y: 10 },
