@@ -1004,7 +1004,7 @@ export default function LandingBody() {
           <div className="c1-wrap">
             <Shead
               index="03" kicker="Capabilities"
-              sub="The SDK and 24-tool MCP server go well past one-shot payments."
+              sub="The SDK and 27-tool MCP server go well past one-shot payments."
             >
               Beyond a single transfer.
             </Shead>
