@@ -85,15 +85,6 @@ function pct(fraction: number): string {
   return `${(fraction * 100).toFixed(2)}%`;
 }
 
-function amt(s: string | null): string {
-  if (s == null) return "—";
-  const n = Number(s);
-  if (!Number.isFinite(n)) return s;
-  if (n === 0) return "0";
-  if (Math.abs(n) < 0.0001) return "<0.0001";
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
-}
-
 function formatUsd(n: number): string {
   if (!Number.isFinite(n)) return "$—";
   if (n === 0) return "$0.00";
@@ -202,53 +193,61 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
   const bestApyRaw = finiteApys.length > 0 ? Math.max(...finiteApys) : NaN;
   const bestApy = Number.isFinite(bestApyRaw) ? bestApyRaw : null;
 
-  const labelCls = "text-[10px] text-white/80 uppercase tracking-widest font-medium";
+  // One row per available stablecoin market (USDC + USDT) so BOTH APYs are
+  // visible; merge in the supplied balance when a position exists for that token.
+  const marketRows = (["USDC", "USDT"] as const)
+    .map((asset) => {
+      const m = (markets ?? []).find((mk) => mk.asset === asset);
+      const pos = positions?.positions.find((p) => p.asset === asset);
+      const apy = m?.supplyApy ?? pos?.supplyApy;
+      if (apy == null) return null;
+      return { asset, apy, balance: pos ? Number(pos.balance) : null };
+    })
+    .filter((r): r is { asset: "USDC" | "USDT"; apy: number; balance: number | null } => r !== null);
 
   return (
     <div className="relative">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className={labelCls}>Earn · Q402 Yield</span>
-          <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-widest text-emerald-400/80 font-semibold">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/aave.svg" alt="Aave" width={13} height={13} className="rounded-full" />
-            Aave V3
-          </span>
-        </div>
-        {hasPositions && positions && (
-          <div className="text-[11px] text-emerald-300 font-mono">
-            {formatUsd(positions.totalSuppliedUsd)}
-            {partialRead ? "+ supplied" : " supplied"}
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/aave.svg" alt="Aave" width={26} height={26} className="rounded-full shrink-0" />
+          <div className="min-w-0 leading-tight">
+            <div className="text-[15px] font-semibold text-white/90">Q402 Yield</div>
+            <div className="text-[12px] text-white/55 mt-0.5">Aave V3</div>
           </div>
-        )}
+        </div>
+        <div className="text-[19px] font-semibold font-mono shrink-0 leading-none">
+          {hasPositions && positions ? (
+            <span className="text-emerald-300">
+              {formatUsd(positions.totalSuppliedUsd)}
+              {partialRead ? "+" : ""}
+            </span>
+          ) : (
+            <span className="text-white/30">$0.00</span>
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div className="text-white/50 text-[12px] py-3 text-center">Loading Earn positions…</div>
       ) : error ? (
         <div className="text-[11.5px] text-amber-300/80 py-1">{error}</div>
-      ) : hasPositions && positions ? (
+      ) : marketRows.length > 0 ? (
         <div className="space-y-1.5">
-          {positions.positions.map((p) => (
-            <div
-              key={`${p.chain}-${p.marketAddress}-${p.asset}`}
-              className="flex items-center justify-between text-[12.5px]"
-            >
+          {marketRows.map((row) => (
+            <div key={row.asset} className="flex items-center justify-between text-[12.5px]">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-white/85 font-medium font-mono text-[12px]">{p.asset}</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/${row.asset.toLowerCase()}.svg`} alt={row.asset} width={16} height={16} className="rounded-full shrink-0" />
+                <span className="text-white/85 font-medium font-mono text-[12px]">{row.asset}</span>
                 <span className="text-white/40">·</span>
-                <span className="text-white/72 text-[11px] capitalize">{p.protocol}</span>
-                <span className="text-white/40">·</span>
-                <span className="text-emerald-300/90 text-[11px]">{pct(p.supplyApy)} APY</span>
+                <span className="text-emerald-300/90 text-[11px]">{pct(row.apy)} APY</span>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-emerald-300 font-mono text-[12px]">{amt(p.balance)}</span>
-                {p.accrued !== null && (
-                  <span className="text-white/45 font-mono text-[11px]" title="Accrued yield">
-                    +{amt(p.accrued)}
-                  </span>
-                )}
-              </div>
+              {row.balance != null ? (
+                <span className="text-emerald-300 font-mono text-[13px] shrink-0">{formatUsd(row.balance)}</span>
+              ) : (
+                <span className="text-white/30 font-mono text-[13px] shrink-0">—</span>
+              )}
             </div>
           ))}
         </div>
@@ -286,6 +285,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           signMessage={signMessage}
           onChanged={() => { void loadPositions(); }}
           canDeposit={canDeposit}
+          defaultToken={positions?.positions?.[0]?.asset === "USDT" ? "USDT" : "USDC"}
         />
       )}
     </div>
@@ -312,15 +312,19 @@ function AgenticWalletEarnActions({
   signMessage,
   onChanged,
   canDeposit,
+  defaultToken,
 }: {
   ownerAddress: string;
   walletId: string;
   signMessage: (message: string) => Promise<string | null>;
   onChanged: () => void;
   canDeposit: boolean;
+  /** Seeds the deposit/withdraw token to the wallet's supplied asset so the
+   *  control doesn't default to USDC while the position is USDT (and vice versa). */
+  defaultToken: "USDC" | "USDT";
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
-  const [token, setToken] = useState<"USDC" | "USDT">("USDC");
+  const [token, setToken] = useState<"USDC" | "USDT">(defaultToken);
   const [amount, setAmount] = useState("");
   const [maxWithdraw, setMaxWithdraw] = useState(false);
   const [busy, setBusy] = useState(false);
