@@ -132,7 +132,7 @@ const CAPS = [
   },
 ];
 
-// 04 - the full 24-tool surface, grouped like an API reference (5+2+1+7+4+4+1).
+// 04 - the full 27-tool surface, grouped like an API reference (5+2+1+7+4+4+1+3).
 const TOOL_GROUPS = [
   { label: "Setup and read", tools: ["q402_doctor", "q402_quote", "q402_balance", "q402_agentic_info", "q402_wallet_status"] },
   { label: "Pay", tools: ["q402_pay", "q402_batch_pay"] },
@@ -141,6 +141,7 @@ const TOOL_GROUPS = [
   { label: "Yield", tools: ["q402_yield_reserves", "q402_yield_positions", "q402_yield_deposit", "q402_yield_withdraw"] },
   { label: "Bridge", tools: ["q402_bridge_quote", "q402_bridge_send", "q402_bridge_history", "q402_bridge_gas_tank"] },
   { label: "Delegation", tools: ["q402_clear_delegation"] },
+  { label: "Requests", tools: ["q402_request_create", "q402_request_status", "q402_request_pay"] },
 ];
 
 const CHAINS = ["BNB", "Ethereum", "Arbitrum", "Avalanche", "Mantle", "X Layer", "Monad", "Scroll", "Injective", "Stable"];
@@ -170,7 +171,7 @@ export default function AgentsPage() {
           <Section index="03" label="Capabilities" title="Well past a single payment.">
             <CapabilityGrid />
           </Section>
-          <Section index="04" label="24 tools" title="The whole surface, one package.">
+          <Section index="04" label="27 tools" title="The whole surface, one package.">
             <InstallBlock />
             <ToolIndex />
             <ChainStrip />

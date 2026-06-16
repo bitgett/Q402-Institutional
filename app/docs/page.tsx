@@ -553,7 +553,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 24 total</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 27 total</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <table className="w-full text-sm">
                 <thead>
