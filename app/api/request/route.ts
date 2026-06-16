@@ -90,6 +90,18 @@ export async function POST(req: NextRequest) {
   if (!AMOUNT_RE.test(amount) || !(Number(amount) > 0)) {
     return NextResponse.json({ error: "amount must be a positive decimal string" }, { status: 400 });
   }
+  // Reject more fractional digits than the token supports on this chain. Without
+  // this, an over-precision amount stores fine but the pay route's
+  // ethers.parseUnits() throws at settle time, leaving the request permanently
+  // unpayable. Validate here so the creator gets a clean 400 instead.
+  const maxDecimals = AGENTIC_CHAINS[chain].tokens[token].decimals;
+  const dot = amount.indexOf(".");
+  if (dot !== -1 && amount.length - dot - 1 > maxDecimals) {
+    return NextResponse.json(
+      { error: `amount has more decimals than ${token} supports on ${chain} (max ${maxDecimals})` },
+      { status: 400 },
+    );
+  }
 
   const ttlDays =
     typeof body.ttlDays === "number" && body.ttlDays > 0 && body.ttlDays <= 90
