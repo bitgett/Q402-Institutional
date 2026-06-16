@@ -223,8 +223,8 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
                     How to pay
                   </div>
                   <div style={{ fontSize: 14, color: TEXT, marginBottom: 14, lineHeight: 1.55 }}>
-                    Send <b>{req.amount} {req.token}</b> to the address above on <b>{chain?.name ?? req.chain}</b>.
-                    A Q402 agent can settle it gaslessly:
+                    Have a Q402 agent settle this gaslessly. It pays the exact{" "}
+                    <b>{req.amount} {req.token}</b> on <b>{chain?.name ?? req.chain}</b> and marks the request paid:
                   </div>
                   <div
                     style={{
@@ -242,11 +242,15 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
                     }}
                   >
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      q402_request_pay {"{"} requestId: &quot;{req.id}&quot; {"}"}
+                      q402_request_pay {"{"} requestId: &quot;{req.id}&quot;, confirm: true {"}"}
                     </span>
-                    <button onClick={() => copy("cmd", `q402_request_pay { requestId: "${req.id}" }`)} style={miniBtn}>
+                    <button onClick={() => copy("cmd", `q402_request_pay { requestId: "${req.id}", confirm: true }`)} style={miniBtn}>
                       {copied === "cmd" ? "copied" : "copy"}
                     </button>
+                  </div>
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 10, lineHeight: 1.5 }}>
+                    Paying the address manually from any wallet also works, but it will not auto-update this
+                    page; the request stays Awaiting payment until an agent settles it.
                   </div>
 
                   <button

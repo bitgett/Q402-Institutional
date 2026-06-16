@@ -5,6 +5,8 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import {
   getPaymentRequest,
   cancelPaymentRequest,
+  acquireRequestPayLock,
+  releaseRequestPayLock,
   toPublicRequest,
 } from "@/app/lib/payment-request";
 
@@ -73,6 +75,23 @@ export async function POST(
     );
   }
 
-  const cancelled = await cancelPaymentRequest(id);
+  // Serialize against settlement: if the pay lock is held, a payment is in
+  // flight. Cancelling now could show "cancelled" while the payment still
+  // lands (and pay's markRequestPaid would then overwrite to "paid"). Take the
+  // same lock so cancel and pay can't interleave.
+  if (!(await acquireRequestPayLock(id))) {
+    return NextResponse.json(
+      { error: "A settlement is in progress for this request; try cancelling again shortly." },
+      { status: 409 },
+    );
+  }
+  let cancelled;
+  try {
+    // Re-checks status === "open" internally, so a request that settled between
+    // the check above and acquiring the lock is left as-is (not force-cancelled).
+    cancelled = await cancelPaymentRequest(id);
+  } finally {
+    await releaseRequestPayLock(id);
+  }
   return NextResponse.json({ request: cancelled ? toPublicRequest(cancelled) : null });
 }

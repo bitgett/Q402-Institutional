@@ -203,13 +203,16 @@ export function RequestsView({ ownerAddress, signMessage, scope }: RequestsViewP
 
   return (
     <V2AccentScope>
-      <Surface style={{ padding: 21 }}>
+      {/* marginTop separates this card from the Docs section above (sibling
+          Developer sections rely on the inner Surface for the gap). Cyan accent
+          sets Payment requests apart from the yellow-dominant dashboard. */}
+      <Surface style={{ padding: 21, marginTop: 14, borderTop: `2px solid ${v2.cyan}` }}>
         {/* Header — give the section real weight so it reads as a capability,
             not a heading squished between cards. */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
           <div>
-            <Eyebrow>Receive · invoices</Eyebrow>
-            <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.03em", marginTop: 7 }}>
+            <Eyebrow style={{ color: v2.cyan }}>Receive · invoices</Eyebrow>
+            <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.03em", marginTop: 7, color: v2.cyan }}>
               Payment requests
             </div>
             <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 8, maxWidth: 560, lineHeight: 1.55 }}>

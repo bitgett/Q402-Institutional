@@ -139,7 +139,7 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   // Requests
   { group: "Requests", name: "q402_request_create", purpose: "Publish a payment request (invoice). No funds move — returns a /pay link + req_ id." },
   { group: "Requests", name: "q402_request_status", purpose: "Look up a request by req_ id (amount, recipient, status). Read-only, no auth." },
-  { group: "Requests", name: "q402_request_pay", purpose: "Pay a request gaslessly from your own Agent Wallet. Moves funds — needs confirm." },
+  { group: "Requests", name: "q402_request_pay", purpose: "Pay a request gaslessly from your own Agent Wallet. Moves funds — two-phase consent, like q402_pay." },
 ];
 
 /**

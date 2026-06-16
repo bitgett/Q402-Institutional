@@ -242,7 +242,19 @@ export async function POST(
 
     // Settled. Flip status; keep the lock as a belt-and-suspenders re-pay
     // guard until it expires (the on-chain nonce already prevents replay).
-    await markRequestPaid(id, { txHash, paidBy, receiptId }).catch(() => {});
+    // Flip status to paid. Retry a few times on a transient KV blip so the
+    // request doesn't linger as "open" after the funds moved. Even if all
+    // retries fail, a re-pay is still blocked (server mode by the durable
+    // idempotency marker keyed to this request, witness mode by the on-chain
+    // nonce), so this is a display-consistency guard, not a fund-safety one.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await markRequestPaid(id, { txHash, paidBy, receiptId });
+        break;
+      } catch {
+        /* transient; retry */
+      }
+    }
     releaseOnExit = false;
 
     return NextResponse.json({ status: "paid", txHash, receiptId: receiptId ?? null });
