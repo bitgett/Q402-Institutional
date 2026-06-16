@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Poppins, JetBrains_Mono, Bricolage_Grotesque } from "next/font/google";
+import { Poppins, JetBrains_Mono, Bricolage_Grotesque, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import Providers from "./components/Providers";
 
@@ -28,6 +28,17 @@ const bricolage = Bricolage_Grotesque({
   display: "swap",
 });
 
+// Editorial display face for the /agents product page only. Space Grotesk is a
+// geometric grotesk that reads colder and more technical than Bricolage at large
+// sizes, so /agents gets its own big-type voice without echoing the landing.
+// Loaded site-wide via the html var, but only /agents opts in via font-grotesk.
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-grotesk",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://q402.quackai.ai"),
   title: "Q402 | Gasless Payments on EVM | Quack AI",
@@ -53,7 +64,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${poppins.variable} ${jetbrainsMono.variable} ${bricolage.variable}`}>
+    <html lang="en" className={`${poppins.variable} ${jetbrainsMono.variable} ${bricolage.variable} ${spaceGrotesk.variable}`}>
       <body className="font-poppins antialiased bg-navy text-white">
         <Providers>
           {children}

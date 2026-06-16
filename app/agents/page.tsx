@@ -1,15 +1,21 @@
 "use client";
 
 /**
- * /agents — Q402 Agent Wallet landing.
+ * /agents - Q402 Agent Wallet product page.
  *
- * Brand-distinct surface: deep slate base, yellow (#F5C518) accent for
- * the Agent-Wallet feature line, console mockup right of the hero —
- * aligned with the Q402 brand accent used across the rest of the app.
+ * Identity: a flat technical "datasheet" with editorial big-type, deliberately
+ * NOT the marketing landing. The landing's signature motifs are all avoided here
+ * on purpose: no radial corner glows, no grid overlay, no yellow->cyan glow
+ * terminal, no glowing rounded bento cards with yellow icon chips, no hover-lift
+ * everywhere, no gradient-clip "sheen" titles, no gradient CTA band. Instead:
+ * a flat navy base, a sticky left index gutter, hairline section rules, sharp
+ * 4px-radius bordered blocks with no shadow, solid-ink Space Grotesk headlines,
+ * monospace tool tags, and restrained color (yellow for one accent word + the
+ * primary CTA, cyan for signatures/tool tags). Palette stays navy + #F5C518 +
+ * #5BC8FA. Brand mark comes from the shared Navbar / Footer.
  *
- * No pricing tier on this page; the trial promise (2,000 sponsored TX on
- * BNB Chain) appears in the proof row, and the page funnels into the
- * dashboard's Wallets view.
+ * Every number/limit below is grounded in the real product (mcp-server tool
+ * surface, app/lib/agentic-wallet*, contracts.manifest.json) as of 2026-06.
  */
 
 import { useEffect, useState } from "react";
@@ -18,507 +24,531 @@ import { motion } from "framer-motion";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 
+const INK = "#E6EAF2";
+const MUT = "rgba(230,234,242,0.60)";
+const MUT2 = "rgba(230,234,242,0.40)";
+const LINE = "rgba(255,255,255,0.11)";
+const HAIR = "rgba(255,255,255,0.07)";
+const YELLOW = "#F5C518";
+const CYAN = "#5BC8FA";
+
 const INSTALL_CMD = "npx @quackai/q402-mcp";
 
-// Six lines that drip in one-by-one to make the hero feel live. Kept as
-// data so the animation timing is obvious + tweakable.
-const CONSOLE_LINES: { text: string; tone?: "muted" | "good" | "accent" | "warn"; pause?: number }[] = [
-  { text: "$ q402 agent run shop.bot", tone: "muted" },
-  { text: "agent: ordering analytics data ($3.24 USDC)", tone: "accent" },
-  { text: "→ q402_pay(chain: 'bnb', to: 0x9c…2f4a, amount: 3.24)", tone: "muted" },
-  { text: "✓ settled · gas sponsored · tx 0x4a1c…e83f", tone: "good" },
-  { text: "agent: forwarding 0.5 USDT to data provider", tone: "accent" },
-  { text: "✓ settled · 248 ms · receipt rct_aB12cd34", tone: "good" },
+// Hero key facts - the one place these headline numbers live.
+const HERO_FACTS = [
+  { v: "24", label: "MCP tools" },
+  { v: "10", label: "EVM chains" },
+  { v: "$0", label: "gas per send" },
+  { v: "10", label: "wallets / owner" },
 ];
+
+const CLIENTS: { name: string; src: string; invert?: boolean }[] = [
+  { name: "Claude", src: "/logos/claude.svg" },
+  { name: "Codex", src: "/logos/codex.svg" },
+  { name: "Cursor", src: "/logos/cursor.svg", invert: true },
+  { name: "Cline", src: "/logos/cline.svg", invert: true },
+  { name: "Copilot", src: "/logos/copilot.jpg" },
+  { name: "Hermes", src: "/logos/hermes.jpg" },
+];
+
+// 01 - the safety model. The product's central differentiator, stated as spec.
+const SAFETY = [
+  {
+    term: "Intent-bound signatures",
+    body: "Every spend carries a fresh owner signature over the exact chain, token, recipient and amount. A signature for one action can not be replayed as another, or against another wallet.",
+  },
+  {
+    term: "Per-transaction and daily caps",
+    body: "Defaults of $200 per transaction and $500 per day, set per wallet, enforced server-side on every send and on every row of a batch. A runaway agent stays bounded.",
+  },
+  {
+    term: "Keys you actually hold",
+    body: "Wallet keys are AES-GCM encrypted and bound to your account, exportable anytime with an audit log. Delete a wallet and it stays recoverable for 7 days.",
+  },
+  {
+    term: "Funds the server can not touch",
+    body: "Gas deposits, revenue and the relayer hot wallet are three separate addresses. A server compromise can drain the operational gas float, never your deposits.",
+  },
+  {
+    term: "Idempotent settlement",
+    body: "Single sends and batch payouts settle behind a per-wallet, per-chain lock against a one-time challenge, so a retried or duplicated call never moves funds twice.",
+  },
+  {
+    term: "Receipts you verify offline",
+    body: "Every transfer returns a Trust Receipt. Recover the relayer signature from on-chain state to verify it yourself, with no Q402 API call in the loop.",
+  },
+];
+
+// 02 - one run: the request log (typed in) and the resulting receipt fields.
+const RUN_LOG: { text: string; kind?: "you" | "ok" | "out" }[] = [
+  { text: "agent: pay data provider 3.24 USDC", kind: "you" },
+  { text: 'q402_pay(chain:"bnb", token:"USDC", to:"0x9c..2f4a", amount:"3.24")', kind: "out" },
+  { text: "signing intent ......... ok", kind: "ok" },
+  { text: "relayer sponsors gas ... ok", kind: "ok" },
+  { text: "settled in one transaction", kind: "ok" },
+  { text: "receipt rct_aB12cd34", kind: "ok" },
+];
+const RECEIPT_FIELDS: { k: string; v: string; check?: boolean }[] = [
+  { k: "receiptId", v: "rct_aB12cd34" },
+  { k: "chain", v: "bnb" },
+  { k: "token", v: "USDC" },
+  { k: "amount", v: "3.24" },
+  { k: "method", v: "eip7702" },
+  { k: "recipient", v: "0x9c..2f4a" },
+  { k: "signature", v: "verified offline", check: true },
+];
+
+// 03 - capabilities, each with the real numbers and the tools behind it.
+const CAPS = [
+  {
+    title: "Single and batch pay",
+    body: "One recipient, or up to 20 in a single signed call (5 on the free trial). Same chain and token across the batch, with per-row results returned.",
+    tools: ["q402_pay", "q402_batch_pay"],
+  },
+  {
+    title: "Recurring spend",
+    body: "Hourly, daily, weekly or monthly rules with a cancel window of up to 14 days. Pause, resume, skip one fire, or cancel. Each rule tracks its own running total.",
+    tools: ["q402_recurring_*"],
+  },
+  {
+    title: "Aave V3 yield",
+    body: "Park idle USDC or USDT into Aave V3 straight from a prompt, then withdraw on demand. Live on BNB Chain to start.",
+    tools: ["q402_yield_*"],
+  },
+  {
+    title: "CCIP cross-chain bridge",
+    body: "Move USDC across the Ethereum, Avalanche and Arbitrum triangle at Chainlink's price, with zero Q402 markup. Fee in LINK or native.",
+    tools: ["q402_bridge_*"],
+  },
+  {
+    title: "Gas Tank",
+    body: "Fund gas once. Q402 sponsors settlement across all 10 chains and auto-funds bridge fees per chain. The server never receives your deposit.",
+    tools: ["q402_bridge_gas_tank"],
+  },
+  {
+    title: "ERC-8004 graduation",
+    body: "Register an Agent Wallet on-chain as an ERC-8004 agent and earn a weekly reputation write that summarizes its settlement activity. On BNB Chain today.",
+    tools: ["q402_agentic_info"],
+  },
+];
+
+// 04 - the full 24-tool surface, grouped like an API reference (5+2+1+7+4+4+1).
+const TOOL_GROUPS = [
+  { label: "Setup and read", tools: ["q402_doctor", "q402_quote", "q402_balance", "q402_agentic_info", "q402_wallet_status"] },
+  { label: "Pay", tools: ["q402_pay", "q402_batch_pay"] },
+  { label: "Receipts", tools: ["q402_receipt"] },
+  { label: "Recurring", tools: ["q402_recurring_list", "q402_recurring_create", "q402_recurring_fires", "q402_recurring_pause", "q402_recurring_resume", "q402_recurring_skip_next", "q402_recurring_cancel"] },
+  { label: "Yield", tools: ["q402_yield_reserves", "q402_yield_positions", "q402_yield_deposit", "q402_yield_withdraw"] },
+  { label: "Bridge", tools: ["q402_bridge_quote", "q402_bridge_send", "q402_bridge_history", "q402_bridge_gas_tank"] },
+  { label: "Delegation", tools: ["q402_clear_delegation"] },
+];
+
+const CHAINS = ["BNB", "Ethereum", "Arbitrum", "Avalanche", "Mantle", "X Layer", "Monad", "Scroll", "Injective", "Stable"];
+
+// Distinct, restrained motion: a short rise with a different easing than the
+// landing's fadeUp signature, and it does not repeat on every tiny element.
+const rise = {
+  initial: { opacity: 0, y: 10 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { amount: 0.2, once: true } as const,
+  transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const },
+};
 
 export default function AgentsPage() {
   return (
     <>
       <Navbar />
-
-      <main
-        className="pt-24 pb-24 px-6 relative overflow-hidden"
-        style={{
-          background:
-            "radial-gradient(900px 500px at 70% 0%, rgba(245,197,24,0.12), transparent 60%), linear-gradient(180deg, #060B14 0%, #08111E 100%)",
-          color: "#E2E8F0",
-        }}
-      >
-        <GridBacker />
-
-        <div className="relative max-w-6xl mx-auto">
+      <main className="font-poppins" style={{ background: "linear-gradient(180deg, #070B14 0%, #0A0F1C 100%)", color: INK }}>
+        <div className="max-w-[1240px] mx-auto px-6 sm:px-8">
           <Hero />
-          <PromptExamplesSection />
-          <ProofRow />
-          <ConsoleMockupSection />
-          <FlowSection />
-          <PatternsSection />
-          <Closing />
+          <Section index="01" label="Control" title={<>Autonomy with a leash <span style={{ color: YELLOW }}>you hold.</span></>} sub="An Agent Wallet your AI signs through, not your MetaMask. Six guarantees keep a self-driving agent bounded.">
+            <SafetySpec />
+          </Section>
+          <Section index="02" label="Proof" title="One tool call. Settled, gas sponsored." accent={CYAN} sub="A real pay flow and the Trust Receipt it returns. The receipt verifies offline against on-chain state.">
+            <RunBlock />
+          </Section>
+          <Section index="03" label="Capabilities" title="Well past a single payment.">
+            <CapabilityGrid />
+          </Section>
+          <Section index="04" label="24 tools" title="The whole surface, one package.">
+            <InstallBlock />
+            <ToolIndex />
+            <ChainStrip />
+          </Section>
         </div>
       </main>
-
       <Footer />
     </>
   );
 }
 
-// ── Background grid ───────────────────────────────────────────────────────
+// Small inline checkmark (functional SVG, not an emoji glyph). ----------------
 
-function GridBacker() {
+function Check({ color = CYAN }: { color?: string }) {
   return (
-    <div
-      aria-hidden
-      className="absolute inset-0 pointer-events-none opacity-[0.06]"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(245,197,24,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(245,197,24,0.6) 1px, transparent 1px)",
-        backgroundSize: "60px 60px",
-        maskImage: "radial-gradient(ellipse at center, black 35%, transparent 75%)",
-        WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 75%)",
-      }}
-    />
+    <svg viewBox="0 0 16 16" className="inline-block w-3.5 h-3.5 ml-1.5 -translate-y-px" fill="none" aria-hidden>
+      <path d="M3 8.5l3 3 7-7.5" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
-// ── Hero ──────────────────────────────────────────────────────────────────
+// Monospace tool tag - flat bordered, no fill, no glow (reads like inline code).
+
+function Tool({ name }: { name: string }) {
+  return (
+    <span
+      className="font-mono text-[11px] leading-none px-1.5 py-1 rounded-[3px] border whitespace-nowrap"
+      style={{ borderColor: "rgba(91,200,250,0.26)", color: "rgba(91,200,250,0.92)" }}
+    >
+      {name}
+    </span>
+  );
+}
+
+// Section frame: sticky left index gutter + hairline top rule + content. ------
+
+function Section({
+  index,
+  label,
+  title,
+  sub,
+  accent = YELLOW,
+  children,
+}: {
+  index: string;
+  label: string;
+  title: React.ReactNode;
+  sub?: string;
+  accent?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-t py-16 lg:py-24" style={{ borderColor: HAIR }}>
+      <div className="grid lg:grid-cols-[92px_1fr] gap-7 lg:gap-12">
+        <div className="hidden lg:block">
+          <div className="sticky top-28 font-grotesk font-semibold text-2xl" style={{ color: "rgba(255,255,255,0.18)" }}>
+            {index}
+          </div>
+        </div>
+        <div>
+          <motion.div {...rise} className="mb-9">
+            <div className="font-mono text-[11px] uppercase tracking-[0.3em] mb-5" style={{ color: accent }}>
+              [ {label} ]
+            </div>
+            <h2 className="font-grotesk font-semibold tracking-[-0.03em] leading-[1.05] text-[clamp(1.85rem,3.8vw,2.8rem)] max-w-[22ch]" style={{ color: INK }}>
+              {title}
+            </h2>
+            {sub && (
+              <p className="text-[15px] mt-4 max-w-[44rem] leading-relaxed" style={{ color: MUT }}>
+                {sub}
+              </p>
+            )}
+          </motion.div>
+          {children}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// CTAs - pill buttons (a brand element, kept consistent across the site). ------
+
+function PrimaryCta({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="group inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold font-grotesk text-navy bg-yellow hover:bg-yellow-hover transition-colors"
+    >
+      {children}
+      <span className="inline-block transition-transform group-hover:translate-x-1" aria-hidden>&rarr;</span>
+    </Link>
+  );
+}
+
+function SecondaryCta({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium font-grotesk border transition-colors hover:border-white/30"
+      style={{ borderColor: LINE, color: "rgba(230,234,242,0.9)" }}
+    >
+      {children}
+    </Link>
+  );
+}
+
+// Hero - type-forward, flat. No glows, no grid, no animated terminal. ---------
 
 function Hero() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="max-w-3xl mx-auto text-center mb-16"
-    >
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] uppercase tracking-[0.22em] font-bold mb-6"
-        style={{ background: "rgba(245,197,24,0.10)", color: "#f9d64a", border: "1px solid rgba(245,197,24,0.22)" }}
-      >
-        <span>✦</span>
-        Agent Wallet
-      </div>
-      <h1 className="text-5xl md:text-6xl font-semibold tracking-tight mb-5 leading-[1.05]">
-        Give your AI a wallet
-        <span style={{ color: "#f9d64a" }}> it can actually use.</span>
-      </h1>
-      <p className="text-base md:text-lg leading-relaxed max-w-2xl mx-auto" style={{ color: "rgba(226,232,240,0.75)" }}>
-        A wallet your AI signs through. Your MetaMask is untouched. Per-tx and per-day caps, 10 EVM chains, keys exportable anytime.
-      </p>
-      <div className="flex flex-wrap justify-center gap-3 mt-7">
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-semibold transition-colors"
-          style={{ background: "#F5C518", color: "#0B1A12" }}
-        >
-          Open dashboard →
-        </Link>
-        <Link
-          href="/claude"
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-md text-sm font-medium transition-colors border"
-          style={{
-            borderColor: "rgba(226,232,240,0.18)",
-            color: "rgba(226,232,240,0.85)",
-            background: "rgba(226,232,240,0.02)",
-          }}
-        >
-          Use from Claude · Codex · Cursor · Cline
-        </Link>
-      </div>
-    </motion.div>
-  );
-}
-
-// ── Prompt examples — "Try saying this" block ────────────────────────────
-//
-// Lifted out of the abstract feature list so the user immediately sees what
-// kind of *thing they could ask their AI to do* once the wallet exists.
-// Three deliberately concrete prompts: a recurring payout, a routing
-// preference, and a spending policy.
-
-function PromptExamplesSection() {
-  const prompts: { quote: string; lane: "recurring" | "routing" | "policy" }[] = [
-    {
-      quote: "Every Friday, send 25 USDT to these 8 contributors.",
-      lane: "recurring",
-    },
-    {
-      quote: "If Scroll gas is cheaper than Ethereum, use Scroll.",
-      lane: "routing",
-    },
-    {
-      quote: "Never spend more than $200 per transaction or $500 per day.",
-      lane: "policy",
-    },
-  ];
-  const laneLabel: Record<"recurring" | "routing" | "policy", string> = {
-    recurring: "recurring payout",
-    routing: "chain routing",
-    policy: "spending policy",
-  };
-  return (
-    <div className="mb-20 max-w-3xl mx-auto">
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.45 }}
-        className="text-center mb-7"
-      >
-        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#f9d64a" }}>
-          Try saying this
+    <section className="pt-28 lg:pt-32 pb-14 lg:pb-20">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
+        <div className="font-mono text-[11px] uppercase tracking-[0.34em] mb-7" style={{ color: MUT2 }}>
+          [ Q402 / Agent Wallet ]
         </div>
-        <div className="text-2xl md:text-3xl font-semibold tracking-tight mb-2">
-          Plain English. Real settlement.
-        </div>
-        <div className="text-sm" style={{ color: "rgba(226,232,240,0.65)" }}>
-          Claude · Codex · Cursor · Cline — one MCP tool, one Agent Wallet.
+        <h1 className="font-grotesk font-semibold tracking-[-0.035em] leading-[0.98] text-[clamp(2.6rem,7vw,5.2rem)] max-w-[17ch]" style={{ color: INK }}>
+          Let your agent hold a wallet,{" "}
+          <span style={{ color: YELLOW }}>not your keys.</span>
+        </h1>
+        <p className="text-lg leading-relaxed mt-7 max-w-[40rem]" style={{ color: MUT }}>
+          Q402 Agent Wallets sign and settle on their own across 10 EVM chains, gasless, inside the
+          per-transaction and daily caps you set. Export the keys or delete the wallet anytime.
+        </p>
+        <div className="flex flex-wrap gap-3 mt-9">
+          <PrimaryCta href="/dashboard">Open dashboard</PrimaryCta>
+          <SecondaryCta href="/claude">Install the MCP</SecondaryCta>
         </div>
       </motion.div>
 
-      <div className="space-y-3">
-        {prompts.map((p, i) => (
-          <motion.div
-            key={p.quote}
-            initial={{ opacity: 0, y: 8 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: i * 0.08 }}
-            className="rounded-2xl border p-5 flex items-start gap-4"
-            style={{
-              background: "rgba(226,232,240,0.025)",
-              borderColor: "rgba(245,197,24,0.18)",
-            }}
-          >
-            <div
-              className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-[14px] font-semibold"
-              style={{ background: "rgba(245,197,24,0.10)", color: "#f9d64a", border: "1px solid rgba(245,197,24,0.25)" }}
-              aria-hidden
-            >
-              ❝
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[18px] md:text-[19px] font-medium leading-snug" style={{ color: "#E2E8F0" }}>
-                {p.quote}
+      {/* Flat facts row + works-with, separated by a single hairline. */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.15 }}
+        className="mt-14 pt-9 border-t flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8"
+        style={{ borderColor: HAIR }}
+      >
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-10 gap-y-6">
+          {HERO_FACTS.map((f) => (
+            <div key={f.label}>
+              <div className="font-mono font-medium leading-none text-[clamp(1.7rem,2.6vw,2.1rem)]" style={{ color: INK }}>
+                {f.v}
               </div>
-              <div className="text-[10.5px] uppercase tracking-[0.18em] mt-1.5" style={{ color: "rgba(134,239,172,0.7)" }}>
-                {laneLabel[p.lane]}
+              <div className="text-[11px] uppercase tracking-[0.16em] font-mono mt-2" style={{ color: MUT2 }}>
+                {f.label}
               </div>
             </div>
-          </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-[10px] uppercase tracking-[0.24em] font-mono" style={{ color: MUT2 }}>
+            Works with
+          </span>
+          <div className="flex items-center gap-2">
+            {CLIENTS.map((c) => (
+              <span key={c.name} className="w-7 h-7 rounded-[5px] bg-white p-1 flex items-center justify-center" title={c.name}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={c.src} alt={c.name} className={`w-full h-full object-contain ${c.invert ? "invert" : ""}`} />
+              </span>
+            ))}
+          </div>
+        </div>
+      </motion.div>
+    </section>
+  );
+}
 
-      <div className="mt-5 text-center text-[11px]" style={{ color: "rgba(226,232,240,0.4)" }}>
-        Your agent only ever spends what you let it — caps are enforced server-side
-        on every send.
-      </div>
+// 01 - safety spec: full-width numbered rows, big index, hairline dividers. ----
+
+function SafetySpec() {
+  return (
+    <div>
+      {SAFETY.map((s, i) => (
+        <motion.div
+          key={s.term}
+          {...rise}
+          className="grid md:grid-cols-[60px_minmax(0,17rem)_1fr] gap-4 md:gap-8 py-7 border-t items-start"
+          style={{ borderColor: HAIR }}
+        >
+          <div className="font-grotesk font-semibold leading-none text-3xl md:text-4xl" style={{ color: "rgba(255,255,255,0.16)" }}>
+            {String(i + 1).padStart(2, "0")}
+          </div>
+          <div className="font-grotesk text-lg md:text-xl font-semibold tracking-[-0.01em]" style={{ color: INK }}>
+            {s.term}
+          </div>
+          <p className="text-[15px] leading-relaxed md:pt-0.5" style={{ color: MUT }}>
+            {s.body}
+          </p>
+        </motion.div>
+      ))}
     </div>
   );
 }
 
-// ── Console mockup — its own section between proof + flow ─────────────────
+// 02 - run block: flat log (typed) + flat receipt fields, no glow terminal. ----
 
-function ConsoleMockupSection() {
-  return (
-    <div className="mb-20 max-w-2xl mx-auto">
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.45 }}
-        className="text-center mb-6"
-      >
-        <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-2" style={{ color: "#f9d64a" }}>
-          What an agent run looks like
-        </div>
-        <div className="text-2xl font-semibold tracking-tight">
-          Two payments, no popups.
-        </div>
-      </motion.div>
-      <ConsoleMockup />
-    </div>
-  );
-}
-
-// ── Console mockup (animated) ─────────────────────────────────────────────
-
-function ConsoleMockup() {
+function RunBlock() {
   const [visible, setVisible] = useState(0);
 
   useEffect(() => {
-    if (visible >= CONSOLE_LINES.length) return;
-    const delay = 600 + (CONSOLE_LINES[visible].pause ?? 0);
-    const t = setTimeout(() => setVisible((v) => v + 1), delay);
+    if (visible >= RUN_LOG.length) {
+      const hold = setTimeout(() => setVisible(0), 2800);
+      return () => clearTimeout(hold);
+    }
+    const t = setTimeout(() => setVisible((v) => v + 1), 560);
     return () => clearTimeout(t);
   }, [visible]);
 
-  const colorFor = (tone?: "muted" | "good" | "accent" | "warn") => {
-    if (tone === "good") return "#f9d64a";
-    if (tone === "accent") return "#E2E8F0";
-    if (tone === "warn") return "#FCD34D";
-    return "rgba(226,232,240,0.45)";
+  const logColor = (kind?: "you" | "ok" | "out") => {
+    if (kind === "you") return CYAN;
+    if (kind === "ok") return YELLOW;
+    if (kind === "out") return INK;
+    return MUT;
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55, delay: 0.1 }}
-      className="rounded-2xl border p-5 font-mono text-[13px] leading-relaxed relative"
-      style={{
-        background: "rgba(8,17,30,0.85)",
-        borderColor: "rgba(245,197,24,0.22)",
-        boxShadow: "0 0 0 1px rgba(245,197,24,0.05), 0 30px 80px rgba(0,0,0,0.35)",
-      }}
-    >
-      {/* Window chrome */}
-      <div className="flex items-center gap-1.5 mb-4">
-        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(239,68,68,0.55)" }} />
-        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(234,179,8,0.55)" }} />
-        <span className="w-2.5 h-2.5 rounded-full" style={{ background: "rgba(245,197,24,0.55)" }} />
-        <span className="ml-3 text-[10px] uppercase tracking-[0.22em]" style={{ color: "rgba(226,232,240,0.35)" }}>
-          mcp · q402_pay · live
-        </span>
-      </div>
-
-      <div className="space-y-1.5 min-h-[180px]">
-        {CONSOLE_LINES.slice(0, visible).map((line, i) => (
-          <div key={i} style={{ color: colorFor(line.tone) }}>
-            {line.text}
-          </div>
-        ))}
-        {visible < CONSOLE_LINES.length && (
-          <div className="inline-block w-2 h-4 align-middle" style={{ background: "#f9d64a" }} />
-        )}
-      </div>
-
-      <div
-        className="mt-5 pt-3 border-t flex items-center justify-between text-[11px]"
-        style={{ borderColor: "rgba(226,232,240,0.06)", color: "rgba(226,232,240,0.4)" }}
-      >
-        <span>Real flow · sandboxed in this mockup</span>
-        <span style={{ color: "#f9d64a" }}>● connected</span>
-      </div>
-    </motion.div>
-  );
-}
-
-// ── Proof row ─────────────────────────────────────────────────────────────
-
-function ProofRow() {
-  const rows: { label: string; value: string; foot: string }[] = [
-    { label: "Chains live",       value: "10 EVM chains",    foot: "BNB · ETH · AVAX · X Layer · Stable · Mantle · Injective · Monad · Scroll · Arbitrum" },
-    { label: "Wallet popups",     value: "Zero",             foot: "Your agent signs through Q402 — your MetaMask never touched" },
-    { label: "Spend controls",    value: "Per-tx · daily",   foot: "Caps enforced at the relay on every send + batch row" },
-    { label: "Settle time",       value: "~1–3 s",           foot: "Median, single-recipient, sender pays $0 gas" },
-  ];
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.45 }}
-      className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-20"
-    >
-      {rows.map((r) => (
-        <div
-          key={r.label}
-          className="rounded-xl border p-4"
-          style={{ background: "rgba(226,232,240,0.02)", borderColor: "rgba(226,232,240,0.08)" }}
-        >
-          <div className="text-[10px] uppercase tracking-[0.18em] font-semibold mb-2" style={{ color: "rgba(226,232,240,0.4)" }}>
-            {r.label}
-          </div>
-          <div className="text-xl font-semibold mb-1" style={{ color: "#f9d64a" }}>
-            {r.value}
-          </div>
-          <div className="text-[11px] leading-snug" style={{ color: "rgba(226,232,240,0.5)" }}>
-            {r.foot}
-          </div>
+    <motion.div {...rise} className="grid lg:grid-cols-2 gap-4">
+      {/* Request log - flat, single thin top rule (not a yellow->cyan gradient). */}
+      <div className="border rounded-[4px] p-5 md:p-6 font-mono text-[13px] leading-relaxed" style={{ borderColor: LINE, background: "rgba(255,255,255,0.015)" }}>
+        <div className="h-px -mx-5 md:-mx-6 -mt-5 md:-mt-6 mb-5" style={{ background: "rgba(91,200,250,0.4)" }} />
+        <div className="text-[10px] uppercase tracking-[0.24em] mb-4" style={{ color: MUT2 }}>
+          mcp . q402_pay . request
         </div>
-      ))}
-      {/* Lightweight capability mention — Agent Wallets can graduate onto
-          the ERC-8004 on-chain identity layer. Kept as a single inline
-          line rather than a prominent badge — this is a feature surface,
-          not a marketing claim. */}
-      <div className="col-span-2 md:col-span-4 text-[11.5px] text-center mt-1" style={{ color: "rgba(226,232,240,0.45)" }}>
-        Optional: graduate your Agent Wallet onto ERC-8004 for an on-chain identity badge.
+        <div className="space-y-1.5 min-h-[170px]">
+          {RUN_LOG.slice(0, visible).map((l, i) => (
+            <div key={i} style={{ color: logColor(l.kind) }}>
+              {l.kind === "you" && <span style={{ color: CYAN }}>$ </span>}
+              {l.kind === "out" && <span style={{ color: MUT2 }}>&gt; </span>}
+              {l.text}
+            </div>
+          ))}
+          {visible < RUN_LOG.length && <span className="inline-block w-2 h-4 align-middle" style={{ background: YELLOW }} />}
+        </div>
+      </div>
+
+      {/* Trust Receipt - flat field list, square corners. */}
+      <div className="border rounded-[4px] p-5 md:p-6 font-mono text-[13px]" style={{ borderColor: LINE, background: "rgba(255,255,255,0.015)" }}>
+        <div className="h-px -mx-5 md:-mx-6 -mt-5 md:-mt-6 mb-5" style={{ background: "rgba(245,197,24,0.4)" }} />
+        <div className="text-[10px] uppercase tracking-[0.24em] mb-4" style={{ color: MUT2 }}>
+          trust receipt . response
+        </div>
+        <div className="divide-y" style={{ borderColor: HAIR }}>
+          {RECEIPT_FIELDS.map((f) => (
+            <div key={f.k} className="flex items-center justify-between py-2.5" style={{ borderColor: HAIR }}>
+              <span style={{ color: MUT2 }}>{f.k}</span>
+              <span style={{ color: f.check ? CYAN : INK }}>
+                {f.v}
+                {f.check && <Check />}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </motion.div>
   );
 }
 
-// ── Flow ──────────────────────────────────────────────────────────────────
+// 03 - capabilities: flat bordered blocks, no icon chips, no hover-lift. -------
 
-function FlowSection() {
-  const steps = [
-    {
-      n: "01",
-      title: "Install Q402 MCP",
-      body: "One package, every MCP client. Same surface in Claude, Codex, Cursor, Cline.",
-      code: INSTALL_CMD,
-    },
-    {
-      n: "02",
-      title: "Mint the wallet",
-      body: "One signature on the dashboard. Key exportable anytime.",
-      code: 'POST /api/wallet/agentic\n  → { address: "0xD2…ff64", createdAt: 1717... }',
-    },
-    {
-      n: "03",
-      title: "Let the agent run",
-      body: "One tool call. Server signs, relayer pays gas, every transfer returns a Trust Receipt.",
-      code: 'agent.pay({\n  chain: "bnb",\n  token: "USDC",\n  to:   "0x9c…2f4a",\n  amount: "3.24"\n})',
-    },
-  ];
+function CapabilityGrid() {
   return (
-    <div className="mb-20">
-      <motion.h2
-        initial={{ opacity: 0, y: 8 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.45 }}
-        className="text-3xl font-semibold tracking-tight mb-2"
-      >
-        Three steps to autonomous spend.
-      </motion.h2>
-      <p className="text-sm mb-9" style={{ color: "rgba(226,232,240,0.55)" }}>
-        Bounded by limits you set. Trust-receipted on every transfer.
-      </p>
-
-      <div className="space-y-4">
-        {steps.map((s, i) => (
-          <motion.div
-            key={s.n}
-            initial={{ opacity: 0, x: -8 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.45, delay: i * 0.08 }}
-            className="grid md:grid-cols-[120px_1fr_1.05fr] gap-5 items-start rounded-2xl border p-5"
-            style={{ background: "rgba(226,232,240,0.02)", borderColor: "rgba(226,232,240,0.07)" }}
-          >
-            <div className="text-2xl font-mono font-semibold" style={{ color: "#f9d64a" }}>{s.n}</div>
-            <div>
-              <div className="text-lg font-semibold mb-2">{s.title}</div>
-              <div className="text-sm leading-relaxed" style={{ color: "rgba(226,232,240,0.6)" }}>
-                {s.body}
-              </div>
-            </div>
-            <pre
-              className="rounded-md p-4 text-[12px] font-mono leading-relaxed whitespace-pre overflow-x-auto"
-              style={{
-                background: "rgba(8,17,30,0.7)",
-                color: "#cbd5e1",
-                border: "1px solid rgba(245,197,24,0.16)",
-              }}
-            >
-              {s.code}
-            </pre>
-          </motion.div>
-        ))}
-      </div>
+    <div className="grid md:grid-cols-2 gap-4">
+      {CAPS.map((c) => (
+        <motion.div
+          key={c.title}
+          {...rise}
+          className="border rounded-[4px] p-6 flex flex-col gap-4"
+          style={{ borderColor: LINE, background: "rgba(255,255,255,0.012)" }}
+        >
+          <h3 className="font-grotesk text-lg md:text-xl font-semibold tracking-[-0.01em]" style={{ color: INK }}>
+            {c.title}
+          </h3>
+          <p className="text-[14.5px] leading-relaxed" style={{ color: MUT }}>
+            {c.body}
+          </p>
+          <div className="flex flex-wrap gap-2 mt-auto pt-1">
+            {c.tools.map((t) => <Tool key={t} name={t} />)}
+          </div>
+        </motion.div>
+      ))}
     </div>
   );
 }
 
-// ── Patterns / use-case strip ────────────────────────────────────────────
+// 04 - install: one command, every client. Flat block with a copy affordance.
 
-function PatternsSection() {
-  const patterns = [
-    {
-      eyebrow: "Streaming spend",
-      headline: "Pay per row, not per call.",
-      body: "Crawlers / RAG pipelines fan out micro-payments to data providers in real time. Limits cap the worst case.",
-    },
-    {
-      eyebrow: "Batch payouts",
-      headline: "20 recipients, one call.",
-      body: "Reward distribution, ambassador stipends, vendor invoices — submit up to 20 transfers in a single batch and get per-row results back.",
-    },
-    {
-      eyebrow: "Recurring API spend",
-      headline: "Keep the lights on, automatically.",
-      body: "Top up worker bots and partner services on cron. Reverse-direction sweep keeps the agent wallet itself funded.",
-    },
-  ];
-  return (
-    <div className="mb-20">
-      <motion.h2
-        initial={{ opacity: 0, y: 8 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ duration: 0.45 }}
-        className="text-3xl font-semibold tracking-tight mb-9"
-      >
-        Patterns this unlocks.
-      </motion.h2>
+function InstallBlock() {
+  const [copied, setCopied] = useState(false);
 
-      <div className="grid md:grid-cols-3 gap-4">
-        {patterns.map((p, i) => (
-          <motion.div
-            key={p.eyebrow}
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.4, delay: i * 0.08 }}
-            className="rounded-2xl border p-6"
-            style={{ background: "rgba(226,232,240,0.02)", borderColor: "rgba(226,232,240,0.07)" }}
-          >
-            <div className="text-[10px] uppercase tracking-[0.22em] font-bold mb-3" style={{ color: "#f9d64a" }}>
-              {p.eyebrow}
-            </div>
-            <div className="text-lg font-semibold mb-3">{p.headline}</div>
-            <div className="text-sm leading-relaxed" style={{ color: "rgba(226,232,240,0.6)" }}>
-              {p.body}
-            </div>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
+  const copy = () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    navigator.clipboard.writeText(INSTALL_CMD).then(() => setCopied(true)).catch(() => {});
+  };
 
-// ── Closing ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1600);
+    return () => clearTimeout(t);
+  }, [copied]);
 
-function Closing() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.45 }}
-      className="rounded-2xl border p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-5"
-      style={{
-        background:
-          "linear-gradient(135deg, rgba(245,197,24,0.10) 0%, rgba(8,17,30,0.6) 70%)",
-        borderColor: "rgba(245,197,24,0.22)",
-      }}
+      {...rise}
+      className="border rounded-[4px] p-6 md:p-7 mb-12 flex flex-col md:flex-row md:items-center md:justify-between gap-6"
+      style={{ borderColor: LINE, background: "rgba(255,255,255,0.015)" }}
     >
       <div>
-        <div className="text-xl md:text-2xl font-semibold mb-1">Spin one up.</div>
-        <div className="text-sm" style={{ color: "rgba(226,232,240,0.6)" }}>
-          Free to create. Send on BNB Chain today; a multichain key opens the rest of the 10 EVM chains when you&apos;re ready.
+        <div className="flex items-center gap-3 mb-2">
+          <span className="font-mono text-[11px]" style={{ color: MUT2 }}>01</span>
+          <h3 className="font-grotesk text-lg md:text-xl font-semibold tracking-[-0.01em]" style={{ color: INK }}>
+            Install Q402 MCP
+          </h3>
         </div>
+        <p className="text-[14.5px] leading-relaxed max-w-[36rem]" style={{ color: MUT }}>
+          One package, every MCP client. Same surface in Claude, Codex, Cursor, Cline.
+        </p>
       </div>
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/dashboard"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-semibold"
-          style={{ background: "#F5C518", color: "#0B1A12" }}
+      <div className="flex items-center gap-2.5 shrink-0">
+        <code
+          className="font-mono text-[13.5px] px-4 py-3 rounded-[4px] border"
+          style={{ borderColor: LINE, background: "rgba(7,11,20,0.6)", color: INK }}
         >
-          Create Agent Wallet →
-        </Link>
-        <Link
-          href="/docs#claude-mcp"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md text-sm font-medium border"
-          style={{
-            borderColor: "rgba(226,232,240,0.18)",
-            color: "rgba(226,232,240,0.85)",
-            background: "rgba(226,232,240,0.02)",
-          }}
+          <span style={{ color: MUT2 }}>$ </span>
+          {INSTALL_CMD}
+        </code>
+        <button
+          type="button"
+          onClick={copy}
+          aria-label="Copy install command"
+          className="font-mono text-[11px] uppercase tracking-[0.14em] px-3 py-3 rounded-[4px] border transition-colors hover:border-white/30"
+          style={{ borderColor: LINE, color: copied ? CYAN : MUT }}
         >
-          Read the docs
-        </Link>
+          {copied ? "copied" : "copy"}
+          {copied && <Check />}
+        </button>
       </div>
     </motion.div>
   );
 }
+
+// 04 - tool index: grouped mono columns, like an API reference. ---------------
+
+function ToolIndex() {
+  return (
+    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-10 gap-y-9">
+      {TOOL_GROUPS.map((g) => (
+        <motion.div key={g.label} {...rise}>
+          <div className="flex items-baseline justify-between mb-3 pb-2 border-b" style={{ borderColor: HAIR }}>
+            <span className="font-mono text-[11px] uppercase tracking-[0.2em]" style={{ color: YELLOW }}>{g.label}</span>
+            <span className="font-mono text-[11px]" style={{ color: MUT2 }}>{g.tools.length}</span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {g.tools.map((t) => (
+              <span key={t} className="font-mono text-[12.5px]" style={{ color: MUT }}>{t}</span>
+            ))}
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// Chains + tokens support strip (flat, mono). --------------------------------
+
+function ChainStrip() {
+  return (
+    <motion.div {...rise} className="mt-12 pt-8 border-t" style={{ borderColor: HAIR }}>
+      <div className="font-mono text-[11px] uppercase tracking-[0.24em] mb-4" style={{ color: MUT2 }}>
+        10 chains . USDC and USDT everywhere . RLUSD on Ethereum
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-2">
+        {CHAINS.map((c) => (
+          <span key={c} className="font-mono text-[13px] px-2.5 py-1 rounded-[3px] border" style={{ borderColor: LINE, color: MUT }}>
+            {c}
+          </span>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+

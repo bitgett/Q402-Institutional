@@ -16,6 +16,7 @@ const config: Config = {
         poppins: ["var(--font-poppins)", "Poppins", "sans-serif"],
         mono:    ["var(--font-mono)", "JetBrains Mono", "monospace"],
         display: ["var(--font-display)", "Bricolage Grotesque", "Inter", "system-ui", "sans-serif"],
+        grotesk: ["var(--font-grotesk)", "Space Grotesk", "Inter", "system-ui", "sans-serif"],
       },
     },
   },
