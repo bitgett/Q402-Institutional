@@ -29,6 +29,7 @@ import WalletButton from "@/app/components/WalletButton";
 import { v2, type Scope, type V2ViewId } from "./theme";
 import { WalletsView } from "./views/WalletsView";
 import { ActivityView } from "./views/ActivityView";
+import { RequestsView } from "./views/RequestsView";
 import { TreasuryView } from "./views/TreasuryView";
 import { DeveloperView } from "./views/DeveloperView";
 import DashboardBanners from "./DashboardBanners";
@@ -52,7 +53,7 @@ export default function DashboardV2({
   const [view, setView] = useState<V2ViewId>(() => {
     if (typeof window === "undefined") return "wallets";
     const v = new URLSearchParams(window.location.search).get("view");
-    return (["wallets", "activity", "treasury", "developer"] as const).includes(v as V2ViewId)
+    return (["wallets", "activity", "requests", "treasury", "developer"] as const).includes(v as V2ViewId)
       ? (v as V2ViewId)
       : "wallets";
   });
@@ -252,6 +253,7 @@ export default function DashboardV2({
         <div key={view} className="v2-view-enter">
           {view === "wallets" && <WalletsView {...viewProps} />}
           {view === "activity" && <ActivityView {...viewProps} />}
+          {view === "requests" && <RequestsView {...viewProps} />}
           {view === "treasury" && <TreasuryView {...viewProps} />}
           {view === "developer" && <DeveloperView {...viewProps} />}
         </div>

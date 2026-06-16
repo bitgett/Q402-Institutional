@@ -136,6 +136,7 @@ export function LinkButton({
 const NAV_ITEMS: { id: V2ViewId; label: string }[] = [
   { id: "wallets", label: "Wallets" },
   { id: "activity", label: "Activity" },
+  { id: "requests", label: "Requests" },
   { id: "treasury", label: "Treasury" },
   { id: "developer", label: "Developer" },
 ];

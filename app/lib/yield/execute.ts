@@ -34,6 +34,7 @@ import {
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { isAgenticChainKey, type AgenticChainKey, type AgenticToken } from "@/app/lib/agentic-wallet-sign";
 import { signYieldAction, type YieldAction } from "./sign";
+import { listAllPositions } from "./index";
 import {
   settleYieldAction,
   yieldFacilitator,
@@ -504,6 +505,25 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     }
 
     const signed = await signYieldAction({ privateKey, expectedOwner: wallet.address as Address, chain, token, action, amount, facilitator });
+
+    // For a withdraw-all ("max"), the exact drawn amount isn't known at sign
+    // time, so signed.amount is the "max" sentinel. Capture the redeemable
+    // aToken balance NOW (pre-settlement; post-withdraw it would read ~0) so
+    // the activity row shows the real number instead of "max". Best-effort:
+    // on read failure we keep the sentinel, which ActivityView renders as "All".
+    let displayAmount = signed.amount;
+    if (action === "withdraw" && signed.amount === "max") {
+      try {
+        const positions = await listAllPositions(chain, walletAddr);
+        const pos = positions.find((p) => p.asset === token);
+        if (pos && Number.isFinite(Number(pos.balance)) && Number(pos.balance) > 0) {
+          displayAmount = pos.balance;
+        }
+      } catch {
+        /* keep the "max" sentinel — display falls back to "All" */
+      }
+    }
+
     const result = await settleYieldAction(signed);
 
     // Broadcast-but-unconfirmed: the action MAY have settled. Do NOT release
@@ -606,7 +626,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
         chain,
         fromUser: walletAddr,
         toUser: signed.pool,
-        tokenAmount: signed.amount,
+        tokenAmount: displayAmount,
         tokenSymbol: token,
         gasCostNative: 0,
         relayTxHash: result.txHash,

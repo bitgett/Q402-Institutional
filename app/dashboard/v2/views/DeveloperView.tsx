@@ -101,7 +101,7 @@ const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: stri
 ];
 
 /**
- * Canonical @quackai/q402-mcp tool surface — 24 tools, source of truth is
+ * Canonical @quackai/q402-mcp tool surface — 27 tools, source of truth is
  * mcp-server/src/index.ts (ListTools order). One-line purposes condensed from
  * each tool's own `description` + app/docs/page.tsx. Grouped so the grid reads
  * as Core → Recurring → Bridge (CCIP) → Yield (Aave).
@@ -135,6 +135,10 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Yield", name: "q402_yield_positions", purpose: "Agent Wallet's current Aave positions + aggregate USD value. Read-only." },
   { group: "Yield", name: "q402_yield_deposit", purpose: "Supply USDC / USDT into Aave V3 to earn APY. Moves funds — needs confirm." },
   { group: "Yield", name: "q402_yield_withdraw", purpose: `Withdraw stablecoin from Aave (amount "max" = full). Moves funds — needs confirm.` },
+  // Requests
+  { group: "Requests", name: "q402_request_create", purpose: "Publish a payment request (invoice). No funds move — returns a /pay link + req_ id." },
+  { group: "Requests", name: "q402_request_status", purpose: "Look up a request by req_ id (amount, recipient, status). Read-only, no auth." },
+  { group: "Requests", name: "q402_request_pay", purpose: "Pay a request gaslessly from your own Agent Wallet. Moves funds — needs confirm." },
 ];
 
 /**
@@ -464,7 +468,7 @@ const SECTIONS = [
   { id: "credentials", label: "Credentials", hint: "API keys · scopes" },
   { id: "integration", label: "Integration guide", hint: "SDK in 4 steps" },
   { id: "mcp", label: "MCP setup", hint: "Claude · Cursor · Cline" },
-  { id: "tools", label: "MCP tool reference", hint: "24 tools" },
+  { id: "tools", label: "MCP tool reference", hint: "27 tools" },
   { id: "webhook", label: "Webhook", hint: "Signed settlement POSTs" },
   { id: "playground", label: "API playground", hint: "Simulate a quote" },
   { id: "docs", label: "Documentation", hint: "Full reference" },
@@ -1870,12 +1874,12 @@ function IntegrationGuide() {
   );
 }
 
-// ── MCP tool reference grid (24 tools) ───────────────────────────────────────
+// ── MCP tool reference grid (27 tools) ───────────────────────────────────────
 // The full @quackai/q402-mcp tool surface with one-line purposes + npm/GitHub
 // source links. Grouped Core → Recurring → Bridge → Yield.
 function McpToolGrid() {
   const groups = useMemo(() => {
-    const order = ["Core", "Recurring", "Bridge", "Yield"] as const;
+    const order = ["Core", "Recurring", "Bridge", "Yield", "Requests"] as const;
     return order.map((g) => ({
       group: g,
       tools: MCP_TOOLS.filter((t) => t.group === g),
@@ -1887,6 +1891,7 @@ function McpToolGrid() {
     Recurring: "Scheduled rules",
     Bridge: "Chainlink CCIP · eth/avax/arbitrum",
     Yield: "Aave V3 · BNB only today",
+    Requests: "Invoices · agent-to-agent billing",
   };
 
   const sourceLink: React.CSSProperties = {
@@ -2282,7 +2287,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
             <McpSetupCard sandboxKey={mcpSandboxKey} demo={demoMode} />
           </div>
 
-          {/* ── MCP tool reference grid (24 tools) ──────────────────── */}
+          {/* ── MCP tool reference grid (27 tools) ──────────────────── */}
           <div ref={refs.tools} style={section(3)}>
             <McpToolGrid />
           </div>
