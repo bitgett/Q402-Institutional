@@ -132,7 +132,13 @@ export async function POST(
             to: record.recipient,
             amount: record.amount,
             ...(body.walletId ? { walletId: body.walletId } : {}),
-            ...(body.idempotencyKey ? { idempotencyKey: body.idempotencyKey } : {}),
+            // Bind idempotency to the request, not the call. A request is
+            // single-payment, so a deterministic key lets the send route write
+            // its durable (no-TTL) settled-marker — guarding against a re-pay
+            // even if markRequestPaid below fails and the 30-min send claim
+            // later expires (server mode signs a fresh nonce each call, so the
+            // on-chain nonce alone would NOT stop a double-settle).
+            idempotencyKey: body.idempotencyKey ?? `payreq-${record.id}`,
           }),
           signal: AbortSignal.timeout(60_000),
         });

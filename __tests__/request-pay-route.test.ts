@@ -161,3 +161,40 @@ describe("pay route - tamper-safety + settlement", () => {
     expect((store.get(payreqKey(id)) as PaymentRequest).status).toBe("paid");
   });
 });
+
+describe("pay route - server mode (agent pays from own wallet)", () => {
+  it("forwards payerApiKey + a request-bound idempotencyKey + the human amount to the send route, then marks paid", async () => {
+    const id = `req_${"a".repeat(24)}`;
+    store.set(payreqKey(id), openRequest(id)); // eth USDC, amount "2.5"
+
+    let captured: Record<string, unknown> | null = null;
+    let capturedUrl = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: { body: string }) => {
+        capturedUrl = String(url);
+        captured = JSON.parse(init.body);
+        return new Response(JSON.stringify({ txHash: "0xbeef", receiptId: "rct_y" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+
+    const res = await POST(payReq({ payerApiKey: "q402_live_payer", confirm: true }), payCtx(id));
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.status).toBe("paid");
+    expect(capturedUrl).toContain("/api/wallet/agentic/send"); // server-mode routes through send
+    expect(captured!.apiKey).toBe("q402_live_payer"); // payer's own key, not the creator's
+    // Idempotency bound to the request (not the call) so a re-pay can't double-settle.
+    expect(captured!.idempotencyKey).toBe(`payreq-${id}`);
+    // Server mode passes the HUMAN amount (the send route does its own parseUnits).
+    expect(captured!.amount).toBe("2.5");
+    expect(captured!.to).toBe(RECIPIENT);
+    expect(captured!.witnessSig).toBeUndefined();
+
+    expect((store.get(payreqKey(id)) as PaymentRequest).status).toBe("paid");
+  });
+});
