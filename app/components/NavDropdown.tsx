@@ -1,57 +1,55 @@
 "use client";
 
 /**
- * NavDropdown — hover / focus driven menu trigger for the top navbar.
+ * NavDropdown - hover / focus driven menu trigger for the top navbar.
  *
- * Why custom (not Radix / Headless UI):
- *   - Zero new deps. The Navbar's only requirement is "hover to peek,
- *     click to lock open, click outside / Esc to close" — 80 lines does it.
- *   - Animations land on the same framer-motion the Hero already pulls,
- *     so bundle cost is one Motion child per item, not a new toolkit.
+ * Flat datasheet styling to match the redesigned product pages: a solid navy
+ * panel, a 1px hairline border, mono-free clean item rows, and only the house
+ * accent colors (yellow + cyan). The trigger shows an active underline when the
+ * current route lives inside this group.
  *
- * Accessibility:
- *   - Trigger is a real <button> with aria-expanded / aria-haspopup.
- *   - Menu items are real <Link>/<a>; keyboard tab order is preserved.
- *   - Esc closes; click-outside closes via mousedown listener while open.
+ * Accessibility: trigger is a real <button> with aria-expanded / aria-haspopup;
+ * items are real <Link>/<a>; Esc and click-outside close while open.
  */
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 
 export interface NavDropdownItem {
   href: string;
   label: string;
   description?: string;
-  accent?: "default" | "green" | "orange" | "yellow";
-  badge?: { label: string; color: "green" | "orange" | "yellow" };
+  accent?: "default" | "yellow" | "cyan";
+  badge?: { label: string; color: "yellow" | "cyan" };
   external?: boolean;
 }
 
-interface Props {
-  label: string;
-  items: NavDropdownItem[];
-}
-
 const ACCENT_CLASS: Record<NonNullable<NavDropdownItem["accent"]>, string> = {
-  default: "text-white/85 hover:text-white",
-  green: "text-yellow/85 hover:text-yellow",
-  orange: "text-orange-300/85 hover:text-orange-200",
-  yellow: "text-yellow/85 hover:text-yellow",
+  default: "text-white/90",
+  yellow: "text-yellow",
+  cyan: "text-[#5BC8FA]",
 };
 
-const BADGE_CLASS: Record<"green" | "orange" | "yellow", string> = {
-  green: "text-yellow bg-yellow/15 border-yellow/40",
-  orange: "text-orange-300 bg-orange-300/15 border-orange-300/40",
-  yellow: "text-yellow bg-yellow/15 border-yellow/40",
+const BADGE_CLASS: Record<"yellow" | "cyan", string> = {
+  yellow: "text-yellow bg-yellow/12 border-yellow/35",
+  cyan: "text-[#5BC8FA] bg-[#5BC8FA]/12 border-[#5BC8FA]/35",
 };
 
-export default function NavDropdown({ label, items }: Props) {
+export default function NavDropdown({ label, items }: { label: string; items: NavDropdownItem[] }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const pathname = usePathname();
 
-  // Click-outside + Esc to close. Only attaches listeners while open so
-  // the idle navbar doesn't carry a global mousedown handler.
+  // Active when the current route is one of this group's real (non-anchor,
+  // non-external) destinations, so the matching trigger reads as selected.
+  const active = items.some((i) => {
+    if (i.external) return false;
+    const base = i.href.split("#")[0];
+    return base && base !== "/" && pathname === base;
+  });
+
   useEffect(() => {
     if (!open) return;
     function onDocMouseDown(e: MouseEvent) {
@@ -78,23 +76,25 @@ export default function NavDropdown({ label, items }: Props) {
     >
       <button
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-          open ? "text-white" : "text-white/55 hover:text-white"
+        className={`relative inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+          open || active ? "text-white" : "text-white/55 hover:text-white"
         }`}
       >
         {label}
         <svg
-          className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`w-3 h-3 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
           viewBox="0 0 12 12"
           fill="none"
           stroke="currentColor"
           strokeWidth="1.6"
+          aria-hidden
         >
           <path d="M2.5 4.5L6 8l3.5-3.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
+        {active && <span aria-hidden className="absolute left-3 right-3 -bottom-0.5 h-px" style={{ background: "#F5C518" }} />}
       </button>
 
       <AnimatePresence>
@@ -104,58 +104,45 @@ export default function NavDropdown({ label, items }: Props) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            // Bridge gap above the panel so cursor can travel from trigger
-            // to menu without crossing a no-pointer zone (which would close).
-            className="absolute left-0 top-full pt-2 min-w-[240px]"
+            // Bridge the gap above the panel so the cursor can travel from the
+            // trigger to the menu without crossing a no-pointer zone.
+            className="absolute left-0 top-full pt-2.5 min-w-[268px]"
             role="menu"
           >
             <div
-              className="rounded-xl border border-white/10 overflow-hidden p-1.5"
-              style={{
-                background: "linear-gradient(180deg, #0F1626 0%, #080E1C 100%)",
-                boxShadow: "0 18px 48px rgba(0,0,0,0.55)",
-              }}
+              className="rounded-lg border overflow-hidden p-1.5"
+              style={{ background: "#0B1320", borderColor: "rgba(255,255,255,0.1)", boxShadow: "0 20px 48px rgba(0,0,0,0.55)" }}
             >
-              {items.map(item => {
-                const className = `flex flex-col gap-0.5 px-3 py-2 rounded-md text-sm transition-colors ${ACCENT_CLASS[item.accent ?? "default"]} hover:bg-white/[0.04]`;
+              {items.map((item) => {
+                const isActive = !item.external && item.href.split("#")[0] === pathname && pathname !== "/";
+                const className = `group/item flex flex-col gap-0.5 px-3 py-2.5 rounded-md transition-colors ${isActive ? "bg-white/[0.04]" : "hover:bg-white/[0.05]"}`;
                 const inner = (
                   <>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">{item.label}</span>
+                      <span className={`text-sm font-medium ${ACCENT_CLASS[item.accent ?? "default"]}`}>{item.label}</span>
                       {item.badge && (
-                        <span className={`text-[8px] font-extrabold tracking-[0.14em] uppercase border rounded-sm px-1 leading-[1.4] ${BADGE_CLASS[item.badge.color]}`}>
+                        <span className={`text-[8px] font-extrabold tracking-[0.14em] uppercase border rounded-sm px-1 leading-[1.5] ${BADGE_CLASS[item.badge.color]}`}>
                           {item.badge.label}
                         </span>
                       )}
+                      {item.external && (
+                        <span className="text-white/25 text-[10px] ml-auto" aria-hidden>&#8599;</span>
+                      )}
                     </div>
                     {item.description && (
-                      <span className="text-white/35 text-[11px] leading-snug">
-                        {item.description}
-                      </span>
+                      <span className="text-white/35 text-[11px] leading-snug">{item.description}</span>
                     )}
                   </>
                 );
                 if (item.external) {
                   return (
-                    <a
-                      key={item.href}
-                      href={item.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      role="menuitem"
-                      className={className}
-                    >
+                    <a key={item.href} href={item.href} target="_blank" rel="noreferrer" role="menuitem" className={className}>
                       {inner}
                     </a>
                   );
                 }
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    role="menuitem"
-                    className={className}
-                  >
+                  <Link key={item.href} href={item.href} role="menuitem" className={className}>
                     {inner}
                   </Link>
                 );
