@@ -563,20 +563,26 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             {/* Q402 Yield card */}
             <Surface radius={15} style={{ padding: 19 }}>
               <div id="treasury-yield" style={{ scrollMarginTop: 84 }}>
-                <SectionHead
-                  title={
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                      <Q402Mark size={20} />
-                      Q402 Yield
-                    </span>
-                  }
-                  meta={
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: v2.mint }}>
-                      <TokenIcon src="/aave.svg" size={15} />
-                      Aave V3{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
-                    </span>
-                  }
-                />
+                {/* The embedded EarnSection renders its OWN "Q402 Yield / Aave V3"
+                    header (with the supplied total), so only show this card-level
+                    SectionHead when EarnSection is NOT mounted (demo / no wallet) —
+                    otherwise the header doubles up. */}
+                {!(ownerAddress && agentWallet) && (
+                  <SectionHead
+                    title={
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <Q402Mark size={20} />
+                        Q402 Yield
+                      </span>
+                    }
+                    meta={
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: v2.mint }}>
+                        <TokenIcon src="/aave.svg" size={15} />
+                        Aave V3{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
+                      </span>
+                    }
+                  />
+                )}
                 {ownerAddress && agentWallet ? (
                   // AgenticWalletEarnSection owns its own fetch + deposit/withdraw
                   // actions. Mounted inside V2AccentScope (this whole view) so its

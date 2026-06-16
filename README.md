@@ -126,9 +126,9 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_yield_withdraw` | live key | Withdraw the Agent Wallet's supplied stablecoin out of Aave (`amount="max"` for the full position). Always allowed, even after downgrade. |
 | `q402_request_create` | api key | Publish a payment request (invoice). No funds move — returns a /pay link + req_ id. Recipient defaults to the Agent Wallet. |
 | `q402_request_status` | none | Look up a request by req_ id (amount, recipient, status). Read-only. |
-| `q402_request_pay` | live key | Pay a request gaslessly from your own Agent Wallet (Mode C). Terms locked to the request. Confirm-gated. |
+| `q402_request_pay` | live key | Pay a request gaslessly from your own Agent Wallet (Mode C). Terms locked to the request. Two-phase consent (same as `q402_pay`). |
 
-The three fund-moving tools — `q402_pay`, `q402_batch_pay`, and `q402_bridge_send` — use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one — `confirm: true` alone no longer fires a payment.
+The four fund-moving tools (`q402_pay`, `q402_batch_pay`, `q402_bridge_send`, `q402_request_pay`) use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one. `confirm: true` alone no longer fires a payment.
 
 Q402 Yield is a **paid-only** feature: depositing requires a live Multichain plan, Trial accounts cannot supply, and withdrawals are always allowed so deposited funds can always be recovered.
 
