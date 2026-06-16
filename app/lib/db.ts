@@ -140,7 +140,7 @@ export interface RelayedTx {
    *                  but never as "Recurring only" — we don't lie about
    *                  provenance for rows we can't classify.
    */
-  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw";
+  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request";
   /**
    * Recurring-only metadata: which rule this fire was paying for. Lets
    * the dashboard "Recurring only" filter group by rule and the

@@ -96,7 +96,7 @@ Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
 Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything else → Multichain.
 6+ BNB batches return `status="ambiguous"` so the agent asks the user how to split.
 
-**24 tools** (all sandbox by default; live needs an API key + a signing path):
+**27 tools** (all sandbox by default; live needs an API key + a signing path):
 
 | Tool | Auth | What it does |
 |---|---|---|

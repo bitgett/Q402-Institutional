@@ -72,7 +72,7 @@ interface RelayedTx {
   relayTxHash: string;
   relayedAt: string;
   receiptId?: string;
-  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw";
+  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request";
   ruleId?: string;
   /**
    * Demo-only presentation overrides (set only on DEMO rows; absent on real
@@ -106,13 +106,14 @@ interface WalletRow {
   label: string | null;
 }
 
-type RailTab = "all" | "manual" | "recurring" | "yield" | "bridge" | "receipts";
+type RailTab = "all" | "manual" | "recurring" | "yield" | "request" | "bridge" | "receipts";
 
 const RAIL: { id: RailTab; label: string; hint: string }[] = [
   { id: "all", label: "All settlements", hint: "Every relayed payment" },
   { id: "manual", label: "Manual sends", hint: "Send · batch · API" },
   { id: "recurring", label: "Recurring fires", hint: "Scheduled payouts" },
   { id: "yield", label: "Yield", hint: "Aave deposits · withdrawals" },
+  { id: "request", label: "Requests", hint: "Inbound payment requests" },
   { id: "bridge", label: "Bridge history", hint: "CCIP cross-chain" },
   { id: "receipts", label: "Trust Receipts", hint: "Verifiable receipts" },
 ];
@@ -159,6 +160,7 @@ const SOURCE_LABEL: Record<NonNullable<RelayedTx["source"]>, string> = {
   api: "API settlement",
   yield_deposit: "Yield deposit",
   yield_withdraw: "Yield withdrawal",
+  request: "Payment request",
 };
 
 function settlementKind(tx: RelayedTx): string {
@@ -177,6 +179,16 @@ function shortHash(h: string): string {
 
 function fmtNum(n: number): string {
   return n.toLocaleString("en-US");
+}
+
+// Withdraw-all yield settlements record the "max" sentinel as the amount (the
+// exact drawn balance isn't known until the on-chain event), so rendering it
+// numerically would surface "NaN". Show "All" instead, and degrade any other
+// non-finite value to a dash rather than NaN.
+function fmtTxAmount(v: number | string): string {
+  if (typeof v === "string" && v.trim().toLowerCase() === "max") return "All";
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "—";
 }
 
 // ── DEMO data ────────────────────────────────────────────────────────────────
@@ -624,6 +636,7 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
       );
     if (tab === "recurring") return scopedTxs.filter((tx) => tx.source === "recurring");
     if (tab === "yield") return scopedTxs.filter((tx) => tx.source === "yield_deposit" || tx.source === "yield_withdraw");
+    if (tab === "request") return scopedTxs.filter((tx) => tx.source === "request");
     if (tab === "receipts") return scopedTxs.filter((tx) => !!tx.receiptId);
     return scopedTxs; // "all"
   }, [scopedTxs, tab]);
@@ -1191,7 +1204,7 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                 </Td>
                 <Td align="right">
                   <span style={{ fontSize: fs.base, fontWeight: 600, fontFamily: displayFont }}>
-                    {Number(tx.tokenAmount).toFixed(2)}{" "}
+                    {fmtTxAmount(tx.tokenAmount)}{" "}
                     <span style={{ color: v2.muted2, fontWeight: 400 }}>{tx.tokenSymbol}</span>
                   </span>
                 </Td>
