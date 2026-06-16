@@ -72,7 +72,7 @@ interface RelayedTx {
   relayTxHash: string;
   relayedAt: string;
   receiptId?: string;
-  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw";
+  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request";
   ruleId?: string;
   /**
    * Demo-only presentation overrides (set only on DEMO rows; absent on real
@@ -106,13 +106,14 @@ interface WalletRow {
   label: string | null;
 }
 
-type RailTab = "all" | "manual" | "recurring" | "yield" | "bridge" | "receipts";
+type RailTab = "all" | "manual" | "recurring" | "yield" | "request" | "bridge" | "receipts";
 
 const RAIL: { id: RailTab; label: string; hint: string }[] = [
   { id: "all", label: "All settlements", hint: "Every relayed payment" },
   { id: "manual", label: "Manual sends", hint: "Send · batch · API" },
   { id: "recurring", label: "Recurring fires", hint: "Scheduled payouts" },
   { id: "yield", label: "Yield", hint: "Aave deposits · withdrawals" },
+  { id: "request", label: "Requests", hint: "Inbound payment requests" },
   { id: "bridge", label: "Bridge history", hint: "CCIP cross-chain" },
   { id: "receipts", label: "Trust Receipts", hint: "Verifiable receipts" },
 ];
@@ -159,6 +160,7 @@ const SOURCE_LABEL: Record<NonNullable<RelayedTx["source"]>, string> = {
   api: "API settlement",
   yield_deposit: "Yield deposit",
   yield_withdraw: "Yield withdrawal",
+  request: "Payment request",
 };
 
 function settlementKind(tx: RelayedTx): string {
@@ -634,6 +636,7 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
       );
     if (tab === "recurring") return scopedTxs.filter((tx) => tx.source === "recurring");
     if (tab === "yield") return scopedTxs.filter((tx) => tx.source === "yield_deposit" || tx.source === "yield_withdraw");
+    if (tab === "request") return scopedTxs.filter((tx) => tx.source === "request");
     if (tab === "receipts") return scopedTxs.filter((tx) => !!tx.receiptId);
     return scopedTxs; // "all"
   }, [scopedTxs, tab]);

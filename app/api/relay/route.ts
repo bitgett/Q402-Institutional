@@ -186,7 +186,13 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     const b = Buffer.from(cronSecretValue);
     if (timingSafeEqual(a, b)) {
       const rawSource = (body as { source?: unknown }).source;
-      if (rawSource === "recurring" || rawSource === "send" || rawSource === "batch" || rawSource === "api") {
+      if (
+        rawSource === "recurring" ||
+        rawSource === "send" ||
+        rawSource === "batch" ||
+        rawSource === "api" ||
+        rawSource === "request"
+      ) {
         trustedSource = rawSource;
       }
       const rawRuleId = (body as { ruleId?: unknown }).ruleId;

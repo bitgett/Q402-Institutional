@@ -422,7 +422,7 @@ export async function fetchAuthNonce(
  * "source: recurring" tag on their txes.
  */
 export interface InternalRelayMeta {
-  source?: "recurring" | "send" | "batch" | "api";
+  source?: "recurring" | "send" | "batch" | "api" | "request";
   ruleId?: string;
   /** CRON_SECRET value. Caller is responsible for fetching from env;
    *  passing it here keeps the relay-side trust check single-source. */
