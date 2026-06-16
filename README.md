@@ -1,13 +1,14 @@
 # Q402 — Gasless Payments on EVM
 
 > Pay USDC, USDT, or RLUSD across **10 EVM chains** with $0 in gas.
-> Built on EIP-7702 + EIP-712. Callable from a browser, a Node.js
-> backend, or any MCP-compatible AI client — first-class support for
-> Claude (Desktop / Code), OpenAI Codex CLI, Cursor, and Cline.
+> Now with a receive side too: publish a **payment request** (invoice) and
+> anyone can pay it gaslessly. Built on EIP-7702 + EIP-712. Callable from a
+> browser, a Node.js backend, or any MCP-compatible AI client: first-class
+> support for Claude (Desktop / Code), OpenAI Codex CLI, Cursor, and Cline.
 
 [![sdk](https://img.shields.io/badge/sdk-v1.8.0-yellow)](public/q402-sdk.js)
 [![mcp](https://img.shields.io/badge/npm-@quackai/q402--mcp-blue)](https://www.npmjs.com/package/@quackai/q402-mcp)
-[![chains](https://img.shields.io/badge/chains-10-green)](#supported-chains)
+[![chains](https://img.shields.io/badge/chains-10-yellow)](#supported-chains)
 
 **Live**: https://q402.quackai.ai &nbsp;·&nbsp; **Free trial**: https://q402.quackai.ai/event &nbsp;·&nbsp; **Docs**: https://q402.quackai.ai/docs
 

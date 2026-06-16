@@ -581,10 +581,17 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_recurring_resume",    auth: "api key",     purpose: "Resume a paused / stopped rule." },
                     { name: "q402_recurring_skip_next", auth: "api key",     purpose: "Skip ONLY the next scheduled fire. Cadence preserved." },
                     { name: "q402_recurring_cancel",    auth: "api key",     purpose: "Permanently stop a rule." },
+                    { name: "q402_bridge_quote",        auth: "none",        purpose: "Quote a Chainlink CCIP USDC bridge across the eth/avax/arbitrum triangle (LINK + native fee + ETA)." },
+                    { name: "q402_bridge_send",         auth: "live mode",   purpose: "Execute a CCIP USDC bridge from the Agent Wallet (Mode C). Sandbox by default." },
+                    { name: "q402_bridge_history",      auth: "api key",     purpose: "Recent CCIP bridge attempts for the Agent Wallet (src/dst/amount/CCIP msgId/status)." },
+                    { name: "q402_bridge_gas_tank",     auth: "api key",     purpose: "Per-chain Gas Tank native balance + auto-fund window so the agent can top up before bridging." },
                     { name: "q402_yield_reserves",      auth: "none",        purpose: "List Q402 Yield (Aave V3) lending markets + live supply APY. BNB Chain only today." },
                     { name: "q402_yield_positions",     auth: "api key",     purpose: "The Agent Wallet's current Q402 Yield positions — value + live supply APY. Read-only." },
                     { name: "q402_yield_deposit",       auth: "live mode",   purpose: "Supply the Agent Wallet's USDC / USDT into Aave (Mode C). PAID feature — Trial cannot deposit. Confirm-gated + sandbox by default." },
                     { name: "q402_yield_withdraw",      auth: "live mode",   purpose: "Withdraw supplied stablecoin out of Aave (amount=\"max\" for the full position). Always allowed, even after a plan downgrade." },
+                    { name: "q402_request_create",      auth: "api key",     purpose: "Publish a payment request (invoice). No funds move; returns a /pay link + req_ id. Recipient defaults to the Agent Wallet." },
+                    { name: "q402_request_status",      auth: "none",        purpose: "Look up a request by req_ id (amount, token, chain, recipient, status). Read-only; notFound instead of throwing." },
+                    { name: "q402_request_pay",         auth: "live mode",   purpose: "Pay a request gaslessly from your own Agent Wallet (Mode C). Two-phase consent, same as q402_pay." },
                   ]).map((t, i, arr) => (
                     <tr key={t.name} style={{ borderBottom: i === arr.length - 1 ? undefined : "1px solid rgba(255,255,255,0.04)" }}>
                       <td className="px-4 py-3"><code className="text-yellow text-xs">{t.name}</code></td>
