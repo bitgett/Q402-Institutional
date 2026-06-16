@@ -9,6 +9,7 @@ const NAV = [
   { id: "agentic-wallet", label: "Agentic Wallet",  icon: "○" },
   { id: "yield",          label: "Yield · Aave V3", icon: "○" },
   { id: "bridge",         label: "Bridge · CCIP",   icon: "○" },
+  { id: "payment-requests", label: "Payment Requests", icon: "○" },
   { id: "how-it-works",   label: "How It Works",    icon: "○" },
   { id: "quickstart",     label: "Quick Start",     icon: "○" },
   { id: "claude-mcp",     label: "MCP for AI Clients", icon: "○" },
@@ -304,6 +305,44 @@ export default function DocsPage() {
               <code className="text-yellow text-xs">q402_bridge_send</code>,{" "}
               <code className="text-yellow text-xs">q402_bridge_history</code>,{" "}
               <code className="text-yellow text-xs">q402_bridge_gas_tank</code>.
+            </p>
+          </Section>
+
+          {/* ── PAYMENT REQUESTS ── */}
+          <Section id="payment-requests" title="Payment Requests">
+            <p className="text-white/75 text-base leading-relaxed mb-6">
+              The receive side of Q402. Publish a payment request (a fixed amount on a chain, with an
+              optional memo) and Q402 returns a shareable{" "}
+              <code className="text-yellow text-xs">/pay/req_…</code> link plus a{" "}
+              <code className="text-yellow text-xs">req_</code> id. Creating one moves no funds; anyone can
+              fulfill it later. It is the inverse of <code className="text-yellow text-xs">q402_pay</code>:
+              instead of sending, you bill.
+            </p>
+            <div className="grid sm:grid-cols-3 gap-4 mb-6">
+              {[
+                { label: "Create", value: "API key or dashboard" },
+                { label: "Share",  value: "/pay/req_… link" },
+                { label: "Settle", value: "Gasless, Mode C" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
+                  <div className="text-xs text-white/30 mb-1">{item.label}</div>
+                  <div className="text-sm font-mono text-white/80">{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <p className="text-white/75 text-sm leading-relaxed mb-4">
+              Two ways to get paid. A Q402 agent settles a request gaslessly from its own Agent Wallet with{" "}
+              <code className="text-yellow text-xs">q402_request_pay</code>: the agent-to-agent flow, where
+              agent A bills and agent B pays. Or open the <code className="text-yellow text-xs">/pay</code>{" "}
+              link, which shows the exact amount, token, chain, and recipient. Those terms are read from the
+              stored request on every settlement, so a payer can never redirect funds or change the sum.
+            </p>
+            <p className="text-white/55 text-sm leading-relaxed">
+              From an MCP client:{" "}
+              <code className="text-yellow text-xs">q402_request_create</code>,{" "}
+              <code className="text-yellow text-xs">q402_request_status</code>,{" "}
+              <code className="text-yellow text-xs">q402_request_pay</code>{" "}
+              (two-phase consent, same as <code className="text-yellow text-xs">q402_pay</code>).
             </p>
           </Section>
 
