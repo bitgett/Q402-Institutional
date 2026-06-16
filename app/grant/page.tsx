@@ -1,24 +1,45 @@
 "use client";
 
+/**
+ * /grant - Q402 grant program application.
+ *
+ * Shares the /agents + /claude design language (flat technical datasheet,
+ * Space Grotesk, sticky numbered index gutter, hairline section rules, navy +
+ * #F5C518 + #5BC8FA only) so the product pages read as one family. Its own
+ * composition fits the job: tiers, why-build-on-Q402, and an application form
+ * that POSTs to /api/grant. No marketing-landing motifs (corner glows, gradient
+ * sheen titles), and only the house accent colors.
+ */
+
 import Link from "next/link";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Navbar from "@/app/components/Navbar";
+import Footer from "@/app/components/Footer";
+
+const INK = "#E6EAF2";
+const MUT = "rgba(230,234,242,0.60)";
+const MUT2 = "rgba(230,234,242,0.40)";
+const LINE = "rgba(255,255,255,0.11)";
+const HAIR = "rgba(255,255,255,0.07)";
+const YELLOW = "#F5C518";
+const CYAN = "#5BC8FA";
 
 const TIERS = [
   {
     name: "Seed",
     credit: "$500",
     txs: "Up to 10,000 txs",
-    color: "#F5C518",
-    desc: "Early-stage projects exploring gasless UX",
+    accent: YELLOW,
+    desc: "Early-stage projects exploring gasless and agentic UX.",
     perks: ["$500 relay credit", "Priority support", "Q402 partner badge"],
   },
   {
     name: "Builder",
     credit: "$2,000",
     txs: "Up to 50,000 txs",
-    color: "#F5C518",
-    desc: "Live products scaling gasless payments",
+    accent: YELLOW,
+    desc: "Live products scaling gasless and agent payments.",
     perks: ["$2,000 relay credit", "Co-marketing opportunity", "Direct Telegram line", "Custom chain config"],
     featured: true,
   },
@@ -26,16 +47,94 @@ const TIERS = [
     name: "Ecosystem",
     credit: "Custom",
     txs: "Unlimited",
-    color: "#627EEA",
-    desc: "Strategic partners & infrastructure builders",
+    accent: CYAN,
+    desc: "Strategic partners and infrastructure builders.",
     perks: ["Custom credit pool", "Revenue share model", "Joint press release", "Board advisory access"],
   },
 ];
 
+const WHY = [
+  {
+    title: "10 chains. One integration. No migration.",
+    body: "Native operations on BNB Chain, Ethereum, Mantle, Avalanche, Injective, X Layer, Stable, Monad, Scroll and Arbitrum through a single unified API. Not wrapped, not bridged. The multichain coverage that used to take months now takes an afternoon.",
+  },
+  {
+    title: "Gasless for your users. And for their agents.",
+    body: "EIP-712 and EIP-7702 mean no native-token prompts, no gas screens, no rejected transactions from empty wallets. The same rails run through a 24-tool MCP server, so an AI agent can pay on its own, inside the per-transaction and daily caps you set.",
+  },
+  {
+    title: "We grow with what you ship.",
+    body: "Recipients get co-marketing, joint launch announcements, a direct line to the core team and early access to every new chain we ship. Your transaction volume is the metric we track.",
+  },
+];
+
 const CATEGORIES = ["DeFi", "GameFi", "NFT / Creator", "AI Agent", "DAO / Governance", "Infrastructure", "Social / Community", "Other"];
-const CHAINS     = ["BNB Chain", "Ethereum", "Avalanche", "Mantle", "Injective", "X Layer", "Stable", "Monad", "Scroll", "Arbitrum", "Multi-chain"];
-const CREDITS    = ["$500 (Seed)", "$2,000 (Builder)", "$5,000+", "Custom / discuss"];
-const TX_RANGES  = ["< 1,000 / mo", "1,000 – 10,000 / mo", "10,000 – 100,000 / mo", "100,000+ / mo"];
+const CHAINS = ["BNB Chain", "Ethereum", "Avalanche", "Mantle", "Injective", "X Layer", "Stable", "Monad", "Scroll", "Arbitrum", "Multi-chain"];
+const CREDITS = ["$500 (Seed)", "$2,000 (Builder)", "$5,000+", "Custom / discuss"];
+const TX_RANGES = ["< 1,000 / mo", "1,000 - 10,000 / mo", "10,000 - 100,000 / mo", "100,000+ / mo"];
+
+const rise = {
+  initial: { opacity: 0, y: 10 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { amount: 0.2, once: true } as const,
+  transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] as const },
+};
+
+// Section frame: sticky left index gutter + hairline top rule + content. ------
+function Section({
+  index,
+  label,
+  title,
+  sub,
+  accent = YELLOW,
+  id,
+  children,
+}: {
+  index: string;
+  label: string;
+  title: React.ReactNode;
+  sub?: React.ReactNode;
+  accent?: string;
+  id?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section id={id} className="border-t py-14 lg:py-20 scroll-mt-20" style={{ borderColor: HAIR }}>
+      <div className="grid lg:grid-cols-[92px_1fr] gap-7 lg:gap-12">
+        <div className="hidden lg:block">
+          <div className="sticky top-24 font-grotesk font-semibold text-2xl" style={{ color: "rgba(255,255,255,0.18)" }}>
+            {index}
+          </div>
+        </div>
+        <div>
+          <motion.div {...rise} className="mb-8">
+            <div className="font-mono text-[11px] uppercase tracking-[0.3em] mb-5" style={{ color: accent }}>
+              [ {label} ]
+            </div>
+            <h2 className="font-grotesk font-semibold tracking-[-0.03em] leading-[1.05] text-[clamp(1.85rem,3.8vw,2.8rem)] max-w-[34ch]" style={{ color: INK }}>
+              {title}
+            </h2>
+            {sub && (
+              <p className="text-[15px] mt-4 max-w-[46rem] leading-relaxed" style={{ color: MUT }}>
+                {sub}
+              </p>
+            )}
+          </motion.div>
+          {children}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke={YELLOW} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9.5" stroke="rgba(245,197,24,0.4)" />
+      <path d="M7.5 12.3l3 3 6-6.4" />
+    </svg>
+  );
+}
 
 export default function GrantPage() {
   const [form, setForm] = useState({
@@ -46,7 +145,7 @@ export default function GrantPage() {
   const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
-  function set(k: string, v: string) { setForm(f => ({ ...f, [k]: v })); }
+  function set(k: string, v: string) { setForm((f) => ({ ...f, [k]: v })); }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -70,266 +169,258 @@ export default function GrantPage() {
     }
   }
 
-  const inputCls = "w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/25 outline-none focus:border-yellow/40 focus:bg-white/7 transition-all";
+  const inputCls = "w-full bg-white/[0.02] border border-white/10 rounded-[4px] px-4 py-3 text-sm text-white placeholder-white/25 outline-none focus:border-yellow/50 focus:bg-white/[0.04] transition-colors";
   const selectCls = `${inputCls} cursor-pointer appearance-none`;
-  const labelCls = "block text-xs text-white/40 uppercase tracking-widest mb-2 font-medium";
+  const labelCls = "block font-mono text-[10px] text-white/40 uppercase tracking-[0.16em] mb-2";
 
   return (
-    <div className="min-h-screen" style={{ background: "linear-gradient(160deg, #05070A 0%, #0B1220 60%, #0D1628 100%)" }}>
-      {/* Background glows */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-1/4 left-1/3 w-[700px] h-[700px] rounded-full blur-[180px]" style={{ background: "rgba(245,197,24,0.04)" }} />
-        <div className="absolute bottom-1/3 right-1/4 w-[500px] h-[500px] rounded-full blur-[150px]" style={{ background: "rgba(245,197,24,0.03)" }} />
-      </div>
+    <>
+      <Navbar />
+      <main className="font-poppins" style={{ background: "linear-gradient(180deg, #070B14 0%, #0A0F1C 100%)", color: INK }}>
+        <div className="max-w-[1240px] mx-auto px-6 sm:px-8">
 
-      {/* Navbar */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-navy/80 backdrop-blur-md border-b border-white/10">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
-              <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
-            </span>
-            <span className="text-yellow font-bold text-lg tracking-tight leading-none">Q402</span>
-            <span className="text-white/30 text-xs hidden sm:block">by Quack AI</span>
-          </Link>
-          <div className="hidden md:flex items-center gap-8 text-sm text-white/50">
-            <Link href="/#how-it-works" className="hover:text-white transition-colors">How it works</Link>
-            <Link href="/#pricing"      className="hover:text-white transition-colors">Pricing</Link>
-            <Link href="/agents"        className="hover:text-yellow transition-colors text-yellow/70">Agents</Link>
-            <Link href="/grant"         className="text-yellow hover:text-yellow-hover transition-colors font-medium">Grant</Link>
-            <Link href="/docs"          className="hover:text-white transition-colors">Docs</Link>
-          </div>
-          <Link href="/payment" className="bg-yellow text-navy text-xs font-bold px-5 py-2.5 rounded-full hover:bg-yellow-hover transition-colors">
-            Get API Key →
-          </Link>
-        </div>
-      </nav>
-
-      <main className="relative z-10 max-w-5xl mx-auto px-6 pt-32 pb-24">
-
-        {/* Hero */}
-        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}
-          className="text-center mb-20">
-          <div className="inline-flex items-center gap-2 bg-yellow/8 border border-yellow/20 rounded-full px-4 py-1.5 mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
-            <span className="text-yellow text-xs font-semibold tracking-wide uppercase">Q402 Grant Program · 2026</span>
-          </div>
-          <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight mb-5 leading-[1.05]">
-            Build the Future of<br />
-            <span style={{ background: "linear-gradient(90deg, #F5C518, #FCE38A)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              Web3 Payments.
-            </span>
-          </h1>
-          <p className="text-white/45 text-lg max-w-2xl mx-auto leading-relaxed">
-            We believe gasless UX is the missing layer between crypto and mainstream adoption.
-            Q402 backs the builders who share that vision — with relay credits, hands-on support, and long-term partnership.
-          </p>
-        </motion.div>
-
-        {/* Tiers */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.15 }}
-          className="grid md:grid-cols-3 gap-5 mb-20">
-          {TIERS.map((tier) => (
-            <div key={tier.name}
-              className="relative rounded-2xl p-6 border flex flex-col"
-              style={{
-                background: tier.featured ? "linear-gradient(145deg, #141E0F, #0F1A0A)" : "linear-gradient(145deg, #0F1929, #0B1220)",
-                borderColor: tier.featured ? `${tier.color}40` : "rgba(255,255,255,0.08)",
-              }}>
-              {tier.featured && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow text-navy text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                  Most Popular
-                </div>
-              )}
-              {/* Top accent */}
-              <div className="absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl" style={{ background: tier.color, opacity: 0.6 }} />
-
-              <div className="mb-4">
-                <div className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: tier.color }}>{tier.name}</div>
-                <div className="text-3xl font-extrabold mb-0.5">{tier.credit}</div>
-                <div className="text-white/35 text-xs">{tier.txs}</div>
+          {/* ── HERO ─────────────────────────────────────────────────────── */}
+          <section className="pt-24 lg:pt-28 pb-6 lg:pb-8">
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
+              <div className="font-mono text-[11px] uppercase tracking-[0.34em] mb-7" style={{ color: MUT2 }}>
+                [ Grant program / 2026 ]
               </div>
-              <p className="text-white/45 text-sm mb-5 leading-relaxed">{tier.desc}</p>
-              <ul className="space-y-2 mt-auto">
-                {tier.perks.map(p => (
-                  <li key={p} className="flex items-center gap-2 text-xs text-white/60">
-                    <span className="w-1 h-1 rounded-full flex-shrink-0" style={{ background: tier.color }} />
-                    {p}
-                  </li>
-                ))}
-              </ul>
+              <h1 className="font-grotesk font-semibold tracking-[-0.035em] leading-[1.0] text-[clamp(2rem,5vw,3.7rem)]" style={{ color: INK }}>
+                Build on Q402. <span style={{ color: YELLOW }}>The gas is on us.</span>
+              </h1>
+              <p className="text-lg leading-relaxed mt-7 max-w-[42rem]" style={{ color: MUT }}>
+                Relay credits, hands-on support and long-term partnership for teams shipping gasless
+                and agentic stablecoin payments across 10 EVM chains.
+              </p>
+              <div className="flex flex-wrap gap-3 mt-9">
+                <Link
+                  href="#apply"
+                  className="group inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold font-grotesk text-navy bg-yellow hover:bg-yellow-hover transition-colors"
+                >
+                  Apply for a grant
+                  <span className="inline-block transition-transform group-hover:translate-y-0.5" aria-hidden>&darr;</span>
+                </Link>
+                <Link
+                  href="/docs"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-medium font-grotesk border transition-colors hover:border-white/30"
+                  style={{ borderColor: LINE, color: "rgba(230,234,242,0.9)" }}
+                >
+                  Read the docs
+                </Link>
+              </div>
+            </motion.div>
+          </section>
+
+          {/* ── 01 TIERS ─────────────────────────────────────────────────── */}
+          <Section index="01" label="Tiers" title="Three ways in. Pick yours.">
+            <div className="grid md:grid-cols-3 gap-4">
+              {TIERS.map((tier) => (
+                <motion.div
+                  key={tier.name}
+                  {...rise}
+                  className="relative border rounded-[6px] p-6 flex flex-col overflow-hidden"
+                  style={
+                    tier.featured
+                      ? { background: "linear-gradient(150deg, rgba(245,197,24,0.08), rgba(245,197,24,0.015))", borderColor: "rgba(245,197,24,0.3)" }
+                      : { background: "rgba(255,255,255,0.015)", borderColor: LINE }
+                  }
+                >
+                  <span aria-hidden className="absolute top-0 left-0 right-0 h-px" style={{ background: tier.accent, opacity: 0.55 }} />
+                  {tier.featured && (
+                    <div className="absolute top-4 right-4 font-mono text-[9px] uppercase tracking-[0.14em] font-bold px-2 py-0.5 rounded-full" style={{ background: YELLOW, color: "#0A0F1C" }}>
+                      Most popular
+                    </div>
+                  )}
+                  <div className="mb-4">
+                    <div className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: tier.accent }}>{tier.name}</div>
+                    <div className="font-grotesk text-3xl font-semibold tracking-[-0.02em]" style={{ color: INK }}>{tier.credit}</div>
+                    <div className="font-mono text-[11px] mt-1" style={{ color: MUT2 }}>{tier.txs}</div>
+                  </div>
+                  <p className="text-sm mb-5 leading-relaxed" style={{ color: MUT }}>{tier.desc}</p>
+                  <ul className="space-y-2 mt-auto">
+                    {tier.perks.map((p) => (
+                      <li key={p} className="flex items-center gap-2.5 text-[13px]" style={{ color: "rgba(230,234,242,0.7)" }}>
+                        <span className="w-1 h-1 rounded-full flex-shrink-0" style={{ background: tier.accent }} />
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                </motion.div>
+              ))}
             </div>
-          ))}
-        </motion.div>
+          </Section>
 
-        {/* Why Q402 */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.25 }}
-          className="rounded-2xl border p-8 mb-20" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
-          <h2 className="text-xl font-bold mb-2">Why build with Q402?</h2>
-          <p className="text-white/35 text-sm mb-8 leading-relaxed">
-            Gas abstraction is a solved problem on paper. In production, most solutions break under edge cases,
-            require users to acquire obscure tokens, or crumble the moment you try to go multi-chain.
-            Q402 doesn{"'"}t abstract the problem — it eliminates it.
-          </p>
-          <div className="grid sm:grid-cols-3 gap-8">
-            {[
-              {
-                num: "01",
-                title: "10 chains. One integration. No migration.",
-                body: "BNB Chain, Ethereum, Mantle, Avalanche, Injective, X Layer, Stable, Monad, Scroll, Arbitrum — not wrapped, not bridged. Native operations on each, through a single unified API. The multi-chain coverage that used to take months now takes an afternoon. And when the next chain matters, you're already there.",
-              },
-              {
-                num: "02",
-                title: "Your users forget gas exists. Entirely.",
-                body: "EIP-712 off-chain signatures mean no native token prompts, no gas estimation screens, no two-step approve flows, no rejected transactions from empty wallets. Q402 sponsors gas atomically and invisibly — users experience web-like simplicity, trustlessly on-chain.",
-              },
-              {
-                num: "03",
-                title: "We track your growth like it's ours.",
-                body: "Grant recipients aren't just given credit and sent off. You get co-marketing, joint launch announcements, dedicated Telegram access to the core team, and early access to every new chain we ship. Your transaction volume is the metric we care about.",
-              },
-            ].map(item => (
-              <div key={item.num} className="border-t border-white/8 pt-6">
-                <div className="text-xs font-bold text-yellow/40 font-mono mb-4">{item.num}</div>
-                <div className="font-semibold text-sm mb-3 leading-snug">{item.title}</div>
-                <div className="text-white/40 text-xs leading-relaxed">{item.body}</div>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+          {/* ── 02 WHY ───────────────────────────────────────────────────── */}
+          <Section
+            index="02"
+            label="Why build on Q402"
+            title="Gas abstraction, actually solved."
+            accent={CYAN}
+            sub="On paper it is a solved problem. In production, most solutions break under edge cases, force users to acquire obscure tokens, or crumble the moment you go multichain. Q402 does not abstract the problem, it removes it."
+          >
+            <div className="mt-2">
+              {WHY.map((w, i) => (
+                <motion.div
+                  key={w.title}
+                  {...rise}
+                  className="grid md:grid-cols-[60px_minmax(0,22rem)_1fr] gap-4 md:gap-8 py-8 border-t items-start"
+                  style={{ borderColor: HAIR }}
+                >
+                  <div className="font-grotesk font-semibold leading-none text-3xl md:text-4xl" style={{ color: "rgba(91,200,250,0.3)" }}>
+                    {String(i + 1).padStart(2, "0")}
+                  </div>
+                  <div className="font-grotesk text-lg md:text-xl font-semibold tracking-[-0.01em] leading-snug" style={{ color: INK }}>
+                    {w.title}
+                  </div>
+                  <p className="text-[14.5px] leading-relaxed md:pt-0.5" style={{ color: MUT }}>
+                    {w.body}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
+          </Section>
 
-        {/* Application Form */}
-        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.3 }}
-          className="rounded-2xl border overflow-hidden" style={{ background: "linear-gradient(145deg, #0F1929, #0B1220)", borderColor: "rgba(245,197,24,0.15)" }}>
-          <div className="px-8 py-6 border-b" style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(245,197,24,0.03)" }}>
-            <h2 className="text-xl font-bold">Apply for a Grant</h2>
-            <p className="text-white/40 text-sm mt-1">We review all applications within 3–5 business days.</p>
-          </div>
-
-          <AnimatePresence mode="wait">
-            {status === "success" ? (
-              <motion.div key="success" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
-                className="px-8 py-16 flex flex-col items-center text-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-yellow/10 border border-yellow/30 flex items-center justify-center text-3xl">✓</div>
-                <h3 className="text-xl font-bold text-yellow">Application Received</h3>
-                <p className="text-white/45 text-sm max-w-md">
-                  Thanks! We&apos;ll review your application and reach out within 3–5 business days via email or Telegram.
-                </p>
-                <Link href="/" className="mt-2 text-xs text-white/30 hover:text-white transition-colors">← Back to home</Link>
-              </motion.div>
-            ) : (
-              <motion.form key="form" onSubmit={handleSubmit} className="px-8 py-8 space-y-6">
-                {/* Row 1 */}
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Project Name *</label>
-                    <input className={inputCls} placeholder="My Gasless App" value={form.projectName} onChange={e => set("projectName", e.target.value)} required />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Website / GitHub</label>
-                    <input className={inputCls} placeholder="https://..." value={form.website} onChange={e => set("website", e.target.value)} />
-                  </div>
-                </div>
-
-                {/* Row 2 */}
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelCls}>Email *</label>
-                    <input type="email" className={inputCls} placeholder="you@project.xyz" value={form.email} onChange={e => set("email", e.target.value)} required />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Telegram</label>
-                    <input className={inputCls} placeholder="@handle" value={form.telegram} onChange={e => set("telegram", e.target.value)} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Twitter / X</label>
-                    <input className={inputCls} placeholder="@handle" value={form.twitter} onChange={e => set("twitter", e.target.value)} />
-                  </div>
-                </div>
-
-                {/* Row 3 */}
-                <div className="grid sm:grid-cols-3 gap-4">
-                  <div>
-                    <label className={labelCls}>Category *</label>
-                    <div className="relative">
-                      <select className={selectCls} value={form.category} onChange={e => set("category", e.target.value)} required style={{ background: "#0d1422" }}>
-                        <option value="">Select...</option>
-                        {CATEGORIES.map(c => <option key={c} value={c} style={{ background: "#0d1422" }}>{c}</option>)}
-                      </select>
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
+          {/* ── 03 APPLY ─────────────────────────────────────────────────── */}
+          <Section
+            id="apply"
+            index="03"
+            label="Apply"
+            title="Tell us what you are building."
+            sub="We review every application within 3 to 5 business days and reach out by email or Telegram."
+          >
+            <div className="border rounded-[6px] overflow-hidden" style={{ background: "rgba(255,255,255,0.012)", borderColor: LINE }}>
+              <AnimatePresence mode="wait">
+                {status === "success" ? (
+                  <motion.div key="success" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="px-8 py-16 flex flex-col items-center text-center gap-4">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ background: "rgba(245,197,24,0.08)", border: "1px solid rgba(245,197,24,0.3)" }}>
+                      <CheckIcon />
                     </div>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Target Chain *</label>
-                    <div className="relative">
-                      <select className={selectCls} value={form.targetChain} onChange={e => set("targetChain", e.target.value)} required style={{ background: "#0d1422" }}>
-                        <option value="">Select...</option>
-                        {CHAINS.map(c => <option key={c} value={c} style={{ background: "#0d1422" }}>{c}</option>)}
-                      </select>
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
+                    <h3 className="font-grotesk text-xl font-semibold" style={{ color: YELLOW }}>Application received</h3>
+                    <p className="text-sm max-w-md leading-relaxed" style={{ color: MUT }}>
+                      Thanks. We will review your application and reach out within 3 to 5 business days by email or Telegram.
+                    </p>
+                    <Link href="/" className="mt-2 font-mono text-xs transition-colors hover:text-white" style={{ color: MUT2 }}>&larr; Back to home</Link>
+                  </motion.div>
+                ) : (
+                  <motion.form key="form" onSubmit={handleSubmit} className="px-6 md:px-8 py-8 space-y-6">
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className={labelCls}>Project name *</label>
+                        <input className={inputCls} placeholder="My gasless app" value={form.projectName} onChange={(e) => set("projectName", e.target.value)} required />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Website / GitHub</label>
+                        <input className={inputCls} placeholder="https://..." value={form.website} onChange={(e) => set("website", e.target.value)} />
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Credit Requested *</label>
-                    <div className="relative">
-                      <select className={selectCls} value={form.requestedCredit} onChange={e => set("requestedCredit", e.target.value)} required style={{ background: "#0d1422" }}>
-                        <option value="">Select...</option>
-                        {CREDITS.map(c => <option key={c} value={c} style={{ background: "#0d1422" }}>{c}</option>)}
-                      </select>
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
+
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className={labelCls}>Email *</label>
+                        <input type="email" className={inputCls} placeholder="you@project.xyz" value={form.email} onChange={(e) => set("email", e.target.value)} required />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Telegram</label>
+                        <input className={inputCls} placeholder="@handle" value={form.telegram} onChange={(e) => set("telegram", e.target.value)} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Twitter / X</label>
+                        <input className={inputCls} placeholder="@handle" value={form.twitter} onChange={(e) => set("twitter", e.target.value)} />
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Row 4 */}
-                <div>
-                  <label className={labelCls}>Expected Monthly Transactions *</label>
-                  <div className="relative">
-                    <select className={selectCls} value={form.expectedMonthlyTx} onChange={e => set("expectedMonthlyTx", e.target.value)} required style={{ background: "#0d1422" }}>
-                      <option value="">Select...</option>
-                      {TX_RANGES.map(r => <option key={r} value={r} style={{ background: "#0d1422" }}>{r}</option>)}
-                    </select>
-                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">▾</span>
-                  </div>
-                </div>
+                    <div className="grid sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className={labelCls}>Category *</label>
+                        <div className="relative">
+                          <select className={selectCls} value={form.category} onChange={(e) => set("category", e.target.value)} required style={{ background: "#0d1422" }}>
+                            <option value="">Select...</option>
+                            {CATEGORIES.map((c) => <option key={c} value={c} style={{ background: "#0d1422" }}>{c}</option>)}
+                          </select>
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">&#9662;</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Target chain *</label>
+                        <div className="relative">
+                          <select className={selectCls} value={form.targetChain} onChange={(e) => set("targetChain", e.target.value)} required style={{ background: "#0d1422" }}>
+                            <option value="">Select...</option>
+                            {CHAINS.map((c) => <option key={c} value={c} style={{ background: "#0d1422" }}>{c}</option>)}
+                          </select>
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">&#9662;</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Credit requested *</label>
+                        <div className="relative">
+                          <select className={selectCls} value={form.requestedCredit} onChange={(e) => set("requestedCredit", e.target.value)} required style={{ background: "#0d1422" }}>
+                            <option value="">Select...</option>
+                            {CREDITS.map((c) => <option key={c} value={c} style={{ background: "#0d1422" }}>{c}</option>)}
+                          </select>
+                          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">&#9662;</span>
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Row 5 */}
-                <div>
-                  <label className={labelCls}>How will you use gasless payments? *</label>
-                  <input className={inputCls} placeholder="e.g. Let users mint NFTs without holding BNB" value={form.useCase} onChange={e => set("useCase", e.target.value)} required />
-                </div>
+                    <div>
+                      <label className={labelCls}>Expected monthly transactions *</label>
+                      <div className="relative">
+                        <select className={selectCls} value={form.expectedMonthlyTx} onChange={(e) => set("expectedMonthlyTx", e.target.value)} required style={{ background: "#0d1422" }}>
+                          <option value="">Select...</option>
+                          {TX_RANGES.map((r) => <option key={r} value={r} style={{ background: "#0d1422" }}>{r}</option>)}
+                        </select>
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-white/30 text-xs">&#9662;</span>
+                      </div>
+                    </div>
 
-                {/* Row 6 */}
-                <div>
-                  <label className={labelCls}>Tell us about your project *</label>
-                  <textarea className={`${inputCls} resize-none`} rows={4} placeholder="What are you building, who uses it, current traction..." value={form.description} onChange={e => set("description", e.target.value)} required />
-                </div>
+                    <div>
+                      <label className={labelCls}>How will you use gasless payments? *</label>
+                      <input className={inputCls} placeholder="e.g. let users mint NFTs without holding BNB" value={form.useCase} onChange={(e) => set("useCase", e.target.value)} required />
+                    </div>
 
-                {status === "error" && (
-                  <div className="bg-red-400/8 border border-red-400/20 rounded-xl px-4 py-3 text-sm text-red-400">{errorMsg}</div>
+                    <div>
+                      <label className={labelCls}>Tell us about your project *</label>
+                      <textarea className={`${inputCls} resize-none`} rows={4} placeholder="What are you building, who uses it, current traction..." value={form.description} onChange={(e) => set("description", e.target.value)} required />
+                    </div>
+
+                    {status === "error" && (
+                      <div className="rounded-[4px] px-4 py-3 text-sm" style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.25)", color: "#f87171" }}>{errorMsg}</div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={status === "submitting"}
+                      className="w-full py-4 rounded-full font-semibold text-sm font-grotesk bg-yellow text-navy hover:bg-yellow-hover transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                      {status === "submitting" ? (
+                        <>
+                          <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" aria-hidden>
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2" />
+                            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                          </svg>
+                          Submitting...
+                        </>
+                      ) : (
+                        <>
+                          Submit application
+                          <span aria-hidden>&rarr;</span>
+                        </>
+                      )}
+                    </button>
+
+                    <p className="text-center text-xs" style={{ color: MUT2 }}>
+                      Questions? Reach out at{" "}
+                      <a href="mailto:business@quackai.ai" className="transition-colors hover:text-white" style={{ color: MUT }}>business@quackai.ai</a>
+                    </p>
+                  </motion.form>
                 )}
+              </AnimatePresence>
+            </div>
+          </Section>
 
-                <button type="submit" disabled={status === "submitting"}
-                  className="w-full py-4 rounded-xl font-bold text-sm bg-yellow text-navy hover:bg-yellow-hover transition-all disabled:opacity-60 flex items-center justify-center gap-2">
-                  {status === "submitting" ? (
-                    <>
-                      <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2"/>
-                        <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round"/>
-                      </svg>
-                      Submitting...
-                    </>
-                  ) : "Submit Application →"}
-                </button>
-
-                <p className="text-white/20 text-xs text-center">
-                  Questions? Reach out at <a href="mailto:business@quackai.ai" className="text-white/40 hover:text-white transition-colors">business@quackai.ai</a>
-                </p>
-              </motion.form>
-            )}
-          </AnimatePresence>
-        </motion.div>
+        </div>
       </main>
-    </div>
+      <Footer />
+    </>
   );
 }
