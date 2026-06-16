@@ -230,7 +230,7 @@ const rise = {
 // Small document mark for the Docs chip (inherits chip color). ---------------
 function IconDoc() {
   return (
-    <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg viewBox="0 0 16 16" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d="M4 1.8h4.5L12 5.3v8.9H4z" />
       <path d="M8.4 1.8v3.4H12" />
       <path d="M5.8 8.6h4.4M5.8 11h4.4" />
@@ -328,8 +328,14 @@ export default function ClaudePage() {
           {/* ── HERO ─────────────────────────────────────────────────────── */}
           <section className="pt-24 lg:pt-28 pb-6 lg:pb-8">
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
-              <div className="font-mono text-[11px] uppercase tracking-[0.34em] mb-7" style={{ color: MUT2 }}>
-                [ MCP / @quackai/q402-mcp ]
+              <div className="flex items-center justify-between gap-4 mb-7">
+                <div className="font-mono text-[11px] uppercase tracking-[0.34em]" style={{ color: MUT2 }}>
+                  [ MCP / @quackai/q402-mcp ]
+                </div>
+                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border font-mono text-[12px] shrink-0" style={{ borderColor: "rgba(91,200,250,0.3)", color: CYAN }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: CYAN, boxShadow: `0 0 6px ${CYAN}` }} />
+                  v{MCP_VERSION} <span style={{ color: "rgba(91,200,250,0.6)" }}>live</span>
+                </span>
               </div>
               <h1 className="font-grotesk font-semibold tracking-[-0.035em] leading-[0.98] text-[clamp(2.6rem,7vw,5.2rem)] max-w-[15ch]" style={{ color: INK }}>
                 Your agent gets a{" "}
@@ -365,35 +371,29 @@ export default function ClaudePage() {
               className="mt-8 pt-6 border-t flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6"
               style={{ borderColor: HAIR }}
             >
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[12px]">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border" style={{ borderColor: "rgba(91,200,250,0.3)", color: CYAN }}>
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: CYAN, boxShadow: `0 0 6px ${CYAN}` }} />
-                  v{MCP_VERSION}
-                </span>
-                <span className="inline-flex flex-wrap items-center gap-2">
-                  <a href="https://www.npmjs.com/package/@quackai/q402-mcp" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/10 text-white/60 hover:text-white hover:border-white/25 transition-colors">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/logos/npm.png" alt="npm" className="w-3.5 h-3.5 object-contain" /> npm <span className="text-[10px] opacity-70" aria-hidden>&#8599;</span>
-                  </a>
-                  <a href="https://github.com/bitgett/q402-mcp" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/10 text-white/60 hover:text-white hover:border-white/25 transition-colors">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/logos/github.svg" alt="GitHub" className="w-3.5 h-3.5 object-contain invert opacity-90" /> GitHub <span className="text-[10px] opacity-70" aria-hidden>&#8599;</span>
-                  </a>
-                  <Link href="/docs#claude-mcp" className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/10 text-white/60 hover:text-white hover:border-white/25 transition-colors">
-                    <IconDoc /> Docs
-                  </Link>
-                </span>
+              <div className="flex flex-wrap items-center gap-2.5 font-mono text-[13px]">
+                <a href="https://www.npmjs.com/package/@quackai/q402-mcp" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/10 text-white/65 hover:text-white hover:border-white/25 transition-colors">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/logos/npm.webp" alt="npm" className="w-4 h-4 object-contain" /> npm <span className="text-[11px] opacity-70" aria-hidden>&#8599;</span>
+                </a>
+                <a href="https://github.com/bitgett/q402-mcp" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/10 text-white/65 hover:text-white hover:border-white/25 transition-colors">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/logos/github.svg" alt="GitHub" className="w-4 h-4 object-contain invert opacity-90" /> GitHub <span className="text-[11px] opacity-70" aria-hidden>&#8599;</span>
+                </a>
+                <Link href="/docs#claude-mcp" className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/10 text-white/65 hover:text-white hover:border-white/25 transition-colors">
+                  <IconDoc /> Docs
+                </Link>
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-[10px] uppercase tracking-[0.24em] font-mono" style={{ color: MUT2 }}>Works with</span>
                 <div className="flex items-center gap-2">
                   {WORKS_WITH.map((c) => (
-                    <span key={c.name} className="w-7 h-7 rounded-[5px] bg-white p-1 flex items-center justify-center" title={c.name}>
+                    <span key={c.name} className="w-8 h-8 rounded-md bg-white p-1.5 flex items-center justify-center" title={c.name}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={c.src} alt={c.name} className={`w-full h-full object-contain ${c.invert ? "invert" : ""}`} />
                     </span>
                   ))}
-                  <span className="text-[11px] font-mono ml-1" style={{ color: MUT2 }}>+ any</span>
+                  <span className="text-[12px] font-mono ml-1" style={{ color: MUT2 }}>+ any</span>
                 </div>
               </div>
             </motion.div>
