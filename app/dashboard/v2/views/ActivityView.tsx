@@ -179,6 +179,16 @@ function fmtNum(n: number): string {
   return n.toLocaleString("en-US");
 }
 
+// Withdraw-all yield settlements record the "max" sentinel as the amount (the
+// exact drawn balance isn't known until the on-chain event), so rendering it
+// numerically would surface "NaN". Show "All" instead, and degrade any other
+// non-finite value to a dash rather than NaN.
+function fmtTxAmount(v: number | string): string {
+  if (typeof v === "string" && v.trim().toLowerCase() === "max") return "All";
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(2) : "—";
+}
+
 // ── DEMO data ────────────────────────────────────────────────────────────────
 /**
  * Preview rows shown when no wallet is connected (or before live data loads)
@@ -1191,7 +1201,7 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                 </Td>
                 <Td align="right">
                   <span style={{ fontSize: fs.base, fontWeight: 600, fontFamily: displayFont }}>
-                    {Number(tx.tokenAmount).toFixed(2)}{" "}
+                    {fmtTxAmount(tx.tokenAmount)}{" "}
                     <span style={{ color: v2.muted2, fontWeight: 400 }}>{tx.tokenSymbol}</span>
                   </span>
                 </Td>
