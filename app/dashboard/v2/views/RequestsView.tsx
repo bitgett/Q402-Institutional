@@ -11,7 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Surface, V2AccentScope, SectionHead, LinkButton, displayFont, shortAddr } from "../primitives";
+import { Surface, V2AccentScope, Eyebrow, displayFont, shortAddr } from "../primitives";
 import { v2, fs } from "../theme";
 import type { Scope } from "../theme";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
@@ -203,134 +203,158 @@ export function RequestsView({ ownerAddress, signMessage, scope }: RequestsViewP
 
   return (
     <V2AccentScope>
-      <SectionHead
-        title="Payment Requests"
-        meta={requests.length > 0 ? `${requests.length} total` : undefined}
-        action={
-          ownerAddress ? (
-            <LinkButton onClick={() => setShowForm((s) => !s)}>{showForm ? "Close" : "New request"}</LinkButton>
-          ) : undefined
-        }
-      />
-
-      {!ownerAddress && (
-        <Surface style={{ padding: 24, color: v2.muted, fontSize: fs.base }}>
-          Connect your wallet to create and track payment requests.
-        </Surface>
-      )}
-
-      {ownerAddress && showForm && (
-        <Surface style={{ padding: 20, marginBottom: 16 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12, marginBottom: 12 }}>
-            <Field label="Amount">
-              <input
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="5.00"
-                inputMode="decimal"
-                style={inputStyle}
-              />
-            </Field>
-            <Field label="Token">
-              <select value={token} onChange={(e) => setToken(e.target.value as "USDC" | "USDT")} style={inputStyle}>
-                <option value="USDT">USDT</option>
-                <option value="USDC">USDC</option>
-              </select>
-            </Field>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 12 }}>
-            <Field label="Network">
-              <select value={chain} onChange={(e) => setChain(e.target.value)} style={inputStyle}>
-                {chainOptions.map((c) => (
-                  <option key={c} value={c}>
-                    {CHAIN_LABEL[c]}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Receive to">
-              <input
-                value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
-                placeholder="0x..."
-                spellCheck={false}
-                style={{ ...inputStyle, fontFamily: "var(--font-jetbrains), monospace", fontSize: fs.body }}
-              />
-            </Field>
-            <Field label="Memo (optional)">
-              <input
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                placeholder="Invoice 1024 / API usage"
-                maxLength={200}
-                style={inputStyle}
-              />
-            </Field>
-          </div>
-          {formError && <div style={{ color: v2.red, fontSize: fs.body, marginBottom: 10 }}>{formError}</div>}
-          <button onClick={create} disabled={creating} style={primaryBtn(creating)}>
-            {creating ? "Creating..." : "Create request"}
-          </button>
-        </Surface>
-      )}
-
-      {ownerAddress && (
-        <Surface style={{ padding: 0, overflow: "hidden" }}>
-          {loading && requests.length === 0 && (
-            <div style={{ padding: 24, color: v2.muted, fontSize: fs.base }}>Loading...</div>
-          )}
-          {loadError && <div style={{ padding: 24, color: v2.red, fontSize: fs.base }}>{loadError}</div>}
-          {!loading && !loadError && requests.length === 0 && (
-            <div style={{ padding: 24, color: v2.muted, fontSize: fs.base }}>
-              No requests yet. Create one to get a shareable pay link.
+      <Surface style={{ padding: 21 }}>
+        {/* Header — give the section real weight so it reads as a capability,
+            not a heading squished between cards. */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+          <div>
+            <Eyebrow>Receive · invoices</Eyebrow>
+            <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.03em", marginTop: 7 }}>
+              Payment requests
             </div>
+            <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 8, maxWidth: 560, lineHeight: 1.55 }}>
+              Bill anyone with a shareable link. A person pays from the link; a Q402 agent settles it gaslessly
+              with{" "}
+              <code style={{ fontFamily: "var(--font-jetbrains), monospace", color: v2.cyan, fontSize: fs.label }}>
+                q402_request_pay
+              </code>
+              .{requests.length > 0 ? ` ${requests.length} total.` : ""}
+            </div>
+          </div>
+          {ownerAddress && (
+            <button onClick={() => setShowForm((s) => !s)} style={secondaryBtn}>
+              {showForm ? "Close" : "New request"}
+            </button>
           )}
-          {requests.map((r, i) => (
-            <div
-              key={r.id}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(140px,1.4fr) 1fr auto auto",
-                alignItems: "center",
-                gap: 14,
-                padding: "14px 18px",
-                borderTop: i === 0 ? "none" : `1px solid ${v2.line}`,
-              }}
-            >
-              {/* amount + memo */}
-              <div>
-                <div style={{ fontSize: fs.cardTitle, fontWeight: 600, fontFamily: displayFont }}>
-                  {r.amount} <span style={{ color: v2.muted2, fontWeight: 400, fontSize: fs.body }}>{r.token}</span>
-                </div>
-                <div style={{ color: v2.muted, fontSize: fs.micro, marginTop: 2 }}>
-                  {CHAIN_LABEL[r.chain] ?? r.chain} · {r.memo ? r.memo : `to ${shortAddr(r.recipient)}`}
-                </div>
+        </div>
+
+        {!ownerAddress && (
+          <div style={{ marginTop: 18, color: v2.muted, fontSize: fs.base }}>
+            Connect your wallet to create and track payment requests.
+          </div>
+        )}
+
+        {ownerAddress && showForm && (
+          <div
+            style={{
+              marginTop: 18,
+              padding: 18,
+              borderRadius: 13,
+              border: `1px solid ${v2.line}`,
+              background: "rgba(255,255,255,.02)",
+            }}
+          >
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12, marginBottom: 12 }}>
+              <Field label="Amount">
+                <input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="5.00"
+                  inputMode="decimal"
+                  style={inputStyle}
+                />
+              </Field>
+              <Field label="Token">
+                <select value={token} onChange={(e) => setToken(e.target.value as "USDC" | "USDT")} style={inputStyle}>
+                  <option value="USDT">USDT</option>
+                  <option value="USDC">USDC</option>
+                </select>
+              </Field>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12, marginBottom: 12 }}>
+              <Field label="Network">
+                <select value={chain} onChange={(e) => setChain(e.target.value)} style={inputStyle}>
+                  {chainOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {CHAIN_LABEL[c]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Receive to">
+                <input
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  placeholder="0x..."
+                  spellCheck={false}
+                  style={{ ...inputStyle, fontFamily: "var(--font-jetbrains), monospace", fontSize: fs.body }}
+                />
+              </Field>
+              <Field label="Memo (optional)">
+                <input
+                  value={memo}
+                  onChange={(e) => setMemo(e.target.value)}
+                  placeholder="Invoice 1024 / API usage"
+                  maxLength={200}
+                  style={inputStyle}
+                />
+              </Field>
+            </div>
+            {formError && <div style={{ color: v2.red, fontSize: fs.body, marginBottom: 10 }}>{formError}</div>}
+            <button onClick={create} disabled={creating} style={primaryBtn(creating)}>
+              {creating ? "Creating..." : "Create request"}
+            </button>
+          </div>
+        )}
+
+        {ownerAddress && (
+          <div style={{ marginTop: 18, borderTop: `1px solid ${v2.line}` }}>
+            {loading && requests.length === 0 && (
+              <div style={{ padding: "18px 2px", color: v2.muted, fontSize: fs.base }}>Loading...</div>
+            )}
+            {loadError && <div style={{ padding: "18px 2px", color: v2.red, fontSize: fs.base }}>{loadError}</div>}
+            {!loading && !loadError && requests.length === 0 && (
+              <div style={{ padding: "18px 2px", color: v2.muted, fontSize: fs.base }}>
+                No requests yet. Create one to get a shareable pay link.
               </div>
+            )}
+            {requests.map((r, i) => (
+              <div
+                key={r.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(140px,1.4fr) 1fr auto auto",
+                  alignItems: "center",
+                  gap: 14,
+                  padding: "14px 2px",
+                  borderTop: i === 0 ? "none" : `1px solid ${v2.line}`,
+                }}
+              >
+                {/* amount + memo */}
+                <div>
+                  <div style={{ fontSize: fs.cardTitle, fontWeight: 600, fontFamily: displayFont }}>
+                    {r.amount} <span style={{ color: v2.muted2, fontWeight: 400, fontSize: fs.body }}>{r.token}</span>
+                  </div>
+                  <div style={{ color: v2.muted, fontSize: fs.micro, marginTop: 2 }}>
+                    {CHAIN_LABEL[r.chain] ?? r.chain} · {r.memo ? r.memo : `to ${shortAddr(r.recipient)}`}
+                  </div>
+                </div>
 
-              {/* status */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: STATUS_COLOR[r.status] }} />
-                <span style={{ fontSize: fs.body, color: STATUS_COLOR[r.status] }}>{STATUS_LABEL[r.status]}</span>
-              </div>
+                {/* status */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: STATUS_COLOR[r.status] }} />
+                  <span style={{ fontSize: fs.body, color: STATUS_COLOR[r.status] }}>{STATUS_LABEL[r.status]}</span>
+                </div>
 
-              {/* created */}
-              <div style={{ color: v2.muted, fontSize: fs.micro, whiteSpace: "nowrap" }}>{fmtDate(r.createdAt)}</div>
+                {/* created */}
+                <div style={{ color: v2.muted, fontSize: fs.micro, whiteSpace: "nowrap" }}>{fmtDate(r.createdAt)}</div>
 
-              {/* actions */}
-              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-                <button onClick={() => copyLink(r.id)} style={ghostBtn}>
-                  {copied === r.id ? "copied" : "copy link"}
-                </button>
-                {r.status === "open" && (
-                  <button onClick={() => cancel(r.id)} style={{ ...ghostBtn, color: v2.muted }}>
-                    cancel
+                {/* actions */}
+                <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                  <button onClick={() => copyLink(r.id)} style={ghostBtn}>
+                    {copied === r.id ? "copied" : "copy link"}
                   </button>
-                )}
+                  {r.status === "open" && (
+                    <button onClick={() => cancel(r.id)} style={{ ...ghostBtn, color: v2.muted }}>
+                      cancel
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </Surface>
-      )}
+            ))}
+          </div>
+        )}
+      </Surface>
     </V2AccentScope>
   );
 }
@@ -376,4 +400,16 @@ const ghostBtn: React.CSSProperties = {
   fontSize: fs.body,
   cursor: "pointer",
   padding: 0,
+};
+
+const secondaryBtn: React.CSSProperties = {
+  background: "rgba(255,255,255,.03)",
+  border: `1px solid ${v2.line}`,
+  borderRadius: 9,
+  color: v2.text,
+  fontSize: fs.body,
+  fontWeight: 600,
+  padding: "8px 14px",
+  cursor: "pointer",
+  flexShrink: 0,
 };
