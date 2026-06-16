@@ -35,7 +35,7 @@
  * multichain = 10 chains / live key. It does not change layout structure.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Surface,
   V2AccentScope,
@@ -591,10 +591,10 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
   // Capital allocation: per-chain stablecoin share of the active wallet's
   // total, biggest first, top 3 → bar segments (prototype shows 3).
   const allocation = useMemo(() => {
-    if (!activeBalance) return { total: 0, segs: [] as { chain: string; usd: number; pct: number }[] };
+    if (!activeBalance) return { total: 0, segs: [] as { chain: string; usd: number; usdc: number; usdt: number; pct: number }[] };
     const total = activeBalance.totalUsd;
     const segs = activeBalance.perChain
-      .map((c) => ({ chain: c.chain, usd: c.totalUsd ?? 0 }))
+      .map((c) => ({ chain: c.chain, usd: c.totalUsd ?? 0, usdc: c.usdc?.usd ?? 0, usdt: c.usdt?.usd ?? 0 }))
       .filter((s) => s.usd > 0)
       .sort((a, b) => b.usd - a.usd)
       .slice(0, 6)
@@ -788,7 +788,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
   const vmAlloc = demoMode
     ? {
         total: DEMO.wallets[0].balanceUsd,
-        segs: DEMO.allocation.map((a) => ({ chain: a.chain, usd: 0, pct: a.pct })),
+        segs: DEMO.allocation.map((a) => ({ chain: a.chain, usd: 0, usdc: 0, usdt: 0, pct: a.pct })),
       }
     : allocation;
 
@@ -1250,17 +1250,39 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                           <i style={{ display: "block", width: "100%", background: v2.toggleOff }} />
                         )}
                       </div>
-                      <div style={styles.chains}>
+                      <div style={styles.breakdown}>
                         {vmAlloc.segs.length > 0 ? (
-                          vmAlloc.segs.map((s) => (
-                            <span key={s.chain} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                              <ChainIcon chain={s.chain} size={15} />
-                              <b style={{ color: "#d6dce5" }}>{Math.round(s.pct)}%</b>
-                              {CHAIN_LABEL[s.chain] ?? s.chain}
-                            </span>
-                          ))
+                          vmAlloc.segs.flatMap((s) => {
+                            // One row per (chain, token) holding so the token and
+                            // amount land in their own aligned grid columns. The
+                            // chain label/% only renders on the chain's first row.
+                            const toks = [
+                              s.usdc > 0 ? { sym: "USDC", usd: s.usdc } : null,
+                              s.usdt > 0 ? { sym: "USDT", usd: s.usdt } : null,
+                            ].filter(Boolean) as { sym: string; usd: number }[];
+                            const rows = toks.length > 0 ? toks : [{ sym: "", usd: 0 }];
+                            return rows.map((t, ti) => (
+                              <Fragment key={`${s.chain}-${t.sym || "_"}-${ti}`}>
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                                  {ti === 0 && (
+                                    <>
+                                      <ChainIcon chain={s.chain} size={15} />
+                                      <span style={{ color: "#d6dce5", fontWeight: 600 }}>{CHAIN_LABEL[s.chain] ?? s.chain}</span>
+                                      <span style={{ color: v2.muted }}>{Math.round(s.pct)}%</span>
+                                    </>
+                                  )}
+                                </span>
+                                <span style={{ color: v2.muted }}>{t.sym}</span>
+                                <b style={{ color: v2.text, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                                  {t.usd > 0 ? fmtUsd(t.usd) : ""}
+                                </b>
+                              </Fragment>
+                            ));
+                          })
                         ) : (
-                          <span>No stablecoin balance yet — Receive to fund this wallet.</span>
+                          <span style={{ color: v2.muted, fontSize: fs.label, gridColumn: "1 / -1" }}>
+                            No stablecoin balance yet — Receive to fund this wallet.
+                          </span>
                         )}
                       </div>
                     </div>
@@ -2123,6 +2145,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 13,
   },
   chains: { display: "flex", gap: 10, color: v2.muted, fontSize: fs.label, marginTop: 10, flexWrap: "wrap" },
+  breakdown: { display: "grid", gridTemplateColumns: "1fr auto auto", columnGap: 14, rowGap: 8, marginTop: 11, fontSize: fs.label, color: v2.muted, alignItems: "center" },
   rows: { borderTop: `1px solid ${v2.line}` },
   row: {
     display: "grid",

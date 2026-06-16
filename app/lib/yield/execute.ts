@@ -28,6 +28,7 @@ import {
   hasMultichainScope,
   isCashPaidSubscription,
   getScopedCredits,
+  recordRelayedTx,
   type CreditScope,
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
@@ -591,6 +592,24 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     }
 
     await releaseLock();
+    // Record to the owner's activity feed so a yield supply/withdraw shows in the
+    // dashboard like any other gasless settlement (it IS one — relayer-sponsored
+    // EIP-7702). Best-effort: a logging failure must never fail a settled action.
+    if (owner && result.txHash) {
+      await recordRelayedTx(owner, {
+        apiKey: "",
+        address: walletAddr,
+        chain,
+        fromUser: walletAddr,
+        toUser: signed.pool,
+        tokenAmount: signed.amount,
+        tokenSymbol: token,
+        gasCostNative: 0,
+        relayTxHash: result.txHash,
+        relayedAt: receipt.at,
+        source: action === "supply" ? "yield_deposit" : "yield_withdraw",
+      }).catch(() => {});
+    }
     return NextResponse.json({ status: "ok", ...receipt });
   } catch (e) {
     // A throw here is BEFORE any confirmed broadcast (signYieldAction throws
