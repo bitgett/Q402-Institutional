@@ -596,8 +596,12 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     // dashboard like any other gasless settlement (it IS one — relayer-sponsored
     // EIP-7702). Best-effort: a logging failure must never fail a settled action.
     if (owner && result.txHash) {
+      // Tag with the owner's multichain key so the dashboard's scope filter
+      // (scopeKeys.has(tx.apiKey)) keeps the row in the multichain scope — an
+      // empty apiKey gets filtered out and the settlement never renders.
+      const ownerSub = await getSubscription(owner).catch(() => null);
       await recordRelayedTx(owner, {
-        apiKey: "",
+        apiKey: ownerSub?.apiKey ?? "",
         address: walletAddr,
         chain,
         fromUser: walletAddr,
