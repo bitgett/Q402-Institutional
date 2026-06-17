@@ -19,11 +19,13 @@
  * styling artifact.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export interface ThemedSelectOption<V extends string> {
   value: V;
   label: string;
+  /** Optional leading mark (e.g. a chain logo) shown before the label. */
+  icon?: ReactNode;
   /** Smaller text shown right-aligned in the option row. */
   meta?: string;
   disabled?: boolean;
@@ -152,12 +154,13 @@ export function ThemedSelect<V extends string>({
           borderColor: open ? "rgba(74,222,128,0.40)" : "rgba(255,255,255,0.10)",
         }}
       >
-        <span className="truncate text-left flex-1">
+        <span className="text-left flex-1 min-w-0 flex items-center gap-2">
           {selected ? (
             <>
-              {selected.label}
+              {selected.icon}
+              <span className="truncate">{selected.label}</span>
               {selected.meta && (
-                <span className="text-white/40"> · {selected.meta}</span>
+                <span className="text-white/40 shrink-0"> · {selected.meta}</span>
               )}
             </>
           ) : (
@@ -208,7 +211,10 @@ export function ThemedSelect<V extends string>({
                   color: isSelected ? "#86efac" : "#E2E8F0",
                 }}
               >
-                <span className="truncate flex-1">{opt.label}</span>
+                <span className="flex-1 min-w-0 flex items-center gap-2">
+                  {opt.icon}
+                  <span className="truncate">{opt.label}</span>
+                </span>
                 {opt.meta && (
                   <span className="text-[11px] text-white/40 shrink-0">{opt.meta}</span>
                 )}

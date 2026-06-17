@@ -1171,7 +1171,11 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                     style={{ ...styles.action, ...(demoMode || archived || !multichainActive ? styles.actionDisabled : null) }}
                   >
                     Bridge{!demoMode && !multichainActive && " (Paid)"}
-                    <small style={styles.actionSmall}>CCIP</small>
+                    <small style={{ ...styles.actionSmall, display: "flex", alignItems: "center", gap: 4 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/link.jpg" alt="" width={11} height={11} style={{ borderRadius: 3, flexShrink: 0 }} />
+                      CCIP
+                    </small>
                   </button>
                   <button
                     type="button"
