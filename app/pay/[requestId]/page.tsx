@@ -136,7 +136,7 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/q402-logo.svg" alt="Q402" className="h-6 w-auto" />
+                    <img src="/q402-logo.svg" alt="Q402" className="h-8 w-auto" />
                     <span className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-semibold border-l border-white/10 pl-2.5">
                       Payment request
                     </span>
@@ -176,13 +176,9 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
                 <div className="space-y-2.5 text-xs">
                   <div className="flex items-baseline justify-between py-3 mb-1 border-b border-white/5">
                     <span className="text-white/40">Amount</span>
-                    <span className="inline-flex items-baseline gap-2">
+                    <span>
                       <span className="text-3xl font-bold tracking-tight">{req.amount}</span>
-                      <span className="inline-flex items-center gap-1.5 text-sm text-white/55">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={`/${req.token.toLowerCase()}.svg`} alt="" className="w-4 h-4 self-center" />
-                        {req.token}
-                      </span>
+                      <span className="text-sm text-white/55 ml-2">{req.token}</span>
                     </span>
                   </div>
                   <Row label="Network">
