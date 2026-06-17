@@ -124,15 +124,24 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
         )}
 
         {state === "ready" && req && st && (
-          <>
+          <div className="relative">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -top-16 left-1/2 -translate-x-1/2 w-80 h-40 rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(245,197,24,0.13), transparent 70%)" }}
+            />
             <Shell>
               {/* Header */}
               <div className="px-7 pt-7 pb-5 border-b border-white/8 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="text-[10px] uppercase tracking-[0.22em] text-yellow font-semibold">
-                    Q402 · Payment Request
+                  <div className="flex items-center gap-2.5">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/q402-logo.svg" alt="Q402" className="h-6 w-auto" />
+                    <span className="text-[10px] uppercase tracking-[0.22em] text-white/40 font-semibold border-l border-white/10 pl-2.5">
+                      Payment request
+                    </span>
                   </div>
-                  <div className="font-mono text-xs text-white/55 mt-1 break-all">{req.id}</div>
+                  <div className="font-mono text-xs text-white/45 mt-2 break-all">{req.id}</div>
                 </div>
                 <div className="text-[10px] uppercase tracking-[0.18em] text-white/35 text-right shrink-0">
                   {req.sandbox ? "Sandbox" : "Created"}
@@ -167,9 +176,13 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
                 <div className="space-y-2.5 text-xs">
                   <div className="flex items-baseline justify-between py-3 mb-1 border-b border-white/5">
                     <span className="text-white/40">Amount</span>
-                    <span>
+                    <span className="inline-flex items-baseline gap-2">
                       <span className="text-3xl font-bold tracking-tight">{req.amount}</span>
-                      <span className="text-sm text-white/55 ml-2">{req.token}</span>
+                      <span className="inline-flex items-center gap-1.5 text-sm text-white/55">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`/${req.token.toLowerCase()}.svg`} alt="" className="w-4 h-4 self-center" />
+                        {req.token}
+                      </span>
                     </span>
                   </div>
                   <Row label="Network">
@@ -258,7 +271,7 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
             <p className="mt-6 text-center text-[11px] text-white/30">
               Powered by Q402 · gasless payment request
             </p>
-          </>
+          </div>
         )}
       </div>
     </main>
