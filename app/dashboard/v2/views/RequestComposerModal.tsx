@@ -269,8 +269,8 @@ const card: React.CSSProperties = {
   width: "100%",
   maxWidth: 460,
   background: "linear-gradient(180deg, #0F1626 0%, #0A1120 100%)",
-  border: `1px solid ${v2.cyan}33`,
-  borderTop: `2px solid ${v2.cyan}`,
+  border: "1px solid rgba(255,255,255,.08)",
+  borderTop: `2px solid ${v2.yellow}`,
   borderRadius: 16,
   padding: 24,
   boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
@@ -293,13 +293,13 @@ const eyebrow: React.CSSProperties = {
   letterSpacing: ".2em",
   textTransform: "uppercase",
   fontWeight: 700,
-  color: v2.cyan,
+  color: v2.yellow,
 };
 
 const title: React.CSSProperties = {
   font: `600 20px ${displayFont}`,
   letterSpacing: "-.02em",
-  color: v2.cyan,
+  color: v2.text,
   marginTop: 6,
 };
 
@@ -365,7 +365,7 @@ const secondaryBtn: React.CSSProperties = {
 const ghostBtn: React.CSSProperties = {
   background: "transparent",
   border: "none",
-  color: v2.cyan,
+  color: v2.yellow,
   fontSize: fs.body,
   cursor: "pointer",
   padding: 0,

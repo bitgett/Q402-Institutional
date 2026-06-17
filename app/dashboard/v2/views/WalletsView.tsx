@@ -1475,8 +1475,8 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
           {/* Payment requests — compact create card. The invoice list lives in
               Activity → Requests; this card is just the "bill someone" action. */}
           <Surface style={styles.sideCard}>
-            <Eyebrow style={{ color: v2.cyan }}>Receive · invoices</Eyebrow>
-            <div style={{ font: `600 ${fs.cardTitle}px ${displayFont}`, color: v2.cyan, marginTop: 6 }}>
+            <Eyebrow>Receive · invoices</Eyebrow>
+            <div style={{ font: `600 ${fs.cardTitle}px ${displayFont}`, color: v2.text, marginTop: 6 }}>
               Payment requests
             </div>
             <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5, marginTop: 6 }}>
@@ -1487,9 +1487,9 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
               style={{
                 marginTop: 13,
                 width: "100%",
-                background: "transparent",
-                border: `1px solid ${v2.cyan}55`,
-                color: v2.cyan,
+                background: `${v2.yellow}14`,
+                border: `1px solid ${v2.yellow}40`,
+                color: v2.yellow,
                 borderRadius: 9,
                 padding: "9px 14px",
                 fontSize: fs.body,
