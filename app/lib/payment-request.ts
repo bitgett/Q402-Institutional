@@ -57,6 +57,8 @@ export interface PublicPaymentRequest {
   expiresAt: string;
   paidTxHash?: string;
   paidAt?: string;
+  paidBy?: string;
+  receiptId?: string;
   sandbox: boolean;
 }
 
@@ -235,6 +237,8 @@ export function toPublicRequest(r: PaymentRequest): PublicPaymentRequest {
     expiresAt: r.expiresAt,
     ...(r.paidTxHash ? { paidTxHash: r.paidTxHash } : {}),
     ...(r.paidAt ? { paidAt: r.paidAt } : {}),
+    ...(r.paidBy ? { paidBy: r.paidBy } : {}),
+    ...(r.receiptId ? { receiptId: r.receiptId } : {}),
     sandbox: r.sandbox,
   };
 }

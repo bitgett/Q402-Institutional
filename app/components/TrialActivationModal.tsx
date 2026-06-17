@@ -82,6 +82,14 @@ export default function TrialActivationModal({ onClose }: Props) {
       });
       const data = await res.json();
       if (!res.ok) {
+        // "Already used the trial" / "already has Multichain access" are not
+        // failures the user can act on here — they already HAVE an account.
+        // Don't trap them on the form; close and route to the dashboard.
+        if (res.status === 409 && (data.code === "TRIAL_ALREADY_USED" || data.code === "ALREADY_PAID")) {
+          onClose();
+          router.push("/dashboard");
+          return;
+        }
         setError(data.error ?? "Trial activation failed.");
         setActivating(false);
         return;

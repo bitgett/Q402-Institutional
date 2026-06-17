@@ -202,6 +202,12 @@ export default function DashboardPage() {
     if (hasPaid === null) return; // still loading
     if (emailSession) return; // email session already has the trial
     if (subscription?.plan === "trial") return; // already on trial
+    // A live trial can sit under a non-"trial" plan label — e.g. when it lives
+    // on a bound-email pseudo-account, provision returns plan:"starter" but
+    // isTrialActive:true (+ a trialApiKey bridged in). Treat any trial signal
+    // as "already has a trial" so the modal can't re-prompt in a reload loop.
+    if (subscription?.isTrialActive) return;
+    if (subscription?.trialApiKey) return;
     if (hasPaid === true) return; // paid user — don't push trial
     // No trial AND not paid AND no email session → eligible. Prompt once.
     trialPromptedRef.current = true;
