@@ -6,10 +6,17 @@ import { randomBytes } from "crypto";
  *
  * A PaymentRequest is a published intent to RECEIVE money. The creator
  * (biller) names a recipient, chain, token, amount and memo; any payer can
- * later fulfill it gaslessly. The novel bit: the creator sponsors the gas,
- * so an arbitrary external wallet can pay with no Q402 account - it just
- * signs a TransferAuthorization and the creator's quota/gas-tank covers
- * settlement (see /api/request/[id]/pay).
+ * later fulfill it gaslessly. There are TWO settlement modes (see
+ * /api/request/[id]/pay), and the cost model differs between them:
+ *
+ *   - WITNESS (creator-sponsored): an arbitrary external wallet with no Q402
+ *     account signs a TransferAuthorization in the browser; the CREATOR's
+ *     quota/gas-tank covers settlement. This is the "share a link, anyone
+ *     pays" path.
+ *   - SERVER / Mode C (payer-sponsored): an agent pays from its OWN
+ *     server-managed Agent Wallet via /api/wallet/agentic/send using its OWN
+ *     apiKey; the PAYER sponsors its own gas. This is the agent-to-agent
+ *     billing path (q402_request_pay).
  *
  * Storage mirrors the payment-intent primitive (app/lib/payment-intent.ts)
  * for the id-keyed record + the relaytx list convention (app/lib/db.ts) for

@@ -90,6 +90,11 @@ export function RequestsList({ ownerAddress, signMessage }: RequestsListProps) {
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  // Cancel is destructive (kills an invoice) and can 409 mid-settlement, so it
+  // takes a two-tap confirm and surfaces failures per row instead of silently
+  // no-op'ing.
+  const [confirmingCancel, setConfirmingCancel] = useState<string | null>(null);
+  const [cancelErr, setCancelErr] = useState<{ id: string; msg: string } | null>(null);
 
   const payOrigin = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -142,16 +147,36 @@ export function RequestsList({ ownerAddress, signMessage }: RequestsListProps) {
   const cancel = useCallback(
     async (id: string) => {
       if (!ownerAddress) return;
-      const auth = await getAuthCreds(ownerAddress, signMessage);
-      if (!auth) return;
-      const res = await fetch(`/api/request/${id}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: ownerAddress, nonce: auth.nonce, signature: auth.signature }),
-      });
-      if (res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { request?: PublicRequest };
-        if (data.request) setRequests((prev) => prev.map((r) => (r.id === id ? (data.request as PublicRequest) : r)));
+      setCancelErr(null);
+      try {
+        const auth = await getAuthCreds(ownerAddress, signMessage);
+        if (!auth) {
+          setCancelErr({ id, msg: "Wallet signature needed to cancel." });
+          return;
+        }
+        const res = await fetch(`/api/request/${id}/cancel`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ address: ownerAddress, nonce: auth.nonce, signature: auth.signature }),
+        });
+        if (res.ok) {
+          const data = (await res.json().catch(() => ({}))) as { request?: PublicRequest };
+          if (data.request) setRequests((prev) => prev.map((r) => (r.id === id ? (data.request as PublicRequest) : r)));
+          setConfirmingCancel(null);
+          return;
+        }
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setCancelErr({
+          id,
+          msg:
+            res.status === 409
+              ? "Can't cancel. A payment may be in progress."
+              : data.error ?? "Couldn't cancel. Try again.",
+        });
+        setConfirmingCancel(null);
+      } catch {
+        setCancelErr({ id, msg: "Network error. Couldn't cancel." });
+        setConfirmingCancel(null);
       }
     },
     [ownerAddress, signMessage],
@@ -231,9 +256,33 @@ export function RequestsList({ ownerAddress, signMessage }: RequestsListProps) {
                     {r.status === "open" && (
                       <>
                         <Dot />
-                        <button onClick={() => cancel(r.id)} style={{ ...linkBtn, color: v2.muted }}>
-                          cancel
-                        </button>
+                        {confirmingCancel === r.id ? (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: v2.muted2 }}>Cancel?</span>
+                            <button onClick={() => cancel(r.id)} style={{ ...linkBtn, color: v2.red }}>
+                              yes
+                            </button>
+                            <button onClick={() => setConfirmingCancel(null)} style={{ ...linkBtn, color: v2.muted }}>
+                              no
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setCancelErr(null);
+                              setConfirmingCancel(r.id);
+                            }}
+                            style={{ ...linkBtn, color: v2.muted }}
+                          >
+                            cancel
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {cancelErr?.id === r.id && (
+                      <>
+                        <Dot />
+                        <span style={{ color: v2.red }}>{cancelErr.msg}</span>
                       </>
                     )}
                   </div>
