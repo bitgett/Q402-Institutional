@@ -198,3 +198,80 @@ describe("pay route - server mode (agent pays from own wallet)", () => {
     expect((store.get(payreqKey(id)) as PaymentRequest).status).toBe("paid");
   });
 });
+
+describe("pay route - H1/H2/M1 regression guards", () => {
+  function stubSend(resp: Record<string, unknown>) {
+    let captured: { body: Record<string, unknown> | null } = { body: null };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: { body: string }) => {
+        captured.body = JSON.parse(init.body);
+        return new Response(JSON.stringify(resp), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }),
+    );
+    return captured;
+  }
+
+  // H1: server-mode request payments must carry source:"request" so they land
+  // in the Activity "Requests" rail (ActivityView filters source==="request"),
+  // not "Manual sends". Pre-fix /send hardcoded source:"send".
+  it("H1: server mode tags the send with source:'request'", async () => {
+    const id = `req_${"1".repeat(24)}`;
+    store.set(payreqKey(id), openRequest(id));
+    const cap = stubSend({ txHash: "0xb", receiptId: "rct_z", walletId: "0xW" });
+    const res = await POST(payReq({ payerApiKey: "q402_live_payer", confirm: true }), payCtx(id));
+    expect(res.status).toBe(200);
+    expect(cap.body!.source).toBe("request");
+  });
+
+  // H2b: a client-supplied idempotencyKey must NOT override the request-bound
+  // key — allowing it would weaken the per-request dedup.
+  it("H2b: server mode ignores a client-supplied idempotencyKey", async () => {
+    const id = `req_${"2".repeat(24)}`;
+    store.set(payreqKey(id), openRequest(id));
+    const cap = stubSend({ txHash: "0xb", walletId: "0xW" });
+    await POST(
+      payReq({ payerApiKey: "q402_live_payer", confirm: true, idempotencyKey: "attacker-custom-key-123" }),
+      payCtx(id),
+    );
+    expect(cap.body!.idempotencyKey).toBe(`payreq-${id}`);
+  });
+
+  // M1: paidBy must be the RESOLVED wallet address /send echoes back, even when
+  // the client pinned no walletId. Pre-fix paidBy was (body.walletId ?? "") = "".
+  it("M1: records the resolved wallet address from /send as paidBy", async () => {
+    const id = `req_${"3".repeat(24)}`;
+    store.set(payreqKey(id), openRequest(id));
+    stubSend({ txHash: "0xb", receiptId: "rct_w", walletId: "0xABCdef0000000000000000000000000000000001" });
+    await POST(payReq({ payerApiKey: "q402_live_payer", confirm: true }), payCtx(id));
+    const rec = store.get(payreqKey(id)) as PaymentRequest;
+    expect(rec.paidBy).toBe("0xabcdef0000000000000000000000000000000001");
+  });
+
+  // H2: the durable request-scoped settled marker must block a second
+  // settlement even if the record reverts to `open` (markRequestPaid failed +
+  // lock expired). The per-payer send idempotency marker does NOT cover this
+  // cross-payer case — this request-scoped marker is the real guard.
+  it("H2: durable settled marker blocks a re-pay after the record reverts to open", async () => {
+    const id = `req_${"4".repeat(24)}`;
+    store.set(payreqKey(id), openRequest(id));
+    stubSend({ txHash: "0xPAID1", walletId: "0xW" });
+    const first = await POST(payReq({ payerApiKey: "q402_live_payer", confirm: true }), payCtx(id));
+    expect(first.status).toBe(200);
+
+    // Simulate the failure window: force the record back to open and clear the
+    // 120s pay lock (as if it expired), leaving only the durable marker.
+    const rec = store.get(payreqKey(id)) as PaymentRequest;
+    store.set(payreqKey(id), { ...rec, status: "open", paidTxHash: undefined, paidAt: undefined });
+    store.delete(payreqLockKey(id));
+
+    const second = await POST(payReq({ payerApiKey: "q402_live_payer", confirm: true }), payCtx(id));
+    expect(second.status).toBe(409);
+    const body = await second.json();
+    expect(body.status).toBe("paid");
+    expect(body.txHash).toBe("0xPAID1"); // marker-path 409 (not the lock-held 409)
+  });
+});

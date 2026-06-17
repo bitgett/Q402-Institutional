@@ -27,7 +27,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 import { ethers } from "ethers";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
@@ -95,6 +95,14 @@ interface SendBody {
    * the 30-min claim still guards same-payment double-clicks.
    */
   idempotencyKey?: string;
+  /**
+   * Internal provenance override for the resulting RelayedTx `source` tag.
+   * Honoured ONLY when the request also carries a valid X-Q402-Internal-Trust
+   * header (constant-time CRON_SECRET match) — an external Mode C caller
+   * cannot forge it. Currently set to "request" by the payment-request pay
+   * route so request settlements land in the Activity "Requests" rail.
+   */
+  source?: string;
 }
 
 interface SendRecord {
@@ -401,6 +409,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // config endpoints) applies.
   const isModeC = typeof body.apiKey === "string" && body.apiKey.length > 0;
   const trustedHookParams = isModeC ? body.hookParams : undefined;
+
+  // ── Internal source override (trust-gated) ─────────────────────────────
+  // The RelayedTx provenance tag defaults to "send". An INTERNAL caller that
+  // holds CRON_SECRET (the payment-request pay route settling a request
+  // server-side) may override it to "request" so the settlement lands in the
+  // Activity "Requests" rail instead of "Manual sends". Mirrors the relay
+  // route's own X-Q402-Internal-Trust gate, so an external Mode C caller
+  // hitting /send directly can never forge the tag (no secret → ignored).
+  const internalTrust = req.headers.get("x-q402-internal-trust") ?? "";
+  const cronSecretValue = process.env.CRON_SECRET ?? "";
+  const trustedInternal =
+    cronSecretValue.length > 0 &&
+    internalTrust.length === cronSecretValue.length &&
+    timingSafeEqual(Buffer.from(internalTrust), Buffer.from(cronSecretValue));
+  const relaySource: "send" | "request" =
+    trustedInternal && body.source === "request" ? "request" : "send";
 
   // ── Q402 Hooks — beforeAuthorize ───────────────────────────────────────
   // Runs at the EARLIEST point we have (owner, walletId, recipient,
@@ -1063,7 +1087,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let relayResponse: Response;
   try {
     relayResponse = await submitToRelay(internalBaseUrl(), apiKey, signed, {
-      source: "send",
+      source: relaySource,
       internalTrustToken: process.env.CRON_SECRET,
     });
   } catch (e) {
@@ -1212,8 +1236,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   await releaseWcLock();
-  return NextResponse.json(
-    relayBody ?? { error: "relay_response_unreadable" },
-    { status: relayResponse.status },
-  );
+  // Echo the resolved Agent Wallet address so an internal caller (the
+  // payment-request pay route) can record WHO paid even when the client
+  // pinned no walletId. Additive: spread first so a relay-returned field
+  // always wins; relay never returns `walletId`, so this just augments.
+  const responseBody =
+    relayBody && typeof relayBody === "object"
+      ? { walletId, ...(relayBody as Record<string, unknown>) }
+      : (relayBody ?? { error: "relay_response_unreadable" });
+  return NextResponse.json(responseBody, { status: relayResponse.status });
 }

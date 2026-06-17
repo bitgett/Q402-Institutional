@@ -46,6 +46,7 @@ import {
   createPaymentRequest,
   getPaymentRequest,
   listPaymentRequests,
+  listPaymentRequestsPage,
   markRequestPaid,
   cancelPaymentRequest,
   acquireRequestPayLock,
@@ -150,6 +151,31 @@ describe("status transitions", () => {
     // A second cancel is a no-op (already terminal).
     const again = await cancelPaymentRequest(rec.id);
     expect(again?.status).toBe("cancelled");
+  });
+});
+
+describe("listPaymentRequestsPage - pagination", () => {
+  it("pages newest-first with an accurate hasMore across the window", async () => {
+    for (let i = 0; i < 5; i++) {
+      await createPaymentRequest({
+        creatorOwner: OWNER,
+        recipient: RECIPIENT,
+        chain: "bnb",
+        token: "USDC",
+        amount: String(i + 1),
+        sandbox: false,
+      });
+    }
+    // Page 1 of 2: two rows, more remain.
+    const p1 = await listPaymentRequestsPage(OWNER, { limit: 2, offset: 0 });
+    expect(p1.records).toHaveLength(2);
+    expect(p1.hasMore).toBe(true);
+    // Last page: one row, nothing left.
+    const last = await listPaymentRequestsPage(OWNER, { limit: 2, offset: 4 });
+    expect(last.records).toHaveLength(1);
+    expect(last.hasMore).toBe(false);
+    // Back-compat: the array helper still returns everything up to the limit.
+    expect(await listPaymentRequests(OWNER)).toHaveLength(5);
   });
 });
 

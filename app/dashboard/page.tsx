@@ -958,8 +958,10 @@ export default function DashboardPage() {
           onClose={() => {
             setShowAutoTrial(false);
             // Re-fetch the subscription so the dashboard reflects the new
-            // 2k credits + plan=trial state without a full page reload.
-            if (typeof window !== "undefined") window.location.reload();
+            // 2k credits + plan=trial state. refreshProvision re-pulls the
+            // provision record (subscription / keys / credits) in place — no
+            // full page reload needed (the modal close is otherwise jarring).
+            refreshProvision();
           }}
         />
       )}

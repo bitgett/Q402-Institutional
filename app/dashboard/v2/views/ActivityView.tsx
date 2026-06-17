@@ -1102,9 +1102,13 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
         ? "No recurring fires in this scope yet. Scheduled payouts appear here once the cron fires them."
         : emptyFor === "manual"
           ? "No manual sends (send / batch / API) in this scope yet."
-          : emptyFor === "receipts"
-            ? "No Trust Receipts yet. Settlements with a verifiable receipt show a View link."
-            : "No settlements in this scope yet.";
+          : emptyFor === "yield"
+            ? "No yield settlements in this scope yet. Aave deposits and withdrawals appear here once you supply or redeem."
+            : emptyFor === "request"
+              ? "No payment-request settlements in this scope yet. A paid invoice shows here once a payer or agent settles it."
+              : emptyFor === "receipts"
+                ? "No Trust Receipts yet. Settlements with a verifiable receipt show a View link."
+                : "No settlements in this scope yet.";
     return <Empty text={msg} />;
   }
 
