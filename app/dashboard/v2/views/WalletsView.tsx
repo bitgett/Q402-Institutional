@@ -46,7 +46,7 @@ import {
   shortAddr,
 } from "../primitives";
 import { v2, subCard, fs, gasTankCoinGradient } from "../theme";
-import type { Scope } from "../theme";
+import type { Scope, V2ViewId } from "../theme";
 import { ChainIcon, TokenIcon, StablePair, Q402Mark, SparkIcon, AgentBadgeIcon, GasTankIcon, GearIcon } from "../logos";
 import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
@@ -74,6 +74,10 @@ export interface WalletsViewProps {
   signMessage: (message: string) => Promise<string | null>;
   /** Active scope from the top-bar ScopeChip. Gates active key + chain set. */
   scope: Scope;
+  /** Shell view switcher — lets in-view links (e.g. "View all") jump to
+   *  another v2 view (the shell is state-driven, so a URL push alone wouldn't
+   *  switch). Optional so the view still renders standalone. */
+  onNavigate?: (view: V2ViewId) => void;
 }
 
 // ── Local mirrors of the shipped payloads (kept thin; no server imports) ────
@@ -338,7 +342,7 @@ const DEMO = {
   guardrails: { perTxMaxUsd: 200, dailyLimitUsd: 500 },
 } as const;
 
-export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewProps) {
+export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: WalletsViewProps) {
   // ── Wallet list (same contract as AgenticWalletTab) ──────────────────────
   const [wallets, setWallets] = useState<AgenticWalletPublic[] | undefined>(undefined);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -658,8 +662,14 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
   const recentForActive = useMemo(() => {
     if (!activeWallet) return [];
     const w = activeWallet.address.toLowerCase();
+    // /api/transactions returns oldest-first (ActivityView reverses it for its
+    // newest-first ledger). "Recent activity" wants the 4 MOST RECENT, newest
+    // first — so sort by relayedAt desc BEFORE slicing, or a stale tx pins the
+    // top and newer ones get cut off entirely.
     return txs
       .filter((t) => t.fromUser?.toLowerCase() === w || t.toUser?.toLowerCase() === w)
+      .slice()
+      .sort((a, b) => new Date(b.relayedAt).getTime() - new Date(a.relayedAt).getTime())
       .slice(0, 4);
   }, [txs, activeWallet]);
 
@@ -1368,7 +1378,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                 <section>
                   <SectionHead
                     title="Recent activity"
-                    action={<LinkButton>View all</LinkButton>}
+                    action={<LinkButton onClick={() => onNavigate?.("activity")}>View all</LinkButton>}
                   />
                   <div style={styles.rows}>
                     {demoMode ? (
@@ -1409,7 +1419,19 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {(CHAIN_LABEL[t.chain] ?? t.chain)} · {t.tokenSymbol}
                                   {t.source === "recurring" ? " · recurring" : ""}
-                                  {t.receiptId ? " · Trust Receipt ready" : ""}
+                                  {t.receiptId ? (
+                                    <>
+                                      {" · "}
+                                      <a
+                                        href={`/receipt/${t.receiptId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{ color: v2.mint, textDecoration: "none" }}
+                                      >
+                                        Trust Receipt ↗
+                                      </a>
+                                    </>
+                                  ) : ""}
                                 </span>
                               </span>
                             </div>
