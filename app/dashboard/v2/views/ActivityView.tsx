@@ -48,6 +48,7 @@ import type { ChainKey } from "@/app/lib/relayer";
 import { Surface, Eyebrow, V2AccentScope, displayFont, shortAddr } from "../primitives";
 import { v2, fs, V2_ACCENT_SOFT, V2_ACCENT_LINE, V2_ACCENT_FILL } from "../theme";
 import type { Scope } from "../theme";
+import { RequestsList } from "./RequestsList";
 
 export interface ActivityViewProps {
   /** Connected owner address (null until wallet connects). */
@@ -768,13 +769,15 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
                 }}
               >
                 <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em" }}>
-                  Settlement activity
+                  {tab === "request" ? "Payment requests" : "Settlement activity"}
                 </div>
                 {demoMode && <PreviewChip connected={!!ownerAddress} />}
                 {demoMode && <ScopeChip label={scope === "trial" ? "Trial · BNB" : "Multichain · 10 chains"} />}
               </div>
               <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, maxWidth: 460, lineHeight: 1.5 }}>
-                {demoMode ? (
+                {tab === "request" ? (
+                  <>Invoices you&apos;ve issued. Create new ones from Wallets → Payment requests.</>
+                ) : demoMode ? (
                   <>Manual, scheduled, and cross-chain execution. Showing example settlements.</>
                 ) : (
                   <>
@@ -784,13 +787,16 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
                 )}
               </div>
             </div>
-            <div style={{ color: v2.muted, fontSize: fs.label, fontFamily: displayFont }}>
-              {totalInView} in view
-            </div>
+            {tab !== "request" && (
+              <div style={{ color: v2.muted, fontSize: fs.label, fontFamily: displayFont }}>
+                {totalInView} in view
+              </div>
+            )}
           </div>
 
-          {/* Filter chips — wallet + chain. Hidden for the receipts/bridge
-              special cases where they still apply but read identically. */}
+          {/* Filter chips — wallet + chain. Hidden for the requests tab (the
+              invoice list isn't filtered by wallet/network). */}
+          {tab !== "request" && (
           <div
             style={{
               display: "flex",
@@ -833,6 +839,7 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
               />
             ))}
           </div>
+          )}
 
           {/* ── Table ─────────────────────────────────────────────── */}
           {/* Demo mode renders the populated table directly (no connect/empty
@@ -840,7 +847,9 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
               spinner when there is no demo fallback to display (i.e. never,
               since demoMode covers the !ownerAddress and empty cases). */}
           <div style={{ marginTop: 12 }}>
-            {!demoMode && err ? (
+            {tab === "request" ? (
+              <RequestsList ownerAddress={ownerAddress} signMessage={signMessage} />
+            ) : !demoMode && err ? (
               <Empty text={err} tone="red" />
             ) : !demoMode && loading ? (
               <Empty text="Loading activity…" />
