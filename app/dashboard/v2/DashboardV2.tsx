@@ -250,7 +250,7 @@ export default function DashboardV2({
 
         {/* View router. key={view} re-mounts on switch so the enter animation replays. */}
         <div key={view} className="v2-view-enter">
-          {view === "wallets" && <WalletsView {...viewProps} />}
+          {view === "wallets" && <WalletsView {...viewProps} onNavigate={selectView} />}
           {view === "activity" && <ActivityView {...viewProps} />}
           {view === "treasury" && <TreasuryView {...viewProps} />}
           {view === "developer" && <DeveloperView {...viewProps} />}
