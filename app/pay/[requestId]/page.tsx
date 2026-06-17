@@ -240,6 +240,8 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
                     </button>
                   </div>
                   <p className="text-[11px] text-white/35 mt-2.5">
+                    Two-phase: the first call returns a preview + a consentToken; the agent
+                    re-calls with that token to settle. confirm:true alone won&apos;t move funds.
                     Settled gaslessly. A manual transfer to the address works too, but won&apos;t update this page.
                   </p>
                 </div>

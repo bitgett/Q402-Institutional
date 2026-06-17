@@ -75,6 +75,10 @@ export function RequestComposerModal({
     return opts;
   }, [agentWallet, ownerAddress]);
   const [recipient, setRecipient] = useState(agentWallet?.address ?? ownerAddress ?? "");
+  // Custom recipient: when on, the preset select switches to a free 0x input
+  // so an invoice can pay out to a treasury / multisig / team wallet.
+  const [customMode, setCustomMode] = useState(false);
+  const [ttlDays, setTtlDays] = useState(7);
   const [memo, setMemo] = useState("");
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -126,6 +130,7 @@ export function RequestComposerModal({
           token,
           amount,
           recipient,
+          ttlDays,
           ...(memo.trim() ? { memo: memo.trim() } : {}),
         }),
       });
@@ -229,18 +234,41 @@ export function RequestComposerModal({
                 </select>
               </Field>
               <Field label="Receive to">
-                {recipientOptions.length > 1 ? (
-                  <select
-                    value={recipient}
-                    onChange={(e) => setRecipient(e.target.value)}
-                    style={inputStyle}
-                  >
-                    {recipientOptions.map((o) => (
-                      <option key={o.value} value={o.value} style={optionStyle}>
-                        {o.label}
+                {recipientOptions.length > 0 ? (
+                  <>
+                    <select
+                      value={customMode ? "__custom__" : recipient}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "__custom__") {
+                          setCustomMode(true);
+                          setRecipient("");
+                        } else {
+                          setCustomMode(false);
+                          setRecipient(v);
+                        }
+                      }}
+                      style={inputStyle}
+                    >
+                      {recipientOptions.map((o) => (
+                        <option key={o.value} value={o.value} style={optionStyle}>
+                          {o.label}
+                        </option>
+                      ))}
+                      <option value="__custom__" style={optionStyle}>
+                        Custom address…
                       </option>
-                    ))}
-                  </select>
+                    </select>
+                    {customMode && (
+                      <input
+                        value={recipient}
+                        onChange={(e) => setRecipient(e.target.value)}
+                        placeholder="0x... (treasury / multisig / any address)"
+                        spellCheck={false}
+                        style={{ ...inputStyle, fontFamily: "var(--font-jetbrains), monospace", fontSize: fs.body, marginTop: 8 }}
+                      />
+                    )}
+                  </>
                 ) : (
                   <input
                     value={recipient}
@@ -250,6 +278,14 @@ export function RequestComposerModal({
                     style={{ ...inputStyle, fontFamily: "var(--font-jetbrains), monospace", fontSize: fs.body }}
                   />
                 )}
+              </Field>
+              <Field label="Expires in">
+                <select value={String(ttlDays)} onChange={(e) => setTtlDays(Number(e.target.value))} style={inputStyle}>
+                  <option value="7" style={optionStyle}>7 days</option>
+                  <option value="14" style={optionStyle}>14 days</option>
+                  <option value="30" style={optionStyle}>30 days</option>
+                  <option value="90" style={optionStyle}>90 days</option>
+                </select>
               </Field>
               <Field label="Memo (optional)">
                 <input
