@@ -33,6 +33,7 @@ import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { useModalEscape } from "./useModalEscape";
 import { ThemedSelect } from "./ThemedSelect";
+import { ChainIcon } from "../v2/logos";
 
 type CCIPChainKey = "eth" | "avax" | "arbitrum";
 type FeeTokenKind = "LINK" | "native";
@@ -551,7 +552,11 @@ export function AgenticWalletBridgeModal({
         {/* Header — pinned (no scroll) so title + close X stay visible. */}
         <div className="flex items-start justify-between px-6 pt-5 pb-3 shrink-0">
           <div>
-            <div className="text-white font-semibold text-lg">Bridge USDC · Chainlink CCIP</div>
+            <div className="text-white font-semibold text-lg flex items-center gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/link.jpg" alt="" width={20} height={20} style={{ borderRadius: 5, flexShrink: 0 }} />
+              Bridge USDC · Chainlink CCIP
+            </div>
             <div className="text-[11px] text-white/40 font-mono mt-0.5">
               {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}
             </div>
@@ -613,7 +618,7 @@ export function AgenticWalletBridgeModal({
                 <ThemedSelect<CCIPChainKey>
                   value={src}
                   onChange={setSrc}
-                  options={CHAINS.map(c => ({ value: c.key, label: c.label }))}
+                  options={CHAINS.map(c => ({ value: c.key, label: c.label, icon: <ChainIcon chain={c.key} size={16} /> }))}
                   ariaLabel="Source chain"
                   disabled={formLocked}
                 />
@@ -623,7 +628,7 @@ export function AgenticWalletBridgeModal({
                 <ThemedSelect<CCIPChainKey>
                   value={dst}
                   onChange={setDst}
-                  options={LANES[src].map(k => ({ value: k, label: chainMeta(k).label }))}
+                  options={LANES[src].map(k => ({ value: k, label: chainMeta(k).label, icon: <ChainIcon chain={k} size={16} /> }))}
                   ariaLabel="Destination chain"
                   disabled={formLocked}
                 />
