@@ -79,6 +79,9 @@ export function payreqOwnerKey(owner: string) {
 export function payreqLockKey(id: string) {
   return `payreq:lock:${id}`;
 }
+export function payreqSettledKey(id: string) {
+  return `payreq:settled:${id}`;
+}
 
 export function isValidRequestId(id: string): boolean {
   return ID_RE.test(id);
@@ -159,28 +162,69 @@ export async function getPaymentRequest(id: string): Promise<PaymentRequest | nu
   if (!rec) return null;
   if (rec.status === "open" && Date.now() > new Date(rec.expiresAt).getTime()) {
     const expired: PaymentRequest = { ...rec, status: "expired" };
-    kv.set(payreqKey(id), expired, { ex: ttlSecondsFor(expired.expiresAt) }).catch(() => {});
+    // Persist the flip best-effort, but GUARD it: re-read immediately before
+    // writing and only persist if the record is STILL open + expired. Without
+    // the guard, a concurrent markRequestPaid / cancel that lands between our
+    // read above and this write would be clobbered back to `expired`, losing
+    // the txHash + paidBy of a payment whose funds already moved. The returned
+    // value is authoritative regardless of whether this persist wins the race.
+    void (async () => {
+      try {
+        const fresh = await kv.get<PaymentRequest>(payreqKey(id));
+        if (fresh && fresh.status === "open" && Date.now() > new Date(fresh.expiresAt).getTime()) {
+          await kv.set(payreqKey(id), { ...fresh, status: "expired" }, { ex: ttlSecondsFor(fresh.expiresAt) });
+        }
+      } catch {
+        /* best-effort — the computed `expired` view is already returned */
+      }
+    })();
     return expired;
   }
   return rec;
 }
 
+/**
+ * Paginated owner listing, newest-first. The owner index is oldest->newest
+ * (rpush appends), so a page at `offset` is a window near the tail. We fetch
+ * ONE extra id on the older side as a `hasMore` probe (avoids a separate llen
+ * round-trip), then drop it. Records evicted from KV since indexing are
+ * filtered out, so a page can return shorter than `limit`; `hasMore` is derived
+ * from the raw id window, not the filtered records, so paging never stalls on
+ * an evicted row.
+ */
+export async function listPaymentRequestsPage(
+  owner: string,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<{ records: PaymentRequest[]; hasMore: boolean }> {
+  const limit = Math.min(Math.max(1, opts.limit ?? 100), OWNER_INDEX_CAP);
+  const offset = Math.max(0, opts.offset ?? 0);
+  let ids: string[] = [];
+  try {
+    // Window [offset, offset+limit) counted from the newest end, plus one older
+    // item as the hasMore probe.
+    ids = (await kv.lrange<string>(payreqOwnerKey(owner), -(offset + limit + 1), -(offset + 1))) ?? [];
+  } catch {
+    return { records: [], hasMore: false };
+  }
+  const hasMore = ids.length > limit;
+  // Keep the newest `limit` of the window (drop the older probe item if present).
+  const pageIds = hasMore ? ids.slice(ids.length - limit) : ids;
+  if (pageIds.length === 0) return { records: [], hasMore: false };
+  const records = await Promise.all(pageIds.map((id) => getPaymentRequest(id)));
+  return {
+    records: records
+      .filter((r): r is PaymentRequest => r !== null)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    hasMore,
+  };
+}
+
 export async function listPaymentRequests(
   owner: string,
   limit = 100,
+  offset = 0,
 ): Promise<PaymentRequest[]> {
-  let ids: string[] = [];
-  try {
-    // Newest last in the list; take the tail then reverse for newest-first.
-    ids = (await kv.lrange<string>(payreqOwnerKey(owner), -Math.max(1, limit), -1)) ?? [];
-  } catch {
-    return [];
-  }
-  if (ids.length === 0) return [];
-  const records = await Promise.all(ids.map((id) => getPaymentRequest(id)));
-  return records
-    .filter((r): r is PaymentRequest => r !== null)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return (await listPaymentRequestsPage(owner, { limit, offset })).records;
 }
 
 export async function markRequestPaid(
@@ -222,6 +266,60 @@ export async function acquireRequestPayLock(id: string): Promise<boolean> {
 
 export async function releaseRequestPayLock(id: string): Promise<void> {
   await kv.del(payreqLockKey(id)).catch(() => {});
+}
+
+/**
+ * Durable, request-scoped "this request settled" marker. Written the instant a
+ * settlement lands on-chain (BEFORE the status flip to `paid`), so a re-pay is
+ * blocked even if every markRequestPaid retry fails and the 120s pay lock later
+ * expires. The pay route checks it on entry, so a SECOND distinct payer can
+ * never re-settle a request whose funds already moved (the per-payer send
+ * idempotency marker is scoped by owner+wallet and would NOT stop a different
+ * payer; this request-scoped marker does). TTL tracks the record's own lifetime
+ * (expiry + grace) — past that the request is unpayable anyway.
+ */
+export interface RequestSettledMarker {
+  txHash: string;
+  paidBy: string;            // lowercased payer / wallet address ("" if unknown)
+  receiptId?: string;
+  mode: "witness" | "server";
+  settledAt: string;         // ISO
+}
+
+export async function getRequestSettledMarker(id: string): Promise<RequestSettledMarker | null> {
+  if (!isValidRequestId(id)) return null;
+  try {
+    return (await kv.get<RequestSettledMarker>(payreqSettledKey(id))) ?? null;
+  } catch {
+    // Treat a transient read blip as "no marker". The pay route's SET NX lock
+    // + status check are the primary guards, and getPaymentRequest would itself
+    // have thrown earlier if KV were durably down, so this never stands alone
+    // as the only thing between two settlements.
+    return null;
+  }
+}
+
+/**
+ * Write the durable settled marker with bounded retry. Returns false only if
+ * every attempt fails (KV durably down at settlement time) — the caller then
+ * pages ops, since a post-lock retry could re-fire. `expiresAtIso` ties the
+ * marker TTL to the request lifetime.
+ */
+export async function writeRequestSettledMarker(
+  id: string,
+  marker: RequestSettledMarker,
+  expiresAtIso: string,
+): Promise<boolean> {
+  const ttl = ttlSecondsFor(expiresAtIso);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await kv.set(payreqSettledKey(id), marker, { ex: ttl });
+      return true;
+    } catch {
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    }
+  }
+  return false;
 }
 
 export function toPublicRequest(r: PaymentRequest): PublicPaymentRequest {

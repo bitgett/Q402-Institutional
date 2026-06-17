@@ -43,6 +43,10 @@ const CHAIN_LABEL: Record<string, string> = {
 };
 const ALL_CHAINS = Object.keys(CHAIN_LABEL);
 
+// Requests load in pages so a heavy biller's full history is reachable via
+// "Load more" instead of being capped at the first screen.
+const PAGE_SIZE = 50;
+
 const STATUS_COLOR: Record<PublicRequest["status"], string> = {
   open: v2.yellow,
   paid: v2.cyan,
@@ -62,6 +66,8 @@ export function RequestsView({ ownerAddress, signMessage, scope }: RequestsViewP
   const [requests, setRequests] = useState<PublicRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   const [showForm, setShowForm] = useState(false);
   const [amount, setAmount] = useState("");
@@ -81,46 +87,56 @@ export function RequestsView({ ownerAddress, signMessage, scope }: RequestsViewP
 
   const payOrigin = typeof window !== "undefined" ? window.location.origin : "";
 
-  const load = useCallback(async () => {
-    if (!ownerAddress) return;
-    setLoading(true);
-    setLoadError(null);
-    try {
-      let auth = await getAuthCreds(ownerAddress, signMessage);
-      if (!auth) {
-        setLoading(false);
-        return;
-      }
-      const url = (a: { nonce: string; signature: string }) =>
-        `/api/request?address=${ownerAddress}&nonce=${encodeURIComponent(a.nonce)}&sig=${encodeURIComponent(a.signature)}`;
-      let res = await fetch(url(auth));
-      if (res.status === 401) {
-        // Stale session nonce — clear + re-sign once.
-        clearAuthCache(ownerAddress);
-        auth = await getAuthCreds(ownerAddress, signMessage);
+  // Load one page. `append` keeps the existing rows (Load more) vs replacing
+  // them (initial load / owner change). `pageOffset` is passed in rather than
+  // read from state so the callback stays stable (no offset in its deps).
+  const fetchPage = useCallback(
+    async (pageOffset: number, append: boolean) => {
+      if (!ownerAddress) return;
+      setLoading(true);
+      setLoadError(null);
+      try {
+        let auth = await getAuthCreds(ownerAddress, signMessage);
         if (!auth) {
           setLoading(false);
           return;
         }
-        res = await fetch(url(auth));
-      }
-      if (!res.ok) {
+        const url = (a: { nonce: string; signature: string }) =>
+          `/api/request?address=${ownerAddress}&nonce=${encodeURIComponent(a.nonce)}&sig=${encodeURIComponent(a.signature)}&limit=${PAGE_SIZE}&offset=${pageOffset}`;
+        let res = await fetch(url(auth));
+        if (res.status === 401) {
+          // Stale session nonce — clear + re-sign once.
+          clearAuthCache(ownerAddress);
+          auth = await getAuthCreds(ownerAddress, signMessage);
+          if (!auth) {
+            setLoading(false);
+            return;
+          }
+          res = await fetch(url(auth));
+        }
+        if (!res.ok) {
+          setLoadError("Could not load requests.");
+          setLoading(false);
+          return;
+        }
+        const data = (await res.json()) as { requests: PublicRequest[]; hasMore?: boolean };
+        const incoming = data.requests ?? [];
+        setRequests((prev) => (append ? [...prev, ...incoming] : incoming));
+        setHasMore(!!data.hasMore);
+        setOffset(pageOffset + PAGE_SIZE);
+      } catch {
         setLoadError("Could not load requests.");
+      } finally {
         setLoading(false);
-        return;
       }
-      const data = (await res.json()) as { requests: PublicRequest[] };
-      setRequests(data.requests ?? []);
-    } catch {
-      setLoadError("Could not load requests.");
-    } finally {
-      setLoading(false);
-    }
-  }, [ownerAddress, signMessage]);
+    },
+    [ownerAddress, signMessage],
+  );
 
+  // Initial load + reset whenever the owner changes (fetchPage's only deps).
   useEffect(() => {
-    void load();
-  }, [load]);
+    void fetchPage(0, false);
+  }, [fetchPage]);
 
   const create = useCallback(async () => {
     if (!ownerAddress) return;
@@ -355,6 +371,13 @@ export function RequestsView({ ownerAddress, signMessage, scope }: RequestsViewP
                 </div>
               </div>
             ))}
+            {hasMore && (
+              <div style={{ paddingTop: 16, textAlign: "center", borderTop: `1px solid ${v2.line}` }}>
+                <button onClick={() => fetchPage(offset, true)} disabled={loading} style={secondaryBtn}>
+                  {loading ? "Loading..." : "Load more"}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Surface>

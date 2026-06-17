@@ -5,7 +5,7 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { AGENTIC_CHAINS, type AgenticChainKey } from "@/app/lib/agentic-wallet-sign";
 import {
   createPaymentRequest,
-  listPaymentRequests,
+  listPaymentRequestsPage,
   toPublicRequest,
 } from "@/app/lib/payment-request";
 
@@ -102,6 +102,16 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  // Hard ceiling. A request is a human-entered invoice, not an arbitrary-
+  // magnitude intent: without a cap, a junk value like a 400-digit string is a
+  // valid decimal that stores fine but is unpayable. Reject anything over
+  // $1,000,000 with a clean 400 at create time.
+  if (Number(amount) > 1_000_000) {
+    return NextResponse.json(
+      { error: "amount exceeds the maximum of 1,000,000 per request" },
+      { status: 400 },
+    );
+  }
 
   const ttlDays =
     typeof body.ttlDays === "number" && body.ttlDays > 0 && body.ttlDays <= 90
@@ -144,6 +154,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authed.error, code: authed.code }, { status: authed.status });
   }
 
-  const records = await listPaymentRequests(authed);
-  return NextResponse.json({ requests: records.map(toPublicRequest) });
+  const limitParam = Number(req.nextUrl.searchParams.get("limit"));
+  const offsetParam = Number(req.nextUrl.searchParams.get("offset"));
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 50;
+  const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? offsetParam : 0;
+
+  const { records, hasMore } = await listPaymentRequestsPage(authed, { limit, offset });
+  return NextResponse.json({ requests: records.map(toPublicRequest), hasMore });
 }

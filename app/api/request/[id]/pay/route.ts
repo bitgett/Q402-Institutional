@@ -12,7 +12,10 @@ import {
   markRequestPaid,
   acquireRequestPayLock,
   releaseRequestPayLock,
+  getRequestSettledMarker,
+  writeRequestSettledMarker,
 } from "@/app/lib/payment-request";
+import { sendOpsAlert } from "@/app/lib/ops-alerts";
 
 /**
  * POST /api/request/[id]/pay - settle a payment request. Two modes:
@@ -45,9 +48,19 @@ function pickCreatorApiKey(
   if (sandbox) {
     return sub.trialSandboxApiKey ?? sub.sandboxApiKey ?? null;
   }
-  // Mirror the agentic send route's billing-key selection: BNB prefers the
-  // trial key, everything else needs the multichain (paid) key.
-  if (chain === "bnb") return sub.trialApiKey || sub.apiKey || null;
+  // Mirror the agentic send route's billing-key selection: BNB can be sponsored
+  // by the free Trial key, but ONLY while the trial is still active. A wallet
+  // whose trial has lapsed must fall back to the paid Multichain key, or the
+  // relay rejects the stale trial key with a confusing error. Everything off
+  // BNB needs the paid key regardless.
+  if (chain === "bnb") {
+    const trialValid =
+      !!sub.trialApiKey &&
+      !!sub.trialExpiresAt &&
+      new Date(sub.trialExpiresAt) > new Date();
+    if (trialValid) return sub.trialApiKey!;
+    return sub.apiKey || sub.trialApiKey || null;
+  }
   return sub.apiKey || null;
 }
 
@@ -78,6 +91,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  const cronSecret = process.env.CRON_SECRET ?? "";
   const serverMode = typeof body.payerApiKey === "string" && body.payerApiKey.length > 0;
   const from = typeof body.from === "string" ? body.from : "";
   if (!serverMode) {
@@ -97,6 +111,23 @@ export async function POST(
   if (record.status !== "open") {
     return NextResponse.json(
       { error: `Request is ${record.status}`, status: record.status },
+      { status: 409 },
+    );
+  }
+
+  // Durable re-pay guard: a prior settlement may have moved funds on-chain yet
+  // failed to flip the record to `paid` (KV blip mid-settle), leaving it stale
+  // `open`. The status check above can't catch that; this request-scoped marker
+  // is written the instant funds move, so it blocks any second payer.
+  const priorSettle = await getRequestSettledMarker(id);
+  if (priorSettle) {
+    return NextResponse.json(
+      {
+        error: "Request already paid",
+        status: "paid",
+        txHash: priorSettle.txHash,
+        receiptId: priorSettle.receiptId ?? null,
+      },
       { status: 409 },
     );
   }
@@ -124,7 +155,13 @@ export async function POST(
       try {
         sendResp = await fetch(`${internalBaseUrl()}/api/wallet/agentic/send`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            // Trust header lets /send tag the RelayedTx provenance as "request"
+            // so the settlement lands in the Activity "Requests" rail instead of
+            // "Manual sends". Without it /send keeps the default "send" tag.
+            ...(cronSecret ? { "X-Q402-Internal-Trust": cronSecret } : {}),
+          },
           body: JSON.stringify({
             apiKey: body.payerApiKey,
             chain: record.chain,
@@ -132,13 +169,15 @@ export async function POST(
             to: record.recipient,
             amount: record.amount,
             ...(body.walletId ? { walletId: body.walletId } : {}),
-            // Bind idempotency to the request, not the call. A request is
-            // single-payment, so a deterministic key lets the send route write
-            // its durable (no-TTL) settled-marker — guarding against a re-pay
-            // even if markRequestPaid below fails and the 30-min send claim
-            // later expires (server mode signs a fresh nonce each call, so the
-            // on-chain nonce alone would NOT stop a double-settle).
-            idempotencyKey: body.idempotencyKey ?? `payreq-${record.id}`,
+            // Provenance tag (honoured only with the trust header above).
+            source: "request",
+            // Bind idempotency to the REQUEST, not the caller. A request is
+            // single-payment, so a deterministic key lets /send dedupe a
+            // same-payer retry. We deliberately do NOT honour a client-supplied
+            // idempotencyKey — an override would weaken the request-bound dedup.
+            // The request-scoped durable marker (written post-settle) is the
+            // guard against a DIFFERENT payer re-settling a stale-open request.
+            idempotencyKey: `payreq-${record.id}`,
           }),
           signal: AbortSignal.timeout(60_000),
         });
@@ -148,6 +187,7 @@ export async function POST(
       const data = (await sendResp.json().catch(() => ({}))) as {
         txHash?: string;
         receiptId?: string;
+        walletId?: string;
         error?: string;
         message?: string;
       };
@@ -159,7 +199,10 @@ export async function POST(
       }
       txHash = data.txHash;
       receiptId = data.receiptId;
-      paidBy = (body.walletId ?? "").toLowerCase();
+      // /send echoes the RESOLVED Agent Wallet address it signed from, so the
+      // payer is recorded even when the client pinned no walletId (the common
+      // MCP case). Falls back to the client value, then "" if neither is known.
+      paidBy = (data.walletId ?? body.walletId ?? "").toLowerCase();
     } else {
       // ── Creator-sponsored witness settlement ────────────────────────────
       const sub = await getSubscription(record.creatorOwner);
@@ -194,7 +237,6 @@ export async function POST(
             ? { stableNonce: body.nonce }
             : { nonce: body.nonce };
 
-      const cronSecret = process.env.CRON_SECRET ?? "";
       const relayBody = {
         apiKey: creatorApiKey,
         chain: record.chain,
@@ -237,16 +279,44 @@ export async function POST(
       }
       txHash = data.txHash;
       receiptId = data.receiptId;
-      paidBy = from;
+      paidBy = from.toLowerCase();
     }
 
-    // Settled. Flip status; keep the lock as a belt-and-suspenders re-pay
-    // guard until it expires (the on-chain nonce already prevents replay).
+    // ── Durable re-pay guard FIRST ──────────────────────────────────────────
+    // Funds moved on-chain. Before the (failable) status flip, persist the
+    // request-scoped settled marker so a SECOND payer can never re-settle this
+    // request even if every markRequestPaid retry below fails and the 120s lock
+    // later expires. Witness mode signs a FRESH nonce per attempt, so the
+    // on-chain nonce does NOT stop a distinct second payment — this marker is
+    // the real fund-safety guard for BOTH modes.
+    const durableOk = await writeRequestSettledMarker(
+      id,
+      {
+        txHash,
+        paidBy,
+        ...(receiptId ? { receiptId } : {}),
+        mode: serverMode ? "server" : "witness",
+        settledAt: new Date().toISOString(),
+      },
+      record.expiresAt,
+    );
+    if (!durableOk) {
+      // KV durably down at settlement time: payment is on-chain but the re-pay
+      // guard didn't persist. Keep the lock (don't release) as a 120s
+      // best-effort and page ops — mirrors the send route's posture.
+      releaseOnExit = false;
+      void sendOpsAlert(
+        `request/pay durable settled-marker write FAILED after retries for ${id} ` +
+          `(mode=${serverMode ? "server" : "witness"}, txHash=${txHash}, paidBy=${paidBy}). ` +
+          `Funds moved on-chain; a retry after the 120s lock could re-settle — verify before replay.`,
+        "critical",
+      );
+    }
+
     // Flip status to paid. Retry a few times on a transient KV blip so the
     // request doesn't linger as "open" after the funds moved. Even if all
-    // retries fail, a re-pay is still blocked (server mode by the durable
-    // idempotency marker keyed to this request, witness mode by the on-chain
-    // nonce), so this is a display-consistency guard, not a fund-safety one.
+    // retries fail, the durable marker above already blocks a re-pay, so this
+    // is a display-consistency guard, not the fund-safety one.
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         await markRequestPaid(id, { txHash, paidBy, receiptId });
