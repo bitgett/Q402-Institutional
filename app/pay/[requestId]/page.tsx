@@ -1,30 +1,32 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import Navbar from "@/app/components/Navbar";
-import Footer from "@/app/components/Footer";
 
 /**
  * Public payment-request page: /pay/[requestId]
  *
- * v1 is a DISPLAY + instructions surface (browser-wallet settlement is
- * deferred - injected wallets can't sign the EIP-7702 authorization an
- * arbitrary first-time payer would need). It shows the request details and
- * how to fulfill it: pay the recipient on the named chain, or have a Q402
- * agent settle it gaslessly via the q402_request_pay MCP tool.
+ * Mirrors the Trust Receipt card (app/receipt/[id]/ReceiptCard.tsx) — same
+ * sectioned layout, header, status banner, label/value rows, and footer — so a
+ * request and its receipt read as one family. v1 is DISPLAY + instructions:
+ * a Q402 agent settles a request gaslessly via q402_request_pay (browser-wallet
+ * settlement is deferred — injected wallets can't sign the EIP-7702 auth a
+ * first-time payer would need).
  */
 
-const CHAIN_META: Record<string, { name: string; logo: string; explorer?: string }> = {
-  bnb: { name: "BNB Chain", logo: "/bnb.png", explorer: "https://bscscan.com/tx/" },
-  eth: { name: "Ethereum", logo: "/eth.png", explorer: "https://etherscan.io/tx/" },
-  avax: { name: "Avalanche", logo: "/avax.png", explorer: "https://snowtrace.io/tx/" },
-  xlayer: { name: "X Layer", logo: "/xlayer.png", explorer: "https://www.oklink.com/xlayer/tx/" },
+const CHAIN_META: Record<
+  string,
+  { name: string; logo: string; explorer?: string; explorerName?: string }
+> = {
+  bnb: { name: "BNB Chain", logo: "/bnb.png", explorer: "https://bscscan.com/tx/", explorerName: "BscScan" },
+  eth: { name: "Ethereum", logo: "/eth.png", explorer: "https://etherscan.io/tx/", explorerName: "Etherscan" },
+  avax: { name: "Avalanche", logo: "/avax.png", explorer: "https://snowtrace.io/tx/", explorerName: "Snowtrace" },
+  xlayer: { name: "X Layer", logo: "/xlayer.png", explorer: "https://www.oklink.com/xlayer/tx/", explorerName: "OKLink" },
   stable: { name: "Stable", logo: "/stable.jpg" },
-  mantle: { name: "Mantle", logo: "/mantle.png", explorer: "https://mantlescan.xyz/tx/" },
+  mantle: { name: "Mantle", logo: "/mantle.png", explorer: "https://mantlescan.xyz/tx/", explorerName: "Mantlescan" },
   injective: { name: "Injective", logo: "/injective.png" },
   monad: { name: "Monad", logo: "/monad.png" },
-  scroll: { name: "Scroll", logo: "/scroll.png", explorer: "https://scrollscan.com/tx/" },
-  arbitrum: { name: "Arbitrum", logo: "/arbitrum.png", explorer: "https://arbiscan.io/tx/" },
+  scroll: { name: "Scroll", logo: "/scroll.png", explorer: "https://scrollscan.com/tx/", explorerName: "Scrollscan" },
+  arbitrum: { name: "Arbitrum", logo: "/arbitrum.png", explorer: "https://arbiscan.io/tx/", explorerName: "Arbiscan" },
 };
 
 interface PublicRequest {
@@ -44,24 +46,27 @@ interface PublicRequest {
   sandbox: boolean;
 }
 
-const NAVY = "#070C16";
-const PANEL = "#0B1220";
-const LINE = "rgba(255,255,255,.08)";
-const YELLOW = "#F5C518";
-const CYAN = "#5BC8FA";
-const TEXT = "#EAF0FA";
-const MUTED = "#8C9BB3";
+const STATUS: Record<
+  PublicRequest["status"],
+  { label: string; sub: string; icon: string; tone: "active" | "muted" }
+> = {
+  open: { label: "Awaiting payment", sub: "Share this link, or have a Q402 agent settle it.", icon: "•", tone: "active" },
+  paid: { label: "Paid", sub: "Settled on-chain, gaslessly.", icon: "✓", tone: "active" },
+  expired: { label: "Expired", sub: "This request is past its expiry window.", icon: "○", tone: "muted" },
+  cancelled: { label: "Cancelled", sub: "The creator cancelled this request.", icon: "○", tone: "muted" },
+};
 
 function short(a: string): string {
-  return a.length > 14 ? `${a.slice(0, 8)}...${a.slice(-6)}` : a;
+  return a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a;
 }
-
-const STATUS_STYLE: Record<PublicRequest["status"], { label: string; color: string }> = {
-  open: { label: "Awaiting payment", color: YELLOW },
-  paid: { label: "Paid", color: CYAN },
-  expired: { label: "Expired", color: MUTED },
-  cancelled: { label: "Cancelled", color: MUTED },
-};
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+function fmtDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+  });
+}
 
 export default function PayRequestPage({ params }: { params: Promise<{ requestId: string }> }) {
   const { requestId } = use(params);
@@ -74,26 +79,15 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
     (async () => {
       try {
         const res = await fetch(`/api/request/${requestId}`);
-        if (res.status === 404) {
-          if (!cancelled) setState("notfound");
-          return;
-        }
-        if (!res.ok) {
-          if (!cancelled) setState("error");
-          return;
-        }
+        if (res.status === 404) { if (!cancelled) setState("notfound"); return; }
+        if (!res.ok) { if (!cancelled) setState("error"); return; }
         const data = (await res.json()) as { request: PublicRequest };
-        if (!cancelled) {
-          setReq(data.request);
-          setState("ready");
-        }
+        if (!cancelled) { setReq(data.request); setState("ready"); }
       } catch {
         if (!cancelled) setState("error");
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [requestId]);
 
   function copy(key: string, value: string) {
@@ -104,266 +98,193 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
   }
 
   const chain = req ? CHAIN_META[req.chain] : undefined;
+  const st = req ? STATUS[req.status] : null;
 
   return (
-    <div style={{ minHeight: "100vh", background: NAVY, color: TEXT, display: "flex", flexDirection: "column" }}>
-      <Navbar />
-      <main
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "120px 20px 80px",
-        }}
-      >
-        <div style={{ width: "100%", maxWidth: 520 }}>
-          <div style={{ fontSize: 12, letterSpacing: ".12em", textTransform: "uppercase", color: MUTED, marginBottom: 12 }}>
-            Q402 Payment Request
-          </div>
+    <main className="min-h-screen bg-[#0B0F1A] text-white antialiased px-4 py-12 flex items-center justify-center">
+      <div className="w-full max-w-md">
+        {state === "loading" && <div className="text-center text-white/40 text-sm py-20">Loading request…</div>}
 
-          {state === "loading" && (
-            <div style={{ color: MUTED, fontSize: 14, padding: "40px 0" }}>Loading request...</div>
-          )}
+        {state === "notfound" && (
+          <Shell>
+            <div className="px-7 py-10 text-center">
+              <div className="text-lg font-semibold mb-1">Request not found</div>
+              <div className="text-white/45 text-sm">This payment request does not exist or has expired from the ledger.</div>
+            </div>
+          </Shell>
+        )}
 
-          {state === "notfound" && (
-            <Card>
-              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Request not found</div>
-              <div style={{ color: MUTED, fontSize: 14 }}>
-                This payment request does not exist or has expired from the ledger.
+        {state === "error" && (
+          <Shell>
+            <div className="px-7 py-10 text-center">
+              <div className="text-lg font-semibold mb-1">Couldn&apos;t load request</div>
+              <div className="text-white/45 text-sm">Something went wrong. Refresh to try again.</div>
+            </div>
+          </Shell>
+        )}
+
+        {state === "ready" && req && st && (
+          <>
+            <Shell>
+              {/* Header */}
+              <div className="px-7 pt-7 pb-5 border-b border-white/8 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-[0.22em] text-yellow font-semibold">
+                    Q402 · Payment Request
+                  </div>
+                  <div className="font-mono text-xs text-white/55 mt-1 break-all">{req.id}</div>
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.18em] text-white/35 text-right shrink-0">
+                  {req.sandbox ? "Sandbox" : "Created"}
+                  <br />
+                  <span className="text-white/55 normal-case font-mono tracking-normal">{fmtDate(req.createdAt)}</span>
+                </div>
               </div>
-            </Card>
-          )}
 
-          {state === "error" && (
-            <Card>
-              <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Could not load request</div>
-              <div style={{ color: MUTED, fontSize: 14 }}>Something went wrong. Refresh to try again.</div>
-            </Card>
-          )}
-
-          {state === "ready" && req && (
-            <Card>
-              {/* Status + sandbox tag */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-                <span
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: "50%",
-                    background: STATUS_STYLE[req.status].color,
-                    display: "inline-block",
-                  }}
-                />
-                <span style={{ fontSize: 13, color: STATUS_STYLE[req.status].color, fontWeight: 600 }}>
-                  {STATUS_STYLE[req.status].label}
-                </span>
-                {req.sandbox && (
-                  <span
-                    style={{
-                      marginLeft: "auto",
-                      fontSize: 11,
-                      color: MUTED,
-                      border: `1px solid ${LINE}`,
-                      borderRadius: 6,
-                      padding: "2px 8px",
-                      letterSpacing: ".06em",
-                    }}
+              {/* Status banner */}
+              <div
+                className={`mx-7 my-5 rounded-2xl border p-5 ${
+                  st.tone === "active" ? "border-yellow/40 bg-yellow/10" : "border-white/10 bg-white/[0.02]"
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <div
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-lg shrink-0 border border-white/15"
+                    style={{ background: st.tone === "active" ? "rgba(245,197,24,0.16)" : "rgba(255,255,255,0.05)" }}
                   >
-                    SANDBOX
-                  </span>
-                )}
+                    <span className={st.tone === "active" ? "text-yellow" : "text-white/40"}>{st.icon}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold">{st.label}</div>
+                    <div className="text-[11px] text-white/45 mt-0.5">{st.sub}</div>
+                  </div>
+                </div>
               </div>
 
-              {/* Amount */}
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
-                <span style={{ fontSize: 44, fontWeight: 700, letterSpacing: "-0.02em", fontFamily: "var(--font-bricolage), sans-serif" }}>
-                  {req.amount}
-                </span>
-                <span style={{ fontSize: 20, color: MUTED, fontWeight: 600 }}>{req.token}</span>
-              </div>
-              {req.memo && <div style={{ color: MUTED, fontSize: 14, marginBottom: 20 }}>{req.memo}</div>}
-
-              {/* Details rows */}
-              <div style={{ display: "grid", gap: 12, margin: "20px 0", paddingTop: 20, borderTop: `1px solid ${LINE}` }}>
-                <Row label="Network">
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {chain?.logo && <img src={chain.logo} alt="" width={18} height={18} style={{ borderRadius: "50%" }} />}
-                    <span>{chain?.name ?? req.chain}</span>
-                  </span>
-                </Row>
-                <Row label="Pay to">
-                  <button
-                    onClick={() => copy("recipient", req.recipient)}
-                    style={addrBtn}
-                    title="Copy recipient address"
-                  >
-                    <span style={{ fontFamily: "var(--font-jetbrains), monospace" }}>{short(req.recipient)}</span>
-                    <span style={{ color: copied === "recipient" ? CYAN : MUTED, fontSize: 11 }}>
-                      {copied === "recipient" ? "copied" : "copy"}
+              {/* Request details */}
+              <div className="px-7 py-5 border-t border-white/8">
+                <SectionHeader>Request</SectionHeader>
+                <div className="space-y-2.5 text-xs">
+                  <div className="flex items-baseline justify-between py-3 mb-1 border-b border-white/5">
+                    <span className="text-white/40">Amount</span>
+                    <span>
+                      <span className="text-3xl font-bold tracking-tight">{req.amount}</span>
+                      <span className="text-sm text-white/55 ml-2">{req.token}</span>
                     </span>
-                  </button>
-                </Row>
-                {req.status === "open" && (
-                  <Row label="Expires">
-                    <span style={{ color: MUTED }}>
-                      {new Date(req.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </div>
+                  <Row label="Network">
+                    <span className="inline-flex items-center gap-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {chain?.logo && <img src={chain.logo} alt="" width={16} height={16} className="rounded-full" />}
+                      <span className="text-white/85">{chain?.name ?? req.chain}</span>
                     </span>
                   </Row>
-                )}
-
-                {req.status === "paid" && (
-                  <>
-                    {req.paidAt && (
-                      <Row label="Paid">
-                        <span>
-                          {new Date(req.paidAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                          <span style={{ color: MUTED }}> · gas $0</span>
-                        </span>
-                      </Row>
-                    )}
-                    {req.paidBy && (
-                      <Row label="Paid by">
-                        <span style={{ fontFamily: "var(--font-jetbrains), monospace", fontSize: 13 }}>{short(req.paidBy)}</span>
-                      </Row>
-                    )}
-                    {req.paidTxHash && (
-                      <Row label="Settlement">
-                        {chain?.explorer ? (
-                          <a href={`${chain.explorer}${req.paidTxHash}`} target="_blank" rel="noreferrer" style={{ color: CYAN, fontFamily: "var(--font-jetbrains), monospace", fontSize: 13 }}>
-                            {short(req.paidTxHash)} ↗
-                          </a>
-                        ) : (
-                          <span style={{ fontFamily: "var(--font-jetbrains), monospace", fontSize: 13 }}>{short(req.paidTxHash)}</span>
-                        )}
-                      </Row>
-                    )}
-                    {req.receiptId && (
-                      <Row label="Trust Receipt">
-                        <a href={`/receipt/${req.receiptId}`} target="_blank" rel="noreferrer" style={{ color: CYAN, fontSize: 13 }}>
-                          verified ↗
-                        </a>
-                      </Row>
-                    )}
-                  </>
-                )}
+                  <Row label="Pay to">
+                    <button onClick={() => copy("recipient", req.recipient)} className="font-mono text-white/85 hover:text-white transition">
+                      {short(req.recipient)} <span className="text-white/30">{copied === "recipient" ? "copied" : "copy"}</span>
+                    </button>
+                  </Row>
+                  {req.memo && <Row label="Memo"><span className="text-white/85">{req.memo}</span></Row>}
+                </div>
               </div>
 
-              {/* Pay instructions (only while open) */}
-              {req.status === "open" && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 12, letterSpacing: ".08em", textTransform: "uppercase", color: MUTED, marginBottom: 10 }}>
-                    How to pay
+              {/* Paid → on-chain proof */}
+              {req.status === "paid" && (
+                <div className="px-7 py-5 border-t border-white/8">
+                  <SectionHeader>On-chain proof</SectionHeader>
+                  <div className="space-y-2.5 text-xs">
+                    {req.paidAt && <Row label="Paid"><span className="text-white/85 font-mono">{fmtDateTime(req.paidAt)}</span></Row>}
+                    {req.paidBy && <Row label="Paid by"><span className="font-mono text-white/85">{short(req.paidBy)}</span></Row>}
+                    <Row label="Gas"><span className="text-white/85 font-mono">$0 · sponsored by Q402</span></Row>
+                    {req.paidTxHash && (
+                      <Row label="Tx hash"><code className="font-mono text-white/85">{short(req.paidTxHash)}</code></Row>
+                    )}
+                    <div className="flex items-center gap-4 pt-2">
+                      {req.paidTxHash && chain?.explorer && (
+                        <a href={`${chain.explorer}${req.paidTxHash}`} target="_blank" rel="noreferrer" className="text-[11px] text-yellow/80 hover:text-yellow transition">
+                          View on {chain.explorerName ?? "explorer"} ↗
+                        </a>
+                      )}
+                      {req.receiptId && (
+                        <a href={`/receipt/${req.receiptId}`} target="_blank" rel="noreferrer" className="text-[11px] text-yellow/80 hover:text-yellow transition">
+                          Trust Receipt ↗
+                        </a>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 14, color: TEXT, marginBottom: 14, lineHeight: 1.55 }}>
-                    Have a Q402 agent settle this gaslessly. It pays the exact{" "}
-                    <b>{req.amount} {req.token}</b> on <b>{chain?.name ?? req.chain}</b> and marks the request paid:
-                  </div>
-                  <div
-                    style={{
-                      background: "#05080F",
-                      border: `1px solid ${LINE}`,
-                      borderRadius: 10,
-                      padding: "12px 14px",
-                      fontFamily: "var(--font-jetbrains), monospace",
-                      fontSize: 12.5,
-                      color: CYAN,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                    }}
-                  >
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      q402_request_pay {"{"} requestId: &quot;{req.id}&quot;, confirm: true {"}"}
-                    </span>
-                    <button onClick={() => copy("cmd", `q402_request_pay { requestId: "${req.id}", confirm: true }`)} style={miniBtn}>
-                      {copied === "cmd" ? "copied" : "copy"}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 12, color: MUTED, marginTop: 10, lineHeight: 1.5 }}>
-                    Paying the address manually from any wallet also works, but it will not auto-update this
-                    page; the request stays Awaiting payment until an agent settles it.
-                  </div>
-
-                  <button
-                    onClick={() => copy("link", typeof window !== "undefined" ? window.location.href : "")}
-                    style={{ ...primaryBtn, marginTop: 16 }}
-                  >
-                    {copied === "link" ? "Link copied" : "Copy payment link"}
-                  </button>
                 </div>
               )}
 
-              {req.status === "paid" && (
-                <div style={{ marginTop: 8, fontSize: 14, color: CYAN }}>This request has been paid. Thank you.</div>
+              {/* Open → how to pay (compact) */}
+              {req.status === "open" && (
+                <div className="px-7 py-5 border-t border-white/8">
+                  <SectionHeader>Pay with an agent</SectionHeader>
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-black/30 px-3 py-2.5">
+                    <code className="font-mono text-[11px] text-yellow/90 truncate">
+                      q402_request_pay {"{"} requestId: &quot;{req.id}&quot;, confirm: true {"}"}
+                    </code>
+                    <button
+                      onClick={() => copy("cmd", `q402_request_pay { requestId: "${req.id}", confirm: true }`)}
+                      className="text-[10px] text-white/50 hover:text-white border border-white/10 rounded px-2 py-1 shrink-0 transition"
+                    >
+                      {copied === "cmd" ? "copied" : "copy"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-white/35 mt-2.5">
+                    Settled gaslessly. A manual transfer to the address works too, but won&apos;t update this page.
+                  </p>
+                </div>
               )}
-            </Card>
-          )}
-        </div>
-      </main>
-      <Footer />
-    </div>
+
+              {/* Footer */}
+              <div className="px-7 py-5 border-t border-white/8 flex items-center justify-between gap-3">
+                <div className="text-[10px] text-white/30 leading-snug">
+                  {req.status === "open" ? "Expires" : "Created"}
+                  <br />
+                  <span className="font-mono text-white/55">{fmtDate(req.status === "open" ? req.expiresAt : req.createdAt)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {copied === "link" && <span className="text-[11px] text-yellow/85">Link copied</span>}
+                  <button
+                    onClick={() => copy("link", typeof window !== "undefined" ? window.location.href : "")}
+                    className="h-9 px-4 rounded-lg border border-white/15 text-xs text-white/80 hover:text-white hover:border-white/30 transition"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              </div>
+            </Shell>
+
+            <p className="mt-6 text-center text-[11px] text-white/30">
+              Powered by Q402 · gasless payment request
+            </p>
+          </>
+        )}
+      </div>
+    </main>
   );
-
-  function Card({ children }: { children: React.ReactNode }) {
-    return (
-      <div
-        style={{
-          background: PANEL,
-          border: `1px solid ${LINE}`,
-          borderRadius: 18,
-          padding: 28,
-          boxShadow: "0 24px 60px rgba(0,0,0,.4)",
-        }}
-      >
-        {children}
-      </div>
-    );
-  }
-
-  function Row({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-        <span style={{ color: MUTED, fontSize: 13 }}>{label}</span>
-        <span style={{ fontSize: 14 }}>{children}</span>
-      </div>
-    );
-  }
 }
 
-const addrBtn: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  background: "transparent",
-  border: "none",
-  color: "#EAF0FA",
-  cursor: "pointer",
-  fontSize: 14,
-  padding: 0,
-};
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-3xl border border-white/8 overflow-hidden shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)]"
+      style={{ background: "linear-gradient(180deg, #131A2B 0%, #0F1424 100%)" }}
+    >
+      {children}
+    </div>
+  );
+}
 
-const miniBtn: React.CSSProperties = {
-  background: "transparent",
-  border: `1px solid ${LINE}`,
-  borderRadius: 6,
-  color: MUTED,
-  fontSize: 11,
-  padding: "3px 8px",
-  cursor: "pointer",
-  flexShrink: 0,
-};
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-semibold mb-3">{children}</div>;
+}
 
-const primaryBtn: React.CSSProperties = {
-  width: "100%",
-  background: YELLOW,
-  color: "#0A0E16",
-  border: "none",
-  borderRadius: 10,
-  padding: "12px 16px",
-  fontSize: 14,
-  fontWeight: 600,
-  cursor: "pointer",
-};
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-white/40 shrink-0">{label}</span>
+      <span className="text-right truncate">{children}</span>
+    </div>
+  );
+}
