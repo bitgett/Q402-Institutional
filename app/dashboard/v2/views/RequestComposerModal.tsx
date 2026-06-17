@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { v2, fs } from "../theme";
-import { displayFont } from "../primitives";
+import { displayFont, shortAddr } from "../primitives";
 import type { Scope } from "../theme";
 import { getAuthCreds } from "@/app/lib/auth-client";
 
@@ -40,6 +40,9 @@ export interface RequestComposerModalProps {
   ownerAddress: string | null;
   signMessage: (message: string) => Promise<string | null>;
   scope: Scope;
+  /** The active Agent Wallet, so "Receive to" can offer it alongside the owner
+   *  EOA instead of making the user paste an address. */
+  agentWallet?: { address: string; label?: string | null };
   onClose: () => void;
   /** Fired with the created request so a parent list can refresh if it wants. */
   onCreated?: (req: PublicRequest) => void;
@@ -49,13 +52,29 @@ export function RequestComposerModal({
   ownerAddress,
   signMessage,
   scope,
+  agentWallet,
   onClose,
   onCreated,
 }: RequestComposerModalProps) {
   const [amount, setAmount] = useState("");
   const [token, setToken] = useState<"USDC" | "USDT">("USDT");
   const [chain, setChain] = useState("bnb");
-  const [recipient, setRecipient] = useState(ownerAddress ?? "");
+  // "Receive to" presets: the active Agent Wallet (default — you're billing
+  // into it) and the owner EOA. Deduped so the two never collide.
+  const recipientOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [];
+    if (agentWallet?.address) {
+      opts.push({
+        value: agentWallet.address,
+        label: `${agentWallet.label?.trim() || "Agent wallet"} · ${shortAddr(agentWallet.address)}`,
+      });
+    }
+    if (ownerAddress && ownerAddress.toLowerCase() !== agentWallet?.address?.toLowerCase()) {
+      opts.push({ value: ownerAddress, label: `Owner wallet (EOA) · ${shortAddr(ownerAddress)}` });
+    }
+    return opts;
+  }, [agentWallet, ownerAddress]);
+  const [recipient, setRecipient] = useState(agentWallet?.address ?? ownerAddress ?? "");
   const [memo, setMemo] = useState("");
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -210,13 +229,27 @@ export function RequestComposerModal({
                 </select>
               </Field>
               <Field label="Receive to">
-                <input
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  placeholder="0x..."
-                  spellCheck={false}
-                  style={{ ...inputStyle, fontFamily: "var(--font-jetbrains), monospace", fontSize: fs.body }}
-                />
+                {recipientOptions.length > 1 ? (
+                  <select
+                    value={recipient}
+                    onChange={(e) => setRecipient(e.target.value)}
+                    style={inputStyle}
+                  >
+                    {recipientOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={recipient}
+                    onChange={(e) => setRecipient(e.target.value)}
+                    placeholder="0x..."
+                    spellCheck={false}
+                    style={{ ...inputStyle, fontFamily: "var(--font-jetbrains), monospace", fontSize: fs.body }}
+                  />
+                )}
               </Field>
               <Field label="Memo (optional)">
                 <input

@@ -227,11 +227,21 @@ export function AgenticWalletBridgeModal({
     setErrorCode(null);
   }, [src, dst]);
 
-  // Clear stale quote + stale error when amount or feeToken changes.
-  // Same reason as above: the prior error referred to the prior intent.
+  // Amount changed → the quote (and any quote error) no longer applies.
+  // feeToken is deliberately NOT a dep: the quote returns BOTH the LINK and
+  // native fees, so flipping fee token only re-highlights the chosen one.
+  // Discarding the quote there forced a pointless re-fetch ("why did my quote
+  // vanish when I just compared LINK vs native?"). submit() reads the live
+  // feeToken at sign time, so a retained quote can't sign a stale fee.
   useEffect(() => {
     setQuote(null);
     setQuoteError(null);
+  }, [amount]);
+
+  // Stale send error → clear when amount OR fee token changes. A prior error
+  // (e.g. "not enough native gas — switch fee to LINK") referred to the old
+  // intent, so switching fee token should dismiss it.
+  useEffect(() => {
     setError(null);
     setErrorCode(null);
   }, [amount, feeToken]);
@@ -655,7 +665,7 @@ export function AgenticWalletBridgeModal({
                     <button
                       key={t}
                       type="button"
-                      onClick={() => { setFeeToken(t); setQuote(null); }}
+                      onClick={() => setFeeToken(t)}
                       disabled={formLocked}
                       className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         active

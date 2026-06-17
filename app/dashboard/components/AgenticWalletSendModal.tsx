@@ -36,6 +36,9 @@ interface Props {
   signMessage: (message: string) => Promise<string | null>;
   onClose: () => void;
   onSent: () => void;
+  /** Jump to the Hooks modal — surfaced as a CTA when a policy hook HELDS the
+   *  payment, so the user can adjust the policy without hunting for it. */
+  onOpenHooks?: () => void;
   /** Pre-fill the recipient field (e.g. owner EOA for the Withdraw flow). */
   prefillTo?: string;
   /** Pre-fill the amount field (e.g. bucket balance for the Withdraw flow). */
@@ -114,6 +117,7 @@ export function AgenticWalletSendModal({
   signMessage,
   onClose,
   onSent,
+  onOpenHooks,
   prefillTo,
   prefillAmount,
   prefillChain,
@@ -305,17 +309,28 @@ export function AgenticWalletSendModal({
                 No funds moved. To send it, open{" "}
                 <span className="inline-flex items-center gap-1 align-text-bottom"><HexagonIcon size={12} /> Hooks</span>{" "}
                 and adjust the policy
-                that held it — e.g. raise the Spend Cap approval threshold above
+                that held it — e.g. raise the Spend Cap hold threshold above
                 this amount, or turn Spend Cap off — then try again.
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold border border-white/15 text-white/80 hover:bg-white/5"
-            >
-              Close
-            </button>
+            <div className="flex gap-2">
+              {onOpenHooks && (
+                <button
+                  type="button"
+                  onClick={() => onOpenHooks()}
+                  className="flex-1 px-3 py-2 rounded-md text-sm font-semibold bg-amber-400 text-black hover:bg-amber-300"
+                >
+                  Open Hooks
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-3 py-2 rounded-md text-sm font-semibold border border-white/15 text-white/80 hover:bg-white/5"
+              >
+                Close
+              </button>
+            </div>
           </div>
         ) : success ? (
           <div className="space-y-3">
