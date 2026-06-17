@@ -55,7 +55,7 @@ import type { ChainKey } from "@/app/lib/relayer";
 import type { AgenticWalletPublic } from "@/app/dashboard/components/AgenticWalletTab";
 import { AgenticWalletEarnSection } from "@/app/dashboard/components/AgenticWalletEarnSection";
 import { AgenticWalletRecurringSection } from "@/app/dashboard/components/AgenticWalletRecurringSection";
-import { RequestsView } from "./RequestsView";
+import { RequestComposerModal } from "./RequestComposerModal";
 import { AgenticWalletSendModal } from "@/app/dashboard/components/AgenticWalletSendModal";
 import { AgenticWalletReceiveModal } from "@/app/dashboard/components/AgenticWalletReceiveModal";
 import { AgenticWalletBatchModal } from "@/app/dashboard/components/AgenticWalletBatchModal";
@@ -375,6 +375,7 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
   // Withdraw / sweep — the picker opens, then a chosen bucket hands off
   // to the reused SendModal (the exact old-Card sweep flow).
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
   const [withdrawBucket, setWithdrawBucket] = useState<WithdrawBucket | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -1471,6 +1472,34 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
 
         {/* ── Col 3 · Right rail ──────────────────────────────────────── */}
         <aside className="v2-right" style={styles.right}>
+          {/* Payment requests — compact create card. The invoice list lives in
+              Activity → Requests; this card is just the "bill someone" action. */}
+          <Surface style={styles.sideCard}>
+            <Eyebrow style={{ color: v2.cyan }}>Receive · invoices</Eyebrow>
+            <div style={{ font: `600 ${fs.cardTitle}px ${displayFont}`, color: v2.cyan, marginTop: 6 }}>
+              Payment requests
+            </div>
+            <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5, marginTop: 6 }}>
+              Bill anyone with a shareable link. Track them in Activity → Requests.
+            </div>
+            <button
+              onClick={() => setComposeOpen(true)}
+              style={{
+                marginTop: 13,
+                width: "100%",
+                background: "transparent",
+                border: `1px solid ${v2.cyan}55`,
+                color: v2.cyan,
+                borderRadius: 9,
+                padding: "9px 14px",
+                fontSize: fs.body,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              New request
+            </button>
+          </Surface>
           {firstRun ? (
             // First-run: no wallet to configure yet — surface what the rail
             // will hold once a wallet exists, no demo data.
@@ -1625,12 +1654,15 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
         </aside>
       </div>
 
-      {/* ── Payment requests (receive side) — create + track invoices.
-          Lives with the wallets (not Developer) since billing belongs next to
-          the wallet that receives the funds; paid ones also land in Activity. */}
-      <RequestsView ownerAddress={ownerAddress} signMessage={signMessage} scope={scope} />
-
       {/* ── Reused action modals (each self-auths via getActionAuth) ────── */}
+      {composeOpen && (
+        <RequestComposerModal
+          ownerAddress={ownerAddress}
+          signMessage={signMessage}
+          scope={scope}
+          onClose={() => setComposeOpen(false)}
+        />
+      )}
       {activeWallet && sendOpen && (
         <AgenticWalletSendModal
           walletAddress={activeWallet.address}
