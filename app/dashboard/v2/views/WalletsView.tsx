@@ -55,6 +55,7 @@ import type { ChainKey } from "@/app/lib/relayer";
 import type { AgenticWalletPublic } from "@/app/dashboard/components/AgenticWalletTab";
 import { AgenticWalletEarnSection } from "@/app/dashboard/components/AgenticWalletEarnSection";
 import { AgenticWalletRecurringSection } from "@/app/dashboard/components/AgenticWalletRecurringSection";
+import { RequestsView } from "./RequestsView";
 import { AgenticWalletSendModal } from "@/app/dashboard/components/AgenticWalletSendModal";
 import { AgenticWalletReceiveModal } from "@/app/dashboard/components/AgenticWalletReceiveModal";
 import { AgenticWalletBatchModal } from "@/app/dashboard/components/AgenticWalletBatchModal";
@@ -1623,6 +1624,11 @@ export function WalletsView({ ownerAddress, signMessage, scope }: WalletsViewPro
           )}
         </aside>
       </div>
+
+      {/* ── Payment requests (receive side) — create + track invoices.
+          Lives with the wallets (not Developer) since billing belongs next to
+          the wallet that receives the funds; paid ones also land in Activity. */}
+      <RequestsView ownerAddress={ownerAddress} signMessage={signMessage} scope={scope} />
 
       {/* ── Reused action modals (each self-auths via getActionAuth) ────── */}
       {activeWallet && sendOpen && (
