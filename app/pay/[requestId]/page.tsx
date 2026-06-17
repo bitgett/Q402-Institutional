@@ -39,6 +39,8 @@ interface PublicRequest {
   expiresAt: string;
   paidTxHash?: string;
   paidAt?: string;
+  paidBy?: string;
+  receiptId?: string;
   sandbox: boolean;
 }
 
@@ -203,16 +205,48 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
                     </span>
                   </button>
                 </Row>
-                {req.status === "paid" && req.paidTxHash && (
-                  <Row label="Settlement">
-                    {chain?.explorer ? (
-                      <a href={`${chain.explorer}${req.paidTxHash}`} target="_blank" rel="noreferrer" style={{ color: CYAN, fontFamily: "var(--font-jetbrains), monospace", fontSize: 13 }}>
-                        {short(req.paidTxHash)} ↗
-                      </a>
-                    ) : (
-                      <span style={{ fontFamily: "var(--font-jetbrains), monospace", fontSize: 13 }}>{short(req.paidTxHash)}</span>
-                    )}
+                {req.status === "open" && (
+                  <Row label="Expires">
+                    <span style={{ color: MUTED }}>
+                      {new Date(req.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
                   </Row>
+                )}
+
+                {req.status === "paid" && (
+                  <>
+                    {req.paidAt && (
+                      <Row label="Paid">
+                        <span>
+                          {new Date(req.paidAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          <span style={{ color: MUTED }}> · gas $0</span>
+                        </span>
+                      </Row>
+                    )}
+                    {req.paidBy && (
+                      <Row label="Paid by">
+                        <span style={{ fontFamily: "var(--font-jetbrains), monospace", fontSize: 13 }}>{short(req.paidBy)}</span>
+                      </Row>
+                    )}
+                    {req.paidTxHash && (
+                      <Row label="Settlement">
+                        {chain?.explorer ? (
+                          <a href={`${chain.explorer}${req.paidTxHash}`} target="_blank" rel="noreferrer" style={{ color: CYAN, fontFamily: "var(--font-jetbrains), monospace", fontSize: 13 }}>
+                            {short(req.paidTxHash)} ↗
+                          </a>
+                        ) : (
+                          <span style={{ fontFamily: "var(--font-jetbrains), monospace", fontSize: 13 }}>{short(req.paidTxHash)}</span>
+                        )}
+                      </Row>
+                    )}
+                    {req.receiptId && (
+                      <Row label="Trust Receipt">
+                        <a href={`/receipt/${req.receiptId}`} target="_blank" rel="noreferrer" style={{ color: CYAN, fontSize: 13 }}>
+                          verified ↗
+                        </a>
+                      </Row>
+                    )}
+                  </>
                 )}
               </div>
 
