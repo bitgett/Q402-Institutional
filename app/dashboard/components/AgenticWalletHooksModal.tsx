@@ -156,7 +156,7 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
       }
       if (perCallApproval.trim() !== "") {
         const n = Number(perCallApproval);
-        if (!Number.isFinite(n) || n <= 0) return "Per-call approval threshold must be a positive number.";
+        if (!Number.isFinite(n) || n <= 0) return "Hold-above threshold must be a positive number.";
         sc.perCallApprovalUsd = n;
       }
       config.spendCap = sc;
@@ -274,7 +274,7 @@ export function AgenticWalletHooksModal({ ownerAddress, walletId, signMessage, o
                 </div>
               )}
               <div>
-                <div className={labelCls}>Approval threshold (USD; ≥ this needs human approval)</div>
+                <div className={labelCls}>Hold above (USD; payments ≥ this are held until you adjust the policy)</div>
                 <input value={perCallApproval} onChange={(e) => setPerCallApproval(e.target.value)} inputMode="decimal" placeholder="100" className={inputCls} style={inputStyle} />
               </div>
             </Section>

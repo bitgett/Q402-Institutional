@@ -80,7 +80,7 @@ export const spendCapPolicy: Hook = {
       return {
         action: "require_approval",
         code: "APPROVAL_REQUIRED_OVER_CAP",
-        reason: `This payment of $${ctx.amountUsd} is at/above the wallet's approval threshold of $${sc.perCallApprovalUsd} and needs human approval before it settles.`,
+        reason: `This payment of $${ctx.amountUsd} is at or above the wallet's hold threshold of $${sc.perCallApprovalUsd}, so it was held and not sent. Raise the threshold above this amount or turn Spend Cap off, then try again.`,
         status: 202,
         meta: { amountUsd: ctx.amountUsd, perCallApprovalUsd: sc.perCallApprovalUsd },
       };

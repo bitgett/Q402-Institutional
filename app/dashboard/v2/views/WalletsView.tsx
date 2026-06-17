@@ -1682,6 +1682,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
           ownerAddress={ownerAddress}
           signMessage={signMessage}
           scope={scope}
+          agentWallet={activeWallet ? { address: activeWallet.address, label: activeWallet.label } : undefined}
           onClose={() => setComposeOpen(false)}
         />
       )}
@@ -1698,6 +1699,10 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
           onSent={() => {
             setSendOpen(false);
             afterWrite();
+          }}
+          onOpenHooks={() => {
+            setSendOpen(false);
+            setHooksOpen(true);
           }}
         />
       )}
@@ -1807,6 +1812,10 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
             afterWrite();
           }}
           onClose={() => setWithdrawBucket(null)}
+          onOpenHooks={() => {
+            setWithdrawBucket(null);
+            setHooksOpen(true);
+          }}
         />
       )}
     </V2AccentScope>
