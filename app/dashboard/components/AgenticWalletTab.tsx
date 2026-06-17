@@ -359,7 +359,7 @@ function WalletSelector({
 
 function InstallSnippet() {
   const [copied, setCopied] = useState(false);
-  const cmd = "npx @quackai/q402-mcp";
+  const cmd = "npx -y @quackai/q402-mcp";
 
   async function copy() {
     try {

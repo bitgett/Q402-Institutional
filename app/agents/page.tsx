@@ -32,7 +32,7 @@ const HAIR = "rgba(255,255,255,0.07)";
 const YELLOW = "#F5C518";
 const CYAN = "#5BC8FA";
 
-const INSTALL_CMD = "npx @quackai/q402-mcp";
+const INSTALL_CMD = "npx -y @quackai/q402-mcp";
 
 // Hero key facts - the one place these headline numbers live.
 const HERO_FACTS = [
