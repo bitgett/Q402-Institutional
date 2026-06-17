@@ -213,8 +213,8 @@ export function RequestComposerModal({
               </Field>
               <Field label="Token">
                 <select value={token} onChange={(e) => setToken(e.target.value as "USDC" | "USDT")} style={inputStyle}>
-                  <option value="USDT">USDT</option>
-                  <option value="USDC">USDC</option>
+                  <option value="USDT" style={optionStyle}>USDT</option>
+                  <option value="USDC" style={optionStyle}>USDC</option>
                 </select>
               </Field>
             </div>
@@ -222,7 +222,7 @@ export function RequestComposerModal({
               <Field label="Network">
                 <select value={chain} onChange={(e) => setChain(e.target.value)} style={inputStyle}>
                   {chainOptions.map((c) => (
-                    <option key={c} value={c}>
+                    <option key={c} value={c} style={optionStyle}>
                       {CHAIN_LABEL[c]}
                     </option>
                   ))}
@@ -236,7 +236,7 @@ export function RequestComposerModal({
                     style={inputStyle}
                   >
                     {recipientOptions.map((o) => (
-                      <option key={o.value} value={o.value}>
+                      <option key={o.value} value={o.value} style={optionStyle}>
                         {o.label}
                       </option>
                     ))}
@@ -345,6 +345,15 @@ const inputStyle: React.CSSProperties = {
   color: v2.text,
   fontSize: fs.base,
   outline: "none",
+};
+
+// Native <select> options render on the browser's default (white) popup
+// background, so the light `color: v2.text` from the select left them
+// near-invisible (white-on-white). Pin a dark bg + light text per option so
+// the open dropdown is readable.
+const optionStyle: React.CSSProperties = {
+  background: "#0b1220",
+  color: v2.text,
 };
 
 const linkRow: React.CSSProperties = {
