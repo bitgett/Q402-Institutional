@@ -201,7 +201,7 @@ describe("pay route - server mode (agent pays from own wallet)", () => {
 
 describe("pay route - H1/H2/M1 regression guards", () => {
   function stubSend(resp: Record<string, unknown>) {
-    let captured: { body: Record<string, unknown> | null } = { body: null };
+    const captured: { body: Record<string, unknown> | null } = { body: null };
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_url: string, init: { body: string }) => {
