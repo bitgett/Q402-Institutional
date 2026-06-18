@@ -25,7 +25,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { isCCIPChain, CCIP_CONFIG, quoteBridgeFee, feeToUsd, type CCIPChainKey } from "@/app/lib/ccip";
+import { isCCIPChain, CCIP_CONFIG, quoteBridgeFee, feeToUsd, getCCIPFeeUsdPrices, type CCIPChainKey } from "@/app/lib/ccip";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 export const runtime = "nodejs";
@@ -107,11 +107,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "CCIP_QUOTE_FAILED", detail: msg.slice(0, 200) }, { status: 502 });
   }
 
-  // ── USD estimates (rough — production should pull from price feed) ─────
-  // Native USD differs per chain: ETH on eth/arb, AVAX on avax.
-  const nativeUsdPerToken = src === "avax" ? 30 : 4000;
-  const feeLinkUsd = feeToUsd(feeLink, "LINK", { LINK_USD: 12 });
-  const feeNativeUsd = feeToUsd(feeNative, "native", { native_USD: nativeUsdPerToken });
+  // ── USD via live Chainlink Data Feeds (was hardcoded $12/$4000/$30) ────────
+  // The fee AMOUNT above is exact; this only prices it for display + picks the
+  // cheaper token. A failed/out-of-band feed read falls back to a constant.
+  const prices = await getCCIPFeeUsdPrices(src);
+  const feeLinkUsd = feeToUsd(feeLink, "LINK", { LINK_USD: prices.LINK_USD });
+  const feeNativeUsd = feeToUsd(feeNative, "native", { native_USD: prices.native_USD });
 
   const linkWhole = Number(feeLink) / 1e18;
   const nativeWhole = Number(feeNative) / 1e18;
@@ -126,5 +127,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       native: { raw: feeNative.toString(), whole: nativeWhole, usd: feeNativeUsd },
     },
     recommended: feeLinkUsd <= feeNativeUsd ? "link" : "native",
+    priceSource: prices.live ? "chainlink-data-feeds" : "estimate",
   });
 }
