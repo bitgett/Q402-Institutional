@@ -330,3 +330,84 @@ export function feeToUsd(
   const native = whole + frac;
   return feeToken === "LINK" ? native * linkUsd : native * nativeUsd;
 }
+
+// ── Live USD pricing via Chainlink Data Feeds ───────────────────────────────
+// The CCIP fee AMOUNT is exact (Router.getFee). The USD shown beside it used to
+// be hardcoded ($12 LINK / $4000 ETH / $30 AVAX) and drifted far from spot (real
+// values were ~$8 / ~$1750 / ~$6.8), which also skewed the "cheaper fee token"
+// ranking. We now read live prices from Chainlink Data Feeds (latestRoundData).
+// Every address below was verified on-chain (description() matches the pair) via
+// scripts/verify-ccip-feeds.mjs. LINK has no Avalanche feed in our set, so its
+// (global, fungible) price is read from Ethereum's LINK/USD feed.
+const AGGREGATOR_V3_ABI = [
+  "function decimals() view returns (uint8)",
+  "function latestRoundData() view returns (uint80, int256, uint256, uint256, uint80)",
+] as const;
+
+type PriceFeedRef = { chain: CCIPChainKey; address: string };
+
+const PRICE_FEEDS: Record<CCIPChainKey, { link: PriceFeedRef; native: PriceFeedRef }> = {
+  eth: {
+    link:   { chain: "eth", address: "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c" },
+    native: { chain: "eth", address: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419" },
+  },
+  arbitrum: {
+    link:   { chain: "arbitrum", address: "0x86E53CF1B870786351Da77A57575e79CB55812CB" },
+    native: { chain: "arbitrum", address: "0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612" },
+  },
+  avax: {
+    link:   { chain: "eth",  address: "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c" },
+    native: { chain: "avax", address: "0x0A77230d17318075983913bC2145DB16C7366156" },
+  },
+};
+
+// Sanity bands: reject a feed read outside these so a wrong/garbage answer can
+// never render an absurd USD or flip the cheaper-fee recommendation.
+const USD_BOUNDS: Record<"LINK" | "ETH" | "AVAX", [number, number]> = {
+  LINK: [0.5, 500],
+  ETH:  [100, 50000],
+  AVAX: [0.5, 5000],
+};
+
+const FALLBACK_USD = { LINK: 12, ETH: 4000, AVAX: 30 } as const;
+
+async function readFeedUsd(ref: PriceFeedRef): Promise<number | null> {
+  try {
+    const agg = new Contract(ref.address, AGGREGATOR_V3_ABI, getCCIPProvider(ref.chain));
+    const [dec, round] = await Promise.all([
+      agg.decimals() as Promise<bigint>,
+      agg.latestRoundData() as Promise<[bigint, bigint, bigint, bigint, bigint]>,
+    ]);
+    const answer = round[1];
+    if (answer <= 0n) return null;
+    const price = Number(answer) / 10 ** Number(dec);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Live LINK + native USD prices for a source chain's CCIP fee, from Chainlink
+ * Data Feeds. Each read is bounds-checked; an out-of-band or failed read falls
+ * back to a conservative constant so the quote still returns. `live` is true
+ * only when BOTH reads succeeded in-band, so callers can label the source.
+ */
+export async function getCCIPFeeUsdPrices(
+  src: CCIPChainKey,
+): Promise<{ LINK_USD: number; native_USD: number; live: boolean }> {
+  const nativeSym: "ETH" | "AVAX" = src === "avax" ? "AVAX" : "ETH";
+  const [linkRaw, nativeRaw] = await Promise.all([
+    readFeedUsd(PRICE_FEEDS[src].link),
+    readFeedUsd(PRICE_FEEDS[src].native),
+  ]);
+  const inBand = (v: number | null, sym: "LINK" | "ETH" | "AVAX") =>
+    v != null && v >= USD_BOUNDS[sym][0] && v <= USD_BOUNDS[sym][1];
+  const linkOk = inBand(linkRaw, "LINK");
+  const nativeOk = inBand(nativeRaw, nativeSym);
+  return {
+    LINK_USD: linkOk ? (linkRaw as number) : FALLBACK_USD.LINK,
+    native_USD: nativeOk ? (nativeRaw as number) : FALLBACK_USD[nativeSym],
+    live: linkOk && nativeOk,
+  };
+}
