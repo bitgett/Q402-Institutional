@@ -10,8 +10,9 @@
  * Shares the /agents design language (flat technical datasheet, Space Grotesk,
  * sticky numbered index gutter, hairline section rules, navy + #F5C518 + #5BC8FA
  * only) so the two product pages read as one family. But the composition is its
- * own: this is the hands-on page, so it leads with an interactive 4-client
- * install, a wallet-mode picker, a live q402_quote ranking, and the 27-tool
+ * own: this is the hands-on page, so it leads with an interactive multi-client
+ * install (Claude, Codex, Cursor, Cline, Copilot, Hermes), a wallet-mode
+ * picker, a live q402_quote ranking, and the 27-tool
  * surface. No marketing-landing motifs (corner glows, gradient sheen titles).
  */
 
@@ -21,6 +22,7 @@ import { useMemo, useState } from "react";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
 import { MCP_VERSION } from "@/app/lib/version";
+import { MCP_INSTALL, MCP_CLIENTS } from "@/app/lib/mcp-clients";
 
 const INK = "#E6EAF2";
 const MUT = "rgba(230,234,242,0.60)";
@@ -54,82 +56,12 @@ const CHAINS: ChainRow[] = [
   { key: "eth", name: "Ethereum Mainnet", chainId: 1, gas: "ETH", approxGasCostUsd: 1.2, tokens: ["USDC", "USDT", "RLUSD"], note: "L1, volatile gas. RLUSD (Ripple USD) Ethereum-only" },
 ];
 
-// ── 4-client install matrix ─────────────────────────────────────────────────
-type ClientKey = "claude" | "codex" | "cursor" | "cline";
-
-const SHARED_JSON_FULL = `{
-  "mcpServers": {
-    "q402": {
-      "command": "npx",
-      "args": ["-y", "@quackai/q402-mcp"]
-    }
-  }
-}`;
-const SHARED_JSON_INNER = `"q402": { "command": "npx", "args": ["-y", "@quackai/q402-mcp"] }`;
-
-interface ClientInstall {
-  key: ClientKey;
-  name: string;
-  logo: string;
-  invert?: boolean;
-  kind: "cli" | "json";
-  snippet: string;
-  innerSnippet?: string;
-  configPath?: string;
-  hint: string;
-}
-
-const CLIENTS: ClientInstall[] = [
-  {
-    key: "claude",
-    name: "Claude",
-    logo: "/logos/claude.svg",
-    kind: "cli",
-    snippet: "claude mcp add q402 -- npx -y @quackai/q402-mcp",
-    hint: "Claude Code CLI or Claude Desktop. Reload or restart the app after running.",
-  },
-  {
-    key: "codex",
-    name: "Codex",
-    logo: "/logos/codex.svg",
-    kind: "cli",
-    snippet: "codex mcp add q402 -- npx -y @quackai/q402-mcp",
-    hint: "OpenAI Codex CLI. Restart Codex after running. On Windows, if `codex mcp add` returns \"Access is denied\", add the stanza to `~/.codex/config.toml` by hand: `[mcp_servers.q402]` / `command = \"npx\"` / `args = [\"-y\", \"@quackai/q402-mcp\"]`.",
-  },
-  {
-    key: "cursor",
-    name: "Cursor",
-    logo: "/logos/cursor.svg",
-    invert: true,
-    kind: "json",
-    snippet: SHARED_JSON_FULL,
-    innerSnippet: SHARED_JSON_INNER,
-    configPath: "~/.cursor/mcp.json",
-    hint: "Save the full snippet as ~/.cursor/mcp.json if the file is new. After saving, reload Cursor (Cmd/Ctrl+Shift+P, Developer: Reload Window).",
-  },
-  {
-    key: "cline",
-    name: "Cline",
-    logo: "/logos/cline.svg",
-    invert: true,
-    kind: "json",
-    snippet: SHARED_JSON_FULL,
-    innerSnippet: SHARED_JSON_INNER,
-    configPath: "Cline, Settings, MCP Servers, Edit JSON",
-    hint: "Open Cline's MCP servers JSON editor and paste. Reload VS Code (Cmd/Ctrl+Shift+P, Developer: Reload Window) when done.",
-  },
-];
-
-// Clients shown in the hero "works with" strip. Broader than the install matrix:
-// Copilot and Hermes are MCP clients too, they just have no bespoke install row.
-const WORKS_WITH: { name: string; src: string; invert?: boolean }[] = [
-  { name: "Claude", src: "/logos/claude.svg" },
-  { name: "Codex", src: "/logos/codex.svg" },
-  { name: "Cursor", src: "/logos/cursor.svg", invert: true },
-  { name: "Cline", src: "/logos/cline.svg", invert: true },
-  { name: "Copilot", src: "/logos/copilot.jpg" },
-  { name: "Hermes", src: "/logos/hermes.jpg" },
-];
+// ── install matrix + works-with strip live in app/lib/mcp-clients.ts ─────────
+// CLIENTS = the per-client install rows (CLI / JSON / YAML). WORKS_WITH = the
+// derived logo strip. Both share one source so the strip can't advertise a
+// client the install matrix lacks (which is how Hermes/Copilot drifted before).
+const CLIENTS = MCP_INSTALL;
+const WORKS_WITH = MCP_CLIENTS;
 
 // ── wallet modes (one unified panel, Mode C recommended) ────────────────────
 const MODES: { tag: string; title: string; desc: React.ReactNode; env: string[]; rec?: boolean }[] = [
@@ -318,9 +250,9 @@ function Section({
 export default function ClaudePage() {
   const [amount, setAmount] = useState("50");
   const [tokenFilter, setTokenFilter] = useState<"USDC" | "USDT" | "RLUSD" | "ANY">("ANY");
-  const [activeClient, setActiveClient] = useState<ClientKey>("claude");
+  const [activeClient, setActiveClient] = useState<string>("claude");
 
-  const current = CLIENTS.find((c) => c.key === activeClient)!;
+  const current = CLIENTS.find((c) => c.key === activeClient) ?? CLIENTS[0];
 
   const ranked = useMemo(() => {
     const filtered = CHAINS.filter((c) => (tokenFilter === "ANY" ? true : c.tokens.includes(tokenFilter)));
@@ -413,7 +345,7 @@ export default function ClaudePage() {
             index="01"
             label="Install"
             title="Pick your client. One package underneath."
-            sub="Same @quackai/q402-mcp server for every client. CLI for Claude and Codex, a JSON snippet for Cursor and Cline."
+            sub="Same @quackai/q402-mcp server for every client. CLI for Claude and Codex, a JSON snippet for Cursor, Cline and Copilot, YAML for Hermes."
           >
             {/* tab row */}
             <div className="flex flex-wrap gap-2 mb-4">
@@ -461,7 +393,7 @@ export default function ClaudePage() {
               ) : (
                 <div className="flex flex-col flex-1">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: MUT2 }}>paste as JSON</span>
+                    <span className="text-[10px] uppercase tracking-[0.2em]" style={{ color: MUT2 }}>paste as {current.kind === "yaml" ? "YAML" : "JSON"}</span>
                     <CopyButton value={current.snippet} />
                   </div>
                   <pre className="text-[12.5px] whitespace-pre overflow-x-auto leading-relaxed" style={{ color: INK }}>{current.snippet}</pre>
@@ -472,7 +404,7 @@ export default function ClaudePage() {
                         Already have <code style={{ color: MUT }}>{current.configPath}</code> with other servers?
                       </summary>
                       <div className="mt-2 text-[11.5px] leading-relaxed pl-4" style={{ color: MUT }}>
-                        Paste this <strong style={{ color: INK }}>inside</strong> the existing <code style={{ color: INK }}>mcpServers</code> object (do not replace the file):
+                        Paste this <strong style={{ color: INK }}>inside</strong> the existing <code style={{ color: INK }}>{current.wrapperKey}</code> object (do not replace the file):
                         <div className="mt-2 flex items-center gap-2">
                           <pre className="flex-1 text-[11.5px] whitespace-pre overflow-x-auto leading-relaxed" style={{ color: INK }}>{current.innerSnippet}</pre>
                           <CopyButton value={current.innerSnippet} label="Copy entry" />
@@ -480,7 +412,7 @@ export default function ClaudePage() {
                       </div>
                     </details>
                   )}
-                  {current.configPath && (
+                  {current.createFile && (
                     <details className="mt-2 group">
                       <summary className="text-[11.5px] cursor-pointer select-none list-none flex items-center gap-1.5" style={{ color: CYAN }}>
                         <span className="inline-block transition-transform group-open:rotate-90" style={{ color: MUT2 }}>&#9656;</span>
@@ -489,13 +421,13 @@ export default function ClaudePage() {
                       <div className="mt-2 text-[11.5px] leading-relaxed pl-4 space-y-2" style={{ color: MUT }}>
                         <div>
                           <div className="text-[10px] uppercase tracking-[0.16em] mb-1" style={{ color: MUT2 }}>macOS / Linux</div>
-                          <pre className="text-[11px] whitespace-pre overflow-x-auto rounded-[3px] px-2 py-1.5" style={{ color: INK, background: "rgba(7,11,20,0.6)" }}>{`mkdir -p ~/.cursor && code ~/.cursor/mcp.json`}</pre>
+                          <pre className="text-[11px] whitespace-pre overflow-x-auto rounded-[3px] px-2 py-1.5" style={{ color: INK, background: "rgba(7,11,20,0.6)" }}>{current.createFile.unix}</pre>
                         </div>
                         <div>
                           <div className="text-[10px] uppercase tracking-[0.16em] mb-1" style={{ color: MUT2 }}>Windows (PowerShell)</div>
-                          <pre className="text-[11px] whitespace-pre overflow-x-auto rounded-[3px] px-2 py-1.5" style={{ color: INK, background: "rgba(7,11,20,0.6)" }}>{`New-Item -ItemType Directory -Force "$env:USERPROFILE\\.cursor" | Out-Null; code "$env:USERPROFILE\\.cursor\\mcp.json"`}</pre>
+                          <pre className="text-[11px] whitespace-pre overflow-x-auto rounded-[3px] px-2 py-1.5" style={{ color: INK, background: "rgba(7,11,20,0.6)" }}>{current.createFile.win}</pre>
                         </div>
-                        <div style={{ color: MUT2 }}>Paste, save, reload. Cline edits config from inside VS Code, no shell.</div>
+                        <div style={{ color: MUT2 }}>Paste, save, then reload the client. {current.key === "hermes" ? "In Hermes, run /reload-mcp." : "In VS Code, reload the window."}</div>
                       </div>
                     </details>
                   )}
