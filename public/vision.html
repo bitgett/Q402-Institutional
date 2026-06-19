@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payments for the Agent Economy | Q402</title>
+    <meta
+      name="description"
+      content="The Q402 vision and mission: make money as callable as code, so any AI agent can pay, get paid, and prove it, inside policy its owner controls."
+    />
+    <meta property="og:title" content="Payments for the Agent Economy" />
+    <meta
+      property="og:description"
+      content="Our mission is to make money as callable as code. A gasless stablecoin rail for AI agents, with policy before settlement and a receipt for every payment."
+    />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://q402.quackai.ai/vision" />
+    <meta property="og:image" content="https://q402.quackai.ai/vision-og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Payments for the Agent Economy" />
+    <meta name="twitter:description" content="A gasless stablecoin payment rail for AI agents. Sign an intent, Q402 sponsors gas, the recipient gets USDC or USDT, and every settlement leaves a verifiable Trust Receipt." />
+    <meta name="twitter:image" content="https://q402.quackai.ai/vision-og.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-base: #0b1220;
+        --bg-card: #0f1929;
+        --ink: #f4f7fb;
+        --soft: #c4cfdd;
+        --muted: #8a98ac;
+        --faint: #5d6b80;
+        --line: rgba(255, 255, 255, 0.09);
+        --line-soft: rgba(255, 255, 255, 0.06);
+        --yellow: #f5c518;
+        --cyan: #5bc8fa;
+        --maxw: 1040px;
+        --navw: 1280px;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(1100px 520px at 80% -8%, rgba(245, 197, 24, 0.1), transparent 60%),
+          radial-gradient(900px 480px at 10% 2%, rgba(91, 200, 250, 0.08), transparent 60%),
+          var(--bg-base);
+        color: var(--ink);
+        font-family: "Inter", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+        font-size: 18px; line-height: 1.55;
+        -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+        overflow-x: hidden;
+      }
+      h1, h2, h3, .display { font-family: "Fraunces", Georgia, "Times New Roman", serif; letter-spacing: -0.01em; }
+      a { color: inherit; text-decoration: none; }
+      .wrap { width: min(var(--maxw), calc(100% - 40px)); margin: 0 auto; }
+      .nav-wrap { width: min(var(--navw), calc(100% - 40px)); margin: 0 auto; }
+
+      /* ── Navbar (exact landing lockup) ─────────────────────── */
+      .topbar {
+        position: sticky; top: 0; z-index: 50; background: rgba(7, 11, 20, 0.8);
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .topbar-inner { height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      .brand { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
+      .brand .mark { width: 28px; height: 28px; border-radius: 6px; background: var(--yellow); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(245, 197, 24, 0.35); }
+      .brand .mark i { width: 12px; height: 12px; border-radius: 4px; background: rgba(11, 18, 32, 0.9); display: block; }
+      .brand .wm { color: var(--yellow); font-weight: 700; font-size: 18px; letter-spacing: -0.025em; line-height: 1; }
+      .brand .by { color: rgba(255, 255, 255, 0.3); font-size: 12px; font-weight: 300; line-height: 1; }
+      .topnav { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: 14px; }
+      .topnav a { padding: 8px 13px; border-radius: 9px; transition: .15s; }
+      .topnav a:hover { color: var(--ink); background: rgba(255, 255, 255, 0.05); }
+      .topnav .cta { color: #0b1220; background: var(--yellow); font-weight: 600; padding: 8px 16px; border-radius: 10px; }
+      .topnav .cta:hover { background: #ffd84d; }
+
+      /* ── Header ────────────────────────────────────────────── */
+      .head { padding: 60px 0 8px; }
+      .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--cyan); padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(91, 200, 250, 0.3); background: rgba(91, 200, 250, 0.06); }
+      .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 9px var(--cyan); }
+      h1.title { font-size: clamp(34px, 5.4vw, 56px); line-height: 1.04; font-weight: 800; margin: 20px 0 0; max-width: 15ch; }
+      .deck { margin: 20px 0 0; max-width: 54ch; color: var(--soft); font-size: clamp(18px, 2.1vw, 21px); line-height: 1.55; }
+      .meta-row { margin: 28px 0 0; padding: 18px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+      .byline { display: inline-flex; align-items: center; gap: 12px; }
+      .byline .av { width: 40px; height: 40px; border-radius: 8px; background: var(--yellow); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(245,197,24,0.3); }
+      .byline .av i { width: 16px; height: 16px; border-radius: 5px; background: rgba(11,18,32,0.9); display: block; }
+      .byline .who b { color: var(--ink); font-weight: 600; display: block; font-size: 15px; }
+      .byline .who span { color: var(--muted); font-size: 13px; }
+      .share { display: inline-flex; align-items: center; gap: 9px; color: var(--muted); font-size: 13px; }
+      .share .ic { width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--line); display: grid; place-items: center; color: var(--muted); transition: .15s; }
+      .share .ic:hover { color: var(--ink); border-color: var(--cyan); background: rgba(91,200,250,0.06); }
+      .share .ic svg { width: 15px; height: 15px; }
+
+      /* ── Single hero visual ────────────────────────────────── */
+      figure { margin: 30px 0 6px; }
+      .hero { position: relative; border-radius: 18px; border: 1px solid var(--line); overflow: hidden; background: linear-gradient(135deg, #0c1726, #080f1d); padding: 30px 26px; }
+      .hero .glow-y { position: absolute; width: 44%; height: 120%; right: -6%; top: -20%; background: radial-gradient(circle, rgba(245,197,24,0.18), transparent 62%); }
+      .hero .glow-c { position: absolute; width: 42%; height: 120%; left: -8%; bottom: -30%; background: radial-gradient(circle, rgba(91,200,250,0.16), transparent 62%); }
+      .hero .rays { position: absolute; inset: 0; opacity: 0.45; background: repeating-conic-gradient(from 215deg at 88% 14%, rgba(91,200,250,0.06) 0deg, rgba(91,200,250,0.06) 4deg, transparent 4deg, transparent 13deg); }
+      .flow { position: relative; display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 12px; }
+      .fnode { border: 1px solid var(--line); border-radius: 14px; padding: 16px 15px; background: rgba(8, 15, 27, 0.66); }
+      .fnode .k { font-family: "Inter", sans-serif; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cyan); }
+      .fnode .v { margin-top: 7px; font-family: "Fraunces", sans-serif; font-weight: 700; font-size: clamp(15px, 2vw, 20px); color: var(--ink); }
+      .fnode .s { margin-top: 6px; font-size: 12px; color: var(--muted); line-height: 1.4; }
+      .fnode.accent { border-color: rgba(245,197,24,0.4); }
+      .fnode.accent .k { color: var(--yellow); }
+      .farrow { color: var(--faint); font-size: 18px; }
+      figcaption { margin-top: 11px; color: var(--faint); font-size: 13px; }
+
+      /* ── Prose ─────────────────────────────────────────────── */
+      .prose { padding: 6px 0 0; }
+      .prose p { color: var(--soft); margin: 0 0 22px; line-height: 1.78; }
+      .prose p.lead { font-size: 20px; color: var(--ink); }
+      .prose strong { color: var(--ink); font-weight: 600; }
+      .prose em { color: var(--ink); font-style: italic; }
+      h2.sec { font-size: clamp(25px, 3.4vw, 33px); font-weight: 700; margin: 52px 0 14px; }
+
+      /* ── Mission / Vision blocks ───────────────────────────── */
+      .statement { margin: 36px 0; border: 1px solid var(--line); border-radius: 18px; background: linear-gradient(135deg, rgba(245,197,24,0.07), transparent 55%), var(--bg-card); padding: 30px 28px; }
+      .statement .lbl { font-family: "Inter", sans-serif; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--yellow); }
+      .statement p { margin: 12px 0 0; font-family: "Fraunces", sans-serif; font-weight: 600; font-size: clamp(21px, 3vw, 28px); line-height: 1.35; color: var(--ink); letter-spacing: -0.015em; }
+      .statement.vision { background: linear-gradient(135deg, rgba(91,200,250,0.08), transparent 55%), var(--bg-card); }
+      .statement.vision .lbl { color: var(--cyan); }
+
+      .pull { margin: 34px 0; padding: 6px 0 6px 24px; border-left: 3px solid var(--cyan); font-family: "Fraunces", sans-serif; font-weight: 600; font-size: clamp(21px, 2.8vw, 27px); line-height: 1.35; color: var(--ink); }
+      /* Brand wordmark: keep "Q402" in the sans lockup even inside serif text. */
+      .q402 { font-family: "Inter", ui-sans-serif, sans-serif; font-weight: 700; letter-spacing: -0.03em; }
+      .hook { margin: 84px auto 0; max-width: 680px; text-align: center; font-family: "Inter", ui-sans-serif, sans-serif; font-weight: 400; font-size: 19px; line-height: 1.72; color: var(--soft); letter-spacing: normal; }
+      .hook .last { display: block; margin-top: 28px; font-family: "Inter", ui-sans-serif, sans-serif; font-weight: 800; font-size: clamp(25px, 3.2vw, 35px); line-height: 1.3; letter-spacing: -0.02em; }
+      .hook .last .l1 { display: block; color: var(--ink); }
+      .hook .last .l2 { display: block; color: var(--yellow); }
+
+      .belief { margin: 26px 0; }
+      .belief h3 { font-size: 20px; font-weight: 700; color: var(--ink); margin: 0 0 8px; display: flex; align-items: baseline; gap: 11px; }
+      .belief h3 .n { font-family: "Fraunces", sans-serif; color: var(--yellow); font-size: 15px; }
+      .belief p { margin: 0; color: var(--soft); line-height: 1.74; }
+
+      /* ── At a glance (light proof, not a spec table) ───────── */
+      .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 8px 0 6px; }
+      .stat { border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px; background: var(--bg-card); }
+      .stat .n { font-family: "Fraunces", sans-serif; font-weight: 800; font-size: 30px; color: var(--yellow); line-height: 1; }
+      .stat .n.c { color: var(--cyan); }
+      .stat .l { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.4; }
+
+      /* ── CTA ───────────────────────────────────────────────── */
+      .ctaband { margin: 80px 0 96px; border-radius: 20px; border: 1px solid rgba(245,197,24,0.26); background: radial-gradient(circle at 84% 18%, rgba(91,200,250,0.13), transparent 52%), linear-gradient(135deg, rgba(245,197,24,0.1), transparent 50%), var(--bg-card); padding: 40px 32px; text-align: center; }
+      .ctaband h3 { font-size: clamp(24px, 3.4vw, 32px); margin: 0; font-weight: 800; }
+      .ctaband p { margin: 12px auto 24px; max-width: 50ch; color: var(--soft); line-height: 1.6; }
+      .btnrow { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+      .btn { padding: 13px 22px; border-radius: 11px; font-weight: 600; font-size: 15px; transition: .15s; border: 1px solid transparent; }
+      .btn.primary { background: var(--yellow); color: #0b1220; }
+      .btn.primary:hover { background: #ffd84d; }
+      .btn.ghost { border-color: var(--line); color: var(--ink); }
+      .btn.ghost:hover { border-color: var(--cyan); color: var(--cyan); }
+
+      /* ── Footer ────────────────────────────────────────────── */
+      footer { margin-top: 60px; border-top: 1px solid var(--line-soft); }
+      .foot-inner { padding: 38px 0 54px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+      .foot-links { display: flex; gap: 6px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+      .foot-links a { padding: 7px 11px; border-radius: 8px; }
+      .foot-links a:hover { color: var(--ink); background: rgba(255,255,255,0.05); }
+      .foot-note { color: var(--faint); font-size: 13px; }
+
+      @media (max-width: 760px) {
+        body { font-size: 17px; }
+        .topnav .links { display: none; }
+        .flow { grid-template-columns: 1fr; }
+        .farrow { transform: rotate(90deg); justify-self: center; }
+        .meta-row { flex-direction: column; align-items: flex-start; gap: 14px; }
+        .stats { grid-template-columns: repeat(2, 1fr); }
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Navbar (exact Q402 landing lockup) -->
+    <header class="topbar">
+      <div class="nav-wrap topbar-inner">
+        <a class="brand" href="#top">
+          <span class="mark"><i></i></span>
+          <span class="wm">Q402</span>
+          <span class="by">by Quack AI</span>
+        </a>
+        <nav class="topnav">
+          <span class="links">
+            <a href="#mission">Mission</a>
+            <a href="#believe">What we believe</a>
+            <a href="#vision">Vision</a>
+          </span>
+          <a class="cta" href="https://q402.quackai.ai">Open app</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <!-- Header -->
+      <div class="wrap head">
+        <span class="eyebrow"><span class="dot"></span> Vision &amp; Mission</span>
+        <h1 class="title">Payments for the Agent Economy</h1>
+        <p class="deck">
+          Our mission is to make money as callable as code, so any AI agent can pay, get paid, and
+          prove it, inside policy its owner controls.
+        </p>
+        <div class="meta-row">
+          <div class="byline">
+            <span class="av"><i></i></span>
+            <span class="who"><b>Q402, by Quack AI</b><span>June 19, 2026 &middot; 4 min read</span></span>
+          </div>
+          <div class="share">
+            <span>Share this article</span>
+            <a class="ic" target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?text=Payments%20for%20the%20Agent%20Economy&url=https%3A%2F%2Fq402.quackai.ai%2Fvision" aria-label="Share on X"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z"/></svg></a>
+            <a class="ic" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fq402.quackai.ai%2Fvision" aria-label="Share on Facebook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07c0 6.02 4.39 11.01 10.13 11.93v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.69.24 2.69.24v2.97h-1.52c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8v8.44C19.61 23.08 24 18.09 24 12.07Z"/></svg></a>
+            <a class="ic" target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fq402.quackai.ai%2Fvision" aria-label="Share on LinkedIn"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.34V9h3.42v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.07 2.07 0 1 1 0-4.14 2.07 2.07 0 0 1 0 4.14ZM7.12 20.45H3.55V9h3.57v11.45ZM22.22 0H1.77C.8 0 0 .78 0 1.74v20.52C0 23.22.8 24 1.77 24h20.45c.98 0 1.78-.78 1.78-1.74V1.74C24 .78 23.2 0 22.22 0Z"/></svg></a>
+          </div>
+        </div>
+      </div>
+
+      <!-- One hero visual -->
+      <div class="wrap">
+        <figure>
+          <div class="hero">
+            <div class="glow-y"></div><div class="glow-c"></div><div class="rays"></div>
+            <div class="flow">
+              <div class="fnode"><div class="k">Intent</div><div class="v">Pay 250 USDC</div><div class="s">The agent signs what should happen.</div></div>
+              <div class="farrow">&rarr;</div>
+              <div class="fnode accent"><div class="k">Policy + Gas</div><div class="v"><span class="q402">Q402</span> settles</div><div class="s">Rules run first. Gas is sponsored.</div></div>
+              <div class="farrow">&rarr;</div>
+              <div class="fnode"><div class="k">Proof</div><div class="v">Trust Receipt</div><div class="s">A verifiable record of settlement.</div></div>
+            </div>
+          </div>
+          <figcaption>The agent expresses intent; the rail handles policy, gas, execution, and proof.</figcaption>
+        </figure>
+      </div>
+
+      <!-- Body -->
+      <article class="wrap prose">
+        <div class="statement" id="mission">
+          <div class="lbl">Our mission</div>
+          <p>Give AI agents a payment rail they can actually use: stablecoins that move on intent, gas they never hold, policy their owners control, and a receipt for every settlement.</p>
+        </div>
+
+        <p class="lead">
+          Software is starting to act on its own. Agents read, decide, write code, and coordinate with
+          other systems. The one thing they still cannot do well is move money.
+        </p>
+        <p>
+          We think payments are the next piece of infrastructure the agent economy needs, and that it
+          has to be built deliberately, not bolted onto wallets designed for people. That belief is why
+          Q402 exists.
+        </p>
+
+        <h2 class="sec">Why we started</h2>
+        <p>
+          We kept hitting the same contradiction: a wallet can hold USDC and still be unable to pay.
+          Native gas, chain-specific execution, approval flows, receipts, and the question of what an
+          autonomous system should even be allowed to do all sit in the gap between
+          <strong>intent</strong> and <strong>settlement</strong>.
+        </p>
+        <p>
+          A person can pause, buy gas, switch networks, approve, retry, and save a receipt by hand. For
+          a human that gap is friction. For an agent it is a wall. Q402 started as an attempt to remove
+          the wall, the way payments infrastructure has always matured: by pushing the hard parts down
+          into a layer the application no longer has to think about.
+        </p>
+
+        <h2 class="sec" id="believe">What we believe</h2>
+        <p>Four convictions shape everything we build.</p>
+
+        <div class="belief">
+          <h3><span class="n">01</span> Payments are infrastructure, not wallet UX</h3>
+          <p>The agent defines what should happen. The rail decides how it settles: which chain, where gas comes from, how a failure is retried, what proof is produced. Everything between the signature and a confirmed transfer should be infrastructure.</p>
+        </div>
+        <div class="belief">
+          <h3><span class="n">02</span> Policy belongs before settlement</h3>
+          <p>The question is not only whether a payment can execute. It is whether it should. Caps, allowlists, approvals, and conditions have to run before money moves, and they have to fail closed. If a rule cannot be verified, the payment does not settle.</p>
+        </div>
+        <div class="belief">
+          <h3><span class="n">03</span> Agent wallets are not human wallets</h3>
+          <p>A personal wallet is built for ownership. An agent wallet should be built for responsibility: a job, a bounded balance, caps, receipts, and authorizations bound to a single intent, so automation never reaches into personal funds.</p>
+        </div>
+        <div class="belief">
+          <h3><span class="n">04</span> Receipts are part of the payment</h3>
+          <p>When an agent says it paid, that sentence is not proof. The chain is the source of truth; a signed Trust Receipt is the clean, verifiable object software can store and pass on. A transaction hash is too raw, a model response too soft. The receipt sits between them.</p>
+        </div>
+
+        <div class="pull">
+          The goal is not to let agents spend freely. It is to let agents operate inside boundaries that
+          humans can define, inspect, and change.
+        </div>
+
+        <h2 class="sec">This is already real</h2>
+        <p>
+          Q402 is shipped, not a whitepaper. The rail settles real stablecoin payments today across 11 EVM
+          networks, in USDC and USDT, with the payer never holding a single gas token. Any agent can call
+          it over MCP from Claude, Codex, Cursor, or Cline, the same way it calls any other tool.
+        </p>
+        <p>
+          Under the surface there is more: dedicated Agent Wallets with spending caps, policy Hooks that
+          run before money moves, recurring payments, a cross-chain gas bridge, and a verifiable receipt
+          for every settlement. But the point of this note is not the feature list. The point is the
+          direction, and the size of what is coming.
+        </p>
+
+        <h2 class="sec">The market is already moving</h2>
+        <p>
+          Two curves are about to cross. Stablecoins have quietly become one of the largest settlement
+          networks on earth: by several industry trackers they moved tens of trillions of dollars onchain
+          over the past year, on the order of the major card networks, and the volume keeps compounding.
+          At the same time, AI agents are leaving the demo stage and entering production, and analysts
+          expect the agentic software market to grow into the hundreds of billions of dollars this decade.
+        </p>
+        <p>
+          Put those together. Software that can act, meeting money that already moves at the speed of
+          software. Once an agent can decide, negotiate, and execute on its own, the one missing primitive
+          is payment, and almost every agent that does anything economic will eventually need to pay or be
+          paid. That is not a niche. It is the default surface area of the next internet.
+        </p>
+
+        <div class="statement vision" id="vision">
+          <div class="lbl">Our vision</div>
+          <p>A world where AI agents transact at the scale of the internet, where any agent, anywhere, can pay and be paid in stablecoins as easily as it makes an API call, on rails that are gasless, verifiable, and governed by rules people set.</p>
+        </div>
+
+        <h2 class="sec">Where we are going</h2>
+        <p>
+          From here we are building toward agent-to-agent commerce, where one agent invoices and another
+          settles with no human in the loop; verifiable reputation, so agents can choose who to trust by
+          an onchain track record instead of a confident sentence; and self-driving treasuries that keep
+          working capital productive and in the right place, always inside policy their owners control.
+        </p>
+        <p>
+          The direction is simple to state: <strong>the user defines the rules, the agent expresses the
+          intent, and <span class="q402">Q402</span> turns approved intent into settlement.</strong>
+        </p>
+        <p>
+          We are building for the day when hundreds of millions of people have agents acting for them, and
+          most payments begin with software rather than a human hand. We intend to be the settlement layer
+          beneath all of it, the quiet rail under a billion small decisions a day.
+        </p>
+        <div class="pull">The internet taught software how to talk. <span class="q402">Q402</span> is teaching it how to pay.</div>
+
+        <div class="ctaband" id="install">
+          <h3>Build agent payments on <span class="q402">Q402</span></h3>
+          <p>Let your agents quote, pay, and settle stablecoins gaslessly, inside the policies you set.</p>
+          <div class="btnrow">
+            <a class="btn primary" href="https://q402.quackai.ai">Open the dashboard</a>
+            <a class="btn ghost" href="https://www.npmjs.com/package/@quackai/q402-mcp">Read the docs</a>
+          </div>
+        </div>
+      </article>
+    </main>
+  </body>
+</html>
