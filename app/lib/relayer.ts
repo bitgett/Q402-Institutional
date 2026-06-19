@@ -298,7 +298,8 @@ export interface EIP3009PayParams {
   nonce: string;
   /** EIP-3009 signature (65-byte packed: r+s+v) */
   sig: string;
-  /** Chain key — currently xlayer only */
+  /** Chain key — X Layer (EIP-3009 fallback) or Base (x402 rail). Generic over
+   *  any chain whose USDC implements the standard EIP-3009 9-param form. */
   chainKey: ChainKey;
   /** Token symbol */
   token: "USDC" | "USDT" | "RLUSD";

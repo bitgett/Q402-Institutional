@@ -332,6 +332,17 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   const isStable      = chain === "stable";
   const isXLayerEIP7702 = isXLayer && !!authorization && !!xlayerNonce;
   const isXLayerEIP3009 = isXLayer && !!eip3009Nonce && !authorization;
+  // Base x402 rail: USDC EIP-3009 transferWithAuthorization, Q402 as the
+  // facilitator sponsoring gas. Selected by sending `eip3009Nonce` (+ the
+  // EIP-3009 signature in `witnessSig`) with NO `authorization`, mirroring the
+  // X Layer EIP-3009 fallback. The Q402 (EIP-7702) rail on Base uses
+  // `authorization` instead — so the rail is chosen by which fields the client
+  // signs, no extra selector field needed.
+  const isBaseEIP3009 = chain === "base" && !!eip3009Nonce && !authorization;
+  // Any USDC EIP-3009 settlement (x402-compatible). The USDC token contract
+  // verifies the signature against its own EIP-712 domain; the relayer only
+  // submits transferWithAuthorization() and pays the gas.
+  const isEIP3009 = isXLayerEIP3009 || isBaseEIP3009;
   const isStableEIP7702 = isStable && !!authorization && !!stableNonce;
 
   if (isXLayer && !isXLayerEIP7702 && !isXLayerEIP3009) {
@@ -346,28 +357,33 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
       { status: 400 }
     );
   }
-  if (!isXLayer && !isStable && !authorization) {
+  if (!isXLayer && !isStable && !isBaseEIP3009 && !authorization) {
     return NextResponse.json(
-      { error: "EIP-7702 chains (avax/bnb/eth/mantle/injective/monad/scroll/arbitrum) require authorization object" },
+      { error: chain === "base"
+          ? "base requires either `authorization` (Q402 EIP-7702 rail; USDC or USDT) or `eip3009Nonce` (x402 EIP-3009 rail; USDC only)"
+          : "EIP-7702 chains (avax/bnb/eth/mantle/injective/monad/scroll/arbitrum) require authorization object" },
       { status: 400 }
     );
   }
   // avax/bnb/eth/mantle/injective/monad/scroll/arbitrum also require `nonce` — it's part of the signed witness, so a
   // server-synthesized fallback would never match the caller's signature. Fail
   // fast with a clear 400 instead of letting the onchain verify path reject it.
-  if (!isXLayer && !isStable && !nonce) {
+  if (!isXLayer && !isStable && !isBaseEIP3009 && !nonce) {
     return NextResponse.json(
-      { error: "nonce is required for avax/bnb/eth/mantle/injective/monad/scroll/arbitrum (uint256 string, must match the signed witness)" },
+      { error: "nonce is required for avax/bnb/eth/mantle/injective/monad/scroll/arbitrum and the Base Q402 rail (uint256 string, must match the signed witness)" },
       { status: 400 }
     );
   }
 
-  // ── 2a. EIP-3009 fallback on X Layer is USDC-only ────────────────────────────
-  // The USDC_EIP3009_ABI in relayer.ts targets X Layer USDC (9-param v,r,s form).
-  // X Layer USDT uses a different authorization surface — don't pretend to support it.
-  if (isXLayerEIP3009 && token !== "USDC") {
+  // ── 2a. EIP-3009 settlement is USDC-only (X Layer fallback + Base x402 rail) ──
+  // transferWithAuthorization (9-param v,r,s) is implemented by Circle USDC.
+  // X Layer / Base USDT do not expose the same EIP-3009 surface, so route USDT
+  // through the EIP-7702 (Q402) rail instead.
+  if (isEIP3009 && token !== "USDC") {
     return NextResponse.json(
-      { error: "EIP-3009 fallback on X Layer supports USDC only. Use EIP-7702 (authorization + xlayerNonce) for USDT." },
+      { error: isBaseEIP3009
+          ? "The Base x402 (EIP-3009) rail supports USDC only. Use the Q402 EIP-7702 rail (send `authorization`) for USDT."
+          : "EIP-3009 fallback on X Layer supports USDC only. Use EIP-7702 (authorization + xlayerNonce) for USDT." },
       { status: 400 }
     );
   }
@@ -382,7 +398,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   let parsedXLayerNonce:  bigint = 0n;
   let parsedStableNonce:  bigint = 0n;
   try {
-    if (!isXLayer && !isStable) parsedPaymentNonce = BigInt(nonce!);
+    if (!isXLayer && !isStable && !isBaseEIP3009) parsedPaymentNonce = BigInt(nonce!);
     if (isXLayerEIP7702)        parsedXLayerNonce  = BigInt(xlayerNonce!);
     if (isStableEIP7702)        parsedStableNonce  = BigInt(stableNonce!);
   } catch {
@@ -392,7 +408,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     );
   }
   // EIP-3009 nonce is a bytes32 hex string, not a BigInt — validate shape only.
-  if (isXLayerEIP3009 && !/^0x[0-9a-fA-F]{64}$/.test(eip3009Nonce!)) {
+  if (isEIP3009 && !/^0x[0-9a-fA-F]{64}$/.test(eip3009Nonce!)) {
     return NextResponse.json(
       { error: "eip3009Nonce must be 0x-prefixed bytes32 hex" },
       { status: 400 }
@@ -662,7 +678,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // neither a quota credit nor relayer gas (a sybil gas-drain vector). Skipped
   // for the EIP-3009 fallback (different scheme) and sandbox. Fail-open by
   // construction — see witnessSignerMatches.
-  if (!isSandbox && !isXLayerEIP3009) {
+  if (!isSandbox && !isEIP3009) {
     const witnessValue: WitnessValue = {
       owner:       from,
       facilitator: relayerAddress,
@@ -770,7 +786,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     };
     result = await settlePaymentXLayerEIP7702(xlayerParams);
 
-  } else if (isXLayerEIP3009) {
+  } else if (isEIP3009) {
     const eip3009Params: EIP3009PayParams = {
       from,
       to,
@@ -866,7 +882,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   const method: ReceiptMethod =
       isStableEIP7702 ? "eip7702_stable"
     : isXLayerEIP7702 ? "eip7702_xlayer"
-    : isXLayerEIP3009 ? "eip3009"
+    : isEIP3009 ? "eip3009"
     :                   "eip7702";
 
   const initialDeliveryStatus =
