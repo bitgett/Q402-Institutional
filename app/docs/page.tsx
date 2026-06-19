@@ -522,7 +522,7 @@ console.log("Paid! TX:", result.txHash);`} />
           {/* id retained as "claude-mcp" for backlink stability — visible title is canonical MCP. */}
           <Section id="claude-mcp" title="MCP for AI Clients">
             <p className="text-white/70 text-sm mb-6">
-              An MCP server for Claude / Codex / Cursor / Cline.{" "}
+              An MCP server for Claude / Codex / Cursor / Cline / Copilot / Hermes.{" "}
               <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
               {" · "}
               <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a>.
@@ -547,7 +547,24 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
       "args": ["-y", "@quackai/q402-mcp"]
     }
   }
-}`} />
+}
+
+# GitHub Copilot (VS Code) — .vscode/mcp.json. Root key is "servers", NOT mcpServers.
+{
+  "servers": {
+    "q402": {
+      "command": "npx",
+      "args": ["-y", "@quackai/q402-mcp"]
+    }
+  }
+}
+
+# Hermes Agent (Nous Research) — ~/.hermes/config.yaml (YAML). Reload with /reload-mcp.
+mcp_servers:
+  q402:
+    command: "npx"
+    args: ["-y", "@quackai/q402-mcp"]
+    enabled: true`} />
 
             <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">2 · First-time setup — ask your AI</h3>
             <p className="text-white/70 text-sm mb-3">
