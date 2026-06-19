@@ -126,6 +126,13 @@ const WALLET_CHAINS = {
     rpcUrls: ["https://arb1.arbitrum.io/rpc"],
     blockExplorerUrls: ["https://arbiscan.io"],
   },
+  base: {
+    chainId: "0x2105",
+    chainName: "Base",
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    rpcUrls: ["https://mainnet.base.org"],
+    blockExplorerUrls: ["https://basescan.org"],
+  },
 } as const;
 
 export type WalletChainKey = keyof typeof WALLET_CHAINS;

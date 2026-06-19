@@ -1,6 +1,6 @@
 # Q402 — Gasless Payments on EVM
 
-> Pay USDC, USDT, or RLUSD across **10 EVM chains** with $0 in gas.
+> Pay USDC, USDT, or RLUSD across **11 EVM chains** with $0 in gas.
 > Now with a receive side too: publish a **payment request** (invoice) and
 > anyone can pay it gaslessly. Built on EIP-7702 + EIP-712. Callable from a
 > browser, a Node.js backend, or any MCP-compatible AI client: first-class
@@ -31,7 +31,7 @@ User signs EIP-712 off-chain
       → recipient receives 100%, sender pays $0
 ```
 
-All 10 chains share the witness type, the signing rule (`verifyingContract = user EOA`),
+All 11 chains share the witness type, the signing rule (`verifyingContract = user EOA`),
 and the on-wire body. Chain-specific: impl contract + EIP-712 domain name.
 
 ---
@@ -102,7 +102,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | Tool | Auth | What it does |
 |---|---|---|
 | `q402_doctor` | none | First-install onboarding + health check |
-| `q402_quote` | none | Compare gas across 10 chains |
+| `q402_quote` | none | Compare gas across 11 chains |
 | `q402_balance` | api key | Verify key + remaining quota |
 | `q402_pay` | live mode | Single-recipient gasless transfer |
 | `q402_batch_pay` | live mode | Up to 20 recipients per call (trial: 5) |
@@ -176,7 +176,7 @@ Trial credits are real settlements — gas from the relayer wallet, recipient ge
 Trial credentials live in their own key slot (`trialApiKey`); upgrading on [/payment](https://q402.quackai.ai/payment)
 provisions a separate paid key with self-funded Gas Tank.
 
-Trial = BNB-only (server-side `TRIAL_BNB_ONLY` gate). Paid = all 10 chains.
+Trial = BNB-only (server-side `TRIAL_BNB_ONLY` gate). Paid = all 11 chains.
 
 ---
 

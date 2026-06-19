@@ -1,9 +1,9 @@
 /**
- * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 10 Q402 chains.
+ * test-eip7702.mjs — Unified EIP-7702 on-chain test for all 11 Q402 chains.
  *
- *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective|monad|scroll|arbitrum> [--amount 0.05] [--to 0x...]
+ *   node scripts/test-eip7702.mjs --chain <avax|bnb|eth|xlayer|stable|mantle|injective|monad|scroll|arbitrum|base> [--amount 0.05] [--to 0x...]
  *
- * Flow (identical for every chain — all 10 impl contracts share the same
+ * Flow (identical for every chain — all 11 impl contracts share the same
  * TransferAuthorization witness + _domainSeparator(address(this)) scheme):
  *
  *   1. Payer signs TransferAuthorization EIP-712 (verifyingContract = payer EOA,

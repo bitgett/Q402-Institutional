@@ -82,7 +82,7 @@ const walletAddr = process.argv[2];
 if (!walletAddr) { console.error("usage: node scripts/probe-balance.mjs <0x address>"); process.exit(1); }
 const addr = getAddress(walletAddr);
 
-console.log(`Probing balance for ${addr} across 10 chains...\n`);
+console.log(`Probing balance for ${addr} across 11 chains...\n`);
 const perChain = await Promise.all(Object.entries(CHAINS).map(([n, c]) => readChain(n, c, addr)));
 let total = 0;
 for (const c of perChain) {

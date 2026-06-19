@@ -100,7 +100,7 @@ const TABS: Tab[] = [
     category: "In-Game Economy",
     hook:     "$0.05 swords. Sub-cent settle.",
     description:
-      "Micro-transactions priced at chain economics, not gas economics. Batch a tournament's prize payouts in one signed call across any of the 10 supported chains.",
+      "Micro-transactions priced at chain economics, not gas economics. Batch a tournament's prize payouts in one signed call across any of the 11 supported chains.",
     chips: ["BATCH × 20", "ANY CHAIN", "SUB-CENT FEES"],
     code: [
       { kind: "comment", text: "// Tournament ends. Distribute prize payouts to 20 winners in one call." },
@@ -116,7 +116,7 @@ const TABS: Tab[] = [
     hook:     "Invoices clear in 400ms.",
     description:
       "USDC, USDT, or RLUSD between businesses with an ECDSA-signed Trust Receipt per TX. Your accountant gets a verifiable receipt chain instead of a CSV.",
-    chips: ["10-CHAIN", "TRUST RECEIPTS", "~400ms"],
+    chips: ["11-CHAIN", "TRUST RECEIPTS", "~400ms"],
     code: [
       { kind: "comment", text: "// Settle vendor invoice + fetch the receipt for the audit trail." },
       { kind: "code",    text: 'const { receiptId } = await q402.pay({ to: vendor, amount: "12500", token: "USDC" })' },

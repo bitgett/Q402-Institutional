@@ -221,14 +221,14 @@
       "name": "Base",
       "chainId": 8453,
       "relayMode": "eip7702",
-      "implContract": "",
+      "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
       "witness": {
         "type": "TransferAuthorization",
         "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
         "domainName": "Q402 Base",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
-        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (type 0x04 set-code) is expected live on Base mainnet via the OP Stack Isthmus upgrade (L1 Pectra-aligned); confirm with a type-4 delegation test before the first production send. implContract is PENDING deploy via scripts/deploy-fixed-impl.mjs --chain base; on-chain NAME() must equal 'Q402 Base'. The impl address is distinct per chain (CREATE depends on the deployer nonce). Distinguished at signing time by chainId 8453 + domainName 'Q402 Base'."
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). Impl deployed 2026-06-19 by 0xfc77...f466 (CREATE at nonce 0 on Base, which is why this address matches the Stable-chain impl — coincidental, they are distinct chains). On-chain verified: NAME()='Q402 Base', VERSION()='1', owner-binding reverts OwnerMismatch(). EIP-7702 (type 0x04 set-code) on Base mainnet via the OP Stack Isthmus upgrade (L1 Pectra-aligned); confirm with a type-4 delegation test on the first production send. Distinguished at signing time by chainId 8453 + domainName 'Q402 Base'."
       },
       "tokens": {
         "USDC": { "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "decimals": 6, "notes": "Native Circle USDC on Base (issued by Circle), not the legacy bridged USDbC (0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA). Q402 uses native USDC only. Verified on-chain: symbol=USDC decimals=6." },
@@ -236,7 +236,7 @@
       },
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://basescan.org",
-      "verifyUrl": "https://basescan.org/address/"
+      "verifyUrl": "https://basescan.org/address/0x2fb2B2D110b6c5664e701666B3741240242bf350#code"
     }
   },
   "authorizationGuard": {

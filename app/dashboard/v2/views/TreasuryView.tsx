@@ -38,7 +38,7 @@
  *
  * ── Scope semantics ─────────────────────────────────────────────────────
  *   trial scope = BNB-only Gas Tank (the rest dim to "Multichain only");
- *   multichain = full 10-chain set + LINK + bridge enabled. Scope gates
+ *   multichain = full 11-chain set + LINK + bridge enabled. Scope gates
  *   which network rows are interactive and whether the bridge card is live.
  */
 
@@ -83,7 +83,7 @@ export interface TreasuryViewProps {
   scope: Scope;
 }
 
-// ── Chain config (mirrors page.tsx CHAIN_META — same 10-chain set) ───────────
+// ── Chain config (mirrors page.tsx CHAIN_META — same 11-chain set) ───────────
 interface ChainMeta {
   key: string;
   name: string;
@@ -107,7 +107,7 @@ const CHAIN_META: ChainMeta[] = [
 ];
 
 // Chains a trial-scoped account can transact on (BNB-only, mirroring the
-// rest of the dashboard's trial gating). Multichain unlocks all 10.
+// rest of the dashboard's trial gating). Multichain unlocks all 11.
 const TRIAL_CHAINS = new Set(["bnb"]);
 
 const LINK_CHAINS = ["eth", "avax", "arbitrum"] as const;
@@ -1020,7 +1020,7 @@ function PreviewChip() {
   );
 }
 
-/** Active scope badge beside the title — Multichain · 10 chains / Trial · BNB,
+/** Active scope badge beside the title — Multichain · 11 chains / Trial · BNB,
  *  matching the WalletsView hero scope badge. */
 function ScopeChipBadge({ isMultichain }: { isMultichain: boolean }) {
   return (
@@ -1039,7 +1039,7 @@ function ScopeChipBadge({ isMultichain }: { isMultichain: boolean }) {
         whiteSpace: "nowrap",
       }}
     >
-      {isMultichain ? "Multichain · 10 chains" : "Trial · BNB"}
+      {isMultichain ? "Multichain · 11 chains" : "Trial · BNB"}
     </span>
   );
 }

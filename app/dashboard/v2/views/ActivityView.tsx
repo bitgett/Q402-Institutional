@@ -772,7 +772,7 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
                   {tab === "request" ? "Payment requests" : "Settlement activity"}
                 </div>
                 {demoMode && <PreviewChip connected={!!ownerAddress} />}
-                {demoMode && <ScopeChip label={scope === "trial" ? "Trial · BNB" : "Multichain · 10 chains"} />}
+                {demoMode && <ScopeChip label={scope === "trial" ? "Trial · BNB" : "Multichain · 11 chains"} />}
               </div>
               <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, maxWidth: 460, lineHeight: 1.5 }}>
                 {tab === "request" ? (

@@ -33,7 +33,7 @@ import type { ChainKey } from "./relayer";
 import { loadRelayerKey } from "./relayer-key";
 
 // Per-call timeout for eth_getCode probes. Public RPCs occasionally hang
-// or slow-respond for tens of seconds; without a bound, the 10-chain
+// or slow-respond for tens of seconds; without a bound, the 11-chain
 // parallel status read can sit on a single bad endpoint until the Vercel
 // function timeout (default 10s) consumes the whole request. 5s per
 // chain lets the slow chain show up as `error: timeout` while the
@@ -66,6 +66,7 @@ export const CHAIN_IDS: Record<ChainKey, number> = {
   monad:     143,
   scroll:    534352,
   arbitrum:  42161,
+  base:      8453,
 };
 
 // Official Q402 impl contract per chain — mirrors contracts.manifest.json.
@@ -86,6 +87,7 @@ export const Q402_IMPL_PER_CHAIN: Record<ChainKey, string> = {
   monad:     "0xc5d4dfa6d2e545409c1abf86f336dd43bb87621f",
   scroll:    "0x7635f32d893b64b5944cb8cbf2ac4cd3da41b2f1",
   arbitrum:  "0x8d854436ab0426f5bc6cc70865c90576ad523e73",
+  base:      "0x2fb2b2d110b6c5664e701666b3741240242bf350",
 };
 
 export function isOfficialQ402Impl(chain: ChainKey, impl: string | undefined): boolean {
@@ -119,6 +121,8 @@ const RETIRED_IMPLS: Record<ChainKey, readonly string[]> = {
   monad:     ["0x5a8fde1851491d9ed512a9eda1c63ca7627becb8", "0x39ba9520718ee069d7f72882ff4c28a5ea8a2acc"],
   scroll:    ["0x8d854436ab0426f5bc6cc70865c90576ad523e73", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
   arbitrum:  ["0xe5b90d564650bdce7c2bb4344f777f6582e05699", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
+  // base: 0x2fb2b2… is the CURRENT impl here (deployed at nonce 0), not retired.
+  base:      [],
 };
 
 /**
@@ -156,7 +160,7 @@ export async function isQ402ImplOnChain(chain: ChainKey, impl: string): Promise<
 }
 
 export const CHAIN_KEYS: ReadonlyArray<ChainKey> = [
-  "avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum",
+  "avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum", "base",
 ];
 
 // ── EIP-7702 code prefix ───────────────────────────────────────────────────
@@ -230,7 +234,7 @@ export async function getDelegationState(
 }
 
 /**
- * Read delegation state across all 10 chains in parallel.
+ * Read delegation state across all 11 chains in parallel.
  *
  * Returns one entry per chain regardless of error — UI consumes the array
  * directly to render status rows.
@@ -397,6 +401,7 @@ const EXPLORER_TX_BASE: Record<ChainKey, string> = {
   monad:     "https://monadscan.com/tx/",
   scroll:    "https://scrollscan.com/tx/",
   arbitrum:  "https://arbiscan.io/tx/",
+  base:      "https://basescan.org/tx/",
 };
 
 export function explorerTxUrl(chain: ChainKey, hash: string): string {
@@ -414,6 +419,7 @@ const EXPLORER_ADDRESS_BASE: Record<ChainKey, string> = {
   monad:     "https://monadscan.com/address/",
   scroll:    "https://scrollscan.com/address/",
   arbitrum:  "https://arbiscan.io/address/",
+  base:      "https://basescan.org/address/",
 };
 
 export function explorerAddressUrl(chain: ChainKey, addr: string): string {
@@ -431,6 +437,7 @@ const EXPLORER_LABEL: Record<ChainKey, string> = {
   monad:     "MonadScan",
   scroll:    "ScrollScan",
   arbitrum:  "Arbiscan",
+  base:      "Basescan",
 };
 
 export function explorerLabel(chain: ChainKey): string {
