@@ -236,6 +236,21 @@ const TRANSFER_AUTH_TYPES = {
   ],
 } as const;
 
+// EIP-3009 TransferWithAuthorization — the x402 rail signs this against the
+// USDC token's OWN EIP-712 domain (name "USD Coin", version "2"). The relayer
+// then submits USDC.transferWithAuthorization() and sponsors the gas; the USDC
+// contract self-verifies the signature, so there is no EIP-7702 delegation.
+const EIP3009_TYPES = {
+  TransferWithAuthorization: [
+    { name: "from",        type: "address" },
+    { name: "to",          type: "address" },
+    { name: "value",       type: "uint256" },
+    { name: "validAfter",  type: "uint256" },
+    { name: "validBefore", type: "uint256" },
+    { name: "nonce",       type: "bytes32" },
+  ],
+} as const;
+
 export interface SignedAuthorization {
   chainId: number;
   address: Address;
@@ -254,8 +269,14 @@ export interface SignedPayment {
   amountRaw: bigint;       // atomic units (kept for callers that need it)
   nonceUint: bigint;
   deadline: bigint;
-  witnessSig: Hex;
-  authorization: SignedAuthorization;
+  witnessSig: Hex;         // q402 rail: TransferAuthorization witness. x402 rail: EIP-3009 sig.
+  /** Settlement rail. "q402" (default) = EIP-7702 TransferAuthorization.
+   *  "x402" = EIP-3009 USDC transferWithAuthorization (Base USDC only). */
+  rail?: "q402" | "x402";
+  /** EIP-7702 authorization — present for the q402 rail, absent for x402. */
+  authorization?: SignedAuthorization;
+  /** EIP-3009 bytes32 nonce — present for the x402 rail, absent for q402. */
+  eip3009Nonce?: Hex;
 }
 
 interface SignParams {
@@ -278,6 +299,9 @@ interface SignParams {
    *  callers should pre-fetch once and reuse so 20 calls don't fire 20
    *  RPC reads. */
   authorizationNonce?: number;
+  /** Settlement rail. Default "q402" (EIP-7702). "x402" signs an EIP-3009
+   *  USDC transferWithAuthorization instead — Base + USDC only. */
+  rail?: "q402" | "x402";
 }
 
 const DEFAULT_DEADLINE_AHEAD = 600;
@@ -329,6 +353,48 @@ export async function signAgenticPayment(p: SignParams): Promise<SignedPayment> 
     chain: viemChain,
     transport: http(cfg.rpc),
   });
+
+  // ── x402 rail: sign an EIP-3009 USDC transferWithAuthorization instead of the
+  // EIP-7702 TransferAuthorization witness. Base + USDC only (USDT on Base does
+  // not expose EIP-3009). No EIP-7702 authorization — the USDC contract verifies
+  // the signature against its own domain; the relayer submits + sponsors gas.
+  if (p.rail === "x402") {
+    if (p.chain !== "base" || p.token !== "USDC") {
+      throw new Error("X402_BASE_USDC_ONLY");
+    }
+    const eip3009Nonce = ethers.hexlify(ethers.randomBytes(32)) as Hex;
+    const sig = (await walletClient.signTypedData({
+      domain: {
+        name: "USD Coin",
+        version: "2",
+        chainId: cfg.id,
+        verifyingContract: tokenCfg.address,
+      },
+      types: EIP3009_TYPES,
+      primaryType: "TransferWithAuthorization",
+      message: {
+        from: fromAddr,
+        to: p.to,
+        value: amountRaw,
+        validAfter: 0n,
+        validBefore: deadline,
+        nonce: eip3009Nonce,
+      },
+    })) as Hex;
+    return {
+      chain: p.chain,
+      token: p.token,
+      fromAddr,
+      to: p.to,
+      amount: p.amount,
+      amountRaw,
+      nonceUint,            // unused by the x402 body; kept for the shared type
+      deadline,
+      witnessSig: sig,
+      rail: "x402",
+      eip3009Nonce,
+    };
+  }
 
   const witnessSig = (await walletClient.signTypedData({
     domain: {
@@ -451,8 +517,11 @@ export async function submitToRelay(
   meta?: InternalRelayMeta,
 ): Promise<Response> {
   const nonceStr = signed.nonceUint.toString();
-  const chainNoncePayload =
-    signed.chain === "xlayer"
+  // x402 rail carries a bytes32 EIP-3009 nonce and no EIP-7702 authorization.
+  const isX402 = signed.rail === "x402";
+  const chainNoncePayload = isX402
+    ? { eip3009Nonce: signed.eip3009Nonce }
+    : signed.chain === "xlayer"
       ? { xlayerNonce: nonceStr }
       : signed.chain === "stable"
         ? { stableNonce: nonceStr }
@@ -477,7 +546,7 @@ export async function submitToRelay(
       ...chainNoncePayload,
       deadline: signed.deadline.toString(),
       witnessSig: signed.witnessSig,
-      authorization: signed.authorization,
+      ...(isX402 ? {} : { authorization: signed.authorization }),
       ...(meta?.source ? { source: meta.source } : {}),
       ...(meta?.ruleId ? { ruleId: meta.ruleId } : {}),
     }),
