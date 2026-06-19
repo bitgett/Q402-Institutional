@@ -46,7 +46,7 @@ const sdkSource = readFileSync(
   "utf8"
 );
 
-const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum"] as const;
+const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum", "base"] as const;
 
 describe("contracts.manifest.json ↔ server CHAIN_CONFIG", () => {
   it.each(CHAINS)("%s: chainId + implContract match manifest", (chain) => {

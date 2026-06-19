@@ -13,7 +13,7 @@ import { loadRelayerKey } from "./relayer-key";
 import { isChainDisabled } from "./chain-status";
 
 // ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
-// All 10 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad / scroll / arbitrum) default to EIP-7702 Type 4 TXs.
+// All 11 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad / scroll / arbitrum / base) default to EIP-7702 Type 4 TXs.
 // X Layer additionally supports EIP-3009 as a USDC-only fallback.
 //
 // Chain → relay method:
@@ -76,6 +76,12 @@ const CHAIN_RPC_FALLBACKS: Record<string, string[]> = {
     "https://arbitrum.publicnode.com",
     "https://arbitrum.drpc.org",
     "https://rpc.ankr.com/arbitrum",
+  ],
+  base: [
+    "https://mainnet.base.org",
+    "https://base.publicnode.com",
+    "https://base.drpc.org",
+    "https://rpc.ankr.com/base",
   ],
 };
 
@@ -225,6 +231,23 @@ export const CHAIN_CONFIG = {
     usdc: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6, symbol: "USDC" },
     usdt: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6, symbol: "USDT" },
   },
+  base: {
+    name: "Base",
+    rpc: process.env.BASE_RPC_URL ?? "https://mainnet.base.org",
+    chainId: 8453,
+    token: "ETH",
+    // Q402PaymentImplementation (guarded, "Q402 Base") deployed on Base mainnet
+    // (chainId 8453) 2026-06-19 by 0xfc77...f466. On-chain verified: NAME() =
+    // "Q402 Base", VERSION() = "1", owner-binding reverts OwnerMismatch(). CREATE
+    // at nonce 0 on Base, so the address coincides with the Stable-chain impl —
+    // distinct chains, not a shared deployment. EIP-7702 live on Base via the OP
+    // Stack Isthmus upgrade.
+    implContract: process.env.BASE_IMPLEMENTATION_CONTRACT?.trim() || "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Native Circle USDC + bridged Tether USD on Base, both 6 decimals. Native
+    // USDC only (not legacy bridged USDbC). USDT on Base is a bridged token.
+    usdc: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" },
+    usdt: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6, symbol: "USDT" },
+  },
 } as const;
 
 export type ChainKey = keyof typeof CHAIN_CONFIG;
@@ -336,7 +359,7 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
 
 // ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
 // Contract: 0x8D854436ab0426F5BC6Cc70865C90576AD523E73 (X Layer mainnet)
-// Witness type: TransferAuthorization (identical scheme across all 10 chains)
+// Witness type: TransferAuthorization (identical scheme across all 11 chains)
 // Key detail: verifyingContract = user's EOA (address(this) under EIP-7702)
 //             msg.sender must equal facilitator param
 const XLAYER_EIP7702_ABI = [

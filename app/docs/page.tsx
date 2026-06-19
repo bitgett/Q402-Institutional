@@ -162,7 +162,7 @@ export default function DocsPage() {
             </div>
             <h1 className="text-3xl font-bold mb-3">Q402 Developer Docs</h1>
             <p className="text-white/65 text-sm leading-relaxed max-w-xl">
-              Gasless stablecoin payments across 10 EVM chains. One API key, one signed request.
+              Gasless stablecoin payments across 11 EVM chains. One API key, one signed request.
             </p>
             <div className="flex items-center gap-6 mt-6">
               <a href="#quickstart" className="inline-flex items-center gap-2 bg-yellow text-navy text-xs font-bold px-5 py-2.5 rounded-full hover:bg-yellow-hover transition-colors">
@@ -179,7 +179,7 @@ export default function DocsPage() {
           {/* ── OVERVIEW ── */}
           <Section id="overview" title="Overview">
             <p className="text-white/75 text-base leading-relaxed mb-6">
-              A managed relay for USDC / USDT / RLUSD across 10 EVM chains.
+              A managed relay for USDC / USDT / RLUSD across 11 EVM chains.
               Users hold no native token; Q402 submits the TX and pays the gas.
             </p>
 
@@ -423,7 +423,7 @@ export default function DocsPage() {
               <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
                 <p className="text-white/85 font-semibold text-sm mb-1">Multichain API Key</p>
                 <p className="text-white/70 text-xs leading-relaxed">
-                  10 chains · USDC / USDT / RLUSD (eth) · self-funded Gas Tank. <a className="text-yellow hover:underline" href="/payment">/payment</a>.
+                  11 chains · USDC / USDT / RLUSD (eth) · self-funded Gas Tank. <a className="text-yellow hover:underline" href="/payment">/payment</a>.
                 </p>
               </div>
             </div>
@@ -448,7 +448,7 @@ const result = await q402.pay({
 });
 // result → { success: true, txHash: "0x...", chain: "bnb", method: "eip7702" }`} />
 
-            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2b · Multichain key — full 10-chain payment</h3>
+            <h3 className="text-xs font-semibold text-white/50 uppercase tracking-widest mb-3">2b · Multichain key — full 11-chain payment</h3>
             <CodeBlock lang="javascript" code={`// Multichain keys work across all supported chains. Each chain needs
 // a funded Gas Tank — deposit at /dashboard → Treasury.
 const q402 = new Q402Client({
@@ -605,7 +605,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                 <tbody className="text-white/75">
                   {([
                     { name: "q402_doctor",              auth: "none",        purpose: "First-install onboarding + ongoing health check (quota, EIP-7702 state, relay reachability)." },
-                    { name: "q402_quote",               auth: "none",        purpose: "Compare gas + supported tokens across 10 chains." },
+                    { name: "q402_quote",               auth: "none",        purpose: "Compare gas + supported tokens across 11 chains." },
                     { name: "q402_balance",             auth: "api key",     purpose: "Verify key + remaining quota. Returns Trial + Multichain in one read when both keys set." },
                     { name: "q402_pay",                 auth: "live mode",   purpose: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
                     { name: "q402_batch_pay",           auth: "live mode",   purpose: "Up to 20 recipients per call (trial: 5). 6+ BNB batches with Trial → status=\"ambiguous\" so the agent asks how to split." },
@@ -663,7 +663,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
 
 # ── API key (pick one or both for auto-routing) ──
 Q402_TRIAL_API_KEY=          # Free Trial, BNB only (from /event)
-Q402_MULTICHAIN_API_KEY=     # Paid Multichain, all 10 chains (from /payment)
+Q402_MULTICHAIN_API_KEY=     # Paid Multichain, all 11 chains (from /payment)
 
 # ── Signing path — pick ONE of Mode A / B / C ──
 # Mode A: your MetaMask EOA's hex private key
@@ -812,14 +812,14 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
             </p>
             <CodeBlock lang="bash" code={`PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs --chain bnb`} />
             <p className="text-white/55 text-xs mt-3 mb-6 leading-relaxed">
-              All 10 chains, self-paid (~$0.001 native gas).
+              All 11 chains, self-paid (~$0.001 native gas).
             </p>
 
             <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">
               Why we use it
             </h3>
             <p className="text-white/70 text-sm leading-relaxed">
-              One primitive, 10 chains, no per-user contract deploy. Each chain&apos;s impl is source-verified on Sourcify.
+              One primitive, 11 chains, no per-user contract deploy. Each chain&apos;s impl is source-verified on Sourcify.
               The delegation marker is the only on-chain trace.
             </p>
 
@@ -855,7 +855,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
               API key goes in the request body&apos;s <code className="text-yellow text-xs">apiKey</code> field.
               Sandbox keys (<code className="text-yellow text-xs">q402_test_*</code>) on wallet connect.
               Live keys (<code className="text-yellow text-xs">q402_live_*</code>) from <a className="text-yellow hover:underline" href="/event">/event</a> (Trial, BNB)
-              or <a className="text-yellow hover:underline" href="/payment">/payment</a> (Multichain, 10 chains).
+              or <a className="text-yellow hover:underline" href="/payment">/payment</a> (Multichain, 11 chains).
             </p>
             <CodeBlock lang="json" code={`// POST /api/relay
 {
@@ -1055,7 +1055,7 @@ const signature = await signer.signTypedData(domain, types, {
   deadline:    BigInt(Math.floor(Date.now() / 1000) + 600),
 });`} />
             <Callout type="info">
-              <strong className="text-white/85">EIP-7702:</strong> All 10 chains use Type-4 TX — atomic delegate + transfer. X Layer also supports EIP-3009 (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
+              <strong className="text-white/85">EIP-7702:</strong> All 11 chains use Type-4 TX — atomic delegate + transfer. X Layer also supports EIP-3009 (pass <code>eip3009Nonce</code> instead of <code>authorization</code>).
             </Callout>
             <Callout type="warn">
               <strong className="text-white/85">Stable:</strong> USDT0 here = 18 decimals. Use <code>ethers.parseUnits(amount, 18)</code>. Gas Tank also in USDT0. (Mantle USDT0 = 6 decimals.)
@@ -1122,7 +1122,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "How do I get an API key?",
-                a: "Connect a wallet → sandbox key (q402_test_*). For a live key: /event (Trial, BNB, 2,000 TX free) or /payment (Multichain, 10 chains)."
+                a: "Connect a wallet → sandbox key (q402_test_*). For a live key: /event (Trial, BNB, 2,000 TX free) or /payment (Multichain, 11 chains)."
               },
               {
                 q: "How does billing work?",

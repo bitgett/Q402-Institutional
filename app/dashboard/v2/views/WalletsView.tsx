@@ -32,7 +32,7 @@
  * SCOPE: `scope` ("trial" | "multichain") is threaded into the modals'
  * gating via `hasMultichainScope` (resolved server-side from the wallet
  * list response) AND surfaced as a badge. Trial = BNB-only / trial key;
- * multichain = 10 chains / live key. It does not change layout structure.
+ * multichain = 11 chains / live key. It does not change layout structure.
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -955,7 +955,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                   {
                     icon: <GasTankIcon size={16} />,
                     title: "Gas sponsored",
-                    body: "Our relayer covers gas on 10 EVM chains — only the stablecoin moves from your Agent Wallet balance.",
+                    body: "Our relayer covers gas on 11 EVM chains — only the stablecoin moves from your Agent Wallet balance.",
                   },
                 ].map((b) => (
                   <div key={b.title} style={{ ...subCard(13), padding: 13 }}>
@@ -1060,7 +1060,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       </span>
                       <span style={styles.badge}>
                         {(demoMode ? scope === "multichain" : multichainActive)
-                          ? "Multichain · 10 chains"
+                          ? "Multichain · 11 chains"
                           : "Trial · BNB"}
                       </span>
                       {agentNum && <span style={styles.badge}>ERC-8004 #{agentNum}</span>}

@@ -711,7 +711,7 @@ export default function DashboardPage() {
               </div>
               <h2 className="text-base font-bold mb-2">Reconnect to unlock Multichain</h2>
               <p className="text-white/60 text-sm mb-4">
-                Wallet already paired with this email. Reconnect to use Gas Tank, paid plans, and 10-chain history.
+                Wallet already paired with this email. Reconnect to use Gas Tank, paid plans, and 11-chain history.
               </p>
               <button
                 onClick={() => setShowWalletConnectFromEmail(true)}

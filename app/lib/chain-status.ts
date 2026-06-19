@@ -1,7 +1,7 @@
 /**
  * chain-status.ts — settlement allow-list.
  *
- * All ten chains run the guarded EIP-7702 implementation (the
+ * All eleven chains run the guarded EIP-7702 implementation (the
  * `owner == address(this)` binding present on every build). Mantle, Injective,
  * Monad, Scroll, and Arbitrum were redeployed 2026-06-15 with the correct
  * per-chain EIP-712 domain NAME, verified on-chain (NAME() + domainSeparator()

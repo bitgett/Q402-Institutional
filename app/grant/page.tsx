@@ -55,8 +55,8 @@ const TIERS = [
 
 const WHY = [
   {
-    title: "10 chains. One integration. No migration.",
-    body: "Native operations on BNB Chain, Ethereum, Mantle, Avalanche, Injective, X Layer, Stable, Monad, Scroll and Arbitrum through a single unified API. Not wrapped, not bridged. The multichain coverage that used to take months now takes an afternoon.",
+    title: "11 chains. One integration. No migration.",
+    body: "Native operations on BNB Chain, Ethereum, Mantle, Avalanche, Injective, X Layer, Stable, Monad, Scroll, Arbitrum and Base through a single unified API. Not wrapped, not bridged. The multichain coverage that used to take months now takes an afternoon.",
   },
   {
     title: "Gasless for your users. And for their agents.",
@@ -190,7 +190,7 @@ export default function GrantPage() {
               </h1>
               <p className="text-lg leading-relaxed mt-7 max-w-[42rem]" style={{ color: MUT }}>
                 Relay credits, hands-on support and long-term partnership for teams shipping gasless
-                and agentic stablecoin payments across 10 EVM chains.
+                and agentic stablecoin payments across 11 EVM chains.
               </p>
               <div className="flex flex-wrap gap-3 mt-9">
                 <Link

@@ -46,7 +46,7 @@
  *  scroll     TransferAuthorization  "Q402 Scroll"       user's EOA          6
  *  arbitrum   TransferAuthorization  "Q402 Arbitrum"     user's EOA          6
  *
- *  All 10 deployed contracts compute _domainSeparator() with `address(this)`, which
+ *  All 11 deployed contracts compute _domainSeparator() with `address(this)`, which
  *  under EIP-7702 delegation equals the user's EOA — NOT the impl contract.
  *
  *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
@@ -206,6 +206,19 @@ const Q402_CHAIN_CONFIG = {
     usdt: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
     supportedTokens: ["USDC", "USDT"],
   },
+  base: {
+    name:         "Base",
+    chainId:      8453,
+    mode:         "eip7702",
+    domainName:   "Q402 Base",
+    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Native Circle USDC + bridged Tether USD on Base, both 6 dec. EIP-7702 live
+    // on Base mainnet via the OP Stack Isthmus upgrade. CREATE at nonce 0, so the
+    // impl address coincides with Stable's — distinct chains, not shared.
+    usdc: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+    usdt: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
+    supportedTokens: ["USDC", "USDT"],
+  },
 };
 
 // ─── Apply BNB-only narrowing when the flag is set ───────────────────────────
@@ -221,7 +234,7 @@ if (Q402_BNB_FOCUS_MODE) {
   }
 }
 
-// EIP-7702 witness type — shared by all 10 chains (avax/bnb/eth/xlayer/stable/mantle/injective/monad/scroll/arbitrum).
+// EIP-7702 witness type — shared by all 11 chains (avax/bnb/eth/xlayer/stable/mantle/injective/monad/scroll/arbitrum/base).
 // All Q402PaymentImplementation* contracts use the identical TransferAuthorization
 // typehash. verifyingContract = address(this), which under EIP-7702 delegation = user EOA.
 const Q402_TRANSFER_AUTH_TYPES = {

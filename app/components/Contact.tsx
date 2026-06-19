@@ -69,7 +69,7 @@ const PROMPTS: PromptCard[] = [
       { t: "0x9c4f…7e2a",    hl: true                  },
       { t: " right now.”"                              },
     ],
-    reply: "Live gas quotes across all 10 chains, ranked by total cost.",
+    reply: "Live gas quotes across all 11 chains, ranked by total cost.",
     tags:  ["q402_quote", "gas ranking", "multichain"],
   },
   {

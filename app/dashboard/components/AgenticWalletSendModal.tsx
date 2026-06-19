@@ -72,7 +72,8 @@ type ChainKey =
   | "injective"
   | "monad"
   | "scroll"
-  | "arbitrum";
+  | "arbitrum"
+  | "base";
 
 interface ChainMeta {
   key: ChainKey;
@@ -96,6 +97,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "monad",     label: "Monad",      multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://monadscan.com/tx/",                  explorerLabel: "MonadScan" },
   { key: "scroll",    label: "Scroll",     multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://scrollscan.com/tx/",                 explorerLabel: "ScrollScan" },
   { key: "arbitrum",  label: "Arbitrum",   multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://arbiscan.io/tx/",                    explorerLabel: "Arbiscan" },
+  { key: "base",      label: "Base",       multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://basescan.org/tx/",                   explorerLabel: "Basescan" },
 ];
 
 function chainMetaFor(key: ChainKey): ChainMeta {

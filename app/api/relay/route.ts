@@ -80,6 +80,9 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
   // similar to Scroll. Same conservative ETH floor; revisit after the first
   // week of mainnet relay history accrues to tune up or down.
   arbitrum: 0.00005, // ~$0.20 at $4000/ETH; tune once on-chain history accrues
+  // Base OP Stack L2: data-availability cost dominates per-tx gas like Scroll /
+  // Arbitrum. Same conservative ETH floor; revisit after mainnet relay history.
+  base:    0.00005,  // ~$0.20 at $4000/ETH; tune once on-chain history accrues
 };
 
 
@@ -231,7 +234,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // The full multi-chain matrix below is what the protocol shipped on v1.27.
   // The emergency feature flag BNB_FOCUS_MODE (see app/lib/feature-flags.ts)
   // can collapse the matrix to BNB+USDC/USDT for emergency narrowing; the
-  // 10-chain entries stay in this file so flipping the flag back to false
+  // 11-chain entries stay in this file so flipping the flag back to false
   // (current default) restores the full surface with zero code churn.
   //
   //   - Injective: USDC + USDT (native Circle USDC via CCTP, live since 2026-06).
@@ -251,6 +254,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     monad:     ["USDC", "USDT"],
     scroll:    ["USDC", "USDT"],
     arbitrum:  ["USDC", "USDT"],
+    base:      ["USDC", "USDT"],
   };
   const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
     bnb: ["USDC", "USDT"],

@@ -36,7 +36,8 @@ export type AgenticChainKey =
   | "injective"
   | "monad"
   | "scroll"
-  | "arbitrum";
+  | "arbitrum"
+  | "base";
 
 interface TokenCfg {
   address: Address;
@@ -193,6 +194,20 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
       // Native Circle USDC (CCTP) — NOT the bridged USDC.e (0xFF970A61...).
       USDC: { address: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6 },
       USDT: { address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
+    },
+  },
+  base: {
+    key: "base",
+    id: 8453,
+    name: "Base",
+    rpc: process.env.BASE_RPC_URL ?? "https://mainnet.base.org",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    domainName: "Q402 Base",
+    domainVersion: "1",
+    tokens: {
+      // Native Circle USDC + bridged Tether USD on Base, both 6 decimals.
+      USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+      USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
     },
   },
 };

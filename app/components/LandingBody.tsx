@@ -58,7 +58,7 @@ const MARQUEE = [
 const VERSUS = [
   { d: 'Off-chain mempool', a: 'Bundler required',     b: 'None' },
   { d: 'Account type',      a: 'Smart account',        b: 'Vanilla EOA' },
-  { d: 'Gas sponsorship',   a: 'Per-chain paymaster',  b: 'One Gas Tank, 10 chains' },
+  { d: 'Gas sponsorship',   a: 'Per-chain paymaster',  b: 'One Gas Tank, 11 chains' },
   { d: 'Install',           a: 'Account migration',    b: 'EIP-7702, per transaction' },
   { d: 'Moving parts',      a: '7',                    b: '2' },
 ];
@@ -99,7 +99,7 @@ const SECURITY = [
 
 // laid out as an asymmetric bento (areas map to .c1-bento grid-template-areas)
 const CAPABILITIES = [
-  { t: 'Multichain Gas Tank', s: 'One pre-funded tank sponsors gas on all 10 chains. Top up once, your agents spend anywhere.', tag: 'Live', area: 'tank', icon: 'tank', feature: true },
+  { t: 'Multichain Gas Tank', s: 'One pre-funded tank sponsors gas on all 11 chains. Top up once, your agents spend anywhere.', tag: 'Live', area: 'tank', icon: 'tank', feature: true },
   { t: 'Aave V3 yield routing', s: 'Park idle balances into Aave V3 from an agent prompt.', tag: 'Live', logo: '/aave.svg', area: 'aave', icon: 'aave' },
   { t: 'CCIP cross-chain bridge', s: 'Move value across ETH / AVAX / ARB via Chainlink CCIP.', tag: 'Live', logo: '/link.jpg', area: 'ccip', icon: 'ccip' },
   { t: 'Agentic Wallets', s: 'Multi-wallet pipelines with per-wallet daily-spend caps.', tag: 'Live', area: 'wallet', icon: 'wallet' },
@@ -118,25 +118,25 @@ const PRICING = [
   {
     name: 'Starter', price: '$29', period: 'per 30-day access',
     desc: 'For indie developers and early-stage projects.',
-    feats: ['500 sponsored transactions', 'All 10 EVM chains', 'Full API access', 'Community support'],
+    feats: ['500 sponsored transactions', 'All 11 EVM chains', 'Full API access', 'Community support'],
     cta: 'Get started', href: '/payment',
   },
   {
     name: 'Pro', price: '$149', period: 'per 30-day access',
     desc: 'For growing products with real users.',
-    feats: ['10,000 sponsored transactions', 'All 10 EVM chains', 'Full API access', 'Email support'],
+    feats: ['10,000 sponsored transactions', 'All 11 EVM chains', 'Full API access', 'Email support'],
     cta: 'Get started', href: '/payment', popular: true,
   },
   {
     name: 'Scale', price: '$449', period: 'per 30-day access',
     desc: 'For high-throughput DeFi applications.',
-    feats: ['50,000 sponsored transactions', 'All 10 EVM chains', 'API access + webhooks', 'Priority support'],
+    feats: ['50,000 sponsored transactions', 'All 11 EVM chains', 'API access + webhooks', 'Priority support'],
     cta: 'Get started', href: '/payment',
   },
   {
     name: 'Enterprise', price: '$1,999', period: 'per 30-day access',
     desc: 'For mission-critical apps at any scale.',
-    feats: ['500,000 sponsored transactions', 'All 10 EVM chains', 'SLA guarantee (99.9% uptime)', 'Dedicated account manager'],
+    feats: ['500,000 sponsored transactions', 'All 11 EVM chains', 'SLA guarantee (99.9% uptime)', 'Dedicated account manager'],
     cta: 'Get started', href: '/payment',
   },
 ];
@@ -405,7 +405,7 @@ function FlowDiagram() {
   );
 }
 
-/* --- gas tank feeding all 10 chains: pulses travel out, logos light in turn */
+/* --- gas tank feeding all 11 chains: pulses travel out, logos light in turn */
 function GasFlow() {
   return (
     <div className="c1-gas">
@@ -736,7 +736,7 @@ export default function LandingBody() {
 .c1-bento-feature .c1-bento-t{font-size:clamp(22px,2.3vw,29px);margin-bottom:10px;}
 .c1-bento-feature .c1-bento-s{font-size:14.5px;max-width:34ch;color:rgba(255,255,255,.72);}
 
-/* gas tank -> 10 chains: pulse dots travel the rail, each chain lights in turn */
+/* gas tank -> 11 chains: pulse dots travel the rail, each chain lights in turn */
 .c1-gas{margin-top:auto;display:flex;align-items:flex-start;gap:13px;padding-top:20px;}
 .c1-gas-src{display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;}
 .c1-gas-tankico{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;color:var(--acc);

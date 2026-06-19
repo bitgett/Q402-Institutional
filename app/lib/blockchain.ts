@@ -160,6 +160,20 @@ const CHAINS = [
       { symbol: "USDT", address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", decimals: 6 },
     ],
   },
+  {
+    name: "Base",
+    rpcs: [
+      "https://mainnet.base.org",
+      "https://base.publicnode.com",
+      "https://base.drpc.org",
+    ],
+    blockWindow: 900,    // Base ~2s block, ~30 min window
+    // Native Circle USDC + bridged Tether USD on Base, both 6 decimals.
+    tokens: [
+      { symbol: "USDC", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+      { symbol: "USDT", address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
+    ],
+  },
 ];
 
 /** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad","scroll","arbitrum") to CHAINS[].name */
@@ -174,6 +188,7 @@ export const INTENT_CHAIN_MAP: Record<string, string> = {
   monad:     "Monad",
   scroll:    "Scroll",
   arbitrum:  "Arbitrum",
+  base:      "Base",
 };
 
 /**

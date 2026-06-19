@@ -5,7 +5,7 @@
  *
  * Replaces the old "open SendModal with the aggregate USD prefilled"
  * shortcut. That UX was wrong: balance is spread across up to
- * 10 chains × 2 tokens = 20 buckets, but a single Send call moves ONE
+ * 11 chains × 2 tokens = 22 buckets, but a single Send call moves ONE
  * (chain, token) bucket. Prefilling the aggregate guaranteed every
  * non-trivial withdraw failed at the relay.
  *
@@ -235,7 +235,7 @@ export function AgenticWalletWithdrawModal({
         </div>
 
         {loading && (
-          <div className="text-sm text-white/55 py-6 text-center">Reading balances across 10 chains…</div>
+          <div className="text-sm text-white/55 py-6 text-center">Reading balances across 11 chains…</div>
         )}
 
         {error && (

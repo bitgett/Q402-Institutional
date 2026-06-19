@@ -201,8 +201,8 @@ function HowItWorks() {
     },
     {
       n: "02",
-      title: "Deposit on any of 10 EVM chains",
-      body: "Same address across BNB, Ethereum, Avalanche, X Layer, Stable, Mantle, Injective, Monad, Scroll, and Arbitrum. Pick the network in the Receive modal — the explorer link updates to match.",
+      title: "Deposit on any of 11 EVM chains",
+      body: "Same address across BNB, Ethereum, Avalanche, X Layer, Stable, Mantle, Injective, Monad, Scroll, Arbitrum, and Base. Pick the network in the Receive modal — the explorer link updates to match.",
     },
     {
       n: "03",

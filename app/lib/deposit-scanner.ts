@@ -14,7 +14,7 @@ import { ethers } from "ethers";
 import { GASTANK_ADDRESS_LC } from "./wallets";
 
 /**
- * 10-chain table for native-coin deposits to the Gas Tank.
+ * 11-chain table for native-coin deposits to the Gas Tank.
  *
  * `blockWindow` is sized so each chain covers ~10 minutes of recent
  * history, matching the realistic gap between a user submitting a
