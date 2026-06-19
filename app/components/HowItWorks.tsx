@@ -157,6 +157,7 @@ export default function HowItWorks() {
                   { label: "MONAD",  img: "/monad.png",     bg: "#836EF9" },
                   { label: "SCROLL", img: "/scroll.png",    bg: "#FFEEDA" },
                   { label: "ARB",    img: "/arbitrum.png",  bg: "#28A0F0" },
+                  { label: "BASE",   img: "/base.png",      bg: "#0052FF" },
                 ].map((c) => (
                   <div key={c.label} className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.bg }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}

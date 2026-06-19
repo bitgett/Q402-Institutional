@@ -35,6 +35,7 @@ const RECEIVE_CHAINS: ReadonlyArray<ChainOption> = [
   { key: "monad",     label: "Monad",       tokens: ["USDT", "USDC"] },
   { key: "scroll",    label: "Scroll",      tokens: ["USDT", "USDC"] },
   { key: "arbitrum",  label: "Arbitrum",    tokens: ["USDT", "USDC"] },
+  { key: "base",      label: "Base",        tokens: ["USDT", "USDC"] },
 ];
 
 interface Props {

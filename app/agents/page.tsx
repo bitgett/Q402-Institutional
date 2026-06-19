@@ -38,7 +38,7 @@ const INSTALL_CMD = "npx -y @quackai/q402-mcp";
 // Hero key facts - the one place these headline numbers live.
 const HERO_FACTS = [
   { v: "27", label: "MCP tools" },
-  { v: "10", label: "EVM chains" },
+  { v: "11", label: "EVM chains" },
   { v: "$0", label: "gas per send" },
   { v: "10", label: "wallets / owner" },
 ];

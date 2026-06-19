@@ -98,6 +98,15 @@ const chains = [
     ),
   },
   {
+    name: "Base",
+    color: "#0052FF",
+    status: "live",
+    icon: (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src="/base.png" alt="Base" className="w-6 h-6 rounded-full" />
+    ),
+  },
+  {
     name: "USDC",
     color: "#2775CA",
     status: "stable",

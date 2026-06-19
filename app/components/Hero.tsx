@@ -136,6 +136,7 @@ export default function Hero() {
                   { img: "/monad.png",     label: "MON"  },
                   { img: "/scroll.png",    label: "SCR"  },
                   { img: "/arbitrum.png",  label: "ARB"  },
+                  { img: "/base.png",      label: "BASE" },
                 ].map((c, i) => (
                   <motion.span
                     key={c.label}
@@ -232,7 +233,7 @@ export default function Hero() {
                   { value: "<0.9 s",  label: "Inclusion time",    sub: "median, all chains", live: true,  accent: "yellow" },
                   { value: "13K+",    label: "MCP installs",      sub: "and growing",      live: true,  accent: "yellow" },
                   { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "white" },
-                  { value: "10",      label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
+                  { value: "11",      label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
                 ].map((s, i) => {
                   const stripeColor =
                     s.accent === "yellow" ? "rgba(245,197,24,0.55)"

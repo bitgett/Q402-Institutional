@@ -562,7 +562,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll, arbitrum.`,
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll, arbitrum, base.`,
     }, { status: 400 });
   }
 

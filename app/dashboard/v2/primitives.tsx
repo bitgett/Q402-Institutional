@@ -84,7 +84,7 @@ export function SectionHead({
   action,
 }: {
   title: ReactNode;
-  /** Right-aligned muted text (e.g. "10 networks monitored"). */
+  /** Right-aligned muted text (e.g. "11 networks monitored"). */
   meta?: ReactNode;
   /** Right-aligned yellow link button (e.g. "View all"). */
   action?: ReactNode;

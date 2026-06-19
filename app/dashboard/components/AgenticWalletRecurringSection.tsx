@@ -70,6 +70,7 @@ const TX_EXPLORER: Record<string, { base: string; label: string }> = {
   monad:     { base: "https://monadscan.com/tx/",                label: "MonadScan" },
   scroll:    { base: "https://scrollscan.com/tx/",               label: "ScrollScan" },
   arbitrum:  { base: "https://arbiscan.io/tx/",                  label: "Arbiscan" },
+  base:      { base: "https://basescan.org/tx/",                 label: "Basescan" },
 };
 
 function explorerFor(chain: string) {

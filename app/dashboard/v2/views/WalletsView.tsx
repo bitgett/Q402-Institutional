@@ -1238,7 +1238,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
 
                 {/* Capital overview — Stablecoins + Gas Tank on one row, Yield below */}
                 <section>
-                  <SectionHead title="Capital overview" meta="10 networks monitored" />
+                  <SectionHead title="Capital overview" meta="11 networks monitored" />
                   <div style={styles.allocation}>
                     <div style={{ ...subCard(13), padding: 14 }}>
                       <div style={styles.assetTop}>

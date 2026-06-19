@@ -78,7 +78,7 @@ describe("contracts.manifest.json ↔ public SDK", () => {
     expect(sdkSource).toMatch(new RegExp(`chainId:\\s*${m.chainId}\\b`));
   });
 
-  it("SDK uses the unified TransferAuthorization witness type for all 10 chains", () => {
+  it("SDK uses the unified TransferAuthorization witness type for all 11 chains", () => {
     expect(sdkSource).toContain("Q402_TRANSFER_AUTH_TYPES");
     expect(sdkSource).toContain("TransferAuthorization:");
     expect(sdkSource).not.toContain("PaymentWitness");

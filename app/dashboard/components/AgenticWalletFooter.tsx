@@ -50,6 +50,7 @@ const CHAIN_LABEL: Partial<Record<ChainKey, string>> = {
   injective: "Injective",
   monad: "Monad",
   scroll: "Scroll",
+  base: "Base",
 };
 
 export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
