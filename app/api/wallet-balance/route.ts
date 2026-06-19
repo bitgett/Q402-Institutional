@@ -13,6 +13,7 @@ const CHAINS = [
   { key: "monad",  token: "MON",  rpc: "https://rpc.monad.xyz",                  cgId: "monad-2"     },
   { key: "scroll", token: "ETH",  rpc: "https://rpc.scroll.io",                  cgId: "ethereum"    },
   { key: "arbitrum", token: "ETH", rpc: "https://arb1.arbitrum.io/rpc",           cgId: "ethereum"    },
+  { key: "base",   token: "ETH",  rpc: "https://mainnet.base.org",               cgId: "ethereum"    },
 ];
 
 async function getBalance(rpc: string, address: string): Promise<string> {

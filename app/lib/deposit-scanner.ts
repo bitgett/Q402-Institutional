@@ -38,6 +38,8 @@ export const DEPOSIT_CHAINS = [
   // Arbitrum One — block time ~0.25s after Nitro, so 5000 blocks ≈ 21 min,
   // matching the 15-min cron cadence with headroom for late deposits.
   { key: "arbitrum", name: "Arbitrum", token: "ETH",   rpc: "https://arb1.arbitrum.io/rpc",             blockWindow: 5000, explorer: "https://arbiscan.io/tx/" },
+  // Base — OP Stack L2, ~2s block, so 900 blocks ≈ 30 min for the 15-min cron.
+  { key: "base",   name: "Base",      token: "ETH",   rpc: "https://mainnet.base.org",                 blockWindow: 900, explorer: "https://basescan.org/tx/" },
 ] as const;
 
 export type DepositChain = typeof DEPOSIT_CHAINS[number];

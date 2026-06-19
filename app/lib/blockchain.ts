@@ -176,7 +176,7 @@ const CHAINS = [
   },
 ];
 
-/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad","scroll","arbitrum") to CHAINS[].name */
+/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad","scroll","arbitrum","base") to CHAINS[].name */
 export const INTENT_CHAIN_MAP: Record<string, string> = {
   bnb:       "BNB Chain",
   eth:       "Ethereum",
