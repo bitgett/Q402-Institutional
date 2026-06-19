@@ -2,18 +2,11 @@
 
 import { useState } from "react";
 import RegisterModal from "./RegisterModal";
+import { MCP_CLIENTS as AI_CLIENTS } from "@/app/lib/mcp-clients";
 
 // ─── AI client chips ─────────────────────────────────────────────────────────
-// Real brand marks served from /public/logos/. Anthropic Claude in brand
-// orange, OpenAI mark for Codex, Cursor white, Cline light grey — sourced
-// from simple-icons + iconify and saved locally so the page works offline.
-
-const AI_CLIENTS: { name: string; src: string }[] = [
-  { name: "Claude", src: "/logos/claude.svg" },
-  { name: "Codex",  src: "/logos/codex.svg"  },
-  { name: "Cursor", src: "/logos/cursor.svg" },
-  { name: "Cline",  src: "/logos/cline.svg"  },
-];
+// Brand marks + client list come from the shared app/lib/mcp-clients matrix so
+// this strip can never drift from the install matrix on /claude.
 
 // ─── Mini-conversation cards ─────────────────────────────────────────────────
 // Each card is a self-contained YOU → Q402 dialogue: the user describes the

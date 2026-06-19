@@ -2,6 +2,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { MCP_CLIENTS as AI_CLIENTS } from '@/app/lib/mcp-clients';
 
 /* ============================================================================
    Q402 by Quack AI - landing body, "keep-recolor" (depth pass)
@@ -16,16 +17,6 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
    stat band, capability/security/pricing/prompt CARDS, and pill section
    kickers with gradient titles. All CSS is scoped under .c1-root.
    ========================================================================== */
-
-// inv = the logo is light-coloured (white/grey), so invert it to show on a white chip
-const AI_CLIENTS = [
-  { name: 'Claude', src: '/logos/claude.svg' },
-  { name: 'Codex', src: '/logos/codex.svg' },
-  { name: 'Cursor', src: '/logos/cursor.svg', inv: true },
-  { name: 'Cline', src: '/logos/cline.svg', inv: true },
-  { name: 'Copilot', src: '/logos/copilot.jpg' },
-  { name: 'Hermes', src: '/logos/hermes.jpg' },
-];
 
 // built-in DeFi integrations the agent can route to, shown as logos (not text)
 const INTEGRATIONS = [
@@ -976,7 +967,7 @@ export default function LandingBody() {
                     <span className="c1-ai-glabel">Runs in any MCP client</span>
                     <div className="c1-use-clients">
                       {AI_CLIENTS.map((cl) => (
-                        <ClientLogo key={cl.name} src={cl.src} name={cl.name} inv={'inv' in cl && cl.inv} />
+                        <ClientLogo key={cl.name} src={cl.src} name={cl.name} inv={cl.invert} />
                       ))}
                     </div>
                   </div>
