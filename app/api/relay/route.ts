@@ -702,6 +702,41 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // ── 6d. EIP-3009 off-chain signer pre-check (Base x402 rail) ──────────────
+  // The witness pre-check above is skipped for EIP-3009 (different scheme), so
+  // recover the EIP-3009 signer here and reject a clear mismatch before it
+  // costs a quota credit or relayer gas. Base USDC's EIP-712 domain is pinned
+  // and verified on-chain (name "USD Coin", version "2"). Base-only: X Layer's
+  // existing EIP-3009 path is left untouched. Fail-open — a recovery error
+  // falls through to the USDC contract's own on-chain verification.
+  if (!isSandbox && isBaseEIP3009) {
+    try {
+      const recovered = ethers.verifyTypedData(
+        { name: "USD Coin", version: "2", chainId: chainCfg.chainId, verifyingContract: tokenCfg.address },
+        { TransferWithAuthorization: [
+          { name: "from", type: "address" },
+          { name: "to", type: "address" },
+          { name: "value", type: "uint256" },
+          { name: "validAfter", type: "uint256" },
+          { name: "validBefore", type: "uint256" },
+          { name: "nonce", type: "bytes32" },
+        ] },
+        { from, to, value: BigInt(amount), validAfter: 0n, validBefore: BigInt(deadline), nonce: eip3009Nonce! },
+        witnessSig,
+      );
+      if (recovered.toLowerCase() !== from.toLowerCase()) {
+        try {
+          const n = await kv.incr(relayFailKey);
+          if (n === 1) await kv.expire(relayFailKey, 900);
+        } catch { /* counter is best-effort */ }
+        return NextResponse.json(
+          { error: "EIP-3009 signature does not match the payment parameters." },
+          { status: 400 },
+        );
+      }
+    } catch { /* recovery failed → fall through to on-chain USDC verification (fail-open) */ }
+  }
+
   // ── 7c. Atomic credit reservation (just before relay — race-safe) ────────
   // initScopedQuotaIfNeeded: SET NX with a seed pulled from legacy. On a
   //                           clean post-reconciliation account this is a

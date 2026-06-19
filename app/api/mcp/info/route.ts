@@ -77,6 +77,9 @@ export async function GET(): Promise<NextResponse> {
         { name: "q402_yield_positions", description: "The Agent Wallet's Aave positions + aggregate USD value." },
         { name: "q402_yield_deposit", description: "Supply USDC / USDT into Aave V3 to earn yield." },
         { name: "q402_yield_withdraw", description: "Withdraw stablecoin from Aave V3 (amount \"max\" = full)." },
+        { name: "q402_request_create", description: "Create a payment request (invoice); the creator sponsors the gas." },
+        { name: "q402_request_status", description: "Read a payment request's status by id." },
+        { name: "q402_request_pay", description: "Pay an open payment request from the Agent Wallet (Mode C)." },
       ],
       // Hint for indexers + humans — the canonical hosts.
       docs: "https://q402.quackai.ai/docs",
