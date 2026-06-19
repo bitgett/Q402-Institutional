@@ -453,7 +453,7 @@ const result = await q402.pay({
 // a funded Gas Tank — deposit at /dashboard → Treasury.
 const q402 = new Q402Client({
   apiKey: "q402_live_YOUR_KEY",
-  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective" | "monad" | "scroll" | "arbitrum"
+  chain:  "bnb",   // "bnb" | "avax" | "eth" | "xlayer" | "stable" | "mantle" | "injective" | "monad" | "scroll" | "arbitrum" | "base"
 });
 // Note: Injective supports both USDC and USDT (native Circle USDC via CCTP).
 
@@ -901,7 +901,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
               <CodeBlock lang="json" code={`// Request body
 {
   "apiKey":      "q402_live_YOUR_API_KEY",
-  "chain":       "avax",           // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll | arbitrum
+  "chain":       "avax",           // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll | arbitrum | base
   "token":       "USDC",           // USDC | USDT
   "from":        "0xUserWallet...",
   "to":          "0xRecipient...",
@@ -963,6 +963,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
                     { name: "Monad",      color: "#836EF9", param: "monad", id: "143",   gasToken: "MON",              gas: "~$0.001", stableNote: false },
                     { name: "Scroll",     color: "#EEB431", param: "scroll", id: "534352", gasToken: "ETH",             gas: "~$0.001", stableNote: false },
                     { name: "Arbitrum",   color: "#28A0F0", param: "arbitrum", id: "42161", gasToken: "ETH",            gas: "~$0.001", stableNote: false },
+                    { name: "Base",       color: "#0052FF", param: "base",   id: "8453",  gasToken: "ETH",              gas: "~$0.001", stableNote: false },
                   ].map((chain) => (
                     <tr key={chain.param} className="border-b border-white/5 hover:bg-white/2 transition-colors">
                       <td className="py-3 pr-6">

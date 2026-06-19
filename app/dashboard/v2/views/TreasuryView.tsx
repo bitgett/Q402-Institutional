@@ -472,7 +472,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             </div>
             <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, marginBottom: 18 }}>
               Gas Tank, Q402 Yield, and CCIP liquidity across{" "}
-              {isMultichain ? "10 networks" : "BNB Chain (trial)"}.
+              {isMultichain ? "11 networks" : "BNB Chain (trial)"}.
               {demoMode && " Sample figures shown — connect a wallet to load live balances."}
             </div>
           </div>

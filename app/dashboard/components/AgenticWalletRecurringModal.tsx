@@ -62,7 +62,8 @@ type ChainKey =
   | "injective"
   | "monad"
   | "scroll"
-  | "arbitrum";
+  | "arbitrum"
+  | "base";
 
 interface ChainMeta {
   key: ChainKey;
@@ -82,6 +83,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "monad",     label: "Monad",      multichainOnly: true, tokens: ["USDT", "USDC"] },
   { key: "scroll",    label: "Scroll",     multichainOnly: true, tokens: ["USDT", "USDC"] },
   { key: "arbitrum",  label: "Arbitrum",   multichainOnly: true, tokens: ["USDT", "USDC"] },
+  { key: "base",      label: "Base",       multichainOnly: true, tokens: ["USDT", "USDC"] },
 ];
 
 type FrequencyKind = "hourly" | "daily" | "weekly" | "monthly" | "monthly-last";

@@ -8,7 +8,7 @@
 
 [![sdk](https://img.shields.io/badge/sdk-v1.8.0-yellow)](public/q402-sdk.js)
 [![mcp](https://img.shields.io/badge/npm-@quackai/q402--mcp-blue)](https://www.npmjs.com/package/@quackai/q402-mcp)
-[![chains](https://img.shields.io/badge/chains-10-yellow)](#supported-chains)
+[![chains](https://img.shields.io/badge/chains-11-yellow)](#supported-chains)
 
 **Live**: https://q402.quackai.ai &nbsp;·&nbsp; **Free trial**: https://q402.quackai.ai/event &nbsp;·&nbsp; **Docs**: https://q402.quackai.ai/docs
 
