@@ -110,6 +110,29 @@ export function friendlyError(status: number, body: BackendError): FriendlyError
         "This Agent Wallet is already undelegated on this chain — nothing to clear. Retry the bridge.",
     };
   }
+  // ── x402 rail (Base USDC EIP-3009) ────────────────────────────────────
+  if (code === "X402_WALLET_DELEGATED") {
+    // The wallet already used the Q402 rail (EIP-7702 set-code), so Base USDC's
+    // SignatureChecker routes it to ERC-1271 and the EIP-3009 transfer reverts.
+    // Recovery = switch back to the Q402 rail (always works), or clear the
+    // delegation first to free the wallet for x402.
+    return {
+      headline:
+        "This Agent Wallet already uses the Q402 rail (EIP-7702 delegated), so it can't settle x402. " +
+        "Switch the rail back to Q402, or clear the delegation first.",
+      next: { label: "Clear delegation", href: "/dashboard?view=wallets" },
+    };
+  }
+  if (code === "X402_BASE_USDC_ONLY") {
+    return {
+      headline: "The x402 rail is Base USDC only. Switch the rail to Q402 for USDT or other chains.",
+    };
+  }
+  if (code === "X402_NO_HOOKS") {
+    return {
+      headline: "The x402 rail is a plain transfer and can't run Hooks. Use the Q402 rail for splits or conditions.",
+    };
+  }
   if (code === "AGENT_WALLET_AUTOFUND_PENDING") {
     return {
       headline:

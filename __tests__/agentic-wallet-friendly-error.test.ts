@@ -86,6 +86,18 @@ describe("friendlyError", () => {
     expect(friendlyError(401, { error: "NONCE_EXPIRED" }).headline).toMatch(/session signature/i);
   });
 
+  it("maps X402_WALLET_DELEGATED to a switch-rail/clear-delegation copy", () => {
+    const fe = friendlyError(400, { error: "X402_WALLET_DELEGATED" });
+    expect(fe.headline).toMatch(/Q402 rail/);
+    expect(fe.headline).toMatch(/x402/);
+    expect(fe.next?.href).toBe("/dashboard?view=wallets");
+  });
+
+  it("maps the x402 fencing codes to switch-to-Q402 copy", () => {
+    expect(friendlyError(400, { error: "X402_BASE_USDC_ONLY" }).headline).toMatch(/Base USDC only/);
+    expect(friendlyError(400, { error: "X402_NO_HOOKS" }).headline).toMatch(/Hooks/);
+  });
+
   it("falls back to a generic 5xx copy when no code matches", () => {
     const fe = friendlyError(502, { error: "weird_backend_thing" });
     expect(fe.headline).toMatch(/our side/);

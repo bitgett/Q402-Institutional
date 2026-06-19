@@ -26,7 +26,7 @@ const ADDR = privateKeyToAccount(PK).address;
 const TO = "0x3C528161f34ddEAB0b71Aede21ae42535E140abE";
 const FACILITATOR = "0xfc77FF29178B7286A8bA703D7a70895CA74fF466";
 
-const EIP3009_TYPES = {
+const EIP3009_TYPES: Record<string, ethers.TypedDataField[]> = {
   TransferWithAuthorization: [
     { name: "from", type: "address" },
     { name: "to", type: "address" },
@@ -35,7 +35,7 @@ const EIP3009_TYPES = {
     { name: "validBefore", type: "uint256" },
     { name: "nonce", type: "bytes32" },
   ],
-} as const;
+};
 
 function baseX402Params(overrides: Record<string, unknown> = {}) {
   return {

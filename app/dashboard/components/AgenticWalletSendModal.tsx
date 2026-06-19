@@ -135,6 +135,11 @@ export function AgenticWalletSendModal({
   const [token, setToken] = useState<Token>(prefillToken ?? "USDT");
   const [recipient, setRecipient] = useState(prefillTo ?? "");
   const [amount, setAmount] = useState(prefillAmount ?? "");
+  // Settlement rail. Only Base USDC exposes a choice: q402 (default, EIP-7702
+  // gasless) or x402 (Coinbase EIP-3009 standard, Q402 still sponsors gas).
+  // Everywhere else the picker is hidden and the rail stays q402.
+  const [rail, setRail] = useState<"q402" | "x402">("q402");
+  const railAvailable = chain === "base" && token === "USDC";
 
   // Keep token consistent with the selected chain — if the highlighted
   // token isn't supported on the picked chain, snap to a supported one.
@@ -151,6 +156,13 @@ export function AgenticWalletSendModal({
       setChain(allowedChains[0]);
     }
   }, [allowedChains, chain]);
+
+  // The x402 rail only exists for Base USDC. If the chain/token moves off that
+  // combo, fall back to q402 so we never POST rail:x402 for a pairing the
+  // server (and the EIP-3009 path) would reject.
+  useEffect(() => {
+    if (!railAvailable && rail !== "q402") setRail("q402");
+  }, [railAvailable, rail]);
 
   // Portal mount guard — these modals render only after a client
   // interaction, but keep the SSR-safe check so we never touch
@@ -237,6 +249,9 @@ export function AgenticWalletSendModal({
           ownerAddress,
           nonce: auth.challenge,
           signature: auth.signature,
+          // Only forwarded when the user opted into x402 on Base USDC; the
+          // server treats an absent rail as the default q402 (EIP-7702).
+          ...(rail === "x402" ? { rail: "x402" } : {}),
         }),
       });
       const data = (await res.json().catch(() => ({}))) as BackendError;
@@ -431,6 +446,40 @@ export function AgenticWalletSendModal({
                   })}
                 </div>
               </div>
+
+              {railAvailable && (
+                <div>
+                  <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Rail</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { key: "q402", label: "Q402", sub: "EIP-7702" },
+                      { key: "x402", label: "x402", sub: "EIP-3009" },
+                    ] as { key: "q402" | "x402"; label: string; sub: string }[]).map(r => {
+                      const active = rail === r.key;
+                      return (
+                        <button
+                          key={r.key}
+                          type="button"
+                          onClick={() => setRail(r.key)}
+                          className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors flex items-baseline justify-center gap-1.5 ${
+                            active
+                              ? "border-emerald-400 text-emerald-300 bg-emerald-400/8"
+                              : "border-white/10 text-white/55 hover:text-white"
+                          }`}
+                        >
+                          {r.label}
+                          <span className="text-[9px] text-white/40 font-mono">{r.sub}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[10px] text-white/35 mt-1 leading-relaxed">
+                    {rail === "x402"
+                      ? "Coinbase x402 standard (USDC transferWithAuthorization). Q402 still sponsors gas. Needs a wallet that has not used the Q402 rail (not EIP-7702 delegated)."
+                      : "Q402 gasless default. Works for any wallet state and supports Hooks."}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Recipient</div>
