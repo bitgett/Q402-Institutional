@@ -71,6 +71,27 @@ describe("relay route server contract", () => {
     expect(routeSource).not.toMatch(/else if \(paymentId\)/);
     expect(routeSource).not.toMatch(/paymentId\?:\s*string;\s*\/\/ legacy/);
   });
+
+  it("detects the Base x402 rail by `eip3009Nonce` present + no `authorization`", () => {
+    // isBaseEIP3009 routes the relay to the EIP-3009 settlement path. The shape
+    // (chain base + eip3009Nonce + NO authorization) is exactly what the client
+    // submitToRelay emits for rail:"x402".
+    expect(routeSource).toMatch(
+      /isBaseEIP3009\s*=\s*chain === "base"\s*&&\s*!!eip3009Nonce\s*&&\s*!authorization/,
+    );
+    expect(routeSource).toMatch(/isEIP3009\s*=\s*isXLayerEIP3009\s*\|\|\s*isBaseEIP3009/);
+  });
+
+  it("rejects an EIP-7702-delegated wallet on the x402 rail (X402_WALLET_DELEGATED)", () => {
+    // A q402-delegated wallet (set-code) cannot settle via USDC EIP-3009: the
+    // token's SignatureChecker routes code-bearing accounts to ERC-1271, which
+    // the Q402 impl does not implement, so it reverts "FiatTokenV2: invalid
+    // signature". The guard must reject up front before spending a credit/gas.
+    expect(routeSource).toMatch(/X402_WALLET_DELEGATED/);
+    // Guard reads the payer's code and rejects anything that is not empty.
+    expect(routeSource).toMatch(/getCode\(from\)/);
+    expect(routeSource).toMatch(/fromCode\s*!==\s*"0x"/);
+  });
 });
 
 describe("agent-example.mjs relay body shape", () => {

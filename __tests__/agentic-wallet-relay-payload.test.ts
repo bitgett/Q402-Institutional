@@ -147,3 +147,50 @@ describe("submitToRelay — common fields", () => {
     expect(b.apiKey).toBe("q402_live_x");
   });
 });
+
+describe("submitToRelay — x402 (Base USDC EIP-3009) rail", () => {
+  // The relay route detects this rail by `eip3009Nonce` present + no
+  // `authorization` (isBaseEIP3009 in app/api/relay/route.ts). The body must
+  // therefore carry the bytes32 EIP-3009 nonce and OMIT the EIP-7702
+  // authorization — emitting both would mis-route to the q402 path.
+  function buildX402Payment(overrides: Partial<SignedPayment> = {}): SignedPayment {
+    return buildSignedPayment({
+      chain: "base",
+      token: "USDC",
+      amount: "0.001",
+      amountRaw: ethers.parseUnits("0.001", 6),
+      rail: "x402",
+      eip3009Nonce: ("0x" + "ab".repeat(32)) as `0x${string}`,
+      authorization: undefined,
+      witnessSig: ("0xfeed" + "00".repeat(63)) as `0x${string}`,
+      ...overrides,
+    });
+  }
+
+  it("carries eip3009Nonce and omits the EIP-7702 authorization", async () => {
+    const signed = buildX402Payment();
+    await submitToRelay("https://q402.test", "q402_live_x", signed);
+    const b = captured!.body;
+    expect(b.eip3009Nonce).toBe(signed.eip3009Nonce);
+    expect(b).not.toHaveProperty("authorization");
+  });
+
+  it("emits no uint256-style nonce field (nonce/xlayerNonce/stableNonce)", async () => {
+    const signed = buildX402Payment();
+    await submitToRelay("https://q402.test", "q402_live_x", signed);
+    const b = captured!.body;
+    expect(b).not.toHaveProperty("nonce");
+    expect(b).not.toHaveProperty("xlayerNonce");
+    expect(b).not.toHaveProperty("stableNonce");
+  });
+
+  it("forwards raw atomic amount + the EIP-3009 witnessSig on Base USDC", async () => {
+    const signed = buildX402Payment();
+    await submitToRelay("https://q402.test", "q402_live_x", signed);
+    const b = captured!.body;
+    expect(b.chain).toBe("base");
+    expect(b.token).toBe("USDC");
+    expect(b.amount).toBe(ethers.parseUnits("0.001", 6).toString());
+    expect(b.witnessSig).toBe(signed.witnessSig);
+  });
+});

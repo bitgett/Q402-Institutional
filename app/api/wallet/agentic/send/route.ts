@@ -72,6 +72,9 @@ interface SendBody {
   token?: string;
   to?: string;
   amount?: string;
+  /** Settlement rail (Base only). "q402" (default) = EIP-7702 gasless. "x402" =
+   *  EIP-3009 USDC transferWithAuthorization, settled by the Q402 facilitator. */
+  rail?: "q402" | "x402";
   /**
    * Lowercased Agent Wallet address to send from. Optional in Mode C
    * (omitting defaults to the owner's default wallet), required in
@@ -361,6 +364,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (!isPositiveDecimalString(body.amount)) {
     return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+  }
+  if (body.rail === "x402") {
+    if (body.chain !== "base" || body.token !== "USDC") {
+      return NextResponse.json(
+        { error: "X402_BASE_USDC_ONLY", message: 'The x402 rail is Base USDC only. Use rail "q402" (default) for USDT or other chains.' },
+        { status: 400 },
+      );
+    }
+    // EIP-3009 transferWithAuthorization is a single from->to transfer; Q402
+    // Hooks (MultiPayeeSplit / ConditionalOracle) require the EIP-7702 impl.
+    if (body.hookParams) {
+      return NextResponse.json(
+        { error: "X402_NO_HOOKS", message: 'The x402 rail is a plain transfer and does not support Q402 Hooks. Use rail "q402" for splits/conditions.' },
+        { status: 400 },
+      );
+    }
   }
 
   const owner = await resolveOwner(req, body);
@@ -1067,6 +1086,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       to: body.to as Address,
       amount: body.amount,
       facilitator: relayerKey.address as Address,
+      rail: body.rail,
     });
   } catch (e) {
     await refundAndRelease();

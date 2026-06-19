@@ -710,6 +710,32 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // existing EIP-3009 path is left untouched. Fail-open — a recovery error
   // falls through to the USDC contract's own on-chain verification.
   if (!isSandbox && isBaseEIP3009) {
+    // (a) A q402-delegated wallet (EIP-7702 set-code) cannot settle via EIP-3009.
+    // USDC V2_2's SignatureChecker sees the wallet's code and routes to ERC-1271
+    // isValidSignature, which the Q402 impl does not implement, so the token
+    // reverts "FiatTokenV2: invalid signature". Reject up front with a clear,
+    // actionable error instead of burning a credit + relayer gas on a guaranteed
+    // revert. The two rails are mutually exclusive per wallet state: a delegated
+    // wallet must use the Q402 EIP-7702 rail or clear its delegation first.
+    // Fail-open — an RPC blip falls through to on-chain USDC verification.
+    try {
+      const codeProvider = new (await import("ethers")).JsonRpcProvider(chainCfg.rpc);
+      const fromCode = await codeProvider.getCode(from);
+      if (fromCode && fromCode !== "0x") {
+        return NextResponse.json(
+          {
+            error: "X402_WALLET_DELEGATED",
+            message:
+              "This wallet is EIP-7702 delegated (it used the Q402 rail), so the " +
+              "USDC EIP-3009 (x402) path cannot verify its signature. Use the Q402 " +
+              "rail (send `authorization`) or clear the delegation first.",
+          },
+          { status: 400 },
+        );
+      }
+    } catch { /* RPC unreachable → fall through to on-chain USDC verification */ }
+
+    // (b) Off-chain signer pre-check.
     try {
       const recovered = ethers.verifyTypedData(
         { name: "USD Coin", version: "2", chainId: chainCfg.chainId, verifyingContract: tokenCfg.address },
