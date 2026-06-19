@@ -23,6 +23,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import Navbar from "@/app/components/Navbar";
 import Footer from "@/app/components/Footer";
+import { MCP_CLIENTS as CLIENTS } from "@/app/lib/mcp-clients";
 
 const INK = "#E6EAF2";
 const MUT = "rgba(230,234,242,0.60)";
@@ -42,14 +43,6 @@ const HERO_FACTS = [
   { v: "10", label: "wallets / owner" },
 ];
 
-const CLIENTS: { name: string; src: string; invert?: boolean }[] = [
-  { name: "Claude", src: "/logos/claude.svg" },
-  { name: "Codex", src: "/logos/codex.svg" },
-  { name: "Cursor", src: "/logos/cursor.svg", invert: true },
-  { name: "Cline", src: "/logos/cline.svg", invert: true },
-  { name: "Copilot", src: "/logos/copilot.jpg" },
-  { name: "Hermes", src: "/logos/hermes.jpg" },
-];
 
 // 01 - the safety model. The product's central differentiator, stated as spec.
 const SAFETY = [

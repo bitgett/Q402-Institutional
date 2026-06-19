@@ -89,6 +89,16 @@ codex mcp add q402 -- npx -y @quackai/q402-mcp
 
 # Cursor / Cline: paste { "mcpServers": { "q402": { "command": "npx", "args": ["-y", "@quackai/q402-mcp"] } } }
 # into ~/.cursor/mcp.json (Cursor) or Cline → Settings → MCP Servers → Edit JSON.
+
+# GitHub Copilot (VS Code): .vscode/mcp.json — root key is "servers" (NOT mcpServers):
+# { "servers": { "q402": { "command": "npx", "args": ["-y", "@quackai/q402-mcp"] } } }
+
+# Hermes Agent (Nous Research): ~/.hermes/config.yaml (YAML), then /reload-mcp:
+# mcp_servers:
+#   q402:
+#     command: "npx"
+#     args: ["-y", "@quackai/q402-mcp"]
+#     enabled: true
 ```
 
 Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
