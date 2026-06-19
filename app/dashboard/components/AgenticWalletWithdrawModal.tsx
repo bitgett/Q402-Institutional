@@ -70,6 +70,7 @@ const CHAIN_LABEL: Partial<Record<ChainKey, string>> = {
   monad: "Monad",
   scroll: "Scroll",
   arbitrum: "Arbitrum",
+  base: "Base",
 };
 
 function formatUsd(n: number): string {

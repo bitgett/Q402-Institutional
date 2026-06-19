@@ -195,6 +195,20 @@ const CHAINS = {
     explorerBase: "https://arbiscan.io/tx/",
     nonceField: "nonce",
   },
+  base: {
+    id: 8453, name: "Base", domainName: "Q402 Base",
+    rpc: envVars.BASE_RPC_URL ?? "https://mainnet.base.org",
+    impl: envVars.BASE_IMPLEMENTATION_CONTRACT ?? "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Base mainnet (chainId 8453, OP Stack L2). Native Circle USDC + bridged
+    // Tether USDT, both 6 decimals. EIP-7702 live via the Isthmus upgrade.
+    tokens: {
+      USDC: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6 },
+      USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
+    },
+    nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    explorerBase: "https://basescan.org/tx/",
+    nonceField: "nonce",
+  },
 };
 
 const TRANSFER_AUTH_TYPES = {

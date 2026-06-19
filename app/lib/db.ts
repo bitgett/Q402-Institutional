@@ -555,7 +555,7 @@ export async function getGasBalance(address: string): Promise<Record<string, num
     // this closes the read side.
     getNativeBridgeUsedTotals(address),
   ]);
-  const totals: Record<string, number> = { bnb: 0, eth: 0, mantle: 0, injective: 0, avax: 0, xlayer: 0, stable: 0, monad: 0, scroll: 0, arbitrum: 0 };
+  const totals: Record<string, number> = { bnb: 0, eth: 0, mantle: 0, injective: 0, avax: 0, xlayer: 0, stable: 0, monad: 0, scroll: 0, arbitrum: 0, base: 0 };
   for (const d of deposits) totals[d.chain] = (totals[d.chain] ?? 0) + d.amount;
   for (const chain of Object.keys(usedTotals)) {
     totals[chain] = (totals[chain] ?? 0) - usedTotals[chain];

@@ -32,7 +32,7 @@ interface PublicRequest {
 
 const CHAIN_LABEL: Record<string, string> = {
   bnb: "BNB Chain", eth: "Ethereum", avax: "Avalanche", xlayer: "X Layer", stable: "Stable",
-  mantle: "Mantle", injective: "Injective", monad: "Monad", scroll: "Scroll", arbitrum: "Arbitrum",
+  mantle: "Mantle", injective: "Injective", monad: "Monad", scroll: "Scroll", arbitrum: "Arbitrum", base: "Base",
 };
 const ALL_CHAINS = Object.keys(CHAIN_LABEL);
 

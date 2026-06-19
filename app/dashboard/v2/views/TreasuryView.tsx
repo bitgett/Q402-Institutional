@@ -104,6 +104,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "monad",     name: "Monad",      token: "MON",   color: "#836EF9", depositable: true },
   { key: "scroll",    name: "Scroll",     token: "ETH",   color: "#EEB431", depositable: true },
   { key: "arbitrum",  name: "Arbitrum",   token: "ETH",   color: "#28A0F0", depositable: true },
+  { key: "base",      name: "Base",       token: "ETH",   color: "#0052FF", depositable: true },
 ];
 
 // Chains a trial-scoped account can transact on (BNB-only, mirroring the

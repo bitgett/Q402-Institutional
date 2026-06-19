@@ -21,6 +21,7 @@ const CHAIN_LABELS: Record<string, string> = {
   monad:     "Monad",
   scroll:    "Scroll",
   arbitrum:  "Arbitrum One",
+  base:      "Base",
 };
 
 export default async function OgImage({

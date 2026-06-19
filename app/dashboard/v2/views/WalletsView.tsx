@@ -120,6 +120,7 @@ const CHAIN_LABEL: Record<string, string> = {
   monad: "Monad",
   scroll: "Scroll",
   arbitrum: "Arbitrum",
+  base: "Base",
 };
 
 // Allocation-bar segment colours, in prototype order (yellow / cyan / violet …).

@@ -15,6 +15,7 @@ const CHAINS = [
   { key: "monad",  name: "Monad",     token: "MON",   rpc: "https://rpc.monad.xyz",                       cgId: "monad-2"      },
   { key: "scroll", name: "Scroll",    token: "ETH",   rpc: "https://rpc.scroll.io",                       cgId: "ethereum"     },
   { key: "arbitrum", name: "Arbitrum", token: "ETH",  rpc: "https://arb1.arbitrum.io/rpc",                 cgId: "ethereum"     },
+  { key: "base",   name: "Base",      token: "ETH",   rpc: "https://mainnet.base.org",                    cgId: "ethereum"     },
 ];
 
 // Minimum USD thresholds — alert when below these
@@ -38,6 +39,9 @@ const ALERT_THRESHOLD_USD: Record<string, number> = {
   // Arbitrum One: ETH-denominated L2 fees dominate, similar profile to Scroll.
   // Same $5 floor for consistency; tune after first week of mainnet data.
   arbitrum: 5,
+  // Base: ETH-denominated OP Stack L2, same fee profile as Scroll/Arbitrum.
+  // Same $5 floor for consistency; tune after first week of mainnet data.
+  base: 5,
 };
 
 async function getNativeBalance(rpc: string, address: string): Promise<string> {

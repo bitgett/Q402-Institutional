@@ -69,6 +69,7 @@ const CHAIN_LABEL: Partial<Record<ChainKey, string>> = {
   monad: "Monad",
   scroll: "Scroll",
   arbitrum: "Arbitrum",
+  base: "Base",
 };
 
 function formatBalance(n: number): string {
@@ -663,8 +664,9 @@ const CHAIN_ICON: Partial<Record<ChainKey, { src: string; alt: string }>> = {
   monad:     { src: "/monad.png",     alt: "Monad" },
   scroll:    { src: "/scroll.png",    alt: "Scroll" },
   arbitrum:  { src: "/arbitrum.png",  alt: "Arbitrum" },
+  base:      { src: "/base.png",      alt: "Base" },
 };
-const CHAIN_ORDER: ChainKey[] = ["bnb", "eth", "avax", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum"];
+const CHAIN_ORDER: ChainKey[] = ["bnb", "eth", "avax", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum", "base"];
 
 function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: BalancePayload | null }) {
   const byChain = new Map<ChainKey, { usdc: number; usdt: number; total: number; error?: string }>();
