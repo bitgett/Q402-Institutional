@@ -25,6 +25,7 @@ const EXPLORERS: Record<string, { name: string; tx: (h: string) => string }> = {
   monad:     { name: "Monadscan",  tx: h => `https://monadscan.com/tx/${h}` },
   scroll:    { name: "Scrollscan", tx: h => `https://scrollscan.com/tx/${h}` },
   arbitrum:  { name: "Arbiscan",   tx: h => `https://arbiscan.io/tx/${h}` },
+  base:      { name: "Basescan",   tx: h => `https://basescan.org/tx/${h}` },
 };
 
 const CHAIN_LABELS: Record<string, string> = {
@@ -38,6 +39,7 @@ const CHAIN_LABELS: Record<string, string> = {
   monad:     "Monad",
   scroll:    "Scroll",
   arbitrum:  "Arbitrum One",
+  base:      "Base",
 };
 
 const POLL_INTERVAL_MS      = 2_500;

@@ -127,6 +127,14 @@ const CHAINS = {
     token: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", decimals: 6, symbol: "USDC",
     explorer: "https://arbiscan.io/tx/",
   },
+  base: {
+    id: 8453, name: "Base", domainName: "Q402 Base",
+    rpc: "https://mainnet.base.org",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Default to native Circle USDC on Base. USDT (bridged) also supported.
+    token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC",
+    explorer: "https://basescan.org/tx/",
+  },
 };
 
 if (!chainKey || !CHAINS[chainKey]) {

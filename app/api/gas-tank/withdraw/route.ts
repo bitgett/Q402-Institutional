@@ -17,6 +17,7 @@ const CHAIN_RPC: Record<string, { rpc: string; token: string }> = {
   monad:  { rpc: "https://rpc.monad.xyz",                       token: "MON"  },
   scroll: { rpc: "https://rpc.scroll.io",                       token: "ETH"  },
   arbitrum: { rpc: "https://arb1.arbitrum.io/rpc",              token: "ETH"  },
+  base:   { rpc: "https://mainnet.base.org",                   token: "ETH"  },
 };
 
 /**

@@ -49,6 +49,7 @@ const MONITORED_CHAINS: ChainKey[] = [
   "monad",
   "scroll",
   "arbitrum",
+  "base",
 ];
 
 const CCIP_CHAINS: CCIPChainKey[] = ["eth", "avax", "arbitrum"];

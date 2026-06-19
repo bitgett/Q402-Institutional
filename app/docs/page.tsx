@@ -996,6 +996,7 @@ const CONTRACTS = {
   monad:  "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f", // Q402 Monad     (chainId: 143)
   scroll: "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1", // Q402 Scroll    (chainId: 534352)
   arbitrum: "0x8D854436ab0426F5BC6Cc70865C90576AD523E73", // Q402 Arbitrum  (chainId: 42161)
+  base:   "0x2fb2B2D110b6c5664e701666B3741240242bf350", // Q402 Base      (chainId: 8453)
 };
 
 // EIP-712 domain name — must match contract NAME constant exactly
@@ -1010,6 +1011,7 @@ const DOMAIN_NAMES = {
   monad:     "Q402 Monad",
   scroll:    "Q402 Scroll",
   arbitrum:  "Q402 Arbitrum",
+  base:      "Q402 Base",
 };
 
 // verifyingContract:

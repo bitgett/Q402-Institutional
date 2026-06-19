@@ -16,6 +16,7 @@ export const CHAIN_LOGO: Record<string, string> = {
   eth: "/eth.png",
   avax: "/avax.png",
   arbitrum: "/arbitrum.png",
+  base: "/base.png",
   xlayer: "/xlayer.png",
   scroll: "/scroll.png",
   mantle: "/mantle.png",

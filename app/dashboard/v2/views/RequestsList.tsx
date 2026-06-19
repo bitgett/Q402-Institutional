@@ -50,6 +50,7 @@ const CHAIN_META: Record<string, { name: string; color: string }> = {
   monad: { name: "Monad", color: "#836EF9" },
   scroll: { name: "Scroll", color: "#EEB431" },
   arbitrum: { name: "Arbitrum", color: "#28A0F0" },
+  base: { name: "Base", color: "#0052FF" },
 };
 function chainName(c: string): string {
   return CHAIN_META[c]?.name ?? c.toUpperCase();

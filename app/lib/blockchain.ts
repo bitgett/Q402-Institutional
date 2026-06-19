@@ -412,6 +412,7 @@ const CHAIN_THRESHOLDS: Record<string, readonly number[]> = {
   "Avalanche":  UNIFIED_THRESHOLDS,
   "Ethereum":   UNIFIED_THRESHOLDS,
   "Arbitrum":   UNIFIED_THRESHOLDS,
+  "Base":       UNIFIED_THRESHOLDS,
 };
 // Fallback = any chain (all rows equal now). Kept as a named export so
 // callers don't have to know about the per-chain map being constant.
@@ -471,6 +472,8 @@ const CHAIN_MULTIPLIERS: Record<string, number> = {
   "Scroll":    1.0,
   "Avalanche": 1.0,
   "Ethereum":  1.0,
+  "Arbitrum":  1.0,
+  "Base":      1.0,
 };
 
 /**

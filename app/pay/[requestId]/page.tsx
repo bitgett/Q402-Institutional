@@ -27,6 +27,7 @@ const CHAIN_META: Record<
   monad: { name: "Monad", logo: "/monad.png" },
   scroll: { name: "Scroll", logo: "/scroll.png", explorer: "https://scrollscan.com/tx/", explorerName: "Scrollscan" },
   arbitrum: { name: "Arbitrum", logo: "/arbitrum.png", explorer: "https://arbiscan.io/tx/", explorerName: "Arbiscan" },
+  base: { name: "Base", logo: "/base.png", explorer: "https://basescan.org/tx/", explorerName: "Basescan" },
 };
 
 interface PublicRequest {
