@@ -211,25 +211,21 @@ async function main() {
   });
   console.log(`   witnessSig: ${witnessSig.slice(0, 30)}...`);
 
-  // [2/3] EIP-7702 authorization signature
-  console.log("\n[2/3] Signing EIP-7702 authorization...");
+  // [2/3] EIP-7702 authorization — signed the REAL way via viem
+  // signAuthorization (MAGIC 0x05 || rlp([chainId, address, nonce])), matching
+  // production app/lib/agentic-wallet-sign.ts. The earlier hand-rolled EIP-712
+  // scheme produced an INVALID authorization: the node silently skipped it, so
+  // the Type-4 TX reported success while delegating nothing (payer code stayed
+  // 0x, no transfer). signAuthorization is the only correct path.
+  console.log("\n[2/3] Signing EIP-7702 authorization (viem signAuthorization)...");
+  const payerAcc = privateKeyToAccount(PAYER_KEY.startsWith("0x") ? PAYER_KEY : `0x${PAYER_KEY}`);
   const payerTxNonce = await provider.getTransactionCount(payer.address);
-  const authDomain = { name: "EIP7702Authorization", version: "1", chainId: cfg.id };
-  const authTypes  = {
-    Authorization: [
-      { name: "address", type: "address" },
-      { name: "nonce",   type: "uint256" },
-    ],
-  };
-  const authSig = await payer.signTypedData(authDomain, authTypes, {
+  const auth = await payerAcc.signAuthorization({
+    chainId: cfg.id,
     address: cfg.impl,
     nonce:   payerTxNonce,
   });
-  const authR   = authSig.slice(0, 66);
-  const authS   = "0x" + authSig.slice(66, 130);
-  const authV   = parseInt(authSig.slice(130, 132), 16);
-  const yParity = authV === 27 ? 0 : 1;
-  console.log(`   payerTxNonce: ${payerTxNonce}, yParity: ${yParity}`);
+  console.log(`   payerTxNonce: ${payerTxNonce}, yParity: ${auth.yParity}`);
 
   // [3/3] Submit Type-4 TX via viem
   console.log("\n[3/3] Sending EIP-7702 Type-4 TX (relayer pays gas)...");
@@ -247,14 +243,7 @@ async function main() {
     to:    payer.address,
     data:  callData,
     gas:   300_000n,
-    authorizationList: [{
-      chainId: cfg.id,
-      address: cfg.impl,
-      nonce:   payerTxNonce,
-      yParity,
-      r: authR,
-      s: authS,
-    }],
+    authorizationList: [auth],
   });
 
   const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
