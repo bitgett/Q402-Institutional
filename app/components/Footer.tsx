@@ -48,6 +48,7 @@ const NAV: { heading: string; links: { label: string; href?: string; external?: 
   {
     heading: "Company",
     links: [
+      { label: "Vision",           href: "/vision"  },
       { label: "Grant Program",    href: "/grant"   },
       { label: "Contact Sales",    action: "openContactModal" },
       { label: "Terms",            href: "/terms"   },

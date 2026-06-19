@@ -10,6 +10,10 @@ const nextConfig = {
   // package-lock.json in the parent directory (e.g. C:\Users\user\), which
   // makes serverless deploy traces bundle unrelated files. Explicit > inferred.
   outputFileTracingRoot: __dirname,
+  // Clean URL for the standalone Vision page (static file in /public).
+  async rewrites() {
+    return [{ source: "/vision", destination: "/vision.html" }];
+  },
   async headers() {
     return [
       {
