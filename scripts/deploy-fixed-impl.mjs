@@ -30,6 +30,7 @@ const RPCS = {
   monad:     "https://rpc.monad.xyz",
   scroll:    "https://rpc.scroll.io",
   arbitrum:  "https://arb1.arbitrum.io/rpc",
+  base:      "https://mainnet.base.org",
 };
 
 const chain = (() => {
