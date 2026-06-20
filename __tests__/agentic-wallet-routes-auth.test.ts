@@ -19,6 +19,7 @@ const RESTORE_ROUTE   = loadRoute("app", "api", "wallet", "agentic", "restore", 
 const SEND_ROUTE      = loadRoute("app", "api", "wallet", "agentic", "send",        "route.ts");
 const INFO_BY_KEY     = loadRoute("app", "api", "wallet", "agentic", "info-by-key", "route.ts");
 const BALANCE_ROUTE   = loadRoute("app", "api", "wallet", "agentic", "balance",     "route.ts");
+const CLEAR_ROUTE     = loadRoute("app", "api", "wallet", "agentic", "clear-delegation", "route.ts");
 
 describe("POST /api/wallet/agentic/restore — auth + grace handling", () => {
   it("uses intent-bound auth (agentic.restore) — not bare session sig", () => {
@@ -119,5 +120,61 @@ describe("GET /api/wallet/agentic/balance — owner-sig + KV cache", () => {
   });
   it("rate-limits per IP at the standard 30/min cadence", () => {
     expect(BALANCE_ROUTE).toMatch(/rateLimit\(ip,\s*"agentic-wallet-balance",\s*30,\s*60\)/);
+  });
+});
+
+describe("POST /api/wallet/agentic/clear-delegation — dual auth (owner-sig + Mode C apiKey)", () => {
+  it("keeps the owner-signature path via intent-bound auth", () => {
+    // The dashboard clears via the owner's EIP-191 signature over the
+    // {walletId, chain} intent — unchanged by the Mode C addition.
+    expect(CLEAR_ROUTE).toMatch(/requireIntentAuth/);
+    expect(CLEAR_ROUTE).toMatch(/action:\s*"agentic\.clear_delegation"/);
+  });
+  it("adds the Mode C apiKey path via getApiKeyRecord", () => {
+    // Server-managed wallets have no local key — the MCP authenticates the
+    // owner with a live apiKey, exactly like /send's resolveOwner.
+    expect(CLEAR_ROUTE).toMatch(/getApiKeyRecord/);
+    expect(CLEAR_ROUTE).toMatch(/resolveClearOwner/);
+  });
+  it("rejects BOTH sandbox prefixes on the apiKey path", () => {
+    // A paid-owner-attached legacy q402_sandbox_ key must not reach this
+    // live clear path (mirrors the /send comment).
+    expect(CLEAR_ROUTE).toMatch(/q402_test_/);
+    expect(CLEAR_ROUTE).toMatch(/q402_sandbox_/);
+    expect(CLEAR_ROUTE).toMatch(/SANDBOX_KEY_REJECTED/);
+  });
+  it("binds the key to the owner (OWNER_MISMATCH) when ownerAddress is supplied", () => {
+    expect(CLEAR_ROUTE).toMatch(/OWNER_MISMATCH/);
+  });
+  it("makes the apiKey clear a strict subset of /send — STALE + Trial-BNB gates", () => {
+    // A rotated-but-active key is not the owner's current key; a Trial key
+    // is BNB-only (Q402 sponsors the clear gas on non-CCIP chains).
+    expect(CLEAR_ROUTE).toMatch(/STALE_API_KEY/);
+    expect(CLEAR_ROUTE).toMatch(/TRIAL_BNB_ONLY/);
+    expect(CLEAR_ROUTE).toMatch(/getSubscription/);
+  });
+  it("refuses an omitted walletId when the owner has multiple wallets (AMBIGUOUS_WALLET)", () => {
+    // Silently clearing the default could leave the wallet the caller meant
+    // still delegated while reporting success.
+    expect(CLEAR_ROUTE).toMatch(/AMBIGUOUS_WALLET/);
+    expect(CLEAR_ROUTE).toMatch(/listAgenticWallets/);
+  });
+  it("requires either a signature or an apiKey (AUTH_REQUIRED)", () => {
+    expect(CLEAR_ROUTE).toMatch(/AUTH_REQUIRED/);
+  });
+  it("re-enforces ownership downstream via the owner-scoped wallet lookup", () => {
+    // Even with a valid apiKey, the wallet must belong to the resolved
+    // owner — getActiveAgenticWallet(owner, walletId) returns null (404)
+    // for a foreign walletId, so a key for owner A can't clear owner B.
+    expect(CLEAR_ROUTE).toMatch(/getActiveAgenticWallet\(owner,\s*walletId\)/);
+    expect(CLEAR_ROUTE).toMatch(/AGENTIC_WALLET_NOT_FOUND/);
+  });
+  it("resolves auth before touching the wallet (auth → lookup ordering)", () => {
+    // Match the CALL SITES (await …) so JSDoc/comment mentions of either
+    // symbol don't skew the ordering check.
+    const authIdx   = CLEAR_ROUTE.search(/await\s+resolveClearOwner\(/);
+    const lookupIdx = CLEAR_ROUTE.search(/await\s+getActiveAgenticWallet\(owner,\s*walletId\)/);
+    expect(authIdx).toBeGreaterThanOrEqual(0);
+    expect(lookupIdx).toBeGreaterThan(authIdx);
   });
 });
