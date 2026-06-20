@@ -1,35 +1,28 @@
 "use client";
 
 /**
- * AgenticWalletDangerZone — compact destructive-action surface.
+ * AgenticWalletDangerZone — the "Wallet management" surface at the foot of the
+ * Agent console. Two stacked sections, styled with the v2 design tokens so the
+ * typography matches the cards above it:
  *
- * Sits at the bottom of the Agent tab. Visually small + tinted red so
- * it doesn't compete with the primary actions in the main card, but
- * still reachable in one click. Two rows:
+ *   1. Delegation — per-chain EIP-7702 status (read-only, on-chain) with a
+ *      gasless "Clear" per delegated chain. SAFE/reversible (a chain
+ *      re-delegates on its next payment), so it is NOT in the red zone.
+ *   2. Danger zone — Archive (or Restore) + Export private key. Destructive /
+ *      sensitive, tinted red.
  *
- *   • Archive (or Restore when wallet.deletedAt is set)
- *   • Export private key
- *
- * Both routes go through dedicated modals that gather typed confirms /
- * step-up auth / canonical intent challenges — this component is just
- * the trigger surface.
- *
- * Owns:
- *   - archive / restore POST flow (action-bound challenge)
- *   - Export modal mount
- *   - Archive destructive modal mount (typed "ARCHIVE")
- *
- * The Card no longer renders these — pulling them out keeps the main
- * card focused on identity + spending actions and pushes the
- * destructive surface to where users expect it: at the bottom of the
- * page, small.
+ * Auth: every write is an owner-signed intent challenge (getActionAuth):
+ *   - agentic.clear_delegation { walletId, chain } -> /api/wallet/agentic/clear-delegation
+ *   - agentic.archive / agentic.restore { walletId } -> /api/wallet/agentic(.../restore)
+ * Export / Archive go through dedicated modals (typed confirm / step-up auth).
  */
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletArchiveModal } from "./AgenticWalletArchiveModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
+import { v2, fs, subCard } from "@/app/dashboard/v2/theme";
 
 interface Props {
   wallet: AgenticWalletPublic;
@@ -47,6 +40,29 @@ interface Props {
 
 const SOFT_DELETE_GRACE_DAYS = 7;
 
+// Display label + stable display order for the delegation list. Keyed by the
+// Q402 chain key returned in /api/wallet/delegation-status.chains.
+const CHAIN_LABEL: Record<string, string> = {
+  bnb: "BNB Chain",
+  eth: "Ethereum",
+  base: "Base",
+  arbitrum: "Arbitrum",
+  avax: "Avalanche",
+  scroll: "Scroll",
+  mantle: "Mantle",
+  xlayer: "X Layer",
+  monad: "Monad",
+  injective: "Injective",
+  stable: "Stable",
+};
+const CHAIN_ORDER = Object.keys(CHAIN_LABEL);
+
+interface DelegState {
+  delegated: boolean;
+  impl?: string;
+  error?: string;
+}
+
 export function AgenticWalletDangerZone({
   wallet,
   address,
@@ -62,10 +78,32 @@ export function AgenticWalletDangerZone({
   const [exportOpen, setExportOpen] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   // Synchronous guards — destructive actions must not double-fire.
-  // setArchiving / setRestoring race the second click because state
-  // updates batch; the ref check resolves synchronously at click time.
   const archiveInFlightRef = useRef(false);
   const restoreInFlightRef = useRef(false);
+
+  // ── Delegation status ─────────────────────────────────────────────────
+  const [deleg, setDeleg] = useState<Record<string, DelegState> | null>(null);
+  const [delegLoading, setDelegLoading] = useState(true);
+  const [clearingChain, setClearingChain] = useState<string | null>(null);
+  const [delegError, setDelegError] = useState<string | null>(null);
+  const clearInFlightRef = useRef(false);
+
+  const refreshDeleg = useCallback(async () => {
+    setDelegLoading(true);
+    try {
+      const r = await fetch(`/api/wallet/delegation-status?address=${wallet.address}`, { cache: "no-store" });
+      const j = (await r.json()) as { chains?: Record<string, DelegState> };
+      setDeleg(j.chains ?? {});
+    } catch {
+      setDeleg(null); // read failed — surface as "couldn't check"
+    } finally {
+      setDelegLoading(false);
+    }
+  }, [wallet.address]);
+
+  useEffect(() => {
+    void refreshDeleg();
+  }, [refreshDeleg]);
 
   const archived = wallet.deletedAt !== null;
   const graceLeftDays = archived && wallet.deletedAt !== null
@@ -80,20 +118,51 @@ export function AgenticWalletDangerZone({
 
   const walletId = wallet.address.toLowerCase();
 
+  const delegatedChains = deleg
+    ? CHAIN_ORDER.filter((c) => deleg[c]?.delegated)
+    : [];
+
+  async function clearChain(chain: string) {
+    if (clearInFlightRef.current) return;
+    clearInFlightRef.current = true;
+    setClearingChain(chain);
+    setDelegError(null);
+    try {
+      // Intent-bound: the signed message is scoped to (walletId, chain) so a
+      // leaked sig can't clear another wallet/chain. Matches the server's
+      // requireIntentAuth("agentic.clear_delegation", { walletId, chain }).
+      const auth = await getActionAuth(address, "agentic.clear_delegation", { walletId, chain }, signMessage);
+      if (!auth) {
+        setDelegError("Sign the clear-delegation challenge in your wallet to confirm.");
+        return;
+      }
+      const res = await fetch("/api/wallet/agentic/clear-delegation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, walletId, chain, nonce: auth.challenge, signature: auth.signature }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDelegError(data.message ?? data.error ?? "Clear failed.");
+        return;
+      }
+      await refreshDeleg();
+      onChanged();
+    } catch (e) {
+      setDelegError(e instanceof Error ? e.message : String(e));
+    } finally {
+      clearInFlightRef.current = false;
+      setClearingChain(null);
+    }
+  }
+
   async function archive() {
     if (archiveInFlightRef.current) return;
     archiveInFlightRef.current = true;
     setArchiving(true);
     setArchiveError(null);
     try {
-      // walletId in the intent so the signed message is scoped to THIS
-      // wallet. A leaked sig from one wallet can't archive another.
-      const auth = await getActionAuth(
-        address,
-        "agentic.archive",
-        { walletId },
-        signMessage,
-      );
+      const auth = await getActionAuth(address, "agentic.archive", { walletId }, signMessage);
       if (!auth) {
         setArchiveError("Sign the archive challenge in your wallet to confirm.");
         return;
@@ -101,12 +170,7 @@ export function AgenticWalletDangerZone({
       const res = await fetch("/api/wallet/agentic", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address,
-          walletId,
-          nonce: auth.challenge,
-          signature: auth.signature,
-        }),
+        body: JSON.stringify({ address, walletId, nonce: auth.challenge, signature: auth.signature }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -129,14 +193,7 @@ export function AgenticWalletDangerZone({
     setRestoring(true);
     setRestoreError(null);
     try {
-      // Restore is now intent-bound (`agentic.restore`) and walletId-
-      // scoped. Server's POST /restore expects the same shape as DELETE.
-      const auth = await getActionAuth(
-        address,
-        "agentic.restore",
-        { walletId },
-        signMessage,
-      );
+      const auth = await getActionAuth(address, "agentic.restore", { walletId }, signMessage);
       if (!auth) {
         setRestoreError("Sign the restore challenge in your wallet.");
         return;
@@ -144,12 +201,7 @@ export function AgenticWalletDangerZone({
       const res = await fetch("/api/wallet/agentic/restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address,
-          walletId,
-          nonce: auth.challenge,
-          signature: auth.signature,
-        }),
+        body: JSON.stringify({ address, walletId, nonce: auth.challenge, signature: auth.signature }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -167,25 +219,75 @@ export function AgenticWalletDangerZone({
 
   return (
     <>
-      <div
-        className="rounded-xl border px-4 py-3"
-        style={{
-          background: "rgba(248,113,113,0.025)",
-          borderColor: "rgba(248,113,113,0.18)",
-        }}
-      >
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="text-[10px] uppercase tracking-[0.22em] text-red-300/85 font-semibold">
-            Danger zone
-          </div>
-          <div className="text-[10px] text-white/50">
-            irreversible after the 7-day grace expires
-          </div>
+      {/* ── Delegation (safe / reversible) ─────────────────────────────── */}
+      <div style={{ ...subCard(13), padding: 14, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+          <span style={{ fontSize: fs.cardTitle, fontWeight: 600, color: v2.text }}>Delegation</span>
+          <span style={{ fontSize: fs.label, color: v2.muted2 }}>EIP-7702 · gasless to clear</span>
         </div>
 
-        <div className="space-y-1.5">
+        {delegLoading ? (
+          <div style={{ fontSize: fs.body, color: v2.muted }}>Checking delegation across chains…</div>
+        ) : deleg === null ? (
+          <div style={{ fontSize: fs.body, color: v2.muted }}>
+            Couldn&apos;t read delegation status.{" "}
+            <button type="button" onClick={() => void refreshDeleg()} style={linkBtn}>Retry</button>
+          </div>
+        ) : delegatedChains.length === 0 ? (
+          <div style={{ fontSize: fs.body, color: v2.muted }}>
+            No active delegations. This wallet is a clean EOA on every chain.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {delegatedChains.map((chain) => (
+              <div key={chain} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: v2.yellow, flex: "none", boxShadow: `0 0 6px ${v2.yellow}` }} />
+                  <span style={{ fontSize: fs.base, color: v2.text }}>{CHAIN_LABEL[chain] ?? chain}</span>
+                  <span style={{ fontSize: fs.label, color: v2.muted2 }}>delegated</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void clearChain(chain)}
+                  disabled={clearingChain !== null}
+                  style={{ ...clearBtn, ...(clearingChain !== null ? disabledBtn : {}) }}
+                >
+                  {clearingChain === chain ? "Clearing…" : "Clear"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {delegError && (
+          <div style={{ fontSize: fs.label, color: v2.red, marginTop: 9 }}>{delegError}</div>
+        )}
+
+        <div style={{ fontSize: fs.label, color: v2.muted, marginTop: 11, lineHeight: 1.6 }}>
+          Clearing is gasless (Q402 sponsors it). A chain re-delegates automatically on its next
+          payment, so clear it only right before sending on the x402 rail, which needs a non-delegated wallet.
+        </div>
+      </div>
+
+      {/* ── Danger zone (destructive / sensitive) ──────────────────────── */}
+      <div
+        style={{
+          borderRadius: 13,
+          border: `1px solid ${withAlpha(v2.red, 0.18)}`,
+          background: withAlpha(v2.red, 0.025),
+          padding: "12px 14px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
+          <span style={{ fontSize: fs.label, fontWeight: 600, letterSpacing: "0.16em", textTransform: "uppercase", color: withAlpha(v2.red, 0.9) }}>
+            Danger zone
+          </span>
+          <span style={{ fontSize: fs.label, color: v2.muted2 }}>irreversible after the 7-day grace</span>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {archived ? (
-            <CompactDangerRow
+            <ManageRow
               title="Restore wallet"
               hint={`Cancels the pending hard-delete. ${graceLeftDays ?? 0} day${graceLeftDays === 1 ? "" : "s"} of grace remaining.`}
               cta={restoring ? "Restoring…" : "Restore"}
@@ -194,9 +296,9 @@ export function AgenticWalletDangerZone({
               disabled={restoring}
             />
           ) : (
-            <CompactDangerRow
+            <ManageRow
               title="Archive wallet"
-              hint="Soft-delete → 7-day grace window → hard-delete cron sweeps the keystore record."
+              hint="Soft-delete, then a 7-day grace window, then a hard-delete cron sweeps the keystore record."
               cta={archiving ? "Archiving…" : "Archive…"}
               tone="danger"
               onClick={() => setArchiveModalOpen(true)}
@@ -204,7 +306,7 @@ export function AgenticWalletDangerZone({
             />
           )}
 
-          <CompactDangerRow
+          <ManageRow
             title="Export private key"
             hint="One-time reveal · step-up signature · audit-logged."
             cta="Export"
@@ -215,7 +317,7 @@ export function AgenticWalletDangerZone({
         </div>
 
         {(archiveError || restoreError) && (
-          <div className="text-[11px] text-red-300/85 mt-2">
+          <div style={{ fontSize: fs.label, color: v2.red, marginTop: 9 }}>
             {archiveError ?? restoreError}
           </div>
         )}
@@ -254,7 +356,38 @@ export function AgenticWalletDangerZone({
   );
 }
 
-function CompactDangerRow({
+/** Tint a hex color with an alpha (v2.red is a #rrggbb literal). */
+function withAlpha(hex: string, a: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+const clearBtn: React.CSSProperties = {
+  flex: "none",
+  padding: "5px 12px",
+  borderRadius: 8,
+  fontSize: fs.label,
+  fontWeight: 600,
+  cursor: "pointer",
+  color: v2.cyan,
+  background: "transparent",
+  border: `1px solid ${withAlpha(v2.cyan, 0.4)}`,
+};
+const disabledBtn: React.CSSProperties = { opacity: 0.4, cursor: "not-allowed" };
+const linkBtn: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  color: v2.cyan,
+  cursor: "pointer",
+  fontSize: fs.body,
+  textDecoration: "underline",
+};
+
+function ManageRow({
   title,
   hint,
   cta,
@@ -270,21 +403,29 @@ function CompactDangerRow({
   disabled?: boolean;
 }) {
   const danger = tone === "danger";
+  const btn: React.CSSProperties = danger
+    ? { color: "#fff", background: withAlpha(v2.red, 0.7), border: `1px solid ${withAlpha(v2.red, 0.5)}` }
+    : { color: v2.actionText, background: v2.yellow, border: `1px solid ${v2.yellow}` };
   return (
-    <div className="flex items-center justify-between gap-3 py-1">
-      <div className="min-w-0 flex-1">
-        <div className="text-[12.5px] text-white/85 font-medium">{title}</div>
-        <div className="text-[11px] text-white/60 leading-snug">{hint}</div>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: fs.base, color: v2.text, fontWeight: 500 }}>{title}</div>
+        <div style={{ fontSize: fs.label, color: v2.muted, lineHeight: 1.5 }}>{hint}</div>
       </div>
       <button
         type="button"
         onClick={onClick}
         disabled={disabled}
-        className={`shrink-0 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-          danger
-            ? "bg-red-500/70 text-white hover:bg-red-500"
-            : "bg-emerald-400 text-slate-900 hover:bg-emerald-300"
-        }`}
+        style={{
+          flex: "none",
+          padding: "5px 12px",
+          borderRadius: 8,
+          fontSize: fs.label,
+          fontWeight: 600,
+          cursor: "pointer",
+          ...btn,
+          ...(disabled ? disabledBtn : {}),
+        }}
       >
         {cta}
       </button>

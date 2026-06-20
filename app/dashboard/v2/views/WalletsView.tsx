@@ -1472,7 +1472,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                   <summary className="v2-manage-summary" style={styles.manageSummary}>
                     <span style={{ flex: 1 }}>Wallet management</span>
                     <span style={{ color: v2.muted2, fontSize: fs.label }}>
-                      Export key · Archive · Restore
+                      Delegation · Export key · Archive
                     </span>
                   </summary>
                   <div style={styles.dangerZone}>
