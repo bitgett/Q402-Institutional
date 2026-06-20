@@ -51,10 +51,15 @@
  *
  *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
  *
- * ── EIP-3009 fallback (X Layer only) ───────────────────────────────────────────
- *  - Path:        xlayer + eip3009Nonce (no `authorization` object)
- *  - Tokens:      USDC only (X Layer USDT does not expose a compatible 9-param ABI)
- *  - Primary:     use EIP-7702 (authorization + xlayerNonce) for USDC or USDT
+ * ── EIP-3009 settlement (X Layer fallback + Base x402 rail) ─────────────────────
+ *  - Path:        eip3009Nonce (no `authorization` object); USDC's own EIP-712
+ *                 domain (name "USD Coin", version "2"). Q402 facilitates gas.
+ *  - X Layer:     automatic fallback (mode "eip3009"), USDC only.
+ *  - Base x402:   opt-in via pay({ ..., rail: "x402" }). Settles the Coinbase
+ *                 x402 standard on Base USDC instead of the default EIP-7702
+ *                 rail. A q402-delegated wallet cannot use it (USDC routes
+ *                 code-bearing accounts to ERC-1271) — the SDK rejects up front.
+ *  - Primary:     EIP-7702 remains the default everywhere (USDC + USDT).
  *
  * ── Stable chain specifics ──────────────────────────────────────────────────────
  *  - Token:      USDT0 only (0x779ded0c9e1022225f8e0630b35a9b54be713736, mainnet)
@@ -321,7 +326,7 @@ class Q402Client {
    * @throws  When amount is empty, malformed, negative, zero, or has more
    *          decimal places than the target token supports.
    */
-  async pay({ to, amount, token = "USDC" }) {
+  async pay({ to, amount, token = "USDC", rail }) {
     // Per-chain token gating via supportedTokens — rejecting an unsupported
     // token here surfaces the constraint immediately instead of routing the
     // call to a non-existent contract.
@@ -352,6 +357,35 @@ class Q402Client {
     const decimals  = tokenCfg.decimals;
     const amountRaw = toRawAmount(amount, decimals);
     const deadline  = Math.floor(Date.now() / 1000) + 600; // +10min
+
+    // ── x402 rail (Base USDC only) ────────────────────────────────────────────
+    // Opt-in via `pay({ ..., rail: "x402" })`. Settles via the Coinbase x402
+    // standard (USDC EIP-3009 transferWithAuthorization) instead of the default
+    // Q402 EIP-7702 path. Q402 still facilitates the gas, so the payer holds
+    // only the stablecoin. _payEIP3009 is chain-generic (signs USDC's own
+    // domain at this.chainCfg.chainId + tokenCfg.address), so the same helper
+    // that backs the X Layer fallback also serves Base x402.
+    if (rail === "x402") {
+      if (this.chain !== "base" || token !== "USDC") {
+        throw new Error(
+          "The x402 rail is Base USDC only. Omit `rail` (Q402 EIP-7702) for USDT or other chains."
+        );
+      }
+      // A wallet already EIP-7702-delegated by the Q402 rail cannot settle via
+      // USDC EIP-3009: USDC's SignatureChecker routes code-bearing accounts to
+      // ERC-1271 (which the Q402 impl does not implement), so the token reverts
+      // "FiatTokenV2: invalid signature". Reject up front with a clear message
+      // instead of a confusing on-chain revert. The two rails are mutually
+      // exclusive per wallet state.
+      const ownerCode = await provider.getCode(owner);
+      if (ownerCode && ownerCode !== "0x") {
+        throw new Error(
+          "This wallet is EIP-7702 delegated (it used the Q402 rail), so it cannot use the " +
+          "x402 (EIP-3009) rail. Omit `rail` to use the Q402 rail, or clear the delegation first."
+        );
+      }
+      return this._payEIP3009(signer, owner, to, amountRaw, deadline, token, tokenCfg);
+    }
 
     if (this.chainCfg.mode === "eip7702_xlayer") {
       return this._payXLayerEIP7702(signer, provider, owner, to, amountRaw, deadline, token, tokenCfg);

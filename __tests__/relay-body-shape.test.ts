@@ -29,6 +29,10 @@ const routeSource = readFileSync(
   resolve(__dirname, "..", "app", "api", "relay", "route.ts"),
   "utf8"
 );
+const sendRouteSource = readFileSync(
+  resolve(__dirname, "..", "app", "api", "wallet", "agentic", "send", "route.ts"),
+  "utf8"
+);
 
 describe("SDK relay body shape", () => {
   it("avax/bnb/eth path sends `nonce:` (not xlayerNonce/stableNonce)", () => {
@@ -54,6 +58,18 @@ describe("SDK relay body shape", () => {
   it("pay() destructures `token` as the symbol argument", () => {
     // `async pay({ to, amount, token = "USDC" })`
     expect(sdkSource).toMatch(/async\s+pay\s*\(\s*\{[^}]*\btoken\s*=\s*"USDC"/);
+  });
+
+  it("pay() exposes an x402 rail that routes Base USDC through the EIP-3009 path", () => {
+    // pay({ ..., rail: "x402" }) settles via the Coinbase x402 standard
+    // (USDC EIP-3009) instead of the default EIP-7702 rail. It is fenced to
+    // Base + USDC, guards an EIP-7702-delegated wallet up front, and reuses
+    // the chain-generic _payEIP3009 helper (eip3009Nonce, no authorization).
+    expect(sdkSource).toMatch(/async\s+pay\s*\(\s*\{[^}]*\brail\b/);
+    expect(sdkSource).toMatch(/rail === "x402"/);
+    expect(sdkSource).toMatch(/x402 rail is Base USDC only/);
+    expect(sdkSource).toMatch(/getCode\(owner\)/);
+    expect(sdkSource).toMatch(/return this\._payEIP3009\(/);
   });
 });
 
@@ -91,6 +107,26 @@ describe("relay route server contract", () => {
     // Guard reads the payer's code and rejects anything that is not empty.
     expect(routeSource).toMatch(/getCode\(from\)/);
     expect(routeSource).toMatch(/fromCode\s*!==\s*"0x"/);
+  });
+
+  it("the Base x402 pre-check is fail-CLOSED (format check, 503 on RPC fail, 400 on recovery fail)", () => {
+    // The pre-check exists to stop a guaranteed on-chain revert from burning a
+    // credit + relayer gas, so for x402 it must reject (not fall through) on a
+    // malformed signature, an unreadable delegation state, or a recovery error.
+    expect(routeSource).toMatch(/\^0x\[0-9a-fA-F\]\{130\}\$/);          // witnessSig 65-byte shape check
+    expect(routeSource).toMatch(/X402_DELEGATION_CHECK_UNAVAILABLE/);    // delegation-RPC failure -> 503
+    expect(routeSource).toMatch(/EIP-3009 signature could not be verified/); // recovery throw -> 400
+  });
+});
+
+describe("agentic send idempotency binds the settlement rail", () => {
+  it("fingerprint includes the rail so q402 and x402 never share an idempotency slot", () => {
+    // On Base the same (to, amount) settles differently under q402 vs x402, so
+    // they must not collide on one idempotency slot. Only the non-default x402
+    // rail extends the seed (existing q402 fingerprints stay byte-identical).
+    expect(sendRouteSource).toMatch(/rail:\s*string/);                       // fingerprint takes rail
+    expect(sendRouteSource).toMatch(/rail !== "q402"\s*\?\s*\[`rail:\$\{rail\}`\]/); // conditional seed extension
+    expect(sendRouteSource).toMatch(/body\.rail \?\? "q402"/);               // call site passes the rail
   });
 });
 

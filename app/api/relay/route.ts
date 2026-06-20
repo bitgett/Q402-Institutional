@@ -702,22 +702,30 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // ── 6d. EIP-3009 off-chain signer pre-check (Base x402 rail) ──────────────
-  // The witness pre-check above is skipped for EIP-3009 (different scheme), so
-  // recover the EIP-3009 signer here and reject a clear mismatch before it
-  // costs a quota credit or relayer gas. Base USDC's EIP-712 domain is pinned
-  // and verified on-chain (name "USD Coin", version "2"). Base-only: X Layer's
-  // existing EIP-3009 path is left untouched. Fail-open — a recovery error
-  // falls through to the USDC contract's own on-chain verification.
+  // ── 6d. EIP-3009 off-chain pre-check (Base x402 rail) — FAIL-CLOSED ────────
+  // The witness pre-check above is skipped for EIP-3009 (different scheme). This
+  // guard exists specifically to stop a guaranteed on-chain revert from burning
+  // a quota credit + relayer gas, so for the Base x402 rail it is fail-CLOSED: a
+  // malformed signature, a signer mismatch, or an inability to read delegation
+  // state all reject HERE rather than letting the USDC contract revert on-chain.
+  // Base USDC's EIP-712 domain is pinned + verified on-chain (name "USD Coin",
+  // version "2"). X Layer's existing EIP-3009 fallback path is left untouched.
   if (!isSandbox && isBaseEIP3009) {
-    // (a) A q402-delegated wallet (EIP-7702 set-code) cannot settle via EIP-3009.
-    // USDC V2_2's SignatureChecker sees the wallet's code and routes to ERC-1271
-    // isValidSignature, which the Q402 impl does not implement, so the token
-    // reverts "FiatTokenV2: invalid signature". Reject up front with a clear,
-    // actionable error instead of burning a credit + relayer gas on a guaranteed
-    // revert. The two rails are mutually exclusive per wallet state: a delegated
-    // wallet must use the Q402 EIP-7702 rail or clear its delegation first.
-    // Fail-open — an RPC blip falls through to on-chain USDC verification.
+    // (a) Shape-check the signature up front. A malformed value would otherwise
+    // throw inside verifyTypedData; catching that as "could not verify" (below)
+    // is correct, but checking the 65-byte 0x form here gives a precise error.
+    if (typeof witnessSig !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(witnessSig)) {
+      return NextResponse.json(
+        { error: "EIP-3009 signature is malformed (expected a 65-byte 0x signature)." },
+        { status: 400 },
+      );
+    }
+
+    // (b) A q402-delegated wallet (EIP-7702 set-code) cannot settle via EIP-3009:
+    // USDC V2_2's SignatureChecker routes code-bearing accounts to ERC-1271,
+    // which the Q402 impl does not implement, so the token reverts. Reject up
+    // front. RPC failure → 503 (fail-closed): we cannot confirm the wallet is
+    // undelegated, and proceeding would risk a guaranteed-revert gas burn.
     try {
       const codeProvider = new (await import("ethers")).JsonRpcProvider(chainCfg.rpc);
       const fromCode = await codeProvider.getCode(from);
@@ -733,11 +741,23 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
           { status: 400 },
         );
       }
-    } catch { /* RPC unreachable → fall through to on-chain USDC verification */ }
+    } catch {
+      return NextResponse.json(
+        {
+          error: "X402_DELEGATION_CHECK_UNAVAILABLE",
+          message:
+            "Could not confirm this wallet's delegation state on Base right now. " +
+            "Retry shortly, or use the Q402 rail. Your quota and Gas Tank are untouched.",
+        },
+        { status: 503 },
+      );
+    }
 
-    // (b) Off-chain signer pre-check.
+    // (c) Off-chain signer recovery. A recovery FAILURE or a signer MISMATCH
+    // both mean the signature would not verify on-chain — reject (fail-closed).
+    let recovered: string;
     try {
-      const recovered = ethers.verifyTypedData(
+      recovered = ethers.verifyTypedData(
         { name: "USD Coin", version: "2", chainId: chainCfg.chainId, verifyingContract: tokenCfg.address },
         { TransferWithAuthorization: [
           { name: "from", type: "address" },
@@ -750,17 +770,26 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
         { from, to, value: BigInt(amount), validAfter: 0n, validBefore: BigInt(deadline), nonce: eip3009Nonce! },
         witnessSig,
       );
-      if (recovered.toLowerCase() !== from.toLowerCase()) {
-        try {
-          const n = await kv.incr(relayFailKey);
-          if (n === 1) await kv.expire(relayFailKey, 900);
-        } catch { /* counter is best-effort */ }
-        return NextResponse.json(
-          { error: "EIP-3009 signature does not match the payment parameters." },
-          { status: 400 },
-        );
-      }
-    } catch { /* recovery failed → fall through to on-chain USDC verification (fail-open) */ }
+    } catch {
+      try {
+        const n = await kv.incr(relayFailKey);
+        if (n === 1) await kv.expire(relayFailKey, 900);
+      } catch { /* counter is best-effort */ }
+      return NextResponse.json(
+        { error: "EIP-3009 signature could not be verified." },
+        { status: 400 },
+      );
+    }
+    if (recovered.toLowerCase() !== from.toLowerCase()) {
+      try {
+        const n = await kv.incr(relayFailKey);
+        if (n === 1) await kv.expire(relayFailKey, 900);
+      } catch { /* counter is best-effort */ }
+      return NextResponse.json(
+        { error: "EIP-3009 signature does not match the payment parameters." },
+        { status: 400 },
+      );
+    }
   }
 
   // ── 7c. Atomic credit reservation (just before relay — race-safe) ────────

@@ -17,7 +17,7 @@
  *   one-line change.
  */
 
-export const SDK_VERSION = "1.8.0-scroll" as const;
+export const SDK_VERSION = "1.9.0-base-x402" as const;
 
 /**
  * The npm-published @quackai/q402-mcp version. Kept in lockstep with
@@ -26,4 +26,4 @@ export const SDK_VERSION = "1.8.0-scroll" as const;
  * registry.npmjs.org, but UI labels reference *this* constant — so a
  * forgotten label after publish trips on screenshot review, not silently.
  */
-export const MCP_VERSION = "0.8.39" as const;
+export const MCP_VERSION = "0.8.40" as const;
