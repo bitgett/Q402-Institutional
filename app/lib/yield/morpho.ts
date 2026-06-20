@@ -10,19 +10,17 @@
  *
  * Morpho extends Q402 Yield to Base + Arbitrum (Aave covers BNB today).
  *
- * Two deliberate differences from the Aave adapter, both surfaced to callers
- * rather than faked:
+ * Two notes vs the Aave adapter:
  *   1. APY: MetaMorpho exposes no single on-chain "supply APY" getter (a
  *      vault's net rate is the allocation-weighted blend of its underlying
- *      Morpho Blue markets minus the performance fee). Computing that on-chain
- *      is out of scope for the read surface, so supplyApy is read from an
- *      optional on-chain rate hint when present and otherwise reported as 0
- *      ("unknown"), exactly like Aave's best-effort APY-on-error. A precise
- *      figure should come from the Morpho API or a rate oracle in a follow-up.
- *   2. Vault addresses are config-driven (ENV), NOT hardcoded — picking which
- *      curated vault to route into (Moonwell / Gauntlet / Steakhouse / ...) is
- *      an ops decision. With no vault configured a chain returns [] (no
- *      markets), so this adapter is inert until a vault is set. See MORPHO_ENV.
+ *      Morpho Blue markets minus the performance fee). So supplyApy is read
+ *      from the Morpho API (the canonical source), best-effort with a short
+ *      timeout — a network/shape error yields 0 ("unknown") and the market
+ *      still lists, exactly like Aave's best-effort APY-on-error.
+ *   2. Vaults: Base ships a curated DEFAULT (Gauntlet USDC Prime, the largest
+ *      listed Base USDC vault), overridable via MORPHO_VAULT_BASE_USDC. Other
+ *      chains (Arbitrum) are ENV-only — no default, inert until set. Picking a
+ *      different curator is an ops decision; see MORPHO_DEFAULT_VAULT / MORPHO_ENV.
  */
 
 import { createPublicClient, http, formatUnits, isAddress, type Address } from "viem";
@@ -55,6 +53,20 @@ export const MORPHO_ENV = {
   arbitrum: "MORPHO_VAULT_ARBITRUM_USDC",
 } as const;
 
+/**
+ * Curated default vault per chain. Base ships with Gauntlet USDC Prime
+ * (`0xeE8F...4b61`) — the largest listed Base USDC MetaMorpho vault, verified
+ * via the Morpho API and on-chain (asset = Base USDC, ERC-4626, ~$425M TVL).
+ * ENV (MORPHO_ENV) overrides this if ops picks a different curator. Arbitrum
+ * has NO default (Base-first rollout) — it activates only via its ENV var.
+ */
+const MORPHO_DEFAULT_VAULT: Partial<Record<string, Address>> = {
+  base: "0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61",
+};
+
+/** EVM chainId per Q402 chain key, for the Morpho API APY lookup. */
+const MORPHO_CHAIN_ID: Record<string, number> = { base: 8453, arbitrum: 42161 };
+
 function envVault(varName: string): Address | null {
   const v = (process.env[varName] ?? "").trim();
   return v && isAddress(v) ? (v as Address) : null;
@@ -63,9 +75,39 @@ function envVault(varName: string): Address | null {
 function morphoConfig(chain: string): ChainMorphoCfg | null {
   const envName = (MORPHO_ENV as Record<string, string>)[chain];
   if (!envName) return null;
-  const vault = envVault(envName);
+  // ENV override wins; otherwise fall back to the curated default (Base only).
+  const vault = envVault(envName) ?? MORPHO_DEFAULT_VAULT[chain] ?? null;
   if (!vault) return null;
   return { vaults: [{ asset: "USDC", vault }] };
+}
+
+/**
+ * Live net supply APY for a vault from the Morpho API (the canonical source —
+ * MetaMorpho has no on-chain APY getter). Best-effort: a network/timeout/shape
+ * error yields 0 ("unknown"), so a market still lists. 4s timeout keeps the
+ * reserves route responsive even if the API is slow.
+ */
+async function fetchMorphoApy(chain: string, vault: Address): Promise<number> {
+  const chainId = MORPHO_CHAIN_ID[chain];
+  if (!chainId) return 0;
+  try {
+    const body = JSON.stringify({
+      query: `query($a:String!,$c:Int!){ vaultByAddress(address:$a, chainId:$c){ state{ netApy } } }`,
+      variables: { a: vault, c: chainId },
+    });
+    const r = await fetch("https://blue-api.morpho.org/graphql", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) return 0;
+    const j = (await r.json()) as { data?: { vaultByAddress?: { state?: { netApy?: number } } } };
+    const apy = j.data?.vaultByAddress?.state?.netApy;
+    return typeof apy === "number" && Number.isFinite(apy) && apy > 0 ? apy : 0;
+  } catch {
+    return 0;
+  }
 }
 
 // ERC-4626 (MetaMorpho) read surface: the underlying asset, the wallet's
@@ -103,7 +145,11 @@ async function sharesToAssets(c: ReturnType<typeof client>, vault: Address, shar
 }
 
 async function marketRow(c: ReturnType<typeof client>, chain: string, v: VaultCfg): Promise<YieldMarket> {
-  const assetAddress = await readAsset(c, v.vault);
+  // Asset (on-chain) + APY (Morpho API) in parallel — APY is best-effort.
+  const [assetAddress, supplyApy] = await Promise.all([
+    readAsset(c, v.vault),
+    fetchMorphoApy(chain, v.vault),
+  ]);
   return {
     protocol: "morpho",
     chain,
@@ -111,7 +157,7 @@ async function marketRow(c: ReturnType<typeof client>, chain: string, v: VaultCf
     assetAddress,
     positionToken: v.vault, // ERC-4626: the vault share token is the vault itself
     marketAddress: v.vault,
-    supplyApy: 0, // MetaMorpho exposes no on-chain APY getter — see file header
+    supplyApy, // net APY from the Morpho API (0 when unavailable)
     label: `Morpho ${v.asset} vault`,
   };
 }
@@ -132,6 +178,7 @@ function positionRow(
   assetsRaw: bigint,
   sharesRaw: bigint,
   principalHuman: number | undefined,
+  apy: number,
 ): YieldPosition {
   const balance = formatUnits(assetsRaw, tokenDecimals(chain, v.asset));
   let principal: string | null = null;
@@ -153,7 +200,7 @@ function positionRow(
     balanceRaw: sharesRaw.toString(), // raw on-chain unit is the share balance
     principal,
     accrued,
-    supplyApy: 0,
+    supplyApy: apy,
   };
 }
 
@@ -208,7 +255,8 @@ export const morphoAdapter: YieldAdapter = {
       } catch {
         continue;
       }
-      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:${v.asset}`]));
+      const apy = await fetchMorphoApy(chain, v.vault); // best-effort (0 on fail)
+      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:${v.asset}`], apy));
     }
     return out;
   },
@@ -224,7 +272,8 @@ export const morphoAdapter: YieldAdapter = {
       const shares = await readShares(c, v.vault, wallet);
       if (shares === 0n) continue; // no position — omit
       const assets = await sharesToAssets(c, v.vault, shares);
-      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:${v.asset}`]));
+      const apy = await fetchMorphoApy(chain, v.vault); // best-effort (0 on fail)
+      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:${v.asset}`], apy));
     }
     return out;
   },
