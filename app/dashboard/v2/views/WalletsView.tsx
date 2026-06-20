@@ -1470,7 +1470,15 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
               {!demoMode && activeWallet && (
                 <details className="v2-manage" style={styles.manageDetails}>
                   <summary className="v2-manage-summary" style={styles.manageSummary}>
-                    <span style={{ flex: 1 }}>Wallet management</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 11, flex: 1, minWidth: 0 }}>
+                      <span style={styles.manageIcon} aria-hidden>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z" />
+                          <path d="m9 12 2 2 4-4" />
+                        </svg>
+                      </span>
+                      Wallet management
+                    </span>
                     <span style={{ color: v2.muted2, fontSize: fs.label }}>
                       Delegation · Export key · Archive
                     </span>
@@ -2339,21 +2347,33 @@ const styles: Record<string, React.CSSProperties> = {
   // Collapsed "Wallet management" disclosure — keeps the destructive
   // DangerZone tucked at the foot of the console, opened on demand.
   manageDetails: {
-    margin: "2px 25px 20px",
-    borderTop: `1px solid ${v2.line}`,
-    paddingTop: 12,
+    margin: "12px 25px 22px",
   },
+  // Box visual (padding/border/radius/bg + hover) lives in .v2-manage-summary
+  // (globals.css) so the hover state can override; inline keeps layout + type.
   manageSummary: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
     cursor: "pointer",
     listStyle: "none",
     userSelect: "none",
-    color: v2.muted,
-    fontSize: fs.body,
+    color: v2.text,
+    fontSize: fs.cardTitle,
     fontWeight: 600,
-    padding: "5px 0",
+  },
+  manageIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    flex: "none",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: v2.yellow,
+    background: "rgba(245,197,24,.10)",
+    border: "1px solid rgba(245,197,24,.28)",
   },
   // Danger zone wrapper — small top margin so the reused (red) DangerZone
   // sits inside the disclosure without bleeding into the summary above.

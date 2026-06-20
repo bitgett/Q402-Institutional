@@ -249,9 +249,9 @@ html { scroll-behavior: smooth; }
 
 /* "Wallet management" disclosure — hide the native marker, add a rotating chevron */
 .v2-manage-summary::-webkit-details-marker { display: none; }
-.v2-manage-summary { transition: color .15s ease; }
-.v2-manage-summary:hover { color: #e8edf3; }
-.v2-manage-summary::after { content: "▾"; margin-left: 10px; color: #6b7688; transition: transform .2s ease; }
+.v2-manage-summary { padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,.085); background: rgba(255,255,255,.03); transition: background-color .15s ease, border-color .15s ease; }
+.v2-manage-summary:hover { background: rgba(255,255,255,.06); border-color: rgba(247,202,22,.32); }
+.v2-manage-summary::after { content: "▾"; margin-left: 10px; color: #9BA8BD; transition: transform .2s ease; align-self: center; }
 .v2-manage[open] > .v2-manage-summary::after { transform: rotate(180deg); }
 
 /* Action-row hover micro-interaction (enabled buttons only) */
