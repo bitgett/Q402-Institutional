@@ -23,6 +23,7 @@ import { AgenticWalletExportModal } from "./AgenticWalletExportModal";
 import { AgenticWalletArchiveModal } from "./AgenticWalletArchiveModal";
 import type { AgenticWalletPublic } from "./AgenticWalletTab";
 import { v2, fs, subCard } from "@/app/dashboard/v2/theme";
+import { ChainIcon } from "@/app/dashboard/v2/logos";
 
 interface Props {
   wallet: AgenticWalletPublic;
@@ -239,23 +240,37 @@ export function AgenticWalletDangerZone({
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {delegatedChains.map((chain) => (
-              <div key={chain} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: v2.yellow, flex: "none", boxShadow: `0 0 6px ${v2.yellow}` }} />
-                  <span style={{ fontSize: fs.base, color: v2.text }}>{CHAIN_LABEL[chain] ?? chain}</span>
-                  <span style={{ fontSize: fs.label, color: v2.muted2 }}>delegated</span>
+            {delegatedChains.map((chain) => {
+              const impl = deleg?.[chain]?.impl;
+              const implShort = impl ? `${impl.slice(0, 6)}…${impl.slice(-4)}` : null;
+              const busy = clearingChain === chain;
+              return (
+                <div key={chain} style={delegRowCard}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+                    <ChainIcon chain={chain} size={26} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                        <span style={{ fontSize: fs.base, color: v2.text, fontWeight: 600 }}>{CHAIN_LABEL[chain] ?? chain}</span>
+                        <span style={statusPill}>Delegated</span>
+                      </div>
+                      {implShort && (
+                        <div style={{ fontSize: fs.micro, color: v2.muted2, fontFamily: "ui-monospace, SFMono-Regular, monospace", marginTop: 2 }}>
+                          {implShort}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void clearChain(chain)}
+                    disabled={clearingChain !== null}
+                    style={{ ...clearBtn, ...(clearingChain !== null ? disabledBtn : {}) }}
+                  >
+                    {busy ? "Clearing…" : "Clear"}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void clearChain(chain)}
-                  disabled={clearingChain !== null}
-                  style={{ ...clearBtn, ...(clearingChain !== null ? disabledBtn : {}) }}
-                >
-                  {clearingChain === chain ? "Clearing…" : "Clear"}
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -377,6 +392,25 @@ const clearBtn: React.CSSProperties = {
   border: `1px solid ${withAlpha(v2.cyan, 0.4)}`,
 };
 const disabledBtn: React.CSSProperties = { opacity: 0.4, cursor: "not-allowed" };
+const delegRowCard: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "10px 12px",
+  borderRadius: 11,
+  border: `1px solid ${v2.line}`,
+  background: "rgba(255,255,255,.022)",
+};
+const statusPill: React.CSSProperties = {
+  fontSize: fs.micro,
+  color: v2.yellow,
+  background: "rgba(245,197,24,.10)",
+  border: "1px solid rgba(245,197,24,.30)",
+  borderRadius: 999,
+  padding: "1px 8px",
+  lineHeight: 1.5,
+};
 const linkBtn: React.CSSProperties = {
   background: "none",
   border: "none",
