@@ -1,0 +1,56 @@
+name: verify-contracts
+
+# On-chain implementation invariants (NAME + typehash + owner-binding) are a
+# property of the DEPLOYED contracts, so this only needs to run when the
+# manifest, the verifier, or the relay/7702 wiring that references the impls
+# changes. Gating it here (instead of running on every push) avoids spending
+# Actions minutes on a job whose result cannot change between code-only pushes,
+# and avoids spurious failures when a public RPC briefly blocks the runner IP.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'contracts.manifest.json'
+      - 'scripts/verify-contracts.mjs'
+      - 'app/lib/relayer.ts'
+      - 'app/lib/eip7702.ts'
+      - '.github/workflows/verify-contracts.yml'
+  pull_request:
+    paths:
+      - 'contracts.manifest.json'
+      - 'scripts/verify-contracts.mjs'
+      - 'app/lib/relayer.ts'
+      - 'app/lib/eip7702.ts'
+
+concurrency:
+  group: verify-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-contracts:
+    name: on-chain impl invariants (NAME + typehash + owner-binding)
+    runs-on: ubuntu-latest
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout q402-landing
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      # Verifies every deployed impl in contracts.manifest.json against live
+      # RPCs: NAME() matches the manifest domain, the TransferAuthorization
+      # typehash matches, and the owner-binding guard is enforced (eth_call probe
+      # for the production builds; byte-for-byte equality to the locally-compiled
+      # guarded source for the BNB-derived chains). Connectivity errors warn and
+      # the gate re-runs when RPCs are healthy; an actual invariant violation
+      # (wrong NAME, missing guard, no bytecode) fails the job.
+      - name: verify-contracts gate
+        run: node scripts/verify-contracts.mjs
