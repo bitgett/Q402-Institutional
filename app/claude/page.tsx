@@ -145,7 +145,7 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
   {
     label: "Delegation",
     tools: [
-      { name: "q402_clear_delegation", auth: "private key", note: "Clear EIP-7702 delegation on a chain. Q402-sponsored gas." },
+      { name: "q402_clear_delegation", auth: "private key / api key", note: "Clear EIP-7702 delegation on a chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (Gas Tank). Needs confirm: true." },
     ],
   },
   {

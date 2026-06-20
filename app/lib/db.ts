@@ -149,6 +149,14 @@ export interface RelayedTx {
    * sources.
    */
   ruleId?: string;
+  /**
+   * Settlement rail. Undefined on all pre-tagging rows AND on every q402
+   * (EIP-7702) settlement — those are the default and need no badge. Set to
+   * "x402" only for Coinbase x402 (Base USDC EIP-3009) settlements so the
+   * dashboard activity feed can subtly tag them. Derived at relay time from
+   * the isBaseEIP3009 branch, not stored for any other rail.
+   */
+  rail?: "q402" | "x402";
 }
 
 // ── Key helpers ──────────────────────────────────────────────────────────────
