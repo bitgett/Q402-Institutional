@@ -52,7 +52,6 @@ import {
   getSubscription,
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
-import { isCCIPChain } from "@/app/lib/ccip";
 
 export const runtime = "nodejs";
 export const maxDuration = 45;
@@ -69,6 +68,15 @@ interface ClearBody {
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const HEX_ADDR = /^0x[0-9a-fA-F]{40}$/;
+
+// Chains where the CLEAR-delegation gas is billed to the user's Gas Tank
+// instead of being sponsored by Q402. Ethereum L1 ONLY — its type-4 gas is
+// too expensive to sponsor unmetered. Every other chain — including avax and
+// arbitrum (cheap L2 / low-fee) alongside bnb/base/etc. — is fully sponsored.
+// Deliberately NOT isCCIPChain(): that set (eth/avax/arbitrum) is the
+// cross-chain bridge feature, a separate concern; the clear-gas policy is
+// decoupled from it so avax + arbitrum sponsor like the rest.
+const CLEAR_GAS_TANK_CHAINS: ReadonlySet<ChainKey> = new Set<ChainKey>(["eth"]);
 
 /**
  * Resolve the authenticated owner + the walletId to clear, accepting EITHER:
@@ -329,19 +337,16 @@ async function runClear(args: RunClearArgs): Promise<NextResponse> {
     );
   }
 
-  // ── Gas Tank pre-check (CCIP chains only) ───────────────────────────
+  // ── Gas Tank pre-check (Ethereum L1 only) ───────────────────────────
   //
-  // The clear-delegation tx is paid by the relayer hot wallet but the
-  // outlay should land on the USER's Gas Tank — not Q402. Without this
-  // gate every bridge-recovery clear would silently subsidise the user.
-  // Estimate cost = ~60k gas × maxFeePerGas (60k = broadcastClear's
-  // 50k headroom + a 20% buffer for the actual tx variance).
+  // The clear-delegation tx is paid by the relayer hot wallet. On Ethereum
+  // the type-4 gas is expensive enough that the outlay should land on the
+  // USER's Gas Tank — not Q402 — so we estimate (~60k gas × maxFeePerGas =
+  // broadcastClear's 50k headroom + 20% buffer) and gate on the tank balance.
   //
-  // Scope: only debit on chains we already have a native-bridge-usage
-  // bucket for (eth/avax/arbitrum). On other chains the existing
-  // sponsored behaviour stays for now — separate Gas Tank
-  // attribution bucket would need to land first.
-  const debitFromGasTank = isCCIPChain(chain);
+  // Scope: only eth bills the Gas Tank. avax + arbitrum (cheap) are sponsored
+  // like bnb/base/etc., so clears there cost the user nothing.
+  const debitFromGasTank = CLEAR_GAS_TANK_CHAINS.has(chain);
   let estimatedClearGasEth = 0;
   if (debitFromGasTank) {
     const feeData = await publicClient.estimateFeesPerGas().catch(() => null);
