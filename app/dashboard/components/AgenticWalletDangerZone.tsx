@@ -279,8 +279,9 @@ export function AgenticWalletDangerZone({
         )}
 
         <div style={{ fontSize: fs.label, color: v2.muted, marginTop: 11, lineHeight: 1.6 }}>
-          Clearing is gasless (Q402 sponsors it). A chain re-delegates automatically on its next
-          payment, so clear it only right before sending on the x402 rail, which needs a non-delegated wallet.
+          Clearing is gasless on every chain except Ethereum, where the gas is billed to your Gas Tank.
+          A chain re-delegates automatically on its next payment, so clear it only right before sending
+          on the x402 rail, which needs a non-delegated wallet.
         </div>
       </div>
 

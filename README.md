@@ -118,7 +118,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_batch_pay` | live mode | Up to 20 recipients per call (trial: 5) |
 | `q402_receipt` | none | Fetch + verify a Trust Receipt |
 | `q402_wallet_status` | private key | Per-chain EIP-7702 state |
-| `q402_clear_delegation` | private key | Reset EIP-7702 delegation; Q402 sponsors the on-chain TX on every chain |
+| `q402_clear_delegation` | private key / api key | Reset EIP-7702 delegation (Mode A/B local key OR Mode C api key, server-signed). Sponsored on every chain except Ethereum (billed to your Gas Tank). Needs `confirm: true` |
 | `q402_agentic_info` | api key | Agent Wallet info (caps, ERC-8004) |
 | `q402_recurring_list` | api key | List scheduled rules |
 | `q402_recurring_create` | api key | Author a rule (paid Multichain only) |
@@ -307,7 +307,7 @@ Coverage: relay ordering, EIP-7702 signing, trial/paid scope isolation, gas-depo
 EIP-7702 lets your EOA settle gasless payments without a per-user smart-account deploy.
 Persists across payments, reversible anytime.
 
-- **MCP**: ask `"Show my Q402 wallet status"` or `"Clear my Q402 delegation on BNB Chain"`. Local signing; Q402 sponsors the clear TX.
+- **MCP**: ask `"Show my Q402 wallet status"` or `"Clear my Q402 delegation on BNB Chain"`. Local signing (Mode A/B) or server-signed (Mode C, api key only); Q402 sponsors the clear TX on every chain except Ethereum (billed to your Gas Tank).
 - **CLI**:
 
   ```bash

@@ -628,7 +628,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_batch_pay",           auth: "live mode",   purpose: "Up to 20 recipients per call (trial: 5). 6+ BNB batches with Trial → status=\"ambiguous\" so the agent asks how to split." },
                     { name: "q402_receipt",             auth: "none",        purpose: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery against the relayer EOA)." },
                     { name: "q402_wallet_status",       auth: "private key", purpose: "Per-chain EIP-7702 delegation state for the EOA derived from Q402_PRIVATE_KEY. Read-only." },
-                    { name: "q402_clear_delegation",    auth: "private key", purpose: "Clear EIP-7702 delegation on a single chain. Q402-sponsored gas." },
+                    { name: "q402_clear_delegation",    auth: "private key / api key", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (billed to Gas Tank). Needs confirm: true." },
                     { name: "q402_agentic_info",        auth: "api key",     purpose: "Agent Wallet info (addresses, caps, daily-spend used, ERC-8004 id). Drives Mode C." },
                     { name: "q402_recurring_list",      auth: "api key",     purpose: "List scheduled rules." },
                     { name: "q402_recurring_create",    auth: "api key",     purpose: "Author a rule. Paid Multichain on EVERY chain (BNB included)." },

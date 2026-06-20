@@ -79,7 +79,8 @@ export interface HookParams {
   recipientAgentId?: string;
   /** ConditionalOracle — the gate condition for this specific payment. */
   condition?: OracleCondition;
-  /** MultiPayeeSplit — per-payment split override (else wallet default). */
+  /** MultiPayeeSplit — explicit per-payment split. Omit for a plain
+   *  single-recipient payment; there is NO wallet-level default split. */
   splits?: SplitSpec[];
 }
 

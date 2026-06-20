@@ -75,6 +75,9 @@ interface RelayedTx {
   receiptId?: string;
   source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request";
   ruleId?: string;
+  /** Settlement rail — only set to "x402" for Coinbase x402 (Base USDC
+   *  EIP-3009) rows; q402 (default) is left undefined and shows no badge. */
+  rail?: "q402" | "x402";
   /**
    * Demo-only presentation overrides (set only on DEMO rows; absent on real
    * relayed txs). Let the in-file preview data render richer kinds/sub-lines
@@ -1143,8 +1146,25 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
             return (
               <Tr key={`${tx.relayTxHash}-${i}`}>
                 <Td>
-                  <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500 }}>
+                  <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500, display: "flex", alignItems: "center", gap: 7 }}>
                     {tx._demoKind ?? settlementKind(tx)}
+                    {tx.rail === "x402" && (
+                      <span
+                        title="Settled on the Coinbase x402 rail (USDC EIP-3009)"
+                        style={{
+                          fontSize: fs.micro,
+                          fontWeight: 600,
+                          color: v2.cyan,
+                          border: "1px solid rgba(88,199,244,.32)",
+                          background: "rgba(88,199,244,.10)",
+                          borderRadius: 5,
+                          padding: "1px 6px",
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        x402
+                      </span>
+                    )}
                   </div>
                   <div style={{ fontSize: fs.body, color: v2.muted2, marginTop: 3 }}>
                     {tx._demoSub ?? fmtDate(tx.relayedAt)} ·{" "}

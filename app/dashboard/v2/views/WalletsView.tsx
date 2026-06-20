@@ -107,6 +107,8 @@ interface RelayedTx {
   relayedAt: string;
   receiptId?: string;
   source?: "recurring" | "send" | "batch" | "api";
+  /** "x402" only for Coinbase x402 (Base USDC EIP-3009) rows; q402 default = undefined. */
+  rail?: "q402" | "x402";
 }
 
 const CHAIN_LABEL: Record<string, string> = {
@@ -1423,6 +1425,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                                 <ChainIcon chain={asChainKey(t.chain)} size={13} />
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                   {(CHAIN_LABEL[t.chain] ?? t.chain)} · {t.tokenSymbol}
+                                  {t.rail === "x402" ? <span style={{ color: v2.cyan }}> · x402</span> : ""}
                                   {t.source === "recurring" ? " · recurring" : ""}
                                   {t.receiptId ? (
                                     <>

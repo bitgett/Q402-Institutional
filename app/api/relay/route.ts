@@ -1112,6 +1112,9 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
         receiptId:    receiptId ?? undefined,
         ...(trustedSource ? { source: trustedSource } : {}),
         ...(trustedRuleId ? { ruleId: trustedRuleId } : {}),
+        // Tag only the Coinbase x402 (Base USDC EIP-3009) rail so the activity
+        // feed can badge it; q402 (the default EIP-7702 rail) stays untagged.
+        ...(isBaseEIP3009 ? { rail: "x402" as const } : {}),
       });
     } catch (e) {
       console.error("[relay] TX record failed (after-response):", e);
