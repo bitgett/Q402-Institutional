@@ -2255,7 +2255,9 @@ const styles: Record<string, React.CSSProperties> = {
   rowStatus: { fontSize: fs.label, marginTop: 3, textDecoration: "none", display: "inline-block" },
 
   // Col 3 — right rail
-  right: { display: "flex", flexDirection: "column", gap: 15 },
+  // alignSelf stretch lets the rail fill the (taller) console's height so the
+  // last card can be pushed to the bottom edge — see limitsCard marginTop:auto.
+  right: { display: "flex", flexDirection: "column", gap: 15, alignSelf: "stretch" },
   sideCard: { padding: 16 },
   policyScore: { display: "flex", gap: 12, alignItems: "center", margin: "13px 0 15px" },
   ring: {
@@ -2327,7 +2329,10 @@ const styles: Record<string, React.CSSProperties> = {
     borderColor: "rgba(247,202,22,.30)",
     background: "rgba(247,202,22,.08)",
   },
-  limitsCard: { borderColor: "rgba(247,202,22,.18)", background: "rgba(247,202,22,.03)" },
+  // marginTop:auto pushes Spending guardrails to the bottom of the stretched
+  // rail; marginBottom mirrors manageDetails' 22px so its card bottom lines up
+  // exactly with the Wallet management card bottom in the (taller) console.
+  limitsCard: { borderColor: "rgba(247,202,22,.18)", background: "rgba(247,202,22,.03)", marginTop: "auto", marginBottom: 22 },
   limitGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginTop: 11 },
   limit: { padding: 9, borderRadius: 9, background: "rgba(0,0,0,.14)" },
   limitVal: { display: "block", font: `600 ${fs.cardTitle}px ${displayFont}`, marginTop: 4 },
