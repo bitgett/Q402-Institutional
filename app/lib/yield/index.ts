@@ -7,6 +7,7 @@
  */
 
 import { aaveAdapter, aaveSupportedChains } from "./aave";
+import { morphoAdapter, morphoSupportedChains } from "./morpho";
 import type { YieldAdapter, YieldMarket, YieldPosition } from "./types";
 
 export type {
@@ -17,12 +18,12 @@ export type {
   YieldAdapter,
 } from "./types";
 
-/** All installed yield adapters. Append Morpho here when it lands. */
-export const YIELD_ADAPTERS: YieldAdapter[] = [aaveAdapter];
+/** All installed yield adapters. Aave (BNB) + Morpho (Base/Arbitrum, ENV-gated). */
+export const YIELD_ADAPTERS: YieldAdapter[] = [aaveAdapter, morphoAdapter];
 
 /** Chains with at least one yield market (union across adapters). */
 export function yieldSupportedChains(): string[] {
-  return Array.from(new Set([...aaveSupportedChains()]));
+  return Array.from(new Set([...aaveSupportedChains(), ...morphoSupportedChains()]));
 }
 
 /** Live markets across all adapters for a chain (read, best-effort). */

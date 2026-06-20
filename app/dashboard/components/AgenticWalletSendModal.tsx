@@ -473,11 +473,21 @@ export function AgenticWalletSendModal({
                       );
                     })}
                   </div>
-                  <div className="text-[10px] text-white/35 mt-1 leading-relaxed">
-                    {rail === "x402"
-                      ? "Coinbase x402 standard (USDC transferWithAuthorization). Q402 still sponsors gas. Needs a wallet that has not used the Q402 rail (not EIP-7702 delegated)."
-                      : "Q402 gasless default. Works for any wallet state and supports Hooks."}
-                  </div>
+                  {rail === "x402" ? (
+                    <div
+                      className="mt-2 rounded-md border px-3 py-2 text-[11px] leading-relaxed"
+                      style={{ background: "rgba(245,197,24,0.06)", borderColor: "rgba(245,197,24,0.30)", color: "rgba(253,224,71,0.9)" }}
+                    >
+                      <span className="font-semibold">x402 needs a wallet that has not used the Q402 rail.</span>{" "}
+                      Coinbase x402 standard (USDC transferWithAuthorization); Q402 still sponsors gas. An
+                      Agent Wallet that already sent on the Q402 rail is EIP-7702 delegated and will be
+                      rejected here. Use Q402, or clear the delegation first.
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-white/35 mt-1 leading-relaxed">
+                      Q402 gasless default. Works for any wallet state and supports Hooks.
+                    </div>
+                  )}
                 </div>
               )}
 

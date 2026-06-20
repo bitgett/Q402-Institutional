@@ -183,6 +183,7 @@ function agenticSendFingerprint(
   amount: string,
   scope: string,
   hookParamsTag: string,
+  rail: string,
 ): string {
   const seed = [
     owner.toLowerCase(),
@@ -198,6 +199,15 @@ function agenticSendFingerprint(
     // one idempotency slot. Empty tag ("none") when no trusted hook
     // params apply, so non-hook sends keep their existing fingerprint.
     hookParamsTag,
+    // Settlement rail discriminator. On Base, q402 (EIP-7702) and x402
+    // (EIP-3009) move the SAME (to, amount) but with different settlement
+    // semantics, so they must not share an idempotency slot — otherwise an
+    // x402 failure could shadow a q402 retry, or a cached result from the
+    // other rail could be returned. Only the non-default x402 rail extends the
+    // seed, so every existing q402 fingerprint (and its durable settled
+    // marker) stays byte-identical — preserving replay protection across this
+    // change with no double-settle window.
+    ...(rail && rail !== "q402" ? [`rail:${rail}`] : []),
   ].join("|");
   return ethers.keccak256(ethers.toUtf8Bytes(seed)).slice(2, 18);
 }
@@ -552,6 +562,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     body.amount,
     scope,
     hookParamsTag,
+    body.rail ?? "q402",
   );
   const idempotencyKey = sendKey(fp);
   // Durable replay marker is scoped to the CLIENT idempotency key (when
