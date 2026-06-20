@@ -34,6 +34,7 @@ import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { requireIntentAuth } from "@/app/lib/auth";
 import {
   getActiveAgenticWallet,
+  listAgenticWallets,
   decryptPrivateKey,
 } from "@/app/lib/agentic-wallet";
 import {
@@ -47,6 +48,8 @@ import {
   claimAndDebitNativeBridge,
   getGasBalance,
   setPendingClearDebit,
+  getApiKeyRecord,
+  getSubscription,
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { isCCIPChain } from "@/app/lib/ccip";
@@ -55,14 +58,149 @@ export const runtime = "nodejs";
 export const maxDuration = 45;
 
 interface ClearBody {
-  address?:   string;  // owner EOA
-  nonce?:     string;  // challenge
-  signature?: string;  // EIP-191 sig over canonical message
-  walletId?:  string;
-  chain?:     string;  // chain on which to clear
+  address?:      string;  // owner EOA (signature path)
+  nonce?:        string;  // challenge (signature path)
+  signature?:    string;  // EIP-191 sig over canonical message (signature path)
+  apiKey?:       string;  // Mode C — server-mediated MCP holds only the apiKey
+  ownerAddress?: string;  // optional owner binding for the apiKey path
+  walletId?:     string;
+  chain?:        string;  // chain on which to clear
 }
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+const HEX_ADDR = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * Resolve the authenticated owner + the walletId to clear, accepting EITHER:
+ *   - Mode A/B: owner EIP-191 signature with intent challenge (dashboard), OR
+ *   - Mode C:   a live, non-sandbox apiKey (server-mediated MCP). The owner is
+ *               derived from the key; the walletId may be omitted and resolves
+ *               to the owner's single active wallet (>1 → AMBIGUOUS_WALLET).
+ *
+ * The apiKey path is a STRICT SUBSET of what /api/wallet/agentic/send already
+ * authorizes with the same key: clearing a delegation moves no funds and is
+ * the owner's own action. The SANDBOX / STALE_API_KEY / TRIAL_BNB_ONLY gates
+ * mirror /send so a rotated or trial key can't trigger sponsored non-BNB
+ * clears, and ownership is re-enforced downstream by the owner-scoped
+ * getActiveAgenticWallet(owner, walletId) lookup.
+ */
+async function resolveClearOwner(
+  body: ClearBody,
+  chain: ChainKey,
+): Promise<{ owner: string; walletId: string } | NextResponse> {
+  // ── Mode A/B — owner EIP-191 signature with intent challenge ──────────
+  if (typeof body.signature === "string" && body.signature.length > 0) {
+    if (!body.walletId || typeof body.walletId !== "string") {
+      return NextResponse.json({ error: "walletId_required" }, { status: 400 });
+    }
+    const walletId = body.walletId.toLowerCase();
+    const authResult = await requireIntentAuth({
+      address:   body.address ?? null,
+      challenge: body.nonce ?? null,
+      signature: body.signature ?? null,
+      action:    "agentic.clear_delegation",
+      intent:    { walletId, chain },
+    });
+    if (typeof authResult !== "string") {
+      return NextResponse.json(
+        { error: authResult.error, code: authResult.code },
+        { status: authResult.status },
+      );
+    }
+    return { owner: authResult, walletId };
+  }
+
+  // ── Mode C — live apiKey only (server-mediated MCP) ───────────────────
+  if (typeof body.apiKey === "string" && body.apiKey.length > 0) {
+    // Reject BOTH sandbox prefixes — db.ts treats q402_test_ AND legacy
+    // q402_sandbox_ as sandbox; a paid-owner-attached legacy sandbox key
+    // must not reach this live clear path. Matches /send.
+    if (body.apiKey.startsWith("q402_test_") || body.apiKey.startsWith("q402_sandbox_")) {
+      return NextResponse.json(
+        { error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey to clear a delegation." },
+        { status: 401 },
+      );
+    }
+    const rec = await getApiKeyRecord(body.apiKey);
+    if (!rec || !rec.active || rec.isSandbox) {
+      return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
+    }
+    if (typeof body.ownerAddress === "string" && body.ownerAddress.length > 0) {
+      if (!HEX_ADDR.test(body.ownerAddress)) {
+        return NextResponse.json({ error: "INVALID_OWNER" }, { status: 400 });
+      }
+      if (rec.address.toLowerCase() !== body.ownerAddress.toLowerCase()) {
+        return NextResponse.json(
+          { error: "OWNER_MISMATCH", message: "apiKey is not bound to the supplied ownerAddress." },
+          { status: 403 },
+        );
+      }
+    }
+    const owner = rec.address.toLowerCase();
+
+    // STALE_API_KEY + TRIAL_BNB_ONLY — mirror /send so the apiKey clear
+    // authorization is a strict subset of the send authorization. A rotated
+    // (still-active) key isn't the owner's current key; a Trial key is
+    // BNB-only (Q402 sponsors the clear gas on non-CCIP chains).
+    const sub = await getSubscription(owner);
+    const isTrial = body.apiKey === sub?.trialApiKey;
+    const isPaid  = body.apiKey === sub?.apiKey;
+    if (!isTrial && !isPaid) {
+      return NextResponse.json(
+        {
+          error: "STALE_API_KEY",
+          message:
+            "This apiKey is no longer the live trial or multichain key. " +
+            "Rotate to the current key in your dashboard and retry.",
+        },
+        { status: 401 },
+      );
+    }
+    if (isTrial && chain !== "bnb") {
+      return NextResponse.json(
+        {
+          error: "TRIAL_BNB_ONLY",
+          message:
+            "Trial apiKeys can only clear on BNB Chain. Present the Multichain " +
+            "key (or owner-sign) to clear a delegation on other chains.",
+        },
+        { status: 402 },
+      );
+    }
+
+    // Resolve the walletId: explicit wins; otherwise the owner's single
+    // active wallet. With >1 active wallet an omitted walletId is ambiguous —
+    // refuse rather than silently clear the default (which could leave the
+    // wallet the caller actually meant still delegated while reporting
+    // success). deletedAt filter mirrors getActiveAgenticWallet's soft-delete.
+    if (body.walletId && typeof body.walletId === "string") {
+      return { owner, walletId: body.walletId.toLowerCase() };
+    }
+    const active = (await listAgenticWallets(owner)).filter(
+      (w) => !w.deletedAt || Date.now() < w.deletedAt,
+    );
+    if (active.length === 0) {
+      return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
+    }
+    if (active.length > 1) {
+      return NextResponse.json(
+        {
+          error: "AMBIGUOUS_WALLET",
+          message:
+            "You have multiple Agent Wallets. Pass an explicit walletId to choose which one to clear.",
+          wallets: active.map((w) => w.address),
+        },
+        { status: 409 },
+      );
+    }
+    return { owner, walletId: active[0].address.toLowerCase() };
+  }
+
+  return NextResponse.json(
+    { error: "AUTH_REQUIRED", message: "Provide either an EIP-191 signature or an apiKey." },
+    { status: 401 },
+  );
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ip = getClientIP(req);
@@ -77,36 +215,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  // ── Validate before auth so the rebuilt intent matches what the user
-  //    signed ──────────────────────────────────────────────────────────
-  if (!body.walletId || typeof body.walletId !== "string") {
-    return NextResponse.json({ error: "walletId_required" }, { status: 400 });
-  }
+  // ── Validate chain (needed by both auth paths) ───────────────────────
   if (!body.chain || !isAgenticChainKey(body.chain)) {
     return NextResponse.json({ error: "INVALID_CHAIN" }, { status: 400 });
   }
   const chain = body.chain;
   const cfg = AGENTIC_CHAINS[chain];
 
-  // ── Intent-bound auth ────────────────────────────────────────────────
-  const authResult = await requireIntentAuth({
-    address:   body.address ?? null,
-    challenge: body.nonce ?? null,
-    signature: body.signature ?? null,
-    action:    "agentic.clear_delegation",
-    intent: {
-      walletId: body.walletId.toLowerCase(),
-      chain,
-    },
-  });
-  if (typeof authResult !== "string") {
-    return NextResponse.json(
-      { error: authResult.error, code: authResult.code },
-      { status: authResult.status },
-    );
-  }
-  const owner = authResult;
-  const walletId = body.walletId.toLowerCase();
+  // ── Auth — owner EIP-191 signature (Mode A/B) OR live apiKey (Mode C) ─
+  // resolveClearOwner validates walletId before rebuilding the signed intent
+  // on the signature path; the apiKey path derives the owner from the key and
+  // may resolve a default walletId. Ownership is re-checked below by the
+  // owner-scoped getActiveAgenticWallet(owner, walletId) lookup.
+  const auth = await resolveClearOwner(body, chain);
+  if (auth instanceof NextResponse) return auth;
+  const { owner, walletId } = auth;
 
   // ── Per-OWNER rate limit ────────────────────────────────────────────
   // The IP-level limit above (5/h per IP) doesn't close the case where a
