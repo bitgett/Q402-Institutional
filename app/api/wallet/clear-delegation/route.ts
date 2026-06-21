@@ -185,9 +185,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // un-delegation of an older Q402 impl is legitimate — and necessary, since
   // EOAs delegated to a retired impl are exactly the ones that need migrating.
   // (Settlement still requires the CURRENT impl elsewhere; this is clear-only.)
-  // Static list OR — the authoritative completeness fallback — any impl whose
-  // on-chain NAME() is "Q402 …" (covers an un-enumerated older generation; the
-  // static lists can never be provably exhaustive).
+  // Static address allowlist OR — best-effort fallback — an impl whose on-chain
+  // BYTECODE codehash is a known Q402 impl (Q402_IMPL_CODEHASHES). The codehash
+  // can't be forged, unlike the old NAME() check it replaced, which let anyone
+  // get a sponsored clear of a junk delegation to a fake "Q402 …"-named contract.
   if (
     !isClearableQ402Impl(body.chain, state.impl) &&
     !(await isQ402ImplOnChain(body.chain, state.impl!))

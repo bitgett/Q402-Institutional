@@ -112,10 +112,10 @@ const RETIRED_IMPLS: Record<ChainKey, readonly string[]> = {
   stable:    [],
   // 0x2fb2b2… was deployed on mantle/injective/scroll/arbitrum (and is Stable's
   // CURRENT impl) via deterministic nonce-aligned CREATE — it really does carry
-  // code on all of them, so list it everywhere it's retired. The static list is
-  // a fast path; the authoritative completeness check is isQ402ImplOnChain()
-  // below (on-chain NAME() prefix), which clears ANY Q402-shaped impl even if
-  // it's not enumerated here.
+  // code on all of them, so list it everywhere it's retired. The static address
+  // list is the durable guarantee; the fallback isQ402ImplOnChain() below is a
+  // best-effort recogniser by on-chain bytecode codehash (Q402_IMPL_CODEHASHES)
+  // for an un-enumerated impl whose bytecode we already know.
   mantle:    ["0xa9a7dce76def2ac36057fef0d8103df10581d61e", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
   injective: ["0x892e647fbbadc8ee8342710244931ea98529ea9c", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
   monad:     ["0x5a8fde1851491d9ed512a9eda1c63ca7627becb8", "0x39ba9520718ee069d7f72882ff4c28a5ea8a2acc"],
@@ -138,22 +138,71 @@ export function isClearableQ402Impl(chain: ChainKey, impl: string | undefined): 
 }
 
 /**
- * Dynamic completeness check for the clear endpoint. Every Q402 impl — current
- * OR retired, any generation — returns a "Q402 …" domain name from NAME(), so
- * this recognises a Q402 delegation even when the static lists above don't
- * enumerate it (the lists can never be provably exhaustive). Returns false on
- * RPC error or any non-"Q402 " name (e.g. MetaMask's EIP7702StatelessDeleGator),
- * so non-Q402 delegations are never sponsored for cleanup.
+ * Codehash allowlist of EVERY known Q402 impl bytecode: keccak256 of the
+ * on-chain runtime code of each (chain, address) in Q402_IMPL_PER_CHAIN +
+ * RETIRED_IMPLS, collected once PER-(chain,address). Keyed on bytecode, NOT
+ * address — the SAME address carries DIFFERENT bytecode across chains and
+ * generations (e.g. 0x2fb2b2… hashes to 6 distinct values across
+ * stable/base/mantle/injective/scroll/arbitrum), so deduping by address would
+ * silently reject legitimate retired deployments. 21 entries as of the last
+ * collection. Empty/0x code is excluded (a 0x entry would make every plain or
+ * self-destructed EOA match — re-opening the grief).
+ *
+ * Refresh: when you add a new impl ADDRESS to Q402_IMPL_PER_CHAIN/RETIRED_IMPLS,
+ * fetch its on-chain code (cross-checked across ≥2 RPCs), keccak256 it, and add
+ * the hash here in the SAME commit. See docs/IMPL_REFRESH_RUNBOOK.md.
+ */
+export const Q402_IMPL_CODEHASHES: ReadonlySet<string> = new Set<string>([
+  "0x345a0bec725b97d5e049cce9954b286d3ac00c9c62de5b91d423bc73a78206c5", // avax current
+  "0x1f66d6859ec346d8000d9df00209de0f94033072c4db5f2b7024e728129388c1", // bnb current
+  "0x7a2c13a087d61a9d4b99420369b5b8a384d62d72918335d8a50ec35088007ec0", // eth current
+  "0xa2703a7de08e40353c7683f66ad1fae508310af0309c6ef300b057db36ef81c4", // xlayer current
+  "0x8cfe8706df57fc10cc16e52da1cffb861e9a02a42a233b3424f7f3bf0115e24d", // stable current
+  "0x0c7a6dd4d1838354f7021dd7de55fc939ee07d422ff376984431a5d8d3a00448", // mantle current
+  "0xb87ac1c8563df244de934d923e56f0b9fdcdf7fc293546509689088e12a6d398", // injective current
+  "0x6fed32dcc6a28c49874cb01d57c58dc915cbae8a6f77d9b8a3c06ee1382f16cb", // monad current
+  "0x6b2c3faf60f570aab50abbb4aa12a3c0c555671fea6ed9301ac45e340ecda1d9", // scroll current
+  "0x44feb33dce89b4b7a18e0b3cddd6b52154e8db2846d640cfbef43ae2a4d63a33", // arbitrum current
+  "0x5bfc8ae51406a93df0324beca30f1028978da0900778312de8725b9de60f0679", // base current
+  "0x0306a515be22e02d116ae0beeab6b6a08b9e37f8a0cf0d90000a4df77ec5744d", // mantle retired (0xa9a7dc)
+  "0x8fb2ac5535ab1cf247edfb29c5f12206eadfe7f4d4bb696265ff4827e3dc6e3c", // mantle retired (0x2fb2b2)
+  "0x29f061d3db4f9b7bfb3d68286df9c1c1458612f71d605d239b0dffb6c96d8b6b", // injective retired (0x892e64)
+  "0x9a3536aa12e5505087c91507416cb73fc27fc2a9d82ca9f6bea96e35a20b4433", // injective retired (0x2fb2b2)
+  "0xa4d5fc33e2bf2247aa6b3426da09b040799310da1d814df9906f28546455f98d", // monad retired (0x5a8fde)
+  "0x6ee01dc9552636b6bd4f4d5ad56960662c83aa51ea7d1a488d4e0687bebf0c37", // monad retired (0x39ba95)
+  "0x4085e5450309a992a69bdf90dc93d28b0cdf6db1f28557af4de0d694b2ed6514", // scroll retired (0x8d8544)
+  "0x3f1cafbe691713c9df9c6ca3908698b7941d0252181cec6872905e415e5bf828", // scroll retired (0x2fb2b2)
+  "0x463e2cb224f4dcaf599bb52734dc148af4849c4802057a03af9a2fce25bd4e81", // arbitrum retired (0xe5b90d)
+  "0x9acb7b7f2f29371e56d4f3de584c35c8c522b87e09a5a2e043b169143fd12692", // arbitrum retired (0x2fb2b2)
+]);
+
+/**
+ * Dynamic completeness check for the clear endpoint. Recognises a Q402 impl by
+ * its on-chain BYTECODE: fetches eth_getCode(impl) and checks keccak256(code)
+ * against Q402_IMPL_CODEHASHES. Returns false on empty/0x code, on RPC error,
+ * or on any unknown bytecode (an attacker's fake impl, or MetaMask's
+ * EIP7702StatelessDeleGator), so non-Q402 delegations are never sponsored.
+ *
+ * This REPLACES the old NAME()-prefix check, which trusted an attacker-
+ * controllable contract method: anyone could deploy a contract whose NAME()
+ * returns "Q402 …", self-delegate to it, and get Q402 to sponsor clearing the
+ * junk delegation. A codehash can't be forged without deploying byte-identical
+ * Q402 impl bytecode (which IS a real Q402 impl, fine to clear). Enumerated
+ * impls hit isClearableQ402Impl first (synchronous, RPC-free), so this fallback
+ * only ever fires for an un-enumerated bytecode.
  */
 export async function isQ402ImplOnChain(chain: ChainKey, impl: string): Promise<boolean> {
   try {
     const provider = new ethers.JsonRpcProvider(getPrimaryRpc(chain));
-    const name = await withTimeout(
-      new ethers.Contract(impl, ["function NAME() view returns (string)"], provider).NAME() as Promise<string>,
+    const code = await withTimeout(
+      provider.getCode(impl) as Promise<string>,
       PROVIDER_CALL_TIMEOUT_MS,
-      `NAME(${chain})`,
+      `getCode(${chain})`,
     );
-    return typeof name === "string" && name.startsWith("Q402 ");
+    // Empty/0x must short-circuit BEFORE hashing — keccak256("0x") in the set
+    // would make every plain or self-destructed EOA match.
+    if (!code || code === "0x") return false;
+    return Q402_IMPL_CODEHASHES.has(ethers.keccak256(code));
   } catch {
     return false;
   }

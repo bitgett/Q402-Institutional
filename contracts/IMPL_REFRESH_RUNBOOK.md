@@ -13,10 +13,17 @@ delegated to an OLDER impl before the refresh stays on it until it next pays (au
 re-delegate) or is explicitly cleared; until then an actor with the EOA's own key
 could call its delegated code directly (this path bypasses Q402, so chain-status
 doesn't gate it). The official clear path accepts RETIRED impls (`RETIRED_IMPLS` +
-`isClearableQ402Impl`) and, as a completeness fallback, any impl whose on-chain
-`NAME()` is `"Q402 …"` (`isQ402ImplOnChain`), both in
-[`app/lib/eip7702.ts`](../app/lib/eip7702.ts) — so an un-enumerated older generation
-still clears via `q402_clear_delegation` / `scripts/undelegate-7702.mjs`.
+`isClearableQ402Impl`) and, as a best-effort fallback, any impl whose on-chain
+**bytecode codehash** matches a known Q402 impl (`Q402_IMPL_CODEHASHES` +
+`isQ402ImplOnChain`), both in [`app/lib/eip7702.ts`](../app/lib/eip7702.ts). The
+codehash fallback replaced an earlier `NAME()`-prefix check that an attacker
+could spoof to get Q402 to sponsor clearing a junk delegation. An un-enumerated
+older generation whose codehash we already collected still clears via
+`q402_clear_delegation`; otherwise the owner self-pays via
+`scripts/undelegate-7702.mjs`. **When you add a new impl address to
+`Q402_IMPL_PER_CHAIN` / `RETIRED_IMPLS`, add its bytecode codehash to
+`Q402_IMPL_CODEHASHES` in the same commit** (fetch `eth_getCode`, cross-check
+across ≥2 RPCs, `keccak256`).
 
 **Migration status — complete as of 2026-06-15.** A full scan of every historical
 payer EOA in KV (all owners × all wallets, ~492 EOAs) across the five chains, with
