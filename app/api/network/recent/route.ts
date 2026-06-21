@@ -14,7 +14,7 @@
  * construction). We exclude sandbox TXs (apiKey prefix q402_test_ /
  * q402_sandbox_) so the surface stays bound to on-chain settlements.
  *
- * Cached for 15 s at the edge — fast enough to feel realtime,
+ * Cached for 120 s at the edge — fast enough to feel realtime,
  * infrequent enough to keep KV scan cost manageable.
  */
 import { NextResponse } from "next/server";
@@ -23,14 +23,14 @@ import { kv } from "@vercel/kv";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Vercel edge cache for 30s with a 60s SWR window. Cache hit rate is
+// Vercel edge cache for 120s with a 60s SWR window. Cache hit rate is
 // the load-bearing knob here: every cache miss walks every relaytx
 // key + materialises its list against the upstream KV, which is
 // already past its monthly bandwidth quota. With the viz tx-watcher
-// polling every 30s and frontend cache-bust removed, the edge cache
-// absorbs most of the load — staleness budget is ~30s, which the
+// polling every 60s and frontend cache-bust removed, the edge cache
+// absorbs most of the load — staleness budget is ~120s, which the
 // "Live settlement feed" UX absorbs without a noticeable lag.
-const CACHE_HEADER = "public, s-maxage=30, stale-while-revalidate=60";
+const CACHE_HEADER = "public, s-maxage=120, stale-while-revalidate=60";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin":  "*",
