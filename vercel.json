@@ -26,15 +26,15 @@
     },
     {
       "path": "/api/cron/relayer-balance",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/ccip-pending-fund-reconcile",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/cron-watchdog",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/cron/ofac-refresh",
