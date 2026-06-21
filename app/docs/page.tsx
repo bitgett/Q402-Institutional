@@ -821,8 +821,9 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
 "Clear my Q402 delegation on BNB Chain."`} />
             <p className="text-white/70 text-sm mb-3 mt-2 leading-relaxed">
               <code className="text-yellow text-xs">q402_wallet_status</code> reads state.{" "}
-              <code className="text-yellow text-xs">q402_clear_delegation</code> signs locally;
-              Q402 sponsors the clear TX — $0 gas. The next payment recreates the delegation automatically.
+              <code className="text-yellow text-xs">q402_clear_delegation</code> signs locally (Mode A/B)
+              or server-side (Mode C, api key); Q402 sponsors the clear TX on every chain except Ethereum,
+              where it&apos;s billed to your Gas Tank. The next payment recreates the delegation automatically.
             </p>
             <p className="text-white/70 text-sm mb-3 mt-5 leading-relaxed">
               <strong className="text-white/90">From the terminal (CLI):</strong>

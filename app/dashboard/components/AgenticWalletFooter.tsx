@@ -16,8 +16,10 @@
  * NOT exposed as a UI button — the in-browser `wallet_signAuthorization`
  * RPC isn't supported uniformly (OKX, older MetaMask), so we route the
  * action through `scripts/clear-delegation.mjs` (CLI) or the
- * `q402_clear_delegation` MCP tool. Both sign locally and POST to
- * `/api/wallet/clear-delegation` where the relayer sponsors the gas.
+ * `q402_clear_delegation` MCP tool (Mode A/B sign locally; Mode C is
+ * server-signed via api key) and POST to the clear-delegation endpoint,
+ * where the relayer sponsors the gas on every chain except Ethereum, which
+ * is billed to the user's Gas Tank.
  */
 
 import { useEffect, useState } from "react";
@@ -201,7 +203,7 @@ export function AgenticWalletFooter({ ownerAddress, walletAddress }: Props) {
             <div className="text-[11px] text-amber-200/80 leading-relaxed">
               Clear via CLI: <code className="font-mono">node scripts/clear-delegation.mjs</code>
               {" "}— or use the <code className="font-mono">q402_clear_delegation</code> MCP tool
-              from Claude / Codex. Gas is sponsored.
+              from Claude / Codex. Gas is sponsored on every chain except Ethereum, where it&apos;s billed to your Gas Tank.
             </div>
           </div>
         )}

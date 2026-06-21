@@ -40,6 +40,7 @@ import {
 import {
   broadcastClear,
   recoverAuthorizationAddress,
+  CLEAR_GAS_TANK_CHAINS,
   type SignedAuthorization,
 } from "@/app/lib/eip7702";
 import { AGENTIC_CHAINS, isAgenticChainKey } from "@/app/lib/agentic-wallet-sign";
@@ -68,15 +69,6 @@ interface ClearBody {
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const HEX_ADDR = /^0x[0-9a-fA-F]{40}$/;
-
-// Chains where the CLEAR-delegation gas is billed to the user's Gas Tank
-// instead of being sponsored by Q402. Ethereum L1 ONLY — its type-4 gas is
-// too expensive to sponsor unmetered. Every other chain — including avax and
-// arbitrum (cheap L2 / low-fee) alongside bnb/base/etc. — is fully sponsored.
-// Deliberately NOT isCCIPChain(): that set (eth/avax/arbitrum) is the
-// cross-chain bridge feature, a separate concern; the clear-gas policy is
-// decoupled from it so avax + arbitrum sponsor like the rest.
-const CLEAR_GAS_TANK_CHAINS: ReadonlySet<ChainKey> = new Set<ChainKey>(["eth"]);
 
 /**
  * Resolve the authenticated owner + the walletId to clear, accepting EITHER:
@@ -149,7 +141,7 @@ async function resolveClearOwner(
     // STALE_API_KEY + TRIAL_BNB_ONLY — mirror /send so the apiKey clear
     // authorization is a strict subset of the send authorization. A rotated
     // (still-active) key isn't the owner's current key; a Trial key is
-    // BNB-only (Q402 sponsors the clear gas on non-CCIP chains).
+    // BNB-only, and BNB clears are sponsored anyway (only eth bills the tank).
     const sub = await getSubscription(owner);
     const isTrial = body.apiKey === sub?.trialApiKey;
     const isPaid  = body.apiKey === sub?.apiKey;
@@ -242,9 +234,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── Per-OWNER rate limit ────────────────────────────────────────────
   // The IP-level limit above (5/h per IP) doesn't close the case where a
   // single owner rotates IPs (VPN, cloud egress) and hammers sponsored
-  // clears on non-CCIP chains where Q402 still pays gas. Cap each owner
-  // address at 3/h so even with IP rotation the relayer drain is
-  // bounded. CCIP chains debit from Gas Tank so they self-cap, but
+  // clears on every sponsored chain where Q402 still pays gas. Cap each
+  // owner address at 3/h so even with IP rotation the relayer drain is
+  // bounded. Ethereum clears debit the Gas Tank so they self-cap; the
   // sponsored chains do not — owner-level cap covers both for free.
   //
   // failOpen=true: this layer is defense-in-depth ONLY. The IP cap above
