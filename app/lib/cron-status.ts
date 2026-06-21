@@ -97,7 +97,7 @@ export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
  * Tolerances:
  *   - recurring: 1.25× the heartbeat interval (75min for 1h cadence).
  *     Render restart + first-tick latency comfortably under this.
- *   - deposit: 3× the heartbeat (15min for 5min cadence). Block-RPC
+ *   - deposit: 3× the heartbeat (30min for 10min cadence). Block-RPC
  *     slowness on the widest chain (Monad ~30s wall) plus a missed
  *     tick during deploy stays under the threshold.
  */
@@ -112,8 +112,8 @@ export const CRON_META: Record<CronName, CronMeta> = {
     staleAfterMs: 75 * 60 * 1000,
   },
   [CRON_NAMES.DEPOSIT_SCAN]: {
-    expectedIntervalMs: 5 * 60 * 1000,
-    staleAfterMs: 15 * 60 * 1000,
+    expectedIntervalMs: 10 * 60 * 1000,
+    staleAfterMs: 30 * 60 * 1000,
   },
   // Weekly cadence — fires every Sunday 00:00 UTC. Stale window is 8d
   // so a single missed Sunday (e.g. Vercel cron blip) trips the alert
@@ -122,13 +122,13 @@ export const CRON_META: Record<CronName, CronMeta> = {
     expectedIntervalMs: 7 * 24 * 60 * 60 * 1000,
     staleAfterMs: 8 * 24 * 60 * 60 * 1000,
   },
-  // Relayer EOA balance probe — same 5min Render heartbeat as the
-  // deposit scan. Stale window kept tight (15 min) so a missed tick
-  // surfaces in the cron-status watchdog quickly: a stuck probe means
-  // we lose visibility into whether the hot wallet is about to dip.
+  // Relayer EOA balance probe — Vercel cron every 15 min. Stale window
+  // 40 min (~2.7x cadence) so normal cron jitter doesn't false-page; a
+  // genuinely stuck probe still surfaces quickly. A stuck probe means we
+  // lose visibility into whether the hot wallet is about to dip.
   [CRON_NAMES.RELAYER_BALANCE]: {
-    expectedIntervalMs: 5 * 60 * 1000,
-    staleAfterMs: 15 * 60 * 1000,
+    expectedIntervalMs: 15 * 60 * 1000,
+    staleAfterMs: 40 * 60 * 1000,
   },
   // 6-hour Render heartbeat — sweeps GASTANK to Sender pools + relayer.
   // Was 15-min, but each sweep tops up to 2× threshold so a healthy
@@ -144,13 +144,13 @@ export const CRON_META: Record<CronName, CronMeta> = {
     expectedIntervalMs: 6 * 60 * 60 * 1000,
     staleAfterMs: 8 * 60 * 60 * 1000,
   },
-  // Same 5-min Render heartbeat as deposit-scan. Stale 15 min window so
-  // a missed tick surfaces in the watchdog quickly — a stuck reconcile
-  // means relayer ETH could be sitting on Agent Wallets without the
+  // Vercel cron every 15 min. Stale 40 min window (~2.7x cadence) so
+  // normal jitter doesn't false-page; a stuck reconcile still surfaces —
+  // it means relayer ETH could be sitting on Agent Wallets without the
   // matching Gas Tank debit, which is exactly the gap this cron closes.
   [CRON_NAMES.CCIP_PENDING_FUND_RECONCILE]: {
-    expectedIntervalMs: 5 * 60 * 1000,
-    staleAfterMs: 15 * 60 * 1000,
+    expectedIntervalMs: 15 * 60 * 1000,
+    staleAfterMs: 40 * 60 * 1000,
   },
   // OFAC sanctioned-address refresh — daily. The list only changes when
   // Treasury updates the SDN; a daily pull is ample. Stale window 50h
@@ -161,13 +161,13 @@ export const CRON_META: Record<CronName, CronMeta> = {
     expectedIntervalMs: 24 * 60 * 60 * 1000,
     staleAfterMs: 50 * 60 * 60 * 1000,
   },
-  // Vercel-native staleness watchdog — runs every 10 min on Vercel infra
+  // Vercel-native staleness watchdog — runs every 30 min on Vercel infra
   // (independent of the Render heartbeat that drives most other crons), so
   // a Render outage that silently stops deposit-scan / ofac / treasury is
-  // DETECTED and paged here. 35-min stale window (~3× cadence) tolerates a
-  // deploy blip without self-noise.
+  // DETECTED and paged here. Excluded from self-watch, so this window is
+  // documentation-only; 75-min (~2.5x cadence) kept for consistency.
   [CRON_NAMES.CRON_WATCHDOG]: {
-    expectedIntervalMs: 10 * 60 * 1000,
-    staleAfterMs: 35 * 60 * 1000,
+    expectedIntervalMs: 30 * 60 * 1000,
+    staleAfterMs: 75 * 60 * 1000,
   },
 };
