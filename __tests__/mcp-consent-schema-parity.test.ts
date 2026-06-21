@@ -36,13 +36,18 @@ const JSON_CONSENT = /^\s*consentToken:\s*\{/m;
 describe.skipIf(!available)("MCP two-phase consent Zod<->JSON schema parity", () => {
   const twoPhase = toolFiles.filter((f) => ZOD_CONSENT.test(readLF(resolve(TOOLS_DIR, f))));
 
-  it("finds exactly the six fund-moving two-phase consent tools", () => {
-    // If this set changes, the README / landing copy that says "six
-    // fund-moving tools use two-phase consent" must change with it.
+  it("finds the six fund-moving consent tools plus clear-delegation", () => {
+    // Six FUND-MOVING tools use two-phase consent; the README / landing copy
+    // that says "six fund-moving tools" refers to those. clear-delegation is
+    // NOT fund-moving but adopted the SAME token-bound consent because an
+    // undelegate broadcasts a real tx and, on Ethereum, bills the Gas Tank —
+    // so it belongs to the two-phase SET (7) without changing the
+    // "six fund-moving" count.
     expect([...twoPhase].sort()).toEqual(
       [
         "batch-pay.ts",
         "bridge-send.ts",
+        "clear-delegation.ts",
         "pay.ts",
         "request-pay.ts",
         "yield-deposit.ts",

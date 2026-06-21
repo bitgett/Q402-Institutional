@@ -25,6 +25,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
+import { JsonRpcProvider } from "ethers";
 import { rateLimit } from "@/app/lib/ratelimit";
 import {
   broadcastClear,
@@ -33,10 +34,16 @@ import {
   isQ402ImplOnChain,
   recoverAuthorizationAddress,
   CHAIN_IDS,
+  CLEAR_GAS_TANK_CHAINS,
   Q402_IMPL_PER_CHAIN,
   type SignedAuthorization,
 } from "@/app/lib/eip7702";
-import type { ChainKey } from "@/app/lib/relayer";
+import { getPrimaryRpc, type ChainKey } from "@/app/lib/relayer";
+import {
+  getGasBalance,
+  claimAndDebitNativeBridge,
+  setPendingClearDebit,
+} from "@/app/lib/db";
 
 // Wire shape from the client (browser / MCP / CLI). We accept the
 // canonical ethers-style authorization triple plus the target address +
@@ -196,6 +203,41 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // ── Gas Tank pre-check (Ethereum only) ────────────────────────────────────
+  // Policy: undelegate gas is sponsored on every chain EXCEPT Ethereum, where
+  // it is billed to the signer's Gas Tank (eth L1 is too expensive to sponsor
+  // unmetered). The owner here is the RECOVERED signer — for a real EOA that
+  // IS the Gas-Tank-holding address. (Agent-wallet local signing on eth is
+  // pre-empted client-side in the MCP, since the agent wallet is not the tank
+  // holder; a stray direct call simply 402s here, which is the safe outcome —
+  // Q402 still never sponsors eth.) Estimate = ~60k gas × maxFeePerGas (the
+  // 50k broadcastClear headroom + 20% buffer), same basis as the agentic route.
+  const debitFromGasTank = CLEAR_GAS_TANK_CHAINS.has(body.chain);
+  let estimatedClearGasEth = 0;
+  if (debitFromGasTank) {
+    const feeProvider = new JsonRpcProvider(getPrimaryRpc(body.chain));
+    const feeData = await feeProvider.getFeeData().catch(() => null);
+    const maxFeePerGas = feeData?.maxFeePerGas ?? feeData?.gasPrice ?? 0n;
+    estimatedClearGasEth = Number(maxFeePerGas * 60_000n) / 1e18;
+    const gasBal = await getGasBalance(body.address);
+    const avail  = gasBal[body.chain] ?? 0;
+    if (avail < estimatedClearGasEth) {
+      return NextResponse.json(
+        {
+          error:        "INSUFFICIENT_NATIVE_BALANCE",
+          chain:        body.chain,
+          requiredEth:  estimatedClearGasEth,
+          availableEth: avail,
+          reason:
+            `Ethereum undelegate is billed to the signer's Gas Tank (Q402 does ` +
+            `not sponsor eth clears). Short ${(estimatedClearGasEth - avail).toFixed(6)} ETH ` +
+            `— deposit eth to the Gas Tank for ${body.address} and retry.`,
+        },
+        { status: 402 },
+      );
+    }
+  }
+
   // ── Concurrency lock ──────────────────────────────────────────────────────
   // The rate-limit above only PEEKs (it consumes on success), so two concurrent
   // requests for the same (address, chain) could both pass the peek and both
@@ -249,6 +291,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { status: 422 },
       );
     }
+    // ── Debit actual eth gas from the signer's Gas Tank (eth only) ────────
+    // broadcastClear returns gasUsed but not the effective gas price, so we
+    // refetch the receipt. claimAndDebitNativeBridge is an atomic per-txHash
+    // claim+INCR (idempotent with the reconcile cron); on any failure we drop
+    // a pending-debit row for the cron to backfill rather than lose the debit.
+    // The on-chain clear already landed, so this never changes the 200 result.
+    if (debitFromGasTank) {
+      try {
+        const provider = new JsonRpcProvider(getPrimaryRpc(body.chain));
+        const receipt  = await provider.getTransactionReceipt(result.txHash);
+        const gasUsedWei  = receipt?.gasUsed ?? 0n;
+        const gasPriceWei = receipt?.gasPrice ?? 0n; // ethers v6: effective gas price
+        const actualEth   = Number(gasUsedWei * gasPriceWei) / 1e18;
+        if (actualEth > 0) {
+          await claimAndDebitNativeBridge(result.txHash, body.address.toLowerCase(), body.chain, actualEth);
+        }
+      } catch (debitErr) {
+        await setPendingClearDebit({
+          txHash:      result.txHash,
+          estimatedEth: estimatedClearGasEth,
+          ownerLc:     body.address.toLowerCase(),
+          chain:       body.chain,
+          submittedAt: Date.now(),
+        }).catch(() => { /* cron + ops are the backstop */ });
+        console.error(`[wallet/clear-delegation] eth gas-tank debit failed; pending row written`, {
+          chain: body.chain, address: body.address, txHash: result.txHash,
+          error: debitErr instanceof Error ? debitErr.message : String(debitErr),
+        });
+      }
+    }
+
     // Clear landed — consume the 1/hour quota now (only a successful clear counts).
     await rateLimit(rlKey, "wallet-clear-delegation", 1, 3600);
     return NextResponse.json(responseBody, { status: 200 });

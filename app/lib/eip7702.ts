@@ -163,6 +163,19 @@ export const CHAIN_KEYS: ReadonlyArray<ChainKey> = [
   "avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum", "base",
 ];
 
+/**
+ * Chains where a clear-delegation (undelegate) bills the gas to the USER's
+ * Gas Tank instead of Q402 sponsoring it. Ethereum L1 ONLY — its type-4 gas
+ * is too expensive to sponsor unmetered, so every undelegate on eth is
+ * user-funded regardless of wallet mode (A / B / C). Every other chain is
+ * fully sponsored ($0 to the user). Single source of truth shared by BOTH
+ * clear endpoints (/api/wallet/clear-delegation and the agentic one) so the
+ * policy can never drift between them. Deliberately NOT isCCIPChain(): that
+ * set (eth/avax/arbitrum) is the cross-chain bridge feature, a separate
+ * concern — avax + arbitrum clears are sponsored.
+ */
+export const CLEAR_GAS_TANK_CHAINS: ReadonlySet<ChainKey> = new Set<ChainKey>(["eth"]);
+
 // ── EIP-7702 code prefix ───────────────────────────────────────────────────
 // Per EIP-7702, a delegated EOA's `eth_getCode` returns `0xef0100` followed
 // by the 20-byte delegate address. Anything else means "not delegated"
