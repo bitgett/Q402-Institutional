@@ -6,7 +6,7 @@
 > browser, a Node.js backend, or any MCP-compatible AI client: first-class
 > support for Claude (Desktop / Code), OpenAI Codex CLI, Cursor, and Cline.
 
-[![sdk](https://img.shields.io/badge/sdk-v1.8.0-yellow)](public/q402-sdk.js)
+[![sdk](https://img.shields.io/badge/sdk-v1.9.0--base--x402-yellow)](public/q402-sdk.js)
 [![mcp](https://img.shields.io/badge/npm-@quackai/q402--mcp-blue)](https://www.npmjs.com/package/@quackai/q402-mcp)
 [![chains](https://img.shields.io/badge/chains-11-yellow)](#supported-chains)
 
@@ -50,6 +50,7 @@ and the on-wire body. Chain-specific: impl contract + EIP-712 domain name.
 | Monad | 143 | USDC, USDT (USDT0) | live |
 | Scroll | 534352 | USDC, USDT | live |
 | Arbitrum One | 42161 | USDC, USDT | live |
+| Base | 8453 | USDC, USDT | live |
 
 RLUSD is Ethereum-only (issuer constraint, 18 decimals). Injective supports native Circle USDC (CCTP) + USDT.
 
@@ -118,7 +119,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_batch_pay` | live mode | Up to 20 recipients per call (trial: 5) |
 | `q402_receipt` | none | Fetch + verify a Trust Receipt |
 | `q402_wallet_status` | private key | Per-chain EIP-7702 state |
-| `q402_clear_delegation` | private key / api key | Reset EIP-7702 delegation (Mode A/B local key OR Mode C api key, server-signed). Sponsored on every chain except Ethereum (billed to your Gas Tank). Needs `confirm: true` |
+| `q402_clear_delegation` | private key / api key | Reset EIP-7702 delegation (Mode A/B local key OR Mode C api key, server-signed). Sponsored on every chain except Ethereum (billed to your Gas Tank). Two-phase consent (`consentToken`) |
 | `q402_agentic_info` | api key | Agent Wallet info (caps, ERC-8004) |
 | `q402_recurring_list` | api key | List scheduled rules |
 | `q402_recurring_create` | api key | Author a rule (paid Multichain only) |
@@ -148,7 +149,7 @@ Q402 Yield is a **paid-only** feature: depositing requires a live Multichain pla
 ## Cross-chain USDC bridge (Chainlink CCIP)
 
 Phase 1: **3-chain triangle** — ETH ↔ AVAX ↔ Arbitrum (6 directed lanes).
-The other 7 Q402 chains stay native-gasless only — Circle hasn't deployed
+The other 8 Q402 chains stay native-gasless only — Circle hasn't deployed
 CCIP-routable USDC pools there yet.
 
 - Source: Q402CCIPSender contract on each of eth/avax/arbitrum
@@ -312,7 +313,7 @@ Persists across payments, reversible anytime.
 
   ```bash
   PRIVATE_KEY=0x<yourKey> node scripts/undelegate-7702.mjs \
-    --chain <bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll|arbitrum>
+    --chain <bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll|arbitrum|base>
   ```
 
 Clearing is optional — the next payment recreates the delegation. Full guide: [docs#eip-7702-delegation](https://q402.quackai.ai/docs#eip-7702-delegation).

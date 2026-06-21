@@ -581,13 +581,13 @@ mcp_servers:
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
               <div className="rounded-xl border p-6 relative" style={{ background: "rgba(245,197,24,0.04)", borderColor: "rgba(245,197,24,0.30)" }}>
-                <div className="absolute -top-2.5 right-4 text-[10px] uppercase tracking-widest font-bold px-2.5 py-0.5 rounded bg-emerald-500 text-black">Recommended</div>
-                <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-300/85 font-semibold mb-1.5">Mode C</div>
+                <div className="absolute -top-2.5 right-4 text-[10px] uppercase tracking-widest font-bold px-2.5 py-0.5 rounded text-black" style={{ background: "#F5C518" }}>Recommended</div>
+                <div className="text-[11px] uppercase tracking-[0.18em] text-yellow font-semibold mb-1.5">Mode C</div>
                 <div className="text-white font-semibold text-base mb-3">Server-managed</div>
                 <p className="text-[13px] text-white/65 leading-relaxed mb-4">
-                  Q402 holds an encrypted Agent Wallet for you. <span className="text-emerald-300 font-medium">No private key in your env.</span> No MetaMask popup. Best for AI agents and most users.
+                  Q402 holds an encrypted Agent Wallet for you. <span className="text-yellow font-medium">No private key in your env.</span> No MetaMask popup. Best for AI agents and most users.
                 </p>
-                <pre className="text-[11.5px] text-emerald-300/85 font-mono bg-black/30 rounded-md px-3 py-2 leading-relaxed overflow-x-auto">{`Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
+                <pre className="text-[11.5px] text-yellow font-mono bg-black/30 rounded-md px-3 py-2 leading-relaxed overflow-x-auto">{`Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
               <div className="rounded-xl border p-6" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
                 <div className="text-[11px] uppercase tracking-[0.18em] text-white/55 font-semibold mb-1.5">Mode B</div>
@@ -628,7 +628,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_batch_pay",           auth: "live mode",   purpose: "Up to 20 recipients per call (trial: 5). 6+ BNB batches with Trial → status=\"ambiguous\" so the agent asks how to split." },
                     { name: "q402_receipt",             auth: "none",        purpose: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery against the relayer EOA)." },
                     { name: "q402_wallet_status",       auth: "private key", purpose: "Per-chain EIP-7702 delegation state for the EOA derived from Q402_PRIVATE_KEY. Read-only." },
-                    { name: "q402_clear_delegation",    auth: "private key / api key", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (billed to Gas Tank). Needs confirm: true." },
+                    { name: "q402_clear_delegation",    auth: "private key / api key", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (billed to Gas Tank). Two-phase consentToken (preview then execute)." },
                     { name: "q402_agentic_info",        auth: "api key",     purpose: "Agent Wallet info (addresses, caps, daily-spend used, ERC-8004 id). Drives Mode C." },
                     { name: "q402_recurring_list",      auth: "api key",     purpose: "List scheduled rules." },
                     { name: "q402_recurring_create",    auth: "api key",     purpose: "Author a rule. Paid Multichain on EVERY chain (BNB included)." },

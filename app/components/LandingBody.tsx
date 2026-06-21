@@ -36,6 +36,7 @@ const CHAINS = [
   { name: 'Monad',     src: '/monad.png',     color: '#836EF9' },
   { name: 'Scroll',    src: '/scroll.png',    color: '#EEB431' },
   { name: 'Arbitrum',  src: '/arbitrum.png',  color: '#28A0F0' },
+  { name: 'Base',      src: '/base.png',      color: '#0052FF' },
 ];
 
 const MARQUEE = [

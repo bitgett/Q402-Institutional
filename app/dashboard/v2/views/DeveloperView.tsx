@@ -39,7 +39,7 @@
  *
  * ── SCOPE semantics ─────────────────────────────────────────────────────
  *   `scope` highlights the active key card and selects the playground's
- *   chain set (trial → trial key + BNB-only; multichain → live key + 10
+ *   chain set (trial → trial key + BNB-only; multichain → live key + 11
  *   chains). BOTH key cards always render — scope only changes emphasis.
  */
 
@@ -115,7 +115,7 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Core", name: "q402_batch_pay", purpose: "Up to 20 recipients per call (trial: 5) in one settlement." },
   { group: "Core", name: "q402_receipt", purpose: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery)." },
   { group: "Core", name: "q402_wallet_status", purpose: "Per-chain EIP-7702 delegation state for the configured EOA. Read-only." },
-  { group: "Core", name: "q402_clear_delegation", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (Gas Tank). Needs confirm: true." },
+  { group: "Core", name: "q402_clear_delegation", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (Gas Tank). Two-phase consentToken (preview then execute)." },
   { group: "Core", name: "q402_agentic_info", purpose: "Agent Wallet info (addresses, caps, daily-spend used, ERC-8004 id)." },
   // Recurring
   { group: "Recurring", name: "q402_recurring_list", purpose: "List scheduled rules." },
@@ -1597,6 +1597,7 @@ function Playground({
                 <option value="monad" style={{ background: v2.panel }}>Monad · live</option>
                 <option value="scroll" style={{ background: v2.panel }}>Scroll · live</option>
                 <option value="arbitrum" style={{ background: v2.panel }}>Arbitrum · live</option>
+                <option value="base" style={{ background: v2.panel }}>Base · live</option>
               </>
             )}
           </select>
