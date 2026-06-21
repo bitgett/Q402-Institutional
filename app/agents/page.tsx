@@ -137,7 +137,7 @@ const TOOL_GROUPS = [
   { label: "Requests", tools: ["q402_request_create", "q402_request_status", "q402_request_pay"] },
 ];
 
-const CHAINS = ["BNB", "Ethereum", "Arbitrum", "Avalanche", "Mantle", "X Layer", "Monad", "Scroll", "Injective", "Stable"];
+const CHAINS = ["BNB", "Ethereum", "Arbitrum", "Avalanche", "Mantle", "X Layer", "Monad", "Scroll", "Injective", "Stable", "Base"];
 
 // Distinct, restrained motion: a short rise with a different easing than the
 // landing's fadeUp signature, and it does not repeat on every tiny element.

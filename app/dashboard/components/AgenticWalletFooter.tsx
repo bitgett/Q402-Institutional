@@ -52,6 +52,7 @@ const CHAIN_LABEL: Partial<Record<ChainKey, string>> = {
   injective: "Injective",
   monad: "Monad",
   scroll: "Scroll",
+  arbitrum: "Arbitrum",
   base: "Base",
 };
 
