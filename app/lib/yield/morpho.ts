@@ -42,11 +42,17 @@ interface ChainMorphoCfg {
  * Per-chain MetaMorpho vault configuration, sourced from ENV so the chosen
  * curated vault is an ops/audit decision, never a guessed hardcode. Set:
  *
- *   MORPHO_VAULT_BASE_USDC      = 0x...   (a Base USDC MetaMorpho vault)
- *   MORPHO_VAULT_ARBITRUM_USDC  = 0x...   (an Arbitrum USDC MetaMorpho vault)
+ *   MORPHO_VAULT_BASE_USDC      = 0x...   (one or more Base USDC vaults)
+ *   MORPHO_VAULT_ARBITRUM_USDC  = 0x...   (one or more Arbitrum USDC vaults)
  *
- * A chain with no valid vault env returns [] from every read. Invalid/non-
- * address values are ignored (treated as unset) so a typo can't 500 the panel.
+ * Multiple vaults per chain are supported via a comma-separated list, e.g.
+ *   MORPHO_VAULT_BASE_USDC=0xeE8F...4b61,0xBEEF...83b2
+ * (Gauntlet USDC Prime + Steakhouse Prime USDC). Invalid/non-address tokens
+ * are dropped; duplicates (case-insensitive) collapsed; order preserved.
+ *
+ * A chain with no valid vault env AND no curated default returns [] from every
+ * read. Invalid values fall through to the curated default rather than
+ * nulling the chain — so a typo can't 500 the panel.
  */
 export const MORPHO_ENV = {
   base: "MORPHO_VAULT_BASE_USDC",
@@ -72,13 +78,38 @@ function envVault(varName: string): Address | null {
   return v && isAddress(v) ? (v as Address) : null;
 }
 
+/**
+ * Multi-vault ENV: comma-separated list of addresses. Invalid entries dropped.
+ * Returns deduped list (case-insensitive) preserving first-occurrence order.
+ */
+function envVaults(varName: string): Address[] {
+  const raw = (process.env[varName] ?? "").trim();
+  if (!raw) return [];
+  const seen = new Set<string>();
+  const out: Address[] = [];
+  for (const part of raw.split(",")) {
+    const s = part.trim();
+    if (!isAddress(s)) continue;
+    const k = s.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s as Address);
+  }
+  return out;
+}
+
 function morphoConfig(chain: string): ChainMorphoCfg | null {
   const envName = (MORPHO_ENV as Record<string, string>)[chain];
   if (!envName) return null;
-  // ENV override wins; otherwise fall back to the curated default (Base only).
-  const vault = envVault(envName) ?? MORPHO_DEFAULT_VAULT[chain] ?? null;
-  if (!vault) return null;
-  return { vaults: [{ asset: "USDC", vault }] };
+  // ENV (comma-separated) overrides; otherwise fall back to the curated default
+  // (Base only). Empty/invalid ENV falls through to the default — never null
+  // a chain that has a working default just because ops set a malformed string.
+  const fromEnv = envVaults(envName);
+  const vaults: Address[] = fromEnv.length > 0
+    ? fromEnv
+    : (MORPHO_DEFAULT_VAULT[chain] ? [MORPHO_DEFAULT_VAULT[chain] as Address] : []);
+  if (vaults.length === 0) return null;
+  return { vaults: vaults.map((vault) => ({ asset: "USDC" as const, vault })) };
 }
 
 /**
