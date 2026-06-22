@@ -538,7 +538,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         if (isDefinitiveRevert) {
           // Tx ran, ran out of gas / reverted. Refund + emit a
           // throttled (once per day per chain+target+code) alert so
-          // the same bug isn't paging ops every 15 minutes.
+          // the same bug isn't paging ops every 6h.
           await refundReservation();
           results.push({
             plan: p,
