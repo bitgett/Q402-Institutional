@@ -14,7 +14,7 @@
  * For each reserve with a threshold, the cron computes a per-tick
  * "below safe minimum" boolean, batches every flagged reserve into a
  * single Telegram alert, and tracks a 6h cooldown per (reserve, chain)
- * so a continuously-low reserve doesn't spam ops every 5 minutes.
+ * so a continuously-low reserve doesn't spam ops every 15 minutes.
  *
  * Auth: CRON_SECRET via Authorization header (timing-safe; fail-closed
  * when unset). Read-only across the board — KV writes only update the

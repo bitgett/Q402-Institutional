@@ -8,7 +8,7 @@
  *     `recurring-trigger` (hourly). If Render dies, hourly-cadence rules
  *     stall until the Vercel daily backstop catches up.
  *   - `/api/cron/deposit-scan` — driven by Render `deposit-trigger`
- *     (every 5 min). If Render dies, native deposits sit unverified
+ *     (every 10 min). If Render dies, native deposits sit unverified
  *     until the user taps "Verify" or Render recovers.
  *
  * Both cron handlers wrap their final response with `recordCronStatus`
