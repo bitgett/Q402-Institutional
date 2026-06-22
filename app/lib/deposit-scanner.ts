@@ -19,7 +19,7 @@ import { GASTANK_ADDRESS_LC } from "./wallets";
  * `blockWindow` is sized so each chain covers ~10 minutes of recent
  * history, matching the realistic gap between a user submitting a
  * deposit and either tapping "Verify" (verify-deposit) or the next
- * cron tick (deposit-scan, every 15 min). BSC and Injective values are
+ * cron tick (deposit-scan, every 10 min). BSC and Injective values are
  * doubled vs the smaller-chain default because observed block times on
  * those networks are ~0.75s — a 200-block window would only cover
  * ~2.5 minutes there and silently drop legitimate deposits older than

@@ -40,8 +40,8 @@
  * recent window. Each tick enumerates the paid-owner set, scans all 11 chains
  * in parallel (recent `PER_CHAIN_BLOCK_CAP` window, bounded by
  * `SCAN_DEADLINE_MS`), and credits the senders that are in the owner set.
- * Because every chain is swept every ~5-min heartbeat, the recent window is
- * covered every ~5 min for ALL owners — no owner cursor, no ~14.75h revisit
+ * Because every chain is swept every ~10-min heartbeat, the recent window is
+ * covered every ~10 min for ALL owners — no owner cursor, no ~14.75h revisit
  * gap (the old 1-owner-per-tick cursor took that long to revisit an owner,
  * far longer than the window, so most un-verified deposits were missed), and
  * no wedge risk. `addGasDeposit` dedups by txHash, so overlapping windows
@@ -89,7 +89,7 @@ const SCAN_COUNT = 200;
  * deadline passed into every scan that halts the walk well before 60s.
  *
  * The cap limits the MOST-RECENT window walked per chain per tick. Since every
- * chain is swept every ~5-min tick, the recent window stays covered for ALL
+ * chain is swept every ~10-min tick, the recent window stays covered for ALL
  * owners without a one-shot full-window sweep; a chunk-failed / deadline-cut
  * chain is re-covered on the next tick via the overlapping window. Tunable via
  * DEPOSIT_SCAN_BLOCK_CAP env.
@@ -243,7 +243,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // SCAN_DEADLINE_MS so one slow RPC (e.g. Injective ~3.9s/batch) can't drag
   // the function past the 60s ceiling. Per-chain RPC failures stay isolated
   // via Promise.allSettled. Because every chain is scanned every tick, the
-  // recent window is covered every ~5 min for ALL owners — no cursor, no
+  // recent window is covered every ~10 min for ALL owners — no cursor, no
   // 14.75h revisit gap, no wedge. addGasDeposit dedups by txHash, so the
   // overlapping windows across ticks never double-credit.
   let newDeposits = 0;
