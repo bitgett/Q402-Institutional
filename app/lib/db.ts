@@ -1874,7 +1874,7 @@ async function claimAndDebitInternal(
  * were obsessively reconciled but fee failures were silently absorbed.
  *
  * Reconciled by the same cron as pending funds, on a third scan pass.
- * 1h TTL — the cron runs every ~5min so the row is reconciled within
+ * 1h TTL — the cron runs every ~15min so the row is reconciled within
  * a handful of ticks, and the per-txHash atomic claim guarantees the
  * cron's debit attempt is idempotent (a successful in-process retry
  * after the initial throw won't double-debit).
