@@ -130,11 +130,11 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Bridge", name: "q402_bridge_send", purpose: "Execute a CCIP USDC bridge via the Agent Wallet (Mode C). Sandbox by default." },
   { group: "Bridge", name: "q402_bridge_history", purpose: "Recent CCIP bridges — dashboard pointer until session-binding lands." },
   { group: "Bridge", name: "q402_bridge_gas_tank", purpose: "Bridge Gas Tank fee model + deposit address (dashboard pointer)." },
-  // Yield (Aave V3 — BNB only today)
-  { group: "Yield", name: "q402_yield_reserves", purpose: "List Q402 Yield (Aave) markets + supply APY. Read-only, no auth." },
-  { group: "Yield", name: "q402_yield_positions", purpose: "Agent Wallet's current Aave positions + aggregate USD value. Read-only." },
-  { group: "Yield", name: "q402_yield_deposit", purpose: "Supply USDC / USDT into Aave V3 to earn APY. Moves funds — needs confirm." },
-  { group: "Yield", name: "q402_yield_withdraw", purpose: `Withdraw stablecoin from Aave (amount "max" = full). Moves funds — needs confirm.` },
+  // Yield (Aave V3 on BNB, Morpho on Base)
+  { group: "Yield", name: "q402_yield_reserves", purpose: "List Q402 Yield markets + supply APY (Aave on BNB, Morpho on Base). Read-only, no auth." },
+  { group: "Yield", name: "q402_yield_positions", purpose: "Agent Wallet's current Aave/Morpho positions + aggregate USD value. Read-only." },
+  { group: "Yield", name: "q402_yield_deposit", purpose: "Supply stablecoins into Aave (BNB) or Morpho (Base, USDC only) to earn APY. Moves funds, needs confirm." },
+  { group: "Yield", name: "q402_yield_withdraw", purpose: `Withdraw stablecoin from Aave or Morpho (amount "max" = full). Moves funds, needs confirm.` },
   // Requests
   { group: "Requests", name: "q402_request_create", purpose: "Publish a payment request (invoice). No funds move — returns a /pay link + req_ id." },
   { group: "Requests", name: "q402_request_status", purpose: "Look up a request by req_ id (amount, recipient, status). Read-only, no auth." },
@@ -1891,7 +1891,7 @@ function McpToolGrid() {
     Core: "Quote · pay · receipts · delegation",
     Recurring: "Scheduled rules",
     Bridge: "Chainlink CCIP · eth/avax/arbitrum",
-    Yield: "Aave V3 · BNB only today",
+    Yield: "Aave V3 (BNB) · Morpho (Base)",
     Requests: "Invoices · agent-to-agent billing",
   };
 

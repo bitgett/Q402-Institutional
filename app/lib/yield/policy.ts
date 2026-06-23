@@ -25,7 +25,8 @@ import type { AgenticChainKey, AgenticToken } from "@/app/lib/agentic-wallet-sig
 import { getPrimaryRpc, CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
 import { getWalletHookConfig } from "@/app/lib/hooks/config";
 import { aaveTotalPositionValueStrict } from "./aave";
-import type { YieldAction } from "./sign";
+import { morphoTotalPositionValueStrict } from "./morpho";
+import { yieldProtocolForChain, type YieldAction } from "./sign";
 
 export interface YieldPolicyInput {
   owner: string;
@@ -98,16 +99,19 @@ export async function enforceYieldPolicy(input: YieldPolicyInput): Promise<Yield
     return { allow: true };
   }
 
+  // Which protocol settles this chain (aave=BNB, morpho=Base).
+  const protocol = yieldProtocolForChain(input.chain);
+
   // Asset allowlist.
   if (Array.isArray(yp.allowedAssets) && yp.allowedAssets.length > 0
     && !yp.allowedAssets.includes(input.asset)) {
     return { allow: false, code: "ASSET_NOT_ALLOWED", reason: `${input.asset} is not in this wallet's allowed yield assets.` };
   }
 
-  // Protocol allowlist — this build only routes to Aave.
+  // Protocol allowlist — deny if this chain's protocol isn't permitted.
   if (Array.isArray(yp.allowedProtocols) && yp.allowedProtocols.length > 0
-    && !yp.allowedProtocols.includes("aave")) {
-    return { allow: false, code: "PROTOCOL_NOT_ALLOWED", reason: "Aave is not in this wallet's allowed yield protocols." };
+    && (!protocol || !yp.allowedProtocols.includes(protocol))) {
+    return { allow: false, code: "PROTOCOL_NOT_ALLOWED", reason: `${protocol ?? "This chain's"} yield protocol is not in this wallet's allowed yield protocols.` };
   }
 
   // Max allocation: (current yield position + this deposit) as a share of
@@ -127,7 +131,9 @@ export async function enforceYieldPolicy(input: YieldPolicyInput): Promise<Yield
       // swallow errors into an under-counted 0.)
       const [liquidBal, positionVal] = await Promise.all([
         readLiquidStableBalance(input.chain, input.walletId as Address),
-        aaveTotalPositionValueStrict(input.chain, input.walletId),
+        protocol === "morpho"
+          ? morphoTotalPositionValueStrict(input.chain, input.walletId)
+          : aaveTotalPositionValueStrict(input.chain, input.walletId),
       ]);
       liquid = liquidBal;
       currentPosition = positionVal;
