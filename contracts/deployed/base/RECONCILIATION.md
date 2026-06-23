@@ -1,4 +1,16 @@
-# Base yield impl (Q402PaymentImplementationBASEv2) — pre-deploy reconciliation
+# Base yield impl (Q402PaymentImplementationBASEv2) — reconciliation + deploy record
+
+## STATUS: DEPLOYED to Base mainnet (2026-06-23)
+- Address: `0xd4f703683acac7C02bf482A061C9E1F8DEdA467c`
+- Deployer: relayer/facilitator `0xfc77FF29178B7286A8bA703D7a70895CA74fF466`
+- Compiler: solc 0.8.20, optimizer 200, evmVersion london, viaIR=true (4,958-byte runtime)
+- On-chain proofs (base-rpc.publicnode.com): NAME()="Q402 Base", VERSION()="1",
+  isAllowedVault(0xeE8F…4b61)=true (random=false), isAllowedAsset(USDC)=true
+  (random=false), transferWithAuthorization from a non-owner reverts OwnerMismatch.
+- Wired: YIELD_IMPL_BASE set in `.env.local` + Vercel (production + development).
+- PENDING: production go-live needs feat/morpho-yield-write merged to main; a small
+  smoke deposit+withdraw on Base; BaseScan source verification (needs an Etherscan
+  v2 key); the relayer needs ongoing Base ETH for gas sponsorship.
 
 Purpose: before deploying the Base ERC-4626 yield impl, prove its preserved
 transfer path + EIP-712 domain + storage layout are compatible with the
