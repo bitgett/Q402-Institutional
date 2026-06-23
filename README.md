@@ -132,17 +132,17 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_bridge_send` | live key | Execute a cross-chain USDC bridge from the Agent Wallet (Mode C, since MCP 0.8.10). Sandbox-by-default; `sandbox: false` + live Multichain key fires a real on-chain bridge. |
 | `q402_bridge_history` | not yet wired | Returns a dashboard pointer (`{ implemented: false, dashboardUrl }`). Live MCP execution needs session-bound owner-sig auth (follow-up). View at /dashboard → Wallets → Bridge. |
 | `q402_bridge_gas_tank` | not yet wired | Returns static guidance + the canonical Gas Tank deposit address. Live balance lookup needs owner-sig auth (dashboard for now). |
-| `q402_yield_reserves` | none | List Q402 Yield (Aave V3) lending markets + live supply APY. BNB-only today. |
+| `q402_yield_reserves` | none | List Q402 Yield markets + live supply APY. `chain="bnb"` (Aave V3, USDC/USDT) or `chain="base"` (Morpho MetaMorpho vault, USDC only). |
 | `q402_yield_positions` | api key | The Agent Wallet's current Q402 Yield positions (value + APY). Read-only. |
-| `q402_yield_deposit` | live key | Supply the Agent Wallet's USDC / USDT into Aave (Mode C). **Paid Multichain plan only — Trial cannot deposit.** Confirm + sandbox-by-default. |
-| `q402_yield_withdraw` | live key | Withdraw the Agent Wallet's supplied stablecoin out of Aave (`amount="max"` for the full position). Always allowed, even after downgrade. |
+| `q402_yield_deposit` | live key | Supply the Agent Wallet's stablecoin into Aave V3 on BNB (USDC/USDT) or the Morpho vault on Base (USDC only) via `chain` (Mode C). **Paid Multichain plan only. Trial cannot deposit.** Confirm + sandbox-by-default. |
+| `q402_yield_withdraw` | live key | Withdraw the Agent Wallet's supplied stablecoin from Aave (BNB) or Morpho (Base) per `chain` (`amount="max"` for the full position). Always allowed, even after downgrade. |
 | `q402_request_create` | api key | Publish a payment request (invoice). No funds move; returns a /pay link + req_ id. Recipient defaults to the Agent Wallet. |
 | `q402_request_status` | none | Look up a request by req_ id (amount, recipient, status). Read-only. |
 | `q402_request_pay` | live key | Pay a request gaslessly from your own Agent Wallet (Mode C). Terms locked to the request. Two-phase consent (same as `q402_pay`). |
 
 The six fund-moving tools (`q402_pay`, `q402_batch_pay`, `q402_bridge_send`, `q402_yield_deposit`, `q402_yield_withdraw`, `q402_request_pay`) use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one. `confirm: true` alone no longer fires a payment. `q402_clear_delegation` uses the same two-phase consent — it broadcasts a real tx and, on Ethereum, bills your Gas Tank.
 
-Q402 Yield is a **paid-only** feature: depositing requires a live Multichain plan, Trial accounts cannot supply, and withdrawals are always allowed so deposited funds can always be recovered.
+Q402 Yield is a **paid-only** feature: depositing requires a live Multichain plan, Trial accounts cannot supply, and withdrawals are always allowed so deposited funds can always be recovered. Two protocols are wired behind the `chain` argument: Aave V3 on BNB Chain (USDC and USDT) and Morpho on Base (a Gauntlet USDC Prime MetaMorpho ERC-4626 vault, USDC only). The Base path (off-chain sign/relay/policy, MCP tools, and the dashboard Earn selector) is implemented; its Base impl contract is pending a final audit and owner approval before deploy, so Base yield is not live on mainnet yet.
 
 ---
 

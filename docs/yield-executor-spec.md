@@ -83,3 +83,78 @@ Happy supply/withdraw/withdraw-all · wrong facilitator · bad/malleable sig · 
 ## Verify before audit (env had no web)
 - Aave V3 BNB Pool `supply`/`withdraw` exact signatures against the live proxy `0x6807dc…e0cB` (standard V3 IPool assumed).
 - BSC USDT approve zero-first behavior (defensive reset-to-zero specified regardless).
+
+---
+
+# ERC-4626 (Morpho on Base) variant
+
+> Same EIP-7702 witness pattern as the Aave variant above, but the venue is a
+> MetaMorpho ERC-4626 vault on Base instead of an Aave V3 Pool. Built and wired
+> (off-chain sign/relay/policy, MCP tools, dashboard Earn selector); the Base
+> impl contract is NOT yet deployed to Base mainnet (pending final audit + owner
+> approval). Phase 2 of Q402 Yield (Base, USDC only).
+
+## 4626.1 Goal
+Add two functions to the Base impl (`Q402PaymentImplementationBASEv2`) in the SAME witness style:
+- `supplyToErc4626(owner, facilitator, vault, asset, amount, nonce, deadline, witnessSig)`. Under 7702 (`address(this)` == owner EOA): `approve(vault, amount)` then `IERC4626(vault).deposit(amount, owner)`. Funds from owner, vault shares to owner, relayer pays gas.
+- `withdrawFromErc4626(...)`. `amount == type(uint256).max` = withdraw-all, encoded as `IERC4626(vault).redeem(maxRedeem(owner), owner, owner)` (by shares). Partial withdraw uses the absolute underlying `amount`.
+
+Positional args are identical in shape to the Aave entrypoints; the only difference is the 3rd arg is `vault` (the ERC-4626 / MetaMorpho address), not `pool`.
+
+## 4626.2 Must mirror existing pattern
+`msg.sender == facilitator` · EIP-712 witness recovers to `owner` · `verifyingContract` = EOA (`address(this)` under 7702) · per-EOA nonce (SHARED `usedNonces`, see §7) · `deadline` · relayer = gas payer · CEI (nonce marked before external calls) · `nonReentrant` on both 4626-facing functions.
+
+## 4626.3 EIP-712 domain
+`name` = "Q402 Base", `version` = "1", `chainId` from `block.chainid` (8453), `verifyingContract` = `address(this)`.
+
+## 4626.4 New typed-data (exact field order)
+```
+Erc4626SupplyAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 nonce,uint256 deadline)
+Erc4626WithdrawAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 nonce,uint256 deadline)
+```
+Field order is exactly: owner, facilitator, vault, asset, amount, nonce, deadline. Distinct typehashes (supply vs withdraw) are mandatory, and they also differ from the Aave typehashes, so cross-action and cross-venue replay both revert (identical layout otherwise).
+
+## 4626.5 supplyToErc4626 logic (in order)
+1. `require(msg.sender == facilitator)`
+2. `require(owner == address(this))` (self-binding under 7702)
+3. `require(block.timestamp <= deadline)`
+4. `require(amount != 0 && amount != type(uint256).max)` (max meaningless for supply)
+5. **`require(isAllowedVault(vault))`** (+ optionally `isAllowedAsset(asset)`). See §4626.9
+6. nonce: `require(!usedNonces[nonce]); usedNonces[nonce]=true;` (mark BEFORE external calls, CEI)
+7. recover `Erc4626SupplyAuthorization` digest == owner (malleability-safe ECDSA, reject high-s / addr(0))
+8. safe approve to EXACT `amount` (reset-to-zero-first, no-return-value tolerant, same handling as §8)
+9. `IERC4626(vault).deposit(amount, owner)` (shares minted to owner)
+10. (optional) reset residual allowance to 0
+11. `emit Erc4626Supplied(owner, vault, asset, amount, shares, nonce)`
+
+## 4626.6 withdrawFromErc4626 logic
+Same checks 1-3, 5-7 (withdraw typehash). `amount != 0`; `type(uint256).max` ALLOWED (withdraw-all).
+- Partial: convert the absolute underlying `amount` and `IERC4626(vault).withdraw(amount, owner, owner)` (shares burned from owner).
+- Max (`amount == type(uint256).max`): `IERC4626(vault).redeem(IERC4626(vault).maxRedeem(owner), owner, owner)` so the full share balance is redeemed by shares (avoids dust / rounding left behind by an underlying-denominated withdraw).
+No approval needed (burns owner's vault shares). `emit Erc4626Withdrawn(...)`.
+
+## 4626.7 Nonce space (SHARE existing `usedNonces`)
+Same rationale as §7: distinct typehashes + selectors already block cross-action and cross-venue replay, so a shared per-EOA nonce space keeps the SDK simple. Append-only storage (see §9.6); the Base impl is a storage-append-only version that wallets re-delegate to.
+
+## 4626.8 Approve handling (Base USDC)
+- Base USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, 6 decimals) is the only supported asset on Base (USDC-only). SDK must read `decimals()`, never hardcode.
+- Exact-amount approve to the `vault`, no unlimited, reset-to-zero-first, SafeERC20-style (or OZ `SafeERC20.forceApprove`). Atomic approve+deposit in one tx so the approve front-run race is not exploitable.
+
+## 4626.9 Vault/asset allowlist + security
+- `isAllowedVault(vault)` is mandatory: never trust the witness `vault` unchecked, or a compromised/prompt-injected signer could route `approve(maliciousVault, amount)` + deposit into a drain target. Recommended model: immutable constant per-impl (chain-bound), matching §9.1 option (A).
+- Canonical Base vault: Gauntlet USDC Prime MetaMorpho (`0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61`), asset = USDC only.
+- ERC-4626 vaults are external upgradeable-style protocols (allocators, callbacks): keep `nonReentrant` on both 4626-facing functions; CEI (nonce marked before interactions) applies as in §9.3.
+
+## 4626.10 Events
+```
+event Erc4626Supplied(address indexed owner, address indexed vault, address indexed asset, uint256 assets, uint256 shares, uint256 nonce);
+event Erc4626Withdrawn(address indexed owner, address indexed vault, address indexed asset, uint256 assets, bool max, uint256 nonce);
+```
+
+## 4626.11 Test checklist (delta vs §12)
+Happy deposit/withdraw/withdraw-all via `redeem(maxRedeem(owner))` · wrong facilitator · bad/malleable sig · replay (same nonce) + cross-action + cross-venue (Aave vs 4626 typehash) replay · expired deadline · non-allowlisted vault · 6-dec USDC amount conversion · share-rounding on partial withdraw vs max-redeem · reverted vault call leaves nonce unconsumed · reentrancy into supply/withdraw blocked by `nonReentrant` · storage-layout diff vs prior impl.
+
+## 4626.12 Verify before audit
+- `Q402PaymentImplementationBASEv2` `supplyToErc4626` / `withdrawFromErc4626` positional shape matches the Aave entrypoints with `vault` in the 3rd slot, and `NAME() = "Q402 Base"`, `VERSION() = "1"`.
+- MetaMorpho `deposit(assets, receiver)` / `redeem(shares, receiver, owner)` / `maxRedeem(owner)` signatures against the live Gauntlet USDC Prime vault `0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61` (standard ERC-4626 assumed).
+- Contract NOT yet deployed to Base mainnet at time of writing (pending audit + owner approval).

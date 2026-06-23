@@ -73,11 +73,6 @@ const MORPHO_DEFAULT_VAULT: Partial<Record<string, Address>> = {
 /** EVM chainId per Q402 chain key, for the Morpho API APY lookup. */
 const MORPHO_CHAIN_ID: Record<string, number> = { base: 8453, arbitrum: 42161 };
 
-function envVault(varName: string): Address | null {
-  const v = (process.env[varName] ?? "").trim();
-  return v && isAddress(v) ? (v as Address) : null;
-}
-
 /**
  * Multi-vault ENV: comma-separated list of addresses. Invalid entries dropped.
  * Returns deduped list (case-insensitive) preserving first-occurrence order.
@@ -313,6 +308,17 @@ export const morphoAdapter: YieldAdapter = {
 /** Chains where a Morpho vault is configured (ENV-driven). */
 export function morphoSupportedChains(): string[] {
   return Object.keys(MORPHO_ENV).filter((chain) => morphoConfig(chain) !== null);
+}
+
+/** The MetaMorpho vault the WRITE path signs for, or null if unconfigured.
+ *  Resolves the CURATED default ONLY (MORPHO_DEFAULT_VAULT) so it always equals
+ *  the contract's immutable single-vault allowlist (pinned by
+ *  yield-base-vault-drift.test). It deliberately ignores the read adapter's
+ *  ENV-flexible multi-vault list: an ENV-diverged vault would pass off-chain
+ *  signing but revert on-chain (VaultNotAllowed) AFTER the relayer paid gas. */
+export function morphoVaultFor(chain: string, asset: "USDC" | "USDT" = "USDC"): Address | null {
+  if (asset !== "USDC") return null; // curated Base vault is USDC-only
+  return MORPHO_DEFAULT_VAULT[chain] ?? null;
 }
 
 /**

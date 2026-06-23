@@ -129,6 +129,30 @@ const YIELD_IMPL_ABI = [
   },
 ] as const;
 
+// ERC-4626 (Morpho) yield impl ABI — function names match the BASE v2 contract.
+const YIELD_ERC4626_ABI = [
+  {
+    type: "function", name: "supplyToErc4626", stateMutability: "nonpayable",
+    inputs: [
+      { name: "owner", type: "address" }, { name: "facilitator", type: "address" },
+      { name: "vault", type: "address" }, { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" }, { name: "nonce", type: "uint256" },
+      { name: "deadline", type: "uint256" }, { name: "witnessSignature", type: "bytes" },
+    ],
+    outputs: [{ name: "shares", type: "uint256" }],
+  },
+  {
+    type: "function", name: "withdrawFromErc4626", stateMutability: "nonpayable",
+    inputs: [
+      { name: "owner", type: "address" }, { name: "facilitator", type: "address" },
+      { name: "vault", type: "address" }, { name: "asset", type: "address" },
+      { name: "amount", type: "uint256" }, { name: "nonce", type: "uint256" },
+      { name: "deadline", type: "uint256" }, { name: "witnessSignature", type: "bytes" },
+    ],
+    outputs: [{ name: "assetsOut", type: "uint256" }],
+  },
+] as const;
+
 export interface YieldSettleResult {
   success: boolean;
   txHash?: string;
@@ -173,14 +197,23 @@ export async function settleYieldAction(a: SignedYieldAction): Promise<YieldSett
   const walletClient = createWalletClient({ account, transport: http(cfg.rpc) });
   const publicClient = createPublicClient({ transport: http(cfg.rpc) });
 
-  const fnName = a.action === "supply" ? "supplyToAave" : "withdrawFromAave";
-  // Submit exactly the asset that was SIGNED (never re-resolve from config —
-  // a divergence would mismatch the witness and revert).
-  const callData = encodeFunctionData({
-    abi: YIELD_IMPL_ABI,
-    functionName: fnName,
-    args: [a.fromAddr, account.address, a.pool, a.assetAddress, a.amountRaw, a.nonceUint, a.deadline, a.witnessSig],
-  });
+  // Submit exactly the asset/target that was SIGNED (never re-resolve from
+  // config — a divergence would mismatch the witness and revert). Branch the
+  // ABI + function by protocol (Aave Pool vs ERC-4626 vault); args are identical.
+  let callData: `0x${string}`;
+  if (a.protocol === "aave") {
+    callData = encodeFunctionData({
+      abi: YIELD_IMPL_ABI,
+      functionName: a.action === "supply" ? "supplyToAave" : "withdrawFromAave",
+      args: [a.fromAddr, account.address, a.pool, a.assetAddress, a.amountRaw, a.nonceUint, a.deadline, a.witnessSig],
+    });
+  } else {
+    callData = encodeFunctionData({
+      abi: YIELD_ERC4626_ABI,
+      functionName: a.action === "supply" ? "supplyToErc4626" : "withdrawFromErc4626",
+      args: [a.fromAddr, account.address, a.pool, a.assetAddress, a.amountRaw, a.nonceUint, a.deadline, a.witnessSig],
+    });
+  }
 
   const authorizationList = [
     {

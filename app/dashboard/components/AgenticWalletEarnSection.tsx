@@ -8,7 +8,7 @@
  *     accrued yield (when the principal is tracked).
  *   - Total supplied USD across positions.
  *   - When the wallet has no positions, a subtle teaser pulled from the
- *     public markets feed ("Earn ~X% on idle USDC/USDT via Aave").
+ *     public markets feed ("Earn ~X% on idle USDC/USDT via Aave or Morpho").
  *
  * READ-ONLY. No deposit/withdraw actions — those are Phase 1. The only
  * signing here is the cached SESSION read (getAuthCreds), mirroring the
@@ -65,9 +65,9 @@ interface Props {
   canDeposit?: boolean;
 }
 
-// Human chain label for the partial-read notice. Yield is BNB-only today;
-// the map mirrors the dashboard's CHAIN_LABEL convention so added chains
-// read cleanly (uppercased key as the fallback for anything unmapped).
+// Human chain label for the partial-read notice. Yield spans BNB (Aave) and
+// Base (Morpho); the map mirrors the dashboard's CHAIN_LABEL convention so
+// added chains read cleanly (uppercased key as the fallback for anything unmapped).
 const CHAIN_LABEL: Record<string, string> = {
   bnb: "BNB Chain",
   base: "Base",
@@ -213,7 +213,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           <img src="/aave.svg" alt="Aave" width={26} height={26} className="rounded-full shrink-0" />
           <div className="min-w-0 leading-tight">
             <div className="text-[15px] font-semibold text-white/90">Q402 Yield</div>
-            <div className="text-[12px] text-white/55 mt-0.5">Aave V3</div>
+            <div className="text-[12px] text-white/55 mt-0.5">Aave V3 · Morpho</div>
           </div>
         </div>
         <div className="text-[19px] font-semibold font-mono shrink-0 leading-none">
@@ -259,7 +259,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           <span className="text-emerald-300 font-medium">
             {bestApy !== null ? `~${pct(bestApy)}` : "yield"}
           </span>{" "}
-          on idle USDC / USDT via Aave.
+          on idle USDC / USDT via Aave or Morpho.
         </div>
       )}
 
@@ -324,15 +324,23 @@ function AgenticWalletEarnActions({
   defaultToken: "USDC" | "USDT";
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
+  const [chain, setChain] = useState<"bnb" | "base">("bnb");
   const [token, setToken] = useState<"USDC" | "USDT">(defaultToken);
   const [amount, setAmount] = useState("");
   const [maxWithdraw, setMaxWithdraw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<{ action: string; txHash: string } | null>(null);
-  // Flips to true once a route returns 503 yield_not_enabled — disables the
-  // controls for the rest of the session (the contract isn't deployed).
-  const [comingSoon, setComingSoon] = useState(false);
+  const [okMsg, setOkMsg] = useState<{ action: string; txHash: string; chain: "bnb" | "base" } | null>(null);
+  // Chains whose route returned 503 yield_not_enabled (the v2 impl isn't
+  // deployed there yet). Tracked per chain: BNB can be live while Base is not,
+  // so a coming-soon chain disables only its own controls.
+  const [comingSoonChains, setComingSoonChains] = useState<Set<string>>(new Set());
+
+  // Base settles into Morpho and the curated vault is USDC-only, so force USDC
+  // there: the user can't pick an unsupported token.
+  const baseOnly = chain === "base";
+  const effToken: "USDC" | "USDT" = baseOnly ? "USDC" : token;
+  const comingSoon = comingSoonChains.has(chain);
 
   const action = mode === "deposit" ? "agentic.yield_deposit" : "agentic.yield_withdraw";
   const endpoint =
@@ -367,8 +375,8 @@ function AgenticWalletEarnActions({
       // the server's requireIntentAuth rebuilds this exact tuple.
       const intent: Record<string, string> = {
         walletId,
-        chain: "bnb",
-        token,
+        chain,
+        token: effToken,
         amount: amountValue,
       };
       const auth = await getActionAuth(ownerAddress, action, intent, signMessage);
@@ -384,8 +392,8 @@ function AgenticWalletEarnActions({
           nonce: auth.challenge,
           signature: auth.signature,
           walletId,
-          chain: "bnb",
-          token,
+          chain,
+          token: effToken,
           amount: amountValue,
         }),
       });
@@ -395,17 +403,17 @@ function AgenticWalletEarnActions({
         return;
       }
       const data = await res.json().catch(() => ({}));
-      // Deploy-gated: contract not live on this chain yet. Collapse the
-      // controls into a soft "coming soon" rather than erroring loudly.
+      // Deploy-gated: contract not live on THIS chain yet. Mark only this
+      // chain coming-soon (the other may be live) instead of erroring loudly.
       if (res.status === 503 && data.error === "yield_not_enabled") {
-        setComingSoon(true);
+        setComingSoonChains((s) => new Set(s).add(chain));
         return;
       }
       if (!res.ok) {
         setErr(data.message ?? data.error ?? `Action failed (HTTP ${res.status}).`);
         return;
       }
-      setOkMsg({ action: mode === "deposit" ? "Deposited" : "Withdrew", txHash: String(data.txHash ?? "") });
+      setOkMsg({ action: mode === "deposit" ? "Deposited" : "Withdrew", txHash: String(data.txHash ?? ""), chain });
       setAmount("");
       setMaxWithdraw(false);
       onChanged();
@@ -419,20 +427,27 @@ function AgenticWalletEarnActions({
   const labelCls = "text-[10px] text-white/80 uppercase tracking-widest font-medium";
   const inputStyle = { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" } as const;
 
-  if (comingSoon) {
-    return (
-      <div className="mt-3 pt-3 border-t" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-        <div className="text-[11.5px] text-white/45">
-          Deposit / Withdraw —{" "}
-          <span className="text-emerald-300/70 font-medium">coming soon</span>. Q402 Yield isn&apos;t
-          enabled on this chain yet.
-        </div>
-      </div>
-    );
-  }
+  // Segmented-button styles shared by the chain + mode toggles.
+  const segSel = { background: "rgba(247,202,22,0.14)", color: "#f9d64a", border: "1px solid rgba(247,202,22,0.35)" } as const;
+  const segUnsel = { background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.07)" } as const;
 
   return (
     <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+      {/* Chain selector: BNB (Aave V3) / Base (Morpho). Base is USDC-only. */}
+      <div className="flex items-center gap-1.5">
+        {(["bnb", "base"] as const).map((c) => (
+          <button
+            key={c}
+            type="button"
+            onClick={() => { setChain(c); setErr(null); setOkMsg(null); }}
+            className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+            style={chain === c ? segSel : segUnsel}
+          >
+            {c === "bnb" ? "BNB · Aave" : "Base · Morpho"}
+          </button>
+        ))}
+      </div>
+
       {/* Deposit / Withdraw tab toggle */}
       <div className="flex items-center gap-1.5">
         {(["deposit", "withdraw"] as const).map((m) => (
@@ -441,66 +456,75 @@ function AgenticWalletEarnActions({
             type="button"
             onClick={() => { setMode(m); setErr(null); setOkMsg(null); }}
             className="px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition-colors"
-            style={
-              mode === m
-                ? { background: "rgba(247,202,22,0.14)", color: "#f9d64a", border: "1px solid rgba(247,202,22,0.35)" }
-                : { background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.07)" }
-            }
+            style={mode === m ? segSel : segUnsel}
           >
             {m}
           </button>
         ))}
       </div>
 
-      <div className="flex items-stretch gap-1.5">
-        {/* Amount */}
-        <div className="flex-1">
-          <input
-            value={isMax ? "" : amount}
-            onChange={(e) => setAmount(e.target.value)}
-            disabled={busy || isMax}
-            inputMode="decimal"
-            placeholder={isMax ? "max (full position)" : "0.00"}
-            aria-label="Amount"
-            className="w-full rounded-md border px-2.5 py-1.5 text-[12.5px] font-mono text-white placeholder-white/25 disabled:opacity-50"
-            style={inputStyle}
-          />
+      {comingSoon ? (
+        <div className="text-[11.5px] text-white/45">
+          Deposit / Withdraw on {chain === "base" ? "Base" : "BNB Chain"}:{" "}
+          <span className="text-emerald-300/70 font-medium">coming soon</span>. Q402 Yield isn&apos;t
+          enabled on this chain yet.
         </div>
-        {/* Token select */}
-        <select
-          value={token}
-          onChange={(e) => setToken(e.target.value === "USDT" ? "USDT" : "USDC")}
-          disabled={busy}
-          aria-label="Token"
-          className="rounded-md border px-2 py-1.5 text-[12px] font-mono text-white disabled:opacity-50"
-          style={inputStyle}
-        >
-          <option value="USDC" style={{ background: "#0F1929", color: "#EAF2EC" }}>USDC</option>
-          <option value="USDT" style={{ background: "#0F1929", color: "#EAF2EC" }}>USDT</option>
-        </select>
-        {/* Submit */}
-        <button
-          type="button"
-          onClick={submit}
-          disabled={busy || !amountValid || (mode === "deposit" && !canDeposit)}
-          className="px-3 py-1.5 rounded-md text-[12px] font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed capitalize"
-        >
-          {busy ? "…" : mode}
-        </button>
-      </div>
+      ) : (
+        <>
+          <div className="flex items-stretch gap-1.5">
+            {/* Amount */}
+            <div className="flex-1">
+              <input
+                value={isMax ? "" : amount}
+                onChange={(e) => setAmount(e.target.value)}
+                disabled={busy || isMax}
+                inputMode="decimal"
+                placeholder={isMax ? "max (full position)" : "0.00"}
+                aria-label="Amount"
+                className="w-full rounded-md border px-2.5 py-1.5 text-[12.5px] font-mono text-white placeholder-white/25 disabled:opacity-50"
+                style={inputStyle}
+              />
+            </div>
+            {/* Token select. Base routes to the Morpho USDC vault, so USDT is
+                hidden + the control is locked to USDC there. */}
+            <select
+              value={effToken}
+              onChange={(e) => setToken(e.target.value === "USDT" ? "USDT" : "USDC")}
+              disabled={busy || baseOnly}
+              aria-label="Token"
+              className="rounded-md border px-2 py-1.5 text-[12px] font-mono text-white disabled:opacity-50"
+              style={inputStyle}
+            >
+              <option value="USDC" style={{ background: "#0F1929", color: "#EAF2EC" }}>USDC</option>
+              {!baseOnly && (
+                <option value="USDT" style={{ background: "#0F1929", color: "#EAF2EC" }}>USDT</option>
+              )}
+            </select>
+            {/* Submit */}
+            <button
+              type="button"
+              onClick={submit}
+              disabled={busy || !amountValid || (mode === "deposit" && !canDeposit)}
+              className="px-3 py-1.5 rounded-md text-[12px] font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed capitalize"
+            >
+              {busy ? "…" : mode}
+            </button>
+          </div>
 
-      {/* Max toggle — withdraw only */}
-      {mode === "withdraw" && (
-        <label className={`flex items-center gap-1.5 cursor-pointer ${labelCls} normal-case`}>
-          <input
-            type="checkbox"
-            checked={maxWithdraw}
-            onChange={(e) => { setMaxWithdraw(e.target.checked); setErr(null); }}
-            disabled={busy}
-            className="accent-emerald-400 w-3.5 h-3.5"
-          />
-          <span className="text-[11px] text-white/55 tracking-normal normal-case">Withdraw full position (max)</span>
-        </label>
+          {/* Max toggle: withdraw only */}
+          {mode === "withdraw" && (
+            <label className={`flex items-center gap-1.5 cursor-pointer ${labelCls} normal-case`}>
+              <input
+                type="checkbox"
+                checked={maxWithdraw}
+                onChange={(e) => { setMaxWithdraw(e.target.checked); setErr(null); }}
+                disabled={busy}
+                className="accent-emerald-400 w-3.5 h-3.5"
+              />
+              <span className="text-[11px] text-white/55 tracking-normal normal-case">Withdraw full position (max)</span>
+            </label>
+          )}
+        </>
       )}
 
       {err && <div className="text-[11px] text-red-300/85">{err}</div>}
@@ -509,7 +533,7 @@ function AgenticWalletEarnActions({
           {okMsg.action}.{" "}
           {okMsg.txHash ? (
             <a
-              href={`https://bscscan.com/tx/${okMsg.txHash}`}
+              href={`${okMsg.chain === "base" ? "https://basescan.org" : "https://bscscan.com"}/tx/${okMsg.txHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline"

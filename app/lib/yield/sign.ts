@@ -28,6 +28,7 @@ import {
   type AgenticToken,
   type SignedAuthorization,
 } from "@/app/lib/agentic-wallet-sign";
+import { morphoVaultFor, morphoSupportedChains } from "./morpho";
 
 export type YieldAction = "supply" | "withdraw";
 
@@ -57,6 +58,34 @@ const AAVE_WITHDRAW_AUTH_TYPES = {
   ],
 } as const;
 
+// ERC-4626 (Morpho) witness types — field order MUST match the BASE v2 impl's
+// ERC4626_*_AUTHORIZATION_TYPEHASH (vault replaces Aave's pool).
+const ERC4626_SUPPLY_AUTH_TYPES = {
+  Erc4626SupplyAuthorization: [
+    { name: "owner", type: "address" },
+    { name: "facilitator", type: "address" },
+    { name: "vault", type: "address" },
+    { name: "asset", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+const ERC4626_WITHDRAW_AUTH_TYPES = {
+  Erc4626WithdrawAuthorization: [
+    { name: "owner", type: "address" },
+    { name: "facilitator", type: "address" },
+    { name: "vault", type: "address" },
+    { name: "asset", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+export type YieldProtocol = "aave" | "morpho";
+
 /** Aave V3 Pool per chain — must equal the v2 impl's on-chain allowlist. */
 const AAVE_POOL: Partial<Record<AgenticChainKey, Address>> = {
   bnb: "0x6807dc923806fE8Fd134338EABCA509979a7e0cB",
@@ -71,17 +100,28 @@ export function yieldImplAddress(chain: AgenticChainKey): Address | undefined {
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as Address) : undefined;
 }
 
-/** Chains where Aave yield deposit/withdraw is wired (pool + deployed impl). */
+/** Which yield protocol settles on this chain: Aave (BNB) or Morpho/ERC-4626 (Base). */
+export function yieldProtocolForChain(chain: AgenticChainKey): YieldProtocol | null {
+  if (AAVE_POOL[chain]) return "aave";
+  if (morphoVaultFor(chain) !== null) return "morpho";
+  return null;
+}
+
+/** Chains where yield deposit/withdraw is wired (target + deployed impl). */
 export function yieldExecChains(): AgenticChainKey[] {
-  return (Object.keys(AAVE_POOL) as AgenticChainKey[]).filter((c) => yieldImplAddress(c));
+  const aave = (Object.keys(AAVE_POOL) as AgenticChainKey[]).filter((c) => yieldImplAddress(c));
+  const morpho = (morphoSupportedChains() as AgenticChainKey[]).filter((c) => yieldImplAddress(c));
+  return [...new Set([...aave, ...morpho])];
 }
 
 export interface SignedYieldAction {
   chain: AgenticChainKey;
+  protocol: YieldProtocol;
   action: YieldAction;
   asset: AgenticToken;
   /** The exact asset token address that was signed (submit THIS, never re-resolve). */
   assetAddress: Address;
+  /** The settle target: Aave Pool (aave) or the ERC-4626 vault (morpho). */
   pool: Address;
   fromAddr: Address;
   /** The facilitator bound into the witness — the relayer MUST match it. */
@@ -117,8 +157,19 @@ interface SignYieldParams {
 export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAction> {
   const cfg = AGENTIC_CHAINS[p.chain];
   if (!cfg) throw new Error(`UNSUPPORTED_CHAIN:${p.chain}`);
-  const pool = AAVE_POOL[p.chain];
-  if (!pool) throw new Error(`YIELD_NO_POOL:${p.chain}`);
+  const protocol = yieldProtocolForChain(p.chain);
+  if (!protocol) throw new Error(`YIELD_NO_PROTOCOL:${p.chain}`);
+  // Settle target: Aave Pool, or the curated ERC-4626 vault (Morpho, USDC-only).
+  let target: Address;
+  if (protocol === "aave") {
+    const pool = AAVE_POOL[p.chain];
+    if (!pool) throw new Error(`YIELD_NO_POOL:${p.chain}`);
+    target = pool;
+  } else {
+    const vault = morphoVaultFor(p.chain, p.token);
+    if (!vault) throw new Error(`YIELD_NO_VAULT:${p.chain}:${p.token}`);
+    target = vault;
+  }
   const impl = yieldImplAddress(p.chain);
   if (!impl) throw new Error(`YIELD_IMPL_NOT_DEPLOYED:${p.chain}`);
 
@@ -167,21 +218,21 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
     chainId: cfg.id,
     verifyingContract: fromAddr, // == address(this) under 7702
   };
-  const message = {
-    owner: fromAddr,
-    facilitator: p.facilitator,
-    pool,
-    asset: tokenCfg.address,
-    amount: amountRaw,
-    nonce: nonceUint,
-    deadline,
-  };
-
-  // Split branches so viem infers the message type from a concrete
-  // (types, primaryType) pair — a ternary union collapses it to `never`.
-  const witnessSig = (p.action === "supply"
-    ? await walletClient.signTypedData({ domain, types: AAVE_SUPPLY_AUTH_TYPES, primaryType: "AaveSupplyAuthorization", message })
-    : await walletClient.signTypedData({ domain, types: AAVE_WITHDRAW_AUTH_TYPES, primaryType: "AaveWithdrawAuthorization", message })) as Hex;
+  // Build the protocol-correct witness. The message field is `pool` (Aave) or
+  // `vault` (ERC-4626); both carry `target`. Split branches so viem infers the
+  // message type from a concrete (types, primaryType) pair.
+  let witnessSig: Hex;
+  if (protocol === "aave") {
+    const message = { owner: fromAddr, facilitator: p.facilitator, pool: target, asset: tokenCfg.address, amount: amountRaw, nonce: nonceUint, deadline };
+    witnessSig = (p.action === "supply"
+      ? await walletClient.signTypedData({ domain, types: AAVE_SUPPLY_AUTH_TYPES, primaryType: "AaveSupplyAuthorization", message })
+      : await walletClient.signTypedData({ domain, types: AAVE_WITHDRAW_AUTH_TYPES, primaryType: "AaveWithdrawAuthorization", message })) as Hex;
+  } else {
+    const message = { owner: fromAddr, facilitator: p.facilitator, vault: target, asset: tokenCfg.address, amount: amountRaw, nonce: nonceUint, deadline };
+    witnessSig = (p.action === "supply"
+      ? await walletClient.signTypedData({ domain, types: ERC4626_SUPPLY_AUTH_TYPES, primaryType: "Erc4626SupplyAuthorization", message })
+      : await walletClient.signTypedData({ domain, types: ERC4626_WITHDRAW_AUTH_TYPES, primaryType: "Erc4626WithdrawAuthorization", message })) as Hex;
+  }
 
   // EIP-7702 authorization delegating to the v2 impl (the one exposing
   // supplyToAave/withdrawFromAave). Distinct from cfg.impl (v1 transfer).
@@ -198,10 +249,11 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
 
   return {
     chain: p.chain,
+    protocol,
     action: p.action,
     asset: p.token,
     assetAddress: tokenCfg.address,
-    pool,
+    pool: target,
     fromAddr,
     signedFacilitator: p.facilitator,
     amount: isMax ? "max" : p.amount,

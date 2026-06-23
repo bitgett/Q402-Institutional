@@ -36,6 +36,8 @@ import {
 } from "@/app/lib/agentic-wallet";
 import { fetchAgenticBalances } from "@/app/lib/agentic-wallet-balance";
 import { aaveTotalPositionValueStrict } from "@/app/lib/yield/aave";
+import { morphoTotalPositionValueStrict, morphoSupportedChains } from "@/app/lib/yield/morpho";
+import { yieldSupportedChains } from "@/app/lib/yield";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { requireCronAuth } from "@/app/lib/cron-auth";
 
@@ -192,21 +194,31 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
 
     // ── Q402 Yield (Aave V3) position check ───────────────────────────
-    // A wallet that supplied ALL its stablecoins to Aave shows a $0 token
-    // balance above but still holds aTokens. Destroying its encrypted key
-    // would strand those funds FOREVER. fetchAgenticBalances only reads
-    // USDC/USDT balanceOf — not aTokens — so check the Yield position
-    // explicitly. Yield is BNB-only today. Fail closed: a throw (RPC down)
-    // OR a position >= dust defers the delete + pages ops.
+    // A wallet that supplied ALL its stablecoins into yield shows a $0 token
+    // balance above but still holds the position token (Aave aToken or Morpho
+    // vault shares). Destroying its encrypted key would strand those funds
+    // FOREVER. fetchAgenticBalances only reads USDC/USDT balanceOf, so check
+    // the Yield position across EVERY supported venue (Aave on BNB, Morpho on
+    // Base, plus any future chain in yieldSupportedChains). A NEW venue MUST
+    // surface here or this GC can silently strand its funds. Fail closed: a
+    // throw (RPC down) OR a position >= dust defers the delete + pages ops.
+    const morphoChains = new Set(morphoSupportedChains());
     let yieldUsd: number | null = null;
     try {
-      yieldUsd = await aaveTotalPositionValueStrict("bnb", record.address);
+      const perChain = await Promise.all(
+        yieldSupportedChains().map((c) =>
+          morphoChains.has(c)
+            ? morphoTotalPositionValueStrict(c, record.address)
+            : aaveTotalPositionValueStrict(c, record.address),
+        ),
+      );
+      yieldUsd = perChain.reduce((sum, v) => sum + v, 0);
     } catch (e) {
       console.error(`[agentic-wallet-gc] yield position check failed for ${record.address}:`, e);
       void sendOpsAlert(
-        `agentic-wallet-gc: could not verify Q402 Yield (Aave V3) position for ${record.address} ` +
-          `(owner ${record.ownerAddr}). Hard-delete deferred — destroying the key with funds in Aave ` +
-          `would strand them. Investigate before retrying.`,
+        `agentic-wallet-gc: could not verify Q402 Yield position for ${record.address} ` +
+          `(owner ${record.ownerAddr}). Hard-delete deferred. Destroying the key with funds in ` +
+          `Aave or Morpho would strand them. Investigate before retrying.`,
         "critical",
       );
       skipped.push({ key, reason: "yield_check_failed", balanceUsd });
@@ -214,9 +226,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     }
     if (yieldUsd >= DUST_THRESHOLD_USD) {
       void sendOpsAlert(
-        `agentic-wallet-gc: HOLDING WALLET — refusing to hard-delete ${record.address} ` +
-          `(owner ${record.ownerAddr}). Q402 Yield (Aave V3) position ≈ $${yieldUsd.toFixed(2)} still supplied — ` +
-          `destroying the key would strand it. Have the user (or ops) withdraw from Yield before delete.`,
+        `agentic-wallet-gc: HOLDING WALLET. Refusing to hard-delete ${record.address} ` +
+          `(owner ${record.ownerAddr}). Q402 Yield position is about $${yieldUsd.toFixed(2)} still supplied. ` +
+          `Destroying the key would strand it. Have the user (or ops) withdraw from Yield before delete.`,
         "critical",
       );
       skipped.push({ key, reason: "yield_above_dust", balanceUsd });

@@ -559,7 +559,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
 
     const receipt = {
       action: action === "supply" ? "yield_deposit" : "yield_withdraw",
-      protocol: "aave",
+      protocol: signed.protocol,
       chain,
       asset: token,
       amount: signed.amount,
@@ -647,7 +647,10 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     const msg = e instanceof Error ? e.message : String(e);
     // Deploy-gated: signYieldAction throws YIELD_IMPL_NOT_DEPLOYED until the
     // audited v2 impl is live → surface as 503 (feature not yet enabled).
-    if (msg.includes("YIELD_IMPL_NOT_DEPLOYED") || msg.includes("YIELD_NO_POOL")) {
+    if (msg.includes("YIELD_NO_VAULT")) {
+      return NextResponse.json({ error: "yield_token_not_supported", message: "This token is not supported for yield on this chain (Base yield is USDC only)." }, { status: 400 });
+    }
+    if (msg.includes("YIELD_IMPL_NOT_DEPLOYED") || msg.includes("YIELD_NO_POOL") || msg.includes("YIELD_NO_PROTOCOL")) {
       return NextResponse.json({ error: "yield_not_enabled", message: "Q402 Yield is not enabled on this chain yet." }, { status: 503 });
     }
     return NextResponse.json({ error: "yield_action_failed", message: msg }, { status: 500 });
