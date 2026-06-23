@@ -1,14 +1,14 @@
 /**
- * Q402 Yield — Aave V3 adapter (READ surface, Phase 0).
+ * Q402 Yield — Aave V3 adapter (read surface).
  *
  * Reads available stablecoin lending markets (live supply APY) and a
  * wallet's current positions (aToken balance = principal + accrued).
- * Moves NO funds. Deposit/withdraw (Phase 1) ride the EIP-7702 witness
- * executor (separate spec) and will add buildSupply/buildWithdraw here.
+ * This adapter moves NO funds; deposit/withdraw are WIRED and settle
+ * through the EIP-7702 witness path (yield/sign + yield/relay,
+ * supplyToAave/withdrawFromAave), not via the optional build* methods.
  *
- * Aave V3 is live on BNB Chain (Q402's home chain) plus Base / Ethereum
- * / Arbitrum / Avalanche / Scroll. Phase 0 ships BNB; the RESERVES map
- * is keyed by Q402 chain key so adding chains is config-only.
+ * Q402 runs Aave V3 yield on BNB Chain; the RESERVES map is keyed by Q402
+ * chain key so adding chains is config-only.
  *
  * aTokens REBASE: `balanceOf` already includes accrued interest (1:1
  * redeemable for the underlying). Accrued yield is computed off-chain as

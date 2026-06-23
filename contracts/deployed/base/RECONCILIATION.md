@@ -26,7 +26,7 @@ code changes per type-4 tx.
   not bytecode, so the same deployer+nonce yields the same address on both
   chains while each carries its own per-chain bytecode (domain NAME differs).
 - New Base **yield** impl: `contracts/yield/Q402PaymentImplementationBASEv2.sol`
-  (this branch, not yet deployed).
+  (deployed to Base mainnet `0xd4f703683acac7C02bf482A061C9E1F8DEdA467c`).
 
 ## Method
 BaseScan's V1 `getsourcecode` endpoint is deprecated (V2 requires an API key,

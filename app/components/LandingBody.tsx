@@ -97,7 +97,7 @@ const CAPABILITIES = [
   { t: 'Agentic Wallets', s: 'Multi-wallet pipelines with per-wallet daily-spend caps.', tag: 'Live', area: 'wallet', icon: 'wallet' },
   { t: 'Recurring payments', s: 'Scheduled fires with a cancel window before each run.', tag: 'Live', area: 'recur', icon: 'recur' },
   { t: 'Batch payouts ≤ 20', s: 'Up to 20 recipients in one signed call.', tag: 'Live', area: 'batch', icon: 'batch' },
-  { t: 'Morpho vault routing', s: 'Sweep idle USDC into the highest-yielding vault.', tag: 'Roadmap', logo: '/logos/morpho.png', area: 'morpho', icon: 'morpho' },
+  { t: 'Morpho yield on Base', s: 'Earn yield on idle USDC in a curated Morpho vault on Base.', tag: 'Live', logo: '/logos/morpho.png', area: 'morpho', icon: 'morpho' },
 ];
 
 const PRICING = [

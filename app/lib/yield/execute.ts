@@ -41,7 +41,7 @@ import {
   chargeYieldOpBudget,
   refundYieldOpBudget,
 } from "./relay";
-import { enforceYieldPolicy } from "./policy";
+import { enforceYieldPolicy, readTokenBalanceStrict } from "./policy";
 import type { Hex, Address } from "viem";
 
 interface YieldBody {
@@ -159,7 +159,11 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   }
   // Held chains (chain-status.ts): yield settles via its own EIP-7702 path
   // (yield/relay.ts), separate from settlePayment, so it needs its own gate.
-  if (isChainDisabled(body.chain)) {
+  // SUPPLY ONLY — WITHDRAW must ALWAYS be allowed (fund recovery, see P0 note
+  // below). Holding a chain (e.g. during an impl refresh) must never block a
+  // user from recovering funds already supplied there; the contract's own
+  // guards still protect the on-chain withdraw.
+  if (action === "supply" && isChainDisabled(body.chain)) {
     return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
   if (body.token !== "USDC" && body.token !== "USDT") {
@@ -231,14 +235,18 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
         { status: 401 },
       );
     }
-    if (isTrial && chain !== "bnb") {
+    // Q402 Yield deposits are PAID-only (multichain scope is required above), so
+    // a Trial key must never settle a deposit — not even on BNB. Presenting it
+    // would otherwise scope the deposit to the trial credit pool + trial expiry
+    // and could wrongly TRIAL_EXPIRED a paid user. Require the Multichain key
+    // (or owner-sig). This is the SUPPLY branch, so it applies to deposits only.
+    if (isTrial) {
       return NextResponse.json(
         {
-          error: "TRIAL_BNB_ONLY",
+          error: "YIELD_REQUIRES_PAID_KEY",
           message:
-            "Trial apiKeys can only settle on BNB Chain. Present the " +
-            "Multichain key (or omit apiKey + sign the owner challenge) " +
-            "for non-BNB actions.",
+            "Q402 Yield deposits must use your Multichain API key, not the Trial key. " +
+            "Present the Multichain key, or omit apiKey and sign the owner challenge.",
         },
         { status: 402 },
       );
@@ -502,6 +510,31 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       await kv.del(idemKey).catch(() => {});
       await releaseLock();
       return NextResponse.json({ error: "key_decrypt_failed" }, { status: 503 });
+    }
+
+    // Exact-token balance preflight (supply only). The policy's allocation guard
+    // sums USDC+USDT, so a USDC deposit by a wallet holding only USDT could pass
+    // it and then revert on-chain, burning relayer gas. Confirm the wallet holds
+    // `amount` of the EXACT token before we sign + settle.
+    if (action === "supply") {
+      let tokenBal: number;
+      try {
+        tokenBal = await readTokenBalanceStrict(chain, walletAddr as Address, token);
+      } catch {
+        await refundOp();
+        await kv.del(idemKey).catch(() => {});
+        await releaseLock();
+        return NextResponse.json({ error: "BALANCE_READ_FAILED", message: "Could not read your token balance for the deposit." }, { status: 503 });
+      }
+      if (Number(amount) - tokenBal > 1e-6) {
+        await refundOp();
+        await kv.del(idemKey).catch(() => {});
+        await releaseLock();
+        return NextResponse.json(
+          { error: "INSUFFICIENT_TOKEN_BALANCE", message: `Wallet holds ${tokenBal} ${token} on ${chain}; need ${amount} to deposit.` },
+          { status: 400 },
+        );
+      }
     }
 
     const signed = await signYieldAction({ privateKey, expectedOwner: wallet.address as Address, chain, token, action, amount, facilitator });

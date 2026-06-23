@@ -1,23 +1,22 @@
 "use client";
 
 /**
- * AgenticWalletEarnSection — read-only "Earn" surface for an Agent Wallet.
+ * AgenticWalletEarnSection — the "Earn" surface for an Agent Wallet.
  *
- * Phase 0 of Q402 Yield (Aave lending). Renders, for one wallet:
- *   - Each current supply position: asset, redeemable balance, supply APY,
- *     accrued yield (when the principal is tracked).
+ * Q402 Yield (Aave V3 on BNB, Morpho on Base). Renders, for one wallet:
+ *   - Each current supply position per (chain, asset): redeemable balance,
+ *     supply APY, accrued yield (when the principal is tracked).
  *   - Total supplied USD across positions.
  *   - When the wallet has no positions, a subtle teaser pulled from the
  *     public markets feed ("Earn ~X% on idle USDC/USDT via Aave or Morpho").
+ *   - Deposit/withdraw controls (AgenticWalletEarnActions), per chain.
  *
- * READ-ONLY. No deposit/withdraw actions — those are Phase 1. The only
- * signing here is the cached SESSION read (getAuthCreds), mirroring the
- * Hooks modal's load path: positions are an authed read of your own
- * wallet state; markets are public (no auth).
+ * The position/market reads use the cached SESSION sig (getAuthCreds);
+ * markets are public (no auth). Deposit/withdraw are intent-bound writes.
  *
- * Data sources (already-built endpoints):
+ * Data sources:
  *   GET /api/wallet/agentic/yield/positions?walletId&address&nonce&signature
- *   GET /api/wallet/agentic/yield/reserves?chain=bnb   (public)
+ *   GET /api/wallet/agentic/yield/reserves   (public, all supported chains)
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -122,7 +121,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
       // Run both reads in parallel: positions (authed) + public markets.
       const [posRes, mktRes] = await Promise.all([
         fetch(`/api/wallet/agentic/yield/positions?${qs.toString()}`),
-        fetch(`/api/wallet/agentic/yield/reserves?chain=bnb`),
+        fetch(`/api/wallet/agentic/yield/reserves`),
       ]);
 
       if (posRes.status === 401) {
@@ -193,17 +192,23 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
   const bestApyRaw = finiteApys.length > 0 ? Math.max(...finiteApys) : NaN;
   const bestApy = Number.isFinite(bestApyRaw) ? bestApyRaw : null;
 
-  // One row per available stablecoin market (USDC + USDT) so BOTH APYs are
-  // visible; merge in the supplied balance when a position exists for that token.
-  const marketRows = (["USDC", "USDT"] as const)
-    .map((asset) => {
-      const m = (markets ?? []).find((mk) => mk.asset === asset);
-      const pos = positions?.positions.find((p) => p.asset === asset);
-      const apy = m?.supplyApy ?? pos?.supplyApy;
-      if (apy == null) return null;
-      return { asset, apy, balance: pos ? Number(pos.balance) : null };
-    })
-    .filter((r): r is { asset: "USDC" | "USDT"; apy: number; balance: number | null } => r !== null);
+  // One row per (chain, asset) market so BNB Aave and Base Morpho never merge
+  // under a single asset. Union the public markets (APY) with the wallet's
+  // positions (supplied balance), keyed by chain+asset.
+  type EarnRow = { chain: string; asset: string; apy?: number; balance: number | null };
+  const rowMap = new Map<string, EarnRow>();
+  for (const m of markets ?? []) {
+    rowMap.set(`${m.chain}:${m.asset}`, { chain: m.chain, asset: m.asset, apy: m.supplyApy, balance: null });
+  }
+  for (const p of positions?.positions ?? []) {
+    const k = `${p.chain}:${p.asset}`;
+    const r = rowMap.get(k);
+    if (r) { r.balance = Number(p.balance); if (r.apy == null) r.apy = p.supplyApy; }
+    else rowMap.set(k, { chain: p.chain, asset: p.asset, apy: p.supplyApy, balance: Number(p.balance) });
+  }
+  const marketRows = [...rowMap.values()].filter(
+    (r): r is EarnRow & { apy: number } => typeof r.apy === "number" && Number.isFinite(r.apy),
+  );
 
   return (
     <div className="relative">
@@ -235,11 +240,12 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
       ) : marketRows.length > 0 ? (
         <div className="space-y-1.5">
           {marketRows.map((row) => (
-            <div key={row.asset} className="flex items-center justify-between text-[12.5px]">
+            <div key={`${row.chain}:${row.asset}`} className="flex items-center justify-between text-[12.5px]">
               <div className="flex items-center gap-2 min-w-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/${row.asset.toLowerCase()}.svg`} alt={row.asset} width={16} height={16} className="rounded-full shrink-0" />
                 <span className="text-white/85 font-medium font-mono text-[12px]">{row.asset}</span>
+                <span className="text-white/35 text-[10px]">{chainLabel(row.chain)}</span>
                 <span className="text-white/40">·</span>
                 <span className="text-emerald-300/90 text-[11px]">{pct(row.apy)} APY</span>
               </div>

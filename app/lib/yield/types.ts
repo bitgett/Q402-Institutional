@@ -2,17 +2,17 @@
  * Q402 Yield — shared types.
  *
  * "Q402 Yield" lets an Agent Wallet's idle stablecoins earn yield in a
- * lending protocol (Aave first, on BNB Chain; Morpho later on Base/
- * Arbitrum), gasless and within Hooks policy, with a Trust Receipt per
+ * lending protocol — Aave V3 on BNB Chain (USDC/USDT) and Morpho on Base
+ * (USDC only) — gasless and within Hooks policy, with a Trust Receipt per
  * supply/withdraw.
  *
- * Phase 0 (this file's read surface) moves NO funds — it only reads
- * available markets + a wallet's current position. Deposit/withdraw
- * (Phase 1) ride the gasless relayer; their plan/execution types live
- * here too so the adapter surface is stable from the start.
+ * Read surface: this file's market/position types move NO funds. Write
+ * surface (deposit/withdraw) settles through the EIP-7702 witness relayer
+ * (yield/sign + yield/relay); the live path is signYieldAction, not the
+ * optional adapter build* methods below.
  *
  * The adapter abstraction keeps the route/MCP/dashboard layer
- * protocol-agnostic: Aave today, Morpho next, both behind YieldAdapter.
+ * protocol-agnostic: Aave and Morpho both behind YieldAdapter.
  */
 
 export type YieldProtocol = "aave" | "morpho";
@@ -57,11 +57,11 @@ export interface YieldPosition {
 }
 
 /**
- * A built deposit/withdraw the route hands to the relayer. Phase 1.
- * For Aave (EIP-7702 witness path) the wallet signs `witnessToSign`
- * (EIP-712) and the relayer submits `relayerCall`. For Morpho
- * (Bundler3 + Permit2) the wallet signs a Permit2 message; same shape,
- * different `signKind`.
+ * Optional pre-built deposit/withdraw plan type. NOTE: the LIVE write path
+ * does NOT use this — it goes through signYieldAction (EIP-712 witness) +
+ * settleYieldAction. Both Aave and Morpho use the SAME EIP-7702 witness path
+ * (supplyToAave/withdrawFromAave and supplyToErc4626/withdrawFromErc4626);
+ * Morpho does NOT use Permit2/Bundler3. Kept as a stable adapter surface.
  */
 export interface YieldExecutionPlan {
   protocol: YieldProtocol;
