@@ -78,6 +78,26 @@ async function readLiquidStableBalance(chain: AgenticChainKey, wallet: Address):
   return total;
 }
 
+/**
+ * Liquid balance of ONE specific token (human units) for the wallet on the
+ * chain. THROWS on RPC failure or unknown token so the caller can fail closed.
+ * Used as a deposit preflight: the allocation guard sums USDC+USDT, so a USDC
+ * deposit by a USDT-only wallet would otherwise pass and revert on-chain.
+ */
+export async function readTokenBalanceStrict(chain: AgenticChainKey, wallet: Address, token: AgenticToken): Promise<number> {
+  const cfg = CHAIN_CONFIG[chain as ChainKey];
+  const t = token === "USDC" ? cfg?.usdc : cfg?.usdt;
+  if (!cfg || !t?.address) throw new Error(`no ${token} config for ${chain}`);
+  const client = createPublicClient({ transport: http(getPrimaryRpc(chain)) });
+  const raw = (await client.readContract({
+    address: t.address as Address,
+    abi: ERC20_BAL_ABI,
+    functionName: "balanceOf",
+    args: [wallet],
+  })) as bigint;
+  return Number(formatUnits(raw, t.decimals));
+}
+
 export async function enforceYieldPolicy(input: YieldPolicyInput): Promise<YieldPolicyResult> {
   // Hard floor: only USDC/USDT yield (defense in depth; routes also validate).
   if (input.asset !== "USDC" && input.asset !== "USDT") {

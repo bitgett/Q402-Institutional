@@ -35,7 +35,7 @@ import {
   type AgenticWalletRecord,
 } from "@/app/lib/agentic-wallet";
 import { fetchAgenticBalances } from "@/app/lib/agentic-wallet-balance";
-import { aaveTotalPositionValueStrict } from "@/app/lib/yield/aave";
+import { aaveTotalPositionValueStrict, aaveSupportedChains } from "@/app/lib/yield/aave";
 import { morphoTotalPositionValueStrict, morphoSupportedChains } from "@/app/lib/yield/morpho";
 import { yieldSupportedChains } from "@/app/lib/yield";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
@@ -203,14 +203,20 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // surface here or this GC can silently strand its funds. Fail closed: a
     // throw (RPC down) OR a position >= dust defers the delete + pages ops.
     const morphoChains = new Set(morphoSupportedChains());
+    const aaveChains = new Set(aaveSupportedChains());
     let yieldUsd: number | null = null;
     try {
       const perChain = await Promise.all(
-        yieldSupportedChains().map((c) =>
-          morphoChains.has(c)
-            ? morphoTotalPositionValueStrict(c, record.address)
-            : aaveTotalPositionValueStrict(c, record.address),
-        ),
+        yieldSupportedChains().map(async (c) => {
+          // Sum BOTH protocols on the chain — if a chain ever enables Aave AND
+          // Morpho, picking only one would hide the other's funds and let a
+          // hard-delete strand them. Each value read THROWS on RPC fail → the
+          // outer catch defers the delete (fail-closed).
+          const reads: Promise<number>[] = [];
+          if (aaveChains.has(c)) reads.push(aaveTotalPositionValueStrict(c, record.address));
+          if (morphoChains.has(c)) reads.push(morphoTotalPositionValueStrict(c, record.address));
+          return (await Promise.all(reads)).reduce((s, v) => s + v, 0);
+        }),
       );
       yieldUsd = perChain.reduce((sum, v) => sum + v, 0);
     } catch (e) {

@@ -7,7 +7,7 @@ import { SDK_VERSION, MCP_VERSION } from "@/app/lib/version";
 const NAV = [
   { id: "overview",       label: "Overview",        icon: "○" },
   { id: "agentic-wallet", label: "Agentic Wallet",  icon: "○" },
-  { id: "yield",          label: "Yield · Aave V3", icon: "○" },
+  { id: "yield",          label: "Yield", icon: "○" },
   { id: "bridge",         label: "Bridge · CCIP",   icon: "○" },
   { id: "payment-requests", label: "Payment Requests", icon: "○" },
   { id: "how-it-works",   label: "How It Works",    icon: "○" },
@@ -256,16 +256,16 @@ export default function DocsPage() {
           </Section>
 
           {/* ── YIELD ── */}
-          <Section id="yield" title="Yield · Aave V3">
+          <Section id="yield" title="Yield · Aave V3 + Morpho">
             <p className="text-white/75 text-base leading-relaxed mb-6">
-              Supply and withdraw stablecoins on Aave V3 over BNB Chain straight from an Agent
-              Wallet. The EIP-7702 relay sponsors the gas, so idle balances compound while you pay
-              $0 to move them.
+              Supply and withdraw stablecoins straight from an Agent Wallet: Aave V3 on BNB Chain
+              (USDC / USDT) and Morpho on Base (a curated USDC vault). The EIP-7702 relay sponsors
+              the gas, so idle balances compound while you pay $0 to move them.
             </p>
             <div className="grid sm:grid-cols-3 gap-4 mb-6">
               {[
-                { label: "Protocol", value: "Aave V3" },
-                { label: "Chain",    value: "BNB Chain" },
+                { label: "Protocol", value: "Aave V3 / Morpho" },
+                { label: "Chain",    value: "BNB Chain / Base" },
                 { label: "Actions",  value: "Gasless supply / withdraw" },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
@@ -641,10 +641,10 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_bridge_send",         auth: "live mode",   purpose: "Execute a CCIP USDC bridge from the Agent Wallet (Mode C). Sandbox by default." },
                     { name: "q402_bridge_history",      auth: "api key",     purpose: "Recent CCIP bridge attempts for the Agent Wallet (src/dst/amount/CCIP msgId/status)." },
                     { name: "q402_bridge_gas_tank",     auth: "api key",     purpose: "Per-chain Gas Tank native balance + auto-fund window so the agent can top up before bridging." },
-                    { name: "q402_yield_reserves",      auth: "none",        purpose: "List Q402 Yield (Aave V3) lending markets + live supply APY. BNB Chain only today." },
+                    { name: "q402_yield_reserves",      auth: "none",        purpose: "List Q402 Yield lending markets + live supply APY: Aave V3 on BNB, Morpho on Base." },
                     { name: "q402_yield_positions",     auth: "api key",     purpose: "The Agent Wallet's current Q402 Yield positions — value + live supply APY. Read-only." },
-                    { name: "q402_yield_deposit",       auth: "live mode",   purpose: "Supply the Agent Wallet's USDC / USDT into Aave (Mode C). PAID feature — Trial cannot deposit. Confirm-gated + sandbox by default." },
-                    { name: "q402_yield_withdraw",      auth: "live mode",   purpose: "Withdraw supplied stablecoin out of Aave (amount=\"max\" for the full position). Always allowed, even after a plan downgrade." },
+                    { name: "q402_yield_deposit",       auth: "live mode",   purpose: "Supply the Agent Wallet's stablecoins into Aave (BNB, USDC/USDT) or Morpho (Base, USDC). Mode C, PAID feature — Trial cannot deposit. Confirm-gated + sandbox by default." },
+                    { name: "q402_yield_withdraw",      auth: "live mode",   purpose: "Withdraw supplied stablecoin out of Aave or Morpho (amount=\"max\" for the full position). Always allowed, even after a plan downgrade." },
                     { name: "q402_request_create",      auth: "api key",     purpose: "Publish a payment request (invoice). No funds move; returns a /pay link + req_ id. Recipient defaults to the Agent Wallet." },
                     { name: "q402_request_status",      auth: "none",        purpose: "Look up a request by req_ id (amount, token, chain, recipient, status). Read-only; notFound instead of throwing." },
                     { name: "q402_request_pay",         auth: "live mode",   purpose: "Pay a request gaslessly from your own Agent Wallet (Mode C). Two-phase consent, same as q402_pay." },

@@ -1,14 +1,18 @@
 /**
- * Q402 Yield — Morpho (MetaMorpho ERC-4626) adapter (READ surface, Phase 0).
+ * Q402 Yield — Morpho (MetaMorpho ERC-4626) adapter (read + write surface).
  *
- * Mirrors the Aave adapter's read surface for Morpho's MetaMorpho vaults,
- * which are ERC-4626: the vault share token IS the position token, and the
- * redeemable balance is `convertToAssets(shareBalanceOf(wallet))`. Moves NO
- * funds — listMarkets + getPositions only. Deposit/withdraw (Phase 1) ride a
- * separate executor (Permit2 -> Bundler3, distinct from Aave's EIP-7702
- * witness path) and are intentionally NOT implemented here.
+ * Read: mirrors the Aave adapter's reads for Morpho's MetaMorpho vaults, which
+ * are ERC-4626 (the vault share token IS the position token, and the redeemable
+ * balance is `convertToAssets(shareBalanceOf(wallet))`). listMarkets +
+ * getPositions move NO funds.
  *
- * Morpho extends Q402 Yield to Base + Arbitrum (Aave covers BNB today).
+ * Write: deposit/withdraw are WIRED (Base) and settle through the SAME EIP-7702
+ * witness path as Aave — the Base v2 impl exposes supplyToErc4626 /
+ * withdrawFromErc4626 (contracts/yield/Q402PaymentImplementationBASEv2.sol).
+ * `morphoVaultFor` here resolves the curated write-path vault (== the contract's
+ * immutable allowlist). Base is USDC-only.
+ *
+ * Morpho extends Q402 Yield to Base (Aave covers BNB today).
  *
  * Two notes vs the Aave adapter:
  *   1. APY: MetaMorpho exposes no single on-chain "supply APY" getter (a

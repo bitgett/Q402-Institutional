@@ -127,10 +127,10 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
   {
     label: "Yield",
     tools: [
-      { name: "q402_yield_reserves", auth: "no auth", note: "Aave V3 markets + supply APY. BNB only. Read-only." },
+      { name: "q402_yield_reserves", auth: "no auth", note: "Markets + supply APY: Aave V3 on BNB, Morpho on Base. Read-only." },
       { name: "q402_yield_positions", auth: "api key", note: "Your open yield positions + total supplied. Read-only." },
-      { name: "q402_yield_deposit", auth: "live mode", note: "Supply USDC / USDT into Aave V3. Mode C, BNB only. Sandbox by default." },
-      { name: "q402_yield_withdraw", auth: "live mode", note: "Withdraw USDC / USDT from Aave V3 (\"max\" = full). Sandbox by default." },
+      { name: "q402_yield_deposit", auth: "live mode", note: "Supply stablecoins: Aave V3 (BNB, USDC/USDT) or Morpho (Base, USDC). Mode C. Sandbox by default." },
+      { name: "q402_yield_withdraw", auth: "live mode", note: "Withdraw from Aave V3 (BNB) or Morpho (Base) (\"max\" = full). Sandbox by default." },
     ],
   },
   {

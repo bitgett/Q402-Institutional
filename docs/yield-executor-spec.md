@@ -91,8 +91,7 @@ Happy supply/withdraw/withdraw-all · wrong facilitator · bad/malleable sig · 
 > Same EIP-7702 witness pattern as the Aave variant above, but the venue is a
 > MetaMorpho ERC-4626 vault on Base instead of an Aave V3 Pool. Built and wired
 > (off-chain sign/relay/policy, MCP tools, dashboard Earn selector); the Base
-> impl contract is NOT yet deployed to Base mainnet (pending final audit + owner
-> approval). Phase 2 of Q402 Yield (Base, USDC only).
+> impl contract is deployed to Base mainnet. Phase 2 of Q402 Yield (Base, USDC only).
 
 ## 4626.1 Goal
 Add two functions to the Base impl (`Q402PaymentImplementationBASEv2`) in the SAME witness style:
@@ -157,4 +156,4 @@ Happy deposit/withdraw/withdraw-all via `redeem(maxRedeem(owner))` · wrong faci
 ## 4626.12 Verify before audit
 - `Q402PaymentImplementationBASEv2` `supplyToErc4626` / `withdrawFromErc4626` positional shape matches the Aave entrypoints with `vault` in the 3rd slot, and `NAME() = "Q402 Base"`, `VERSION() = "1"`.
 - MetaMorpho `deposit(assets, receiver)` / `redeem(shares, receiver, owner)` / `maxRedeem(owner)` signatures against the live Gauntlet USDC Prime vault `0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61` (standard ERC-4626 assumed).
-- Contract NOT yet deployed to Base mainnet at time of writing (pending audit + owner approval).
+- Contract deployed to Base mainnet at `0xd4f703683acac7C02bf482A061C9E1F8DEdA467c`.
