@@ -254,6 +254,24 @@ html { scroll-behavior: smooth; }
 .v2-manage-summary::after { content: "▾"; margin-left: 10px; color: #9BA8BD; transition: transform .2s ease; align-self: center; }
 .v2-manage[open] > .v2-manage-summary::after { transform: rotate(180deg); }
 
+/* Shiny "new feature" tile — gold/cyan gradient + a periodic sheen sweep. */
+.v2-tile-shine:not(:disabled) {
+  background: linear-gradient(135deg, rgba(247,202,22,.13), rgba(88,199,244,.07)) !important;
+  border-color: rgba(247,202,22,.38) !important;
+  box-shadow: 0 0 18px rgba(247,202,22,.13), inset 0 0 0 1px rgba(247,202,22,.08);
+  overflow: hidden;
+}
+.v2-tile-shine:not(:disabled)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255,255,255,.20) 50%, transparent 62%);
+  transform: translateX(-130%);
+  animation: tileShine 4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes tileShine { 0%, 55% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
+
 /* Action-row hover micro-interaction (enabled buttons only) */
 .v2-hero, .v2-tile { transition: background-color .16s ease, border-color .16s ease, transform .12s ease, filter .16s ease, box-shadow .2s ease; }
 .v2-tile:not(:disabled):hover { background: rgba(255,255,255,.05); border-color: rgba(247,202,22,.30); }

@@ -338,7 +338,7 @@ export interface EIP3009PayParams {
    *  any chain whose USDC implements the standard EIP-3009 9-param form. */
   chainKey: ChainKey;
   /** Token symbol */
-  token: "USDC" | "USDT" | "RLUSD";
+  token: "USDC" | "USDT" | "RLUSD" | "Q";
 }
 
 /**

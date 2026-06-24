@@ -3,14 +3,15 @@
 /**
  * AgenticWalletStakeModal — gasless Q (QuackAI) staking into QuackAiStake on
  * BNB from one Agent Wallet, in the Command-deck modal system. Stake into a
- * lock tier (0-3, longer lock = higher APR) or unstake. Writes are intent-
- * bound: getActionAuth mints a single-use challenge over { walletId, action,
- * stakeType, amount }, the wallet signs it, and POST /api/wallet/agentic/stake
- * rebuilds + verifies it (Mode A/B). BNB-only.
+ * lock tier (0-3, longer lock = higher APR) or unstake matured positions. Writes
+ * are intent-bound: getActionAuth mints a single-use challenge over { walletId,
+ * action, stakeType, amount, cap? }, the wallet signs it, and POST
+ * /api/wallet/agentic/stake rebuilds + verifies it (Mode A/B). The wallet's live
+ * positions are read from /api/wallet/agentic/stake/positions. BNB-only.
  */
 
-import { useState } from "react";
-import { getActionAuth, clearAuthCache } from "@/app/lib/auth-client";
+import { useCallback, useEffect, useState } from "react";
+import { getActionAuth, clearAuthCache, getAuthCreds } from "@/app/lib/auth-client";
 import { ModalShell, Field, Segmented, PrimaryCTA, AlertBox, inputStyle } from "./modal-kit";
 
 const TIERS = [
@@ -19,6 +20,23 @@ const TIERS = [
   { stakeType: 2, lockDays: 120, aprPct: 32 },
   { stakeType: 3, lockDays: 180, aprPct: 40 },
 ] as const;
+
+// Shape of GET /stake/positions (kept inline so the server lib's ethers import
+// never reaches the client bundle).
+interface Position {
+  id: number;
+  stakeType: number;
+  amount: string;
+  aprPct: number;
+  stakedAt: number;
+  unlockAt: number;
+  matured: boolean;
+}
+interface PositionsResp {
+  positions: Position[];
+  stakedTotal: string;
+  withdrawable: string;
+}
 
 export function AgenticWalletStakeModal({
   ownerAddress,
@@ -41,29 +59,47 @@ export function AgenticWalletStakeModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<{ action: string; txHash: string } | null>(null);
+  const [pos, setPos] = useState<PositionsResp | null>(null);
 
-  const maxAvail = quackBalance ?? 0;
-  const stakeMax = mode === "stake" && useMax;
-  const amountValid = stakeMax ? maxAvail > 0 : /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount.trim()) > 0;
+  // Max source is mode-aware: stake -> wallet Q balance; unstake -> withdrawable
+  // (matured) staked total.
+  const withdrawable = pos ? Number(pos.withdrawable) : 0;
+  const maxAvail = mode === "stake" ? quackBalance ?? 0 : withdrawable;
+  const amountValid = useMax ? maxAvail > 0 : /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount.trim()) > 0;
   const tier = TIERS.find((t) => t.stakeType === stakeType)!;
   const fmtQ = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  const fmtDate = (s: number) => new Date(s * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+  const loadPositions = useCallback(async () => {
+    try {
+      const auth = await getAuthCreds(ownerAddress, signMessage);
+      if (!auth) return;
+      const qs = new URLSearchParams({ address: ownerAddress, nonce: auth.nonce, sig: auth.signature, walletId }).toString();
+      const res = await fetch(`/api/wallet/agentic/stake/positions?${qs}`);
+      if (res.ok) setPos((await res.json()) as PositionsResp);
+    } catch {
+      /* positions are best-effort; the form still works without them */
+    }
+  }, [ownerAddress, signMessage, walletId]);
+
+  useEffect(() => { void loadPositions(); }, [loadPositions]);
 
   async function submit() {
     if (busy) return;
     setErr(null);
     setOkMsg(null);
     if (!amountValid) {
-      setErr("Enter a positive Q amount.");
+      setErr(mode === "stake" ? "Enter a positive Q amount." : "Enter an amount, or use Max if a position has matured.");
       return;
     }
     setBusy(true);
-    // "max" (stake only): the user signs "max" PLUS a numeric cap = the balance
-    // they see right now. The server stakes min(on-chain balance, cap), so a
-    // deposit arriving after sign-time can never stake more than was consented.
-    const sendAmount = stakeMax ? "max" : amount.trim();
-    const cap = stakeMax ? String(maxAvail) : null;
+    // "max": the user signs "max" PLUS a numeric cap = the balance/withdrawable
+    // they see now. The server resolves min(on-chain available, cap), so a
+    // deposit (stake) or a just-matured position (unstake) arriving after
+    // sign-time can never move more than was consented.
+    const sendAmount = useMax ? "max" : amount.trim();
+    const cap = useMax ? String(maxAvail) : null;
     try {
-      // Intent MUST equal the server's requireIntentAuth rebuild (string values).
       const intent: Record<string, string> = {
         walletId,
         action: mode,
@@ -107,6 +143,7 @@ export function AgenticWalletStakeModal({
       setOkMsg({ action: mode === "stake" ? "Staked" : "Unstaked", txHash: String(data.txHash ?? "") });
       setAmount("");
       setUseMax(false);
+      void loadPositions();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -128,11 +165,9 @@ export function AgenticWalletStakeModal({
       closeDisabled={busy}
       footer={
         <PrimaryCTA onClick={submit} disabled={!amountValid} busy={busy}>
-          {mode === "stake"
-            ? stakeMax
-              ? `Stake all Q${maxAvail > 0 ? ` (${fmtQ(maxAvail)})` : ""}`
-              : `Stake${amountValid ? ` ${amount.trim()} Q` : " Q"}`
-            : `Unstake${amountValid ? ` ${amount.trim()} Q` : " Q"}`}
+          {useMax
+            ? `${mode === "stake" ? "Stake" : "Unstake"} all${maxAvail > 0 ? ` (${fmtQ(maxAvail)} Q)` : ""}`
+            : `${mode === "stake" ? "Stake" : "Unstake"}${amountValid ? ` ${amount.trim()} Q` : " Q"}`}
         </PrimaryCTA>
       }
     >
@@ -140,7 +175,7 @@ export function AgenticWalletStakeModal({
         <Segmented
           cols={2}
           value={mode}
-          onChange={(m) => { setMode(m); setUseMax(false); setErr(null); setOkMsg(null); }}
+          onChange={(m) => { setMode(m); setUseMax(false); setAmount(""); setErr(null); setOkMsg(null); }}
           options={[
             { value: "stake", label: "Stake" },
             { value: "unstake", label: "Unstake" },
@@ -162,45 +197,48 @@ export function AgenticWalletStakeModal({
       <Field
         label={mode === "stake" ? "Amount to stake" : "Amount to unstake"}
         htmlFor="stake-amount"
-        hint={mode === "stake" && quackBalance != null ? `Balance ${fmtQ(maxAvail)} Q` : undefined}
+        hint={mode === "stake" ? (quackBalance != null ? `Balance ${fmtQ(maxAvail)} Q` : undefined) : `Withdrawable ${fmtQ(withdrawable)} Q`}
       >
         <div style={{ display: "flex", gap: 8 }}>
           <input
             id="stake-amount"
-            value={stakeMax ? fmtQ(maxAvail) : amount}
+            value={useMax ? fmtQ(maxAvail) : amount}
             onChange={(e) => { setAmount(e.target.value); setUseMax(false); }}
             placeholder="0.00"
             inputMode="decimal"
-            disabled={stakeMax}
-            style={{ ...inputStyle(), flex: 1, ...(stakeMax ? { opacity: 0.65 } : {}) }}
+            disabled={useMax}
+            style={{ ...inputStyle(), flex: 1, ...(useMax ? { opacity: 0.65 } : {}) }}
           />
-          {mode === "stake" && (
-            <button
-              type="button"
-              onClick={() => { setUseMax((v) => !v); setErr(null); }}
-              disabled={maxAvail <= 0}
-              className="transition-colors disabled:opacity-35 disabled:cursor-not-allowed"
-              style={{
-                flexShrink: 0,
-                padding: "0 14px",
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: maxAvail > 0 ? "pointer" : "not-allowed",
-                color: stakeMax ? "#101722" : "#f9d64a",
-                background: stakeMax ? "#F5C518" : "rgba(247,202,22,.12)",
-                border: `1px solid ${stakeMax ? "#F5C518" : "rgba(247,202,22,.34)"}`,
-              }}
-            >
-              Max
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => { setUseMax((v) => !v); setErr(null); }}
+            disabled={maxAvail <= 0}
+            className="transition-colors disabled:opacity-35 disabled:cursor-not-allowed"
+            style={{
+              flexShrink: 0,
+              padding: "0 14px",
+              borderRadius: 10,
+              fontSize: 12,
+              fontWeight: 700,
+              cursor: maxAvail > 0 ? "pointer" : "not-allowed",
+              color: useMax ? "#101722" : "#f9d64a",
+              background: useMax ? "#F5C518" : "rgba(247,202,22,.12)",
+              border: `1px solid ${useMax ? "#F5C518" : "rgba(247,202,22,.34)"}`,
+            }}
+          >
+            Max
+          </button>
         </div>
       </Field>
 
       {mode === "stake" && (
         <div style={{ fontSize: 12, color: "rgba(255,255,255,.42)", lineHeight: 1.5 }}>
-          Locks {stakeMax ? `all your Q (${fmtQ(maxAvail)})` : amount.trim() || "0"} {stakeMax ? "" : "Q "}for {tier.lockDays} days at ~{tier.aprPct}% APR. Gasless. The relayer pays.
+          Locks {useMax ? `all your Q (${fmtQ(maxAvail)})` : amount.trim() || "0"} {useMax ? "" : "Q "}for {tier.lockDays} days at ~{tier.aprPct}% APR. Gasless. The relayer pays.
+        </div>
+      )}
+      {mode === "unstake" && (
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,.42)", lineHeight: 1.5 }}>
+          Only matured (unlocked) positions can be unstaked. Locked Q stays until its unlock date.
         </div>
       )}
 
@@ -214,6 +252,32 @@ export function AgenticWalletStakeModal({
             </a>
           )}
         </AlertBox>
+      )}
+
+      {/* ── Your positions ── */}
+      {pos && pos.positions.length > 0 && (
+        <div>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 7 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(255,255,255,.5)" }}>Your stakes</span>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)" }}>Total {fmtQ(Number(pos.stakedTotal))} Q</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {pos.positions.map((p) => {
+              const t = TIERS.find((x) => x.stakeType === p.stakeType);
+              return (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderRadius: 9, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.02)", padding: "7px 10px" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: "rgba(255,255,255,.9)" }}>
+                    {fmtQ(Number(p.amount))} Q
+                    <span style={{ fontWeight: 400, color: "rgba(255,255,255,.5)" }}> · {t?.lockDays ?? "?"}d · {p.aprPct}%</span>
+                  </span>
+                  <span style={{ fontSize: 11, color: p.matured ? "#8fd6f7" : "rgba(255,255,255,.5)" }}>
+                    {p.matured ? "Unlocked" : `Unlocks ${fmtDate(p.unlockAt)}`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </ModalShell>
   );
