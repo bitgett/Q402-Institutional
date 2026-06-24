@@ -1,27 +1,24 @@
 "use client";
 
 /**
- * AgenticWalletWithdrawModal — per-chain / per-token sweep picker.
+ * AgenticWalletWithdrawModal — per-chain / per-token sweep picker, Command-deck
+ * system.
  *
- * Replaces the old "open SendModal with the aggregate USD prefilled"
- * shortcut. That UX was wrong: balance is spread across up to
- * 11 chains × 2 tokens = 22 buckets, but a single Send call moves ONE
- * (chain, token) bucket. Prefilling the aggregate guaranteed every
- * non-trivial withdraw failed at the relay.
- *
- * This modal fetches `/api/wallet/agentic/balance` fresh on open, lists
- * every bucket with balance > 0, and exposes a one-click "Sweep" CTA
- * per row that hands off to the SendModal with the right chain / token /
- * amount preset. When a bucket exceeds the per-tx cap the sweep amount
- * snaps to the cap and the row carries a "multiple sends needed" hint.
+ * Balance is spread across up to 11 chains × 2 tokens = 22 buckets, but a
+ * single Send call moves ONE (chain, token) bucket. This modal fetches
+ * `/api/wallet/agentic/balance` fresh on open, lists every bucket with
+ * balance > 0, and exposes a one-click "Sweep" per row that hands off to the
+ * SendModal with the right chain / token / amount preset. When a bucket
+ * exceeds the per-tx cap the sweep amount snaps to the cap and the row carries
+ * a "split needed" hint.
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { ethers } from "ethers";
 import { getAuthCreds } from "@/app/lib/auth-client";
-import { useModalEscape } from "./useModalEscape";
 import type { ChainKey } from "@/app/lib/relayer";
+import { ModalShell, AlertBox, MonoAddr, GOLD } from "./modal-kit";
+import { WithdrawGlyph } from "./action-icons";
 
 interface Props {
   walletAddress: string;
@@ -80,21 +77,10 @@ function formatUsd(n: number): string {
 }
 
 /**
- * Build a human decimal string for the SendModal's amount field.
- *
- * Codebase invariant: never use Math.floor / Math.round / parseFloat on
- * token amounts — IEEE-754 drift between display and chain-side
- * BigInt(amount) is the exact class of bug we're avoiding. The human
- * string comes straight from the raw atomic units via ethers.formatUnits
- * (no float anywhere on the precision path):
- *
- *   raw → formatUnits → exact human string → SendModal parseUnits back
- *
- * Cap logic: USDC / USDT peg 1:1 with USD, so when the bucket's USD
- * exceeds perTxMaxUsd we scale `raw` to the cap proportionally and
- * format again. Still no float: we compute the capped raw via BigInt
- * multiplication + division so the cap math is exact at the token's
- * native precision.
+ * Build a human decimal string for the SendModal's amount field. Never use
+ * Math.floor / parseFloat on token amounts — IEEE-754 drift between display
+ * and chain-side BigInt(amount) is exactly the bug we avoid. The human string
+ * comes straight from raw atomic units via ethers.formatUnits.
  */
 function deriveSweepAmount(
   tb: TokenBalance,
@@ -105,14 +91,7 @@ function deriveSweepAmount(
 
   let sweepRaw: bigint;
   if (capped && perTxMaxUsd !== null) {
-    // Scale `raw` down to the cap. USD <-> token unit equivalence is
-    // 1:1 for the stablecoins we support, so:
-    //   capped_raw = raw * (perTxMaxUsd / tb.usd)
-    // We do the multiplication in BigInt space to keep precision at
-    // the token's native decimals. The `usd` field is a JS number
-    // (lossy for >2^53 atomic units) but we only USE it to derive a
-    // ratio against a USD cap that is itself a small integer — so the
-    // float exposure is bounded and safe.
+    // capped_raw = raw * (perTxMaxUsd / tb.usd), in BigInt space (1:1 USD peg).
     const numerator = BigInt(Math.floor(perTxMaxUsd * 1_000_000));
     const denominator = BigInt(Math.floor(tb.usd * 1_000_000));
     sweepRaw = denominator > 0n ? (rawBig * numerator) / denominator : 0n;
@@ -136,12 +115,6 @@ export function AgenticWalletWithdrawModal({
   onPickBucket,
 }: Props) {
   const [loading, setLoading] = useState(true);
-  // Portal mount guard (SSR-safe) — see SendModal for rationale.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  // Withdraw is read-only (just lists buckets) so Escape is always
-  // safe — pass `false` for disabled.
-  useModalEscape(onClose, false);
   const [error, setError] = useState<string | null>(null);
   const [balances, setBalances] = useState<BalancesPayload | null>(null);
 
@@ -180,132 +153,74 @@ export function AgenticWalletWithdrawModal({
     void load();
   }, [load]);
 
-  // Flatten per-chain into per-bucket rows, keeping only positive
-  // balances. Sort biggest-first so the user sees the meaningful sweep
-  // candidates at the top.
-  const rows: Array<{
-    bucket: WithdrawBucket;
-    capped: boolean;
-  }> = [];
+  // Flatten per-chain into per-bucket rows, positive balances only, biggest first.
+  const rows: Array<{ bucket: WithdrawBucket; capped: boolean }> = [];
   for (const c of balances?.perChain ?? []) {
     for (const tok of ["USDT", "USDC"] as const) {
       const tb = tok === "USDC" ? c.usdc : c.usdt;
       if (!tb || tb.usd <= 0) continue;
       const { amount, capped } = deriveSweepAmount(tb, perTxMaxUsd);
-      rows.push({
-        bucket: {
-          chain: c.chain,
-          token: tok,
-          amount,
-          raw: tb.raw,
-          decimals: tb.decimals,
-          usd: tb.usd,
-        },
-        capped,
-      });
+      rows.push({ bucket: { chain: c.chain, token: tok, amount, raw: tb.raw, decimals: tb.decimals, usd: tb.usd }, capped });
     }
   }
   rows.sort((a, b) => b.bucket.usd - a.bucket.usd);
 
-  if (!mounted) return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={onClose}
+  return (
+    <ModalShell
+      icon={<WithdrawGlyph size={19} color={GOLD} />}
+      title="Withdraw to your wallet"
+      subtitle={<MonoAddr>{walletAddress.slice(0, 10)}…{walletAddress.slice(-6)} → {ownerAddress.slice(0, 10)}…{ownerAddress.slice(-6)}</MonoAddr>}
+      size="md"
+      onClose={onClose}
     >
-      <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,0.20)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-white font-semibold text-lg">Withdraw to your wallet</div>
-            <div className="text-[11px] text-white/45 font-mono mt-0.5">
-              {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)} → {ownerAddress.slice(0, 10)}…{ownerAddress.slice(-6)}
-            </div>
-            <div className="text-[11px] text-white/50 mt-1.5 leading-relaxed">
-              Each row is one on-chain transfer. Pick the bucket you want to sweep —
-              the SendModal opens with chain, token, and amount already filled in.
-            </div>
-          </div>
-          <button onClick={onClose} className="text-white/40 hover:text-white text-lg leading-none">
-            ×
-          </button>
-        </div>
-
-        {loading && (
-          <div className="text-sm text-white/55 py-6 text-center">Reading balances across 11 chains…</div>
-        )}
-
-        {error && (
-          <div className="rounded-md border px-3 py-2.5 text-[12px] text-red-300/85"
-            style={{ background: "rgba(248,113,113,0.06)", borderColor: "rgba(248,113,113,0.22)" }}
-          >
-            {error}
-            <button
-              type="button"
-              onClick={load}
-              className="ml-3 underline underline-offset-2 hover:text-red-200"
-            >
-              retry
-            </button>
-          </div>
-        )}
-
-        {!loading && !error && rows.length === 0 && (
-          <div
-            className="rounded-md border px-3 py-3 text-[13px] text-white/65"
-            style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
-          >
-            No withdrawable balance on any supported chain. Deposit USDC or USDT first
-            (use the Receive button), then come back to sweep.
-          </div>
-        )}
-
-        {!loading && rows.length > 0 && (
-          <>
-            <div className="space-y-2">
-              {rows.map((r) => (
-                <div
-                  key={`${r.bucket.chain}-${r.bucket.token}`}
-                  className="rounded-md border px-3 py-2.5 flex items-center justify-between gap-3"
-                  style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
-                >
-                  <div className="min-w-0">
-                    <div className="text-[13px] text-white/90 font-medium">
-                      {CHAIN_LABEL[r.bucket.chain] ?? r.bucket.chain} · {r.bucket.token}
-                    </div>
-                    <div className="text-[11px] text-white/55 mt-0.5">
-                      Available {formatUsd(r.bucket.usd)}
-                      {r.capped && (
-                        <span className="text-amber-300/85">
-                          {" "}· cap {formatUsd(perTxMaxUsd ?? 0)} — split needed
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onPickBucket(r.bucket)}
-                    className="shrink-0 px-3 py-1.5 rounded-md text-[12px] font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300"
-                  >
-                    Sweep {r.bucket.amount} →
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="text-[11px] text-white/40 leading-relaxed">
-              Per-tx cap {formatUsd(perTxMaxUsd ?? 0)}. Buckets over the cap will be
-              capped on the SendModal — repeat the sweep for the remainder.
-              Gas is sponsored by Q402; only the stablecoin moves.
-            </div>
-          </>
-        )}
+      <div style={{ fontSize: 12, color: "rgba(255,255,255,.5)", lineHeight: 1.5 }}>
+        Each row is one on-chain transfer. Pick the bucket to sweep — Send opens with chain, token, and amount already filled in.
       </div>
-    </div>,
-    document.body,
+
+      {loading && <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", padding: "20px 0", textAlign: "center" }}>Reading balances across 11 chains…</div>}
+
+      {error && (
+        <AlertBox variant="error" action={<button type="button" onClick={load} style={{ color: "#fecaca", textDecoration: "underline", textUnderlineOffset: 2 }}>retry</button>}>
+          {error}
+        </AlertBox>
+      )}
+
+      {!loading && !error && rows.length === 0 && (
+        <AlertBox variant="info">No withdrawable balance on any supported chain. Deposit USDC or USDT first (Receive), then come back to sweep.</AlertBox>
+      )}
+
+      {!loading && rows.length > 0 && (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {rows.map((r) => (
+              <div
+                key={`${r.bucket.chain}-${r.bucket.token}`}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, borderRadius: 11, border: "1px solid rgba(255,255,255,.07)", background: "rgba(255,255,255,.02)", padding: "10px 12px" }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.9)" }}>{CHAIN_LABEL[r.bucket.chain] ?? r.bucket.chain} · {r.bucket.token}</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.55)", marginTop: 2 }}>
+                    Available {formatUsd(r.bucket.usd)}
+                    {r.capped && <span style={{ color: "rgba(252,211,77,.85)" }}> · cap {formatUsd(perTxMaxUsd ?? 0)} — split needed</span>}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onPickBucket(r.bucket)}
+                  className="transition-opacity"
+                  style={{ flexShrink: 0, padding: "7px 12px", borderRadius: 9, border: "none", background: GOLD, color: "#101722", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                >
+                  Sweep {r.bucket.amount} →
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", lineHeight: 1.5 }}>
+            Per-tx cap {formatUsd(perTxMaxUsd ?? 0)}. Buckets over the cap are capped on Send — repeat the sweep for the remainder. Gas is sponsored by Q402; only the stablecoin moves.
+          </div>
+        </>
+      )}
+    </ModalShell>
   );
 }

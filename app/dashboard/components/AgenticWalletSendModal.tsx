@@ -1,13 +1,12 @@
 "use client";
 
 /**
- * AgenticWalletSendModal — single-recipient send form for the dashboard.
+ * AgenticWalletSendModal — single-recipient send form, Command-deck system.
  *
  * Picks chain (BNB free, the remaining 8 require multichain scope on the
- * caller's subscription) + USDC/USDT, plus recipient + amount. The
- * actual signing happens server-side in /api/wallet/agentic/send — this
- * UI only forwards the user's intent + their EIP-191 session signature
- * for owner-auth.
+ * caller's subscription) + USDC/USDT, plus recipient + amount. The actual
+ * signing happens server-side in /api/wallet/agentic/send — this UI only
+ * forwards the user's intent + their EIP-191 session signature for owner-auth.
  *
  * Friendly-error principle: every backend rejection is mapped to a
  * single-sentence headline + one next action ("Raise cap", "Upgrade
@@ -15,16 +14,16 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import {
   friendlyError,
   type FriendlyError,
   type BackendError,
 } from "@/app/lib/agentic-wallet-friendly-error";
-import { useModalEscape } from "./useModalEscape";
 import { ThemedSelect } from "./ThemedSelect";
 import { HexagonIcon } from "../v2/logos";
+import { SendGlyph } from "./action-icons";
+import { ModalShell, Field, Segmented, PrimaryCTA, GhostButton, AlertBox, inputStyle, MonoAddr, GOLD, GOLD_TEXT } from "./modal-kit";
 
 interface Props {
   walletAddress: string;
@@ -143,8 +142,6 @@ export function AgenticWalletSendModal({
 
   // Keep token consistent with the selected chain — if the highlighted
   // token isn't supported on the picked chain, snap to a supported one.
-  // Migrated from `queueMicrotask(setState)`-in-render to a proper
-  // effect so React 19 doesn't warn about setState during render.
   useEffect(() => {
     if (!allowedTokens.includes(token)) setToken(allowedTokens[0]);
   }, [allowedTokens, token]);
@@ -164,14 +161,7 @@ export function AgenticWalletSendModal({
     if (!railAvailable && rail !== "q402") setRail("q402");
   }, [railAvailable, rail]);
 
-  // Portal mount guard — these modals render only after a client
-  // interaction, but keep the SSR-safe check so we never touch
-  // document.body during server render / hydration.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   const [submitting, setSubmitting] = useState(false);
-  useModalEscape(onClose, submitting);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [success, setSuccess] = useState<{ txHash: string } | null>(null);
   // A 2xx that did NOT settle: a Hook held the payment for approval (HTTP
@@ -180,8 +170,7 @@ export function AgenticWalletSendModal({
   /**
    * Double-click guard — checked + flipped synchronously at the top of
    * submit() so a rapid second click can't slip through before
-   * setSubmitting(true) renders. Without this, two parallel wallet
-   * popups + two POSTs (second NONCE_EXPIRED) confuse users.
+   * setSubmitting(true) renders.
    */
   const inFlightRef = useRef(false);
 
@@ -190,16 +179,11 @@ export function AgenticWalletSendModal({
 
   // Soft per-tx cap check — surface the issue before the user signs.
   const amountNum = isDecimalAmount(amount) ? Number(amount) : 0;
-  const overPerTxCap =
-    typeof perTxMaxUsd === "number" && amountNum > perTxMaxUsd;
+  const overPerTxCap = typeof perTxMaxUsd === "number" && amountNum > perTxMaxUsd;
 
-  const canSubmit =
-    !submitting && isAddress(recipient) && isDecimalAmount(amount) && !overPerTxCap;
+  const canSubmit = !submitting && isAddress(recipient) && isDecimalAmount(amount) && !overPerTxCap;
 
   async function submit() {
-    // Synchronous double-click guard. Setting state alone isn't enough
-    // — React batches and the second click can see canSubmit=true
-    // before the first paint with submitting=true.
     if (inFlightRef.current) return;
     inFlightRef.current = true;
     setError(null);
@@ -217,9 +201,7 @@ export function AgenticWalletSendModal({
     setSubmitting(true);
     try {
       // Intent-bound auth — server rebuilds the canonical message from
-      // `(walletId, chain, token, recipient, amount)`. Server's
-      // separate fingerprint cache makes the actual payment idempotent
-      // on a fresh-challenge retry.
+      // `(walletId, chain, token, recipient, amount)`.
       const to = recipient.trim();
       const intent: Record<string, string> = {
         walletId,
@@ -261,9 +243,7 @@ export function AgenticWalletSendModal({
       }
       const body = data as { status?: string; code?: string; message?: string; txHash?: string };
       // A 2xx that did NOT settle: a Hook held the payment for approval
-      // (HTTP 202 approval_required). Funds did NOT move — surface the hook
-      // + reason instead of a false "Sent." (a sweep over the Spend Cap
-      // threshold lands here; it was not withdrawn).
+      // (HTTP 202 approval_required). Funds did NOT move.
       if (body.status === "approval_required") {
         setHeld({ code: body.code, message: body.message });
         return;
@@ -281,296 +261,178 @@ export function AgenticWalletSendModal({
     }
   }
 
-  if (!mounted) return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={submitting ? undefined : onClose}
-    >
-      <div
-        className="w-full max-w-md rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,.30)" }}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-white font-semibold text-lg">{titleOverride ?? "Send from Agent Wallet"}</div>
-            <div className="text-[11px] text-white/40 font-mono mt-0.5">
-              {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={submitting ? undefined : onClose}
-            disabled={submitting}
-            className="text-white/40 hover:text-white text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Close"
+  // ── render: three states share the shell, differ in body + footer ──────────
+  let body: React.ReactNode;
+  let footer: React.ReactNode;
+
+  if (held) {
+    body = (
+      <AlertBox variant="warn">
+        <div style={{ fontWeight: 700 }}>Held by a policy hook. Not sent.</div>
+        <div style={{ marginTop: 4 }}>
+          {held.message ?? "A Hook on this wallet held this payment for approval."}
+          {held.code ? ` (${held.code})` : ""}
+        </div>
+        <div style={{ marginTop: 8, color: "rgba(255,255,255,.55)", lineHeight: 1.5 }}>
+          No funds moved. To send it, open{" "}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 3, verticalAlign: "text-bottom" }}>
+            <HexagonIcon size={12} /> Hooks
+          </span>{" "}
+          and adjust the policy that held it — e.g. raise the Spend Cap hold threshold above this amount, or turn Spend Cap off — then try again.
+        </div>
+      </AlertBox>
+    );
+    footer = (
+      <div style={{ display: "flex", gap: 8 }}>
+        {onOpenHooks && <div style={{ flex: 1 }}><PrimaryCTA onClick={() => onOpenHooks()}>Open Hooks</PrimaryCTA></div>}
+        <div style={{ flex: 1 }}><GhostButton onClick={onClose}><span style={{ display: "block", textAlign: "center" }}>Close</span></GhostButton></div>
+      </div>
+    );
+  } else if (success) {
+    body = (
+      <>
+        <AlertBox variant="success">Sent.</AlertBox>
+        {success.txHash !== "(pending)" && (
+          <a
+            href={`${chainMeta.explorerTxBase}${success.txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 12, color: GOLD_TEXT, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", wordBreak: "break-all", textDecoration: "underline" }}
           >
-            ×
-          </button>
+            {success.txHash} · {chainMeta.explorerLabel}
+          </a>
+        )}
+      </>
+    );
+    footer = <PrimaryCTA onClick={onSent}>Done</PrimaryCTA>;
+  } else {
+    body = (
+      <>
+        {/* Source-of-funds primer — clears "is this my MetaMask?" + the gas model. */}
+        <div style={{ borderRadius: 10, border: "1px solid rgba(247,202,22,.26)", background: "rgba(247,202,22,.05)", padding: "10px 12px", fontSize: 12, lineHeight: 1.5, color: "rgba(226,232,240,0.78)" }}>
+          Sending from your <span style={{ color: GOLD_TEXT }}>Agent Wallet</span>, not your MetaMask. Only the stablecoin moves from your Agent Wallet balance.
+          <div style={{ marginTop: 7, paddingTop: 7, borderTop: "1px solid rgba(247,202,22,.15)", color: "rgba(255,255,255,.55)" }}>
+            Gas: <span style={{ color: GOLD_TEXT }}>Trial</span> = Q402 sponsors <span style={{ color: GOLD_TEXT }}>BNB Chain only</span>.{" "}
+            <span style={{ color: GOLD_TEXT }}>Multichain</span> = relay gas debits from your Gas Tank on the selected chain. Top up via the Treasury.
+          </div>
         </div>
 
-        {held ? (
-          <div className="space-y-3">
-            <div
-              className="rounded-md border px-3 py-2.5 text-sm"
-              style={{ background: "rgba(251,191,36,0.06)", borderColor: "rgba(251,191,36,0.30)", color: "rgb(253,224,71)" }}
-            >
-              <div className="font-semibold">Held by a policy hook. Not sent.</div>
-              <div className="text-[12px] mt-1" style={{ color: "rgba(253,224,71,0.85)" }}>
-                {held.message ?? "A Hook on this wallet held this payment for approval."}
-                {held.code ? ` (${held.code})` : ""}
+        <Field label="Chain">
+          <ThemedSelect<ChainKey>
+            value={chain}
+            onChange={setChain}
+            options={CHAIN_META.filter((c) => !allowedChains || allowedChains.includes(c.key)).map((c) => ({
+              value: c.key,
+              label: c.label,
+              meta: c.multichainOnly ? "multichain" : undefined,
+            }))}
+            ariaLabel="Chain"
+          />
+          {chain !== "bnb" && (
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 6 }}>Non-BNB chains require an active multichain subscription.</div>
+          )}
+        </Field>
+
+        <Field label="Token">
+          <Segmented
+            cols={allowedTokens.length >= 3 ? 3 : 2}
+            value={token}
+            onChange={setToken}
+            options={allowedTokens.map((t) => ({ value: t, label: t }))}
+          />
+        </Field>
+
+        {railAvailable && (
+          <Field label="Rail">
+            <Segmented
+              cols={2}
+              value={rail}
+              onChange={setRail}
+              options={[
+                { value: "q402", label: "Q402", sub: "EIP-7702" },
+                { value: "x402", label: "x402", sub: "EIP-3009" },
+              ]}
+            />
+            {rail === "x402" ? (
+              <div style={{ marginTop: 8 }}>
+                <AlertBox variant="warn">
+                  <span style={{ fontWeight: 700 }}>x402 needs a wallet that has not used the Q402 rail.</span> Coinbase x402 standard (USDC transferWithAuthorization); Q402 still sponsors gas. An Agent Wallet that already sent on the Q402 rail is EIP-7702 delegated and will be rejected here. Use Q402, or clear the delegation first.
+                </AlertBox>
               </div>
-              <div className="text-[11px] mt-2 text-white/55 leading-relaxed">
-                No funds moved. To send it, open{" "}
-                <span className="inline-flex items-center gap-1 align-text-bottom"><HexagonIcon size={12} /> Hooks</span>{" "}
-                and adjust the policy
-                that held it — e.g. raise the Spend Cap hold threshold above
-                this amount, or turn Spend Cap off — then try again.
-              </div>
-            </div>
-            <div className="flex gap-2">
-              {onOpenHooks && (
-                <button
-                  type="button"
-                  onClick={() => onOpenHooks()}
-                  className="flex-1 px-3 py-2 rounded-md text-sm font-semibold bg-amber-400 text-black hover:bg-amber-300"
-                >
-                  Open Hooks
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 px-3 py-2 rounded-md text-sm font-semibold border border-white/15 text-white/80 hover:bg-white/5"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        ) : success ? (
-          <div className="space-y-3">
-            <div
-              className="rounded-md border px-3 py-2 text-sm"
-              style={{ border: "1px solid rgba(85,230,165,.30)", background: "rgba(85,230,165,.06)", color: "#9af0c9" }}
-            >
-              Sent.
-            </div>
-            {success.txHash !== "(pending)" && (
-              <a
-                href={`${chainMeta.explorerTxBase}${success.txHash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-emerald-400 hover:underline font-mono break-all"
-              >
-                {success.txHash} ↗ {chainMeta.explorerLabel}
-              </a>
+            ) : (
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 6, lineHeight: 1.5 }}>Q402 gasless default. Works for any wallet state and supports Hooks.</div>
             )}
-            <button
-              type="button"
-              onClick={onSent}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300"
-            >
-              Done
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Source-of-funds primer — clears the #1 confusion: "wait, is
-                this signing with my MetaMask?" + the #2 confusion: "wait,
-                Q402 doesn't actually pay my ETH gas on paid plans?" */}
-            <div
-              className="rounded-md border px-3 py-2.5 text-[11.5px] leading-relaxed"
-              style={{
-                background: "rgba(247,202,22,.06)",
-                borderColor: "rgba(247,202,22,.30)",
-                color: "rgba(226,232,240,0.78)",
-              }}
-            >
-              Sending from your <span style={{ color: "#f9d64a" }}>Agent Wallet</span>,
-              not your MetaMask. Only the stablecoin moves from your Agent Wallet balance.
-              <div className="mt-1.5 pt-1.5 border-t text-white/55" style={{ borderColor: "rgba(247,202,22,.15)" }}>
-                Gas: <span style={{ color: "#f9d64a" }}>Trial</span> = Q402 sponsors{" "}
-                <span style={{ color: "#f9d64a" }}>BNB Chain only</span>.{" "}
-                <span style={{ color: "#f9d64a" }}>Multichain</span> = relay gas debits
-                from your Gas Tank on the selected chain. Top up via the Treasury.
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Chain</div>
-                <ThemedSelect<ChainKey>
-                  value={chain}
-                  onChange={setChain}
-                  options={CHAIN_META.filter((c) => !allowedChains || allowedChains.includes(c.key)).map((c) => ({
-                    value: c.key,
-                    label: c.label,
-                    meta: c.multichainOnly ? "multichain" : undefined,
-                  }))}
-                  ariaLabel="Chain"
-                />
-                {chain !== "bnb" && (
-                  <div className="text-[10px] text-white/35 mt-1">
-                    Non-BNB chains require an active multichain subscription.
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Token</div>
-                <div className={`grid gap-2 ${allowedTokens.length >= 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-                  {allowedTokens.map(t => {
-                    const enabled = allowedTokens.includes(t);
-                    const active = token === t;
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        disabled={!enabled}
-                        onClick={() => enabled && setToken(t)}
-                        title={enabled ? undefined : `${chainMeta.label} does not support ${t}`}
-                        className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                          !enabled
-                            ? "border-white/5 text-white/25 cursor-not-allowed"
-                            : active
-                              ? "border-emerald-400 text-emerald-300 bg-emerald-400/8"
-                              : "border-white/10 text-white/55 hover:text-white"
-                        }`}
-                      >
-                        {t}
-                        {!enabled && <span className="ml-1 text-[9px]">N/A</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {railAvailable && (
-                <div>
-                  <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Rail</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { key: "q402", label: "Q402", sub: "EIP-7702" },
-                      { key: "x402", label: "x402", sub: "EIP-3009" },
-                    ] as { key: "q402" | "x402"; label: string; sub: string }[]).map(r => {
-                      const active = rail === r.key;
-                      return (
-                        <button
-                          key={r.key}
-                          type="button"
-                          onClick={() => setRail(r.key)}
-                          className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors flex items-baseline justify-center gap-1.5 ${
-                            active
-                              ? "border-emerald-400 text-emerald-300 bg-emerald-400/8"
-                              : "border-white/10 text-white/55 hover:text-white"
-                          }`}
-                        >
-                          {r.label}
-                          <span className="text-[9px] text-white/40 font-mono">{r.sub}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {rail === "x402" ? (
-                    <div
-                      className="mt-2 rounded-md border px-3 py-2 text-[11px] leading-relaxed"
-                      style={{ background: "rgba(245,197,24,0.06)", borderColor: "rgba(245,197,24,0.30)", color: "rgba(253,224,71,0.9)" }}
-                    >
-                      <span className="font-semibold">x402 needs a wallet that has not used the Q402 rail.</span>{" "}
-                      Coinbase x402 standard (USDC transferWithAuthorization); Q402 still sponsors gas. An
-                      Agent Wallet that already sent on the Q402 rail is EIP-7702 delegated and will be
-                      rejected here. Use Q402, or clear the delegation first.
-                    </div>
-                  ) : (
-                    <div className="text-[10px] text-white/35 mt-1 leading-relaxed">
-                      Q402 gasless default. Works for any wallet state and supports Hooks.
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Recipient</div>
-                <input
-                  type="text"
-                  value={recipient}
-                  onChange={e => setRecipient(e.target.value)}
-                  placeholder="0x…"
-                  spellCheck={false}
-                  className="w-full rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25"
-                  style={{
-                    background: "rgba(255,255,255,0.02)",
-                    borderColor: recipientValid ? "rgba(255,255,255,0.05)" : "rgba(248,113,113,0.45)",
-                  }}
-                />
-              </div>
-
-              <div>
-                <div className="flex items-baseline justify-between mb-1">
-                  <div className="text-[11px] text-white/45 uppercase tracking-widest">Amount</div>
-                  {(typeof perTxMaxUsd === "number" || typeof dailyLimitUsd === "number") && (
-                    <div className="text-[10px] text-white/35">
-                      {typeof perTxMaxUsd === "number" && <>per-tx ${perTxMaxUsd}</>}
-                      {typeof perTxMaxUsd === "number" && typeof dailyLimitUsd === "number" && <> · </>}
-                      {typeof dailyLimitUsd === "number" && <>daily ${dailyLimitUsd}</>}
-                    </div>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  placeholder="1.50"
-                  inputMode="decimal"
-                  className="w-full rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25"
-                  style={{
-                    background: "rgba(255,255,255,0.02)",
-                    borderColor: amountValid && !overPerTxCap ? "rgba(255,255,255,0.05)" : "rgba(248,113,113,0.45)",
-                  }}
-                />
-                {overPerTxCap && (
-                  <div className="text-[11px] text-red-300/85 mt-1">
-                    Over per-tx cap (${perTxMaxUsd}). Raise it in Spending limits or send less.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {error && (
-              <div
-                className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed flex items-start justify-between gap-3"
-                style={{
-                  background: "rgba(248,113,113,0.06)",
-                  borderColor: "rgba(248,113,113,0.22)",
-                  color: "#fecaca",
-                }}
-              >
-                <span>{error.headline}</span>
-                {error.next && (
-                  <a
-                    href={error.next.href}
-                    className="shrink-0 text-emerald-300 hover:text-emerald-200 underline underline-offset-2"
-                  >
-                    {error.next.label}
-                  </a>
-                )}
-              </div>
-            )}
-
-            <button
-              type="button"
-              disabled={!canSubmit}
-              onClick={submit}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {submitting ? "Sending…" : `Send ${amount || "—"} ${token}`}
-            </button>
-          </>
+          </Field>
         )}
-      </div>
-    </div>,
-    document.body,
+
+        <Field label="Recipient">
+          <input
+            type="text"
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            placeholder="0x…"
+            spellCheck={false}
+            className="placeholder-white/25"
+            style={inputStyle({ mono: true, invalid: !recipientValid })}
+          />
+        </Field>
+
+        <Field
+          label="Amount"
+          hint={
+            (typeof perTxMaxUsd === "number" || typeof dailyLimitUsd === "number") ? (
+              <>
+                {typeof perTxMaxUsd === "number" && <>per-tx ${perTxMaxUsd}</>}
+                {typeof perTxMaxUsd === "number" && typeof dailyLimitUsd === "number" && <> · </>}
+                {typeof dailyLimitUsd === "number" && <>daily ${dailyLimitUsd}</>}
+              </>
+            ) : undefined
+          }
+        >
+          <input
+            type="text"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="1.50"
+            inputMode="decimal"
+            className="placeholder-white/25"
+            style={inputStyle({ mono: true, invalid: !(amountValid && !overPerTxCap) })}
+          />
+          {overPerTxCap && (
+            <div style={{ fontSize: 11, color: "rgba(252,165,165,.85)", marginTop: 6 }}>
+              Over per-tx cap (${perTxMaxUsd}). Raise it in Spending limits or send less.
+            </div>
+          )}
+        </Field>
+
+        {error && (
+          <AlertBox
+            variant="error"
+            action={error.next ? <a href={error.next.href} style={{ color: GOLD_TEXT, textDecoration: "underline", textUnderlineOffset: 2 }}>{error.next.label}</a> : undefined}
+          >
+            {error.headline}
+          </AlertBox>
+        )}
+      </>
+    );
+    footer = (
+      <PrimaryCTA onClick={submit} disabled={!canSubmit} busy={submitting}>
+        Send {amount || "—"} {token}
+      </PrimaryCTA>
+    );
+  }
+
+  return (
+    <ModalShell
+      icon={<SendGlyph size={19} color={GOLD} />}
+      title={titleOverride ?? "Send from Agent Wallet"}
+      subtitle={<MonoAddr>{walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}</MonoAddr>}
+      size="md"
+      onClose={onClose}
+      closeDisabled={submitting}
+      footer={footer}
+    >
+      {body}
+    </ModalShell>
   );
 }

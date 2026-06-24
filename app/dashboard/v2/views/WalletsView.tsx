@@ -55,6 +55,7 @@ import type { ChainKey } from "@/app/lib/relayer";
 import type { AgenticWalletPublic } from "@/app/dashboard/components/AgenticWalletTab";
 import { AgenticWalletEarnSection } from "@/app/dashboard/components/AgenticWalletEarnSection";
 import { AgenticWalletStakeModal } from "@/app/dashboard/components/AgenticWalletStakeModal";
+import { SendGlyph, ReceiveGlyph, BatchGlyph, WithdrawGlyph } from "@/app/dashboard/components/action-icons";
 import { AgenticWalletRecurringSection } from "@/app/dashboard/components/AgenticWalletRecurringSection";
 import { RequestComposerModal } from "./RequestComposerModal";
 import { AgenticWalletSendModal } from "@/app/dashboard/components/AgenticWalletSendModal";
@@ -1148,95 +1149,115 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                   </div>
                 </div>
 
-                {/* Actions — each opens the EXISTING modal. In demo mode there
-                    is no wallet to act on, so they are disabled with a
-                    "Connect your wallet" hint rather than opening a modal that
-                    would dereference a null wallet. */}
-                <div className="v2-actions" style={styles.actions}>
+                {/* Actions — Send is the gold hero; the five utilities sit in a
+                    compact tile cluster to its right. Each opens the EXISTING
+                    modal; demo mode disables them (no wallet to act on). */}
+                <div className="v2-actions" style={styles.actionsWrap}>
                   <button
                     type="button"
+                    className="v2-hero"
                     disabled={demoMode || archived}
                     onClick={() => setSendOpen(true)}
                     title={demoMode ? "Connect your wallet" : undefined}
-                    style={{ ...styles.action, ...styles.actionPrimary, ...(demoMode || archived ? styles.actionDisabled : null) }}
+                    style={{ ...styles.actionHero, ...(demoMode || archived ? styles.heroDisabled : null) }}
                   >
-                    Send payment
-                    <small style={styles.actionSmall}>USDC / USDT</small>
+                    <span style={styles.heroIcon}><SendGlyph size={20} color={v2.actionText} /></span>
+                    <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
+                      <span style={styles.heroTitle}>Send payment</span>
+                      <span style={styles.heroSub}>USDC / USDT</span>
+                    </span>
                   </button>
-                  <button
-                    type="button"
-                    disabled={demoMode || archived}
-                    onClick={() => setReceiveOpen(true)}
-                    title={demoMode ? "Connect your wallet" : undefined}
-                    style={{ ...styles.action, ...(demoMode || archived ? styles.actionDisabled : null) }}
-                  >
-                    Receive
-                    <small style={styles.actionSmall}>Show address</small>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={demoMode || archived || !multichainActive}
-                    onClick={() => setBatchOpen(true)}
-                    title={
-                      demoMode
-                        ? "Connect your wallet"
-                        : multichainActive
-                          ? undefined
-                          : hasMultichainScope
-                            ? "Switch the top-bar scope to Multichain to batch across chains."
-                            : "Batch sends require an active Multichain subscription."
-                    }
-                    style={{ ...styles.action, ...(demoMode || archived || !multichainActive ? styles.actionDisabled : null) }}
-                  >
-                    Batch{!demoMode && !multichainActive && " (Paid)"}
-                    <small style={styles.actionSmall}>Up to 20</small>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={demoMode || archived || !multichainActive}
-                    onClick={() => setBridgeOpen(true)}
-                    title={
-                      demoMode
-                        ? "Connect your wallet"
-                        : multichainActive
-                          ? "Cross-chain USDC via Chainlink CCIP."
-                          : hasMultichainScope
-                            ? "Switch the top-bar scope to Multichain to bridge across chains."
-                            : "Bridging requires an active Multichain subscription."
-                    }
-                    style={{ ...styles.action, ...(demoMode || archived || !multichainActive ? styles.actionDisabled : null) }}
-                  >
-                    Bridge{!demoMode && !multichainActive && " (Paid)"}
-                    <small style={{ ...styles.actionSmall, display: "flex", alignItems: "center", gap: 4 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="/link.jpg" alt="" width={11} height={11} style={{ borderRadius: 3, flexShrink: 0 }} />
-                      CCIP
-                    </small>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={demoMode || archived}
-                    onClick={() => setWithdrawOpen(true)}
-                    title={demoMode ? "Connect your wallet" : "Sweep a chain/token bucket back to your wallet"}
-                    style={{ ...styles.action, ...(demoMode || archived ? styles.actionDisabled : null) }}
-                  >
-                    Withdraw
-                    <small style={styles.actionSmall}>Sweep out</small>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={demoMode || archived}
-                    onClick={() => setStakeOpen(true)}
-                    title={demoMode ? "Connect your wallet" : "Lock Q into QuackAiStake on BNB, gasless"}
-                    style={{ ...styles.action, ...(demoMode || archived ? styles.actionDisabled : null) }}
-                  >
-                    Stake
-                    <small style={{ ...styles.actionSmall, display: "flex", alignItems: "center", gap: 4 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="/logos/quack.svg" alt="" width={11} height={11} style={{ flexShrink: 0 }} />
-                      Earn Q
-                    </small>
-                  </button>
+
+                  <div style={styles.utilGrid}>
+                    <button
+                      type="button"
+                      className="v2-tile"
+                      disabled={demoMode || archived}
+                      onClick={() => setReceiveOpen(true)}
+                      title={demoMode ? "Connect your wallet" : undefined}
+                      style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
+                    >
+                      <span style={styles.tileIcon}><ReceiveGlyph size={17} color={v2.cyan} /></span>
+                      <span style={styles.tileLabel}>Receive</span>
+                      <span style={styles.tileSub}>Show address</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="v2-tile"
+                      disabled={demoMode || archived || !multichainActive}
+                      onClick={() => setBatchOpen(true)}
+                      title={
+                        demoMode
+                          ? "Connect your wallet"
+                          : multichainActive
+                            ? undefined
+                            : hasMultichainScope
+                              ? "Switch the top-bar scope to Multichain to batch across chains."
+                              : "Batch sends require an active Multichain subscription."
+                      }
+                      style={{ ...styles.actionTile, ...(demoMode || archived || !multichainActive ? styles.tileDisabled : null) }}
+                    >
+                      {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
+                      <span style={styles.tileIcon}><BatchGlyph size={17} color={v2.cyan} /></span>
+                      <span style={styles.tileLabel}>Batch</span>
+                      <span style={styles.tileSub}>Up to 20</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="v2-tile"
+                      disabled={demoMode || archived || !multichainActive}
+                      onClick={() => setBridgeOpen(true)}
+                      title={
+                        demoMode
+                          ? "Connect your wallet"
+                          : multichainActive
+                            ? "Cross-chain USDC via Chainlink CCIP."
+                            : hasMultichainScope
+                              ? "Switch the top-bar scope to Multichain to bridge across chains."
+                              : "Bridging requires an active Multichain subscription."
+                      }
+                      style={{ ...styles.actionTile, ...(demoMode || archived || !multichainActive ? styles.tileDisabled : null) }}
+                    >
+                      {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
+                      <span style={styles.tileIcon}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/link.jpg" alt="" width={17} height={17} style={{ borderRadius: 4, flexShrink: 0 }} />
+                      </span>
+                      <span style={styles.tileLabel}>Bridge</span>
+                      <span style={styles.tileSub}>CCIP</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="v2-tile"
+                      disabled={demoMode || archived}
+                      onClick={() => setWithdrawOpen(true)}
+                      title={demoMode ? "Connect your wallet" : "Sweep a chain/token bucket back to your wallet"}
+                      style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
+                    >
+                      <span style={styles.tileIcon}><WithdrawGlyph size={17} color={v2.cyan} /></span>
+                      <span style={styles.tileLabel}>Withdraw</span>
+                      <span style={styles.tileSub}>Sweep out</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="v2-tile"
+                      disabled={demoMode || archived}
+                      onClick={() => setStakeOpen(true)}
+                      title={demoMode ? "Connect your wallet" : "Lock Q into QuackAiStake on BNB, gasless"}
+                      style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
+                    >
+                      <span style={styles.tileIcon}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/logos/quack.svg" alt="" width={17} height={17} style={{ flexShrink: 0 }} />
+                      </span>
+                      <span style={styles.tileLabel}>Stake</span>
+                      <span style={styles.tileSub}>Earn Q</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* MCP command bar */}
@@ -2208,32 +2229,88 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 5,
     padding: 0,
   },
-  actions: {
+  actionsWrap: {
     display: "grid",
-    gridTemplateColumns: "1.45fr 1fr 1fr 1fr 1fr 1fr",
-    gap: 8,
+    gridTemplateColumns: "minmax(168px, 1.35fr) minmax(0, 3fr)",
+    gap: 10,
     marginTop: 20,
     position: "relative",
     zIndex: 1,
   },
-  action: {
+  // Send hero — gold, icon + label stacked, visually the primary action.
+  actionHero: {
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    gap: 18,
+    minHeight: 92,
+    padding: "13px 14px",
+    borderRadius: 13,
+    border: `1px solid ${v2.yellow}`,
+    background: v2.yellow,
+    color: v2.actionText,
+    textAlign: "left",
+    cursor: "pointer",
+  },
+  heroDisabled: { opacity: 0.45, cursor: "not-allowed" },
+  heroIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(11,18,32,.14)",
+    color: v2.actionText,
+  },
+  heroTitle: { fontSize: fs.cardTitle, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.15 },
+  heroSub: { fontSize: fs.label, fontWeight: 600, opacity: 0.66 },
+  // Utility tile cluster — 5 compact dark tiles.
+  utilGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(5, minmax(0,1fr))",
+    gap: 8,
+  },
+  actionTile: {
+    position: "relative",
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    minHeight: 92,
+    padding: "11px 11px 10px",
+    borderRadius: 12,
     border: `1px solid ${v2.line}`,
     background: "rgba(255,255,255,.025)",
     color: v2.text,
-    borderRadius: 10,
-    padding: 12,
     textAlign: "left",
     cursor: "pointer",
-    fontSize: fs.base,
   },
-  actionPrimary: {
-    background: v2.yellow,
-    borderColor: v2.yellow,
-    color: v2.actionText,
+  tileDisabled: { opacity: 0.45, cursor: "not-allowed", background: "rgba(255,255,255,.012)" },
+  tileIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    display: "grid",
+    placeItems: "center",
+    background: "rgba(255,255,255,.04)",
+    border: `1px solid ${v2.line}`,
+    marginBottom: 2,
+  },
+  tileLabel: { fontSize: fs.body, fontWeight: 600, color: v2.text, lineHeight: 1.1 },
+  tileSub: { fontSize: fs.micro, color: v2.muted2, lineHeight: 1.1 },
+  paidChip: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    fontSize: 9,
     fontWeight: 700,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase",
+    color: "#f4d98a",
+    background: "rgba(247,202,22,.12)",
+    border: "1px solid rgba(247,202,22,.3)",
+    borderRadius: 5,
+    padding: "1px 5px",
   },
-  actionDisabled: { opacity: 0.5, cursor: "not-allowed", background: "rgba(255,255,255,.015)" },
-  actionSmall: { display: "block", fontSize: fs.label, opacity: 0.7, marginTop: 3 },
   command: {
     marginTop: 11,
     padding: "10px 11px 10px 14px",

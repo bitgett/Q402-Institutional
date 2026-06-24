@@ -1,25 +1,25 @@
 "use client";
 
 /**
- * AgenticWalletBatchModal — multi-recipient send for the Agent tab.
+ * AgenticWalletBatchModal — multi-recipient send for the Agent tab, Command-
+ * deck system.
  *
- * Up to 20 rows per submission, one chain + token for the whole batch.
- * The batch is multichain-tier — the backend rejects BNB-only trial
- * subscriptions with 402 SUBSCRIPTION_REQUIRED. As in the single-send
- * modal, a token is disabled on chains that don't support it. Submission idempotency
- * is server-side (keccak fingerprint of owner+chain+token+rows), so the
- * "Submit" button doubles as a safe retry if the network blips.
+ * Up to 20 rows per submission, one chain + token for the whole batch. The
+ * batch is multichain-tier — the backend rejects BNB-only trial subscriptions
+ * with 402 SUBSCRIPTION_REQUIRED. Submission idempotency is server-side
+ * (keccak fingerprint of owner+chain+token+rows), so "Submit" doubles as a
+ * safe retry if the network blips.
  */
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
 import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import { explorerTxUrl, explorerLabel } from "@/app/lib/eip7702";
 import { friendlyError, type FriendlyError, type BackendError } from "@/app/lib/agentic-wallet-friendly-error";
-import { useModalEscape } from "./useModalEscape";
 import { ThemedSelect } from "./ThemedSelect";
 import type { ChainKey } from "@/app/lib/relayer";
+import { ModalShell, Field, Segmented, PrimaryCTA, AlertBox, inputStyle, MonoAddr, GOLD, GOLD_TEXT } from "./modal-kit";
+import { BatchGlyph } from "./action-icons";
 
 interface Props {
   walletAddress: string;
@@ -96,17 +96,11 @@ export function AgenticWalletBatchModal({
   const chainCfg = CHAIN_OPTIONS.find((c) => c.key === chain) ?? CHAIN_OPTIONS[0];
   const allowedTokens = chainCfg.tokens;
   const [token, setToken] = useState<Token>("USDT");
-  // Effect-based token snap (was queueMicrotask setState in render — a
-  // React 19 warning + an eventual error).
   useEffect(() => {
     if (!allowedTokens.includes(token)) setToken(allowedTokens[0]);
   }, [allowedTokens, token]);
   const [rows, setRows] = useState<Row[]>([{ to: "", amount: "" }]);
-  // Portal mount guard (SSR-safe) — see SendModal for rationale.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
   const [submitting, setSubmitting] = useState(false);
-  useModalEscape(onClose, submitting);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [resp, setResp] = useState<BatchResponse | null>(null);
   const inFlightRef = useRef(false);
@@ -122,9 +116,7 @@ export function AgenticWalletBatchModal({
   }
 
   const trimmedRows = rows.map((r) => ({ to: r.to.trim(), amount: r.amount.trim() }));
-  const validRows =
-    trimmedRows.length > 0 &&
-    trimmedRows.every((r) => isAddress(r.to) && isDecimalAmount(r.amount));
+  const validRows = trimmedRows.length > 0 && trimmedRows.every((r) => isAddress(r.to) && isDecimalAmount(r.amount));
   const total = trimmedRows.reduce((s, r) => (isDecimalAmount(r.amount) ? s + Number(r.amount) : s), 0);
   const canSubmit = !submitting && validRows;
 
@@ -139,17 +131,9 @@ export function AgenticWalletBatchModal({
     }
     setSubmitting(true);
     try {
-      // Fingerprint matches the server's batch idempotency key. Mixes
-      // owner+walletId so two wallets sending the same recipient set
-      // share no cache slot. The user signs an intent that pins this
-      // exact recipient set + walletId — a leaked signature can't
-      // drain a different wallet.
-      const fp = agenticBatchFingerprint(
-        `${ownerAddress.toLowerCase()}:${walletId}`,
-        chain,
-        token,
-        trimmedRows,
-      );
+      // Fingerprint matches the server's batch idempotency key; mixes
+      // owner+walletId so two wallets share no cache slot.
+      const fp = agenticBatchFingerprint(`${ownerAddress.toLowerCase()}:${walletId}`, chain, token, trimmedRows);
       const auth = await getActionAuth(
         ownerAddress,
         "agentic.batch",
@@ -157,11 +141,7 @@ export function AgenticWalletBatchModal({
         signMessage,
       );
       if (!auth) {
-        setError({
-          headline:
-            "Sign the batch challenge in your wallet to authorize. The signature " +
-            "is bound to this exact recipient set.",
-        });
+        setError({ headline: "Sign the batch challenge in your wallet to authorize. The signature is bound to this exact recipient set." });
         return;
       }
       const res = await fetch("/api/wallet/agentic/batch", {
@@ -179,15 +159,11 @@ export function AgenticWalletBatchModal({
       });
       const data = (await res.json().catch(() => ({}))) as BatchResponse & BackendError;
       if (!res.ok) {
-        // Relay outcome uncertain — some rows may have settled on-chain even
-        // though we lost the response. Tell the user NOT to retry (a re-send
-        // re-signs with a fresh nonce and could double-pay); the server's
-        // idempotency guard already refuses to re-fire THIS exact batch.
+        // Relay outcome uncertain — some rows may have settled even though we
+        // lost the response. Tell the user NOT to retry (the server's
+        // idempotency guard already refuses to re-fire THIS exact batch).
         if ((data as { status?: string }).status === "uncertain") {
-          setError({
-            headline:
-              "Couldn't confirm whether these payments settled. The relay didn't respond after they may have been broadcast — check your wallet history on-chain BEFORE sending again, because re-sending could pay twice.",
-          });
+          setError({ headline: "Couldn't confirm whether these payments settled. The relay didn't respond after they may have been broadcast — check your wallet history on-chain BEFORE sending again, because re-sending could pay twice." });
           return;
         }
         setError(friendlyError(res.status, data));
@@ -205,234 +181,130 @@ export function AgenticWalletBatchModal({
   const settled = resp?.settled ?? 0;
   const failed = resp?.failed ?? 0;
 
-  if (!mounted) return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={submitting ? undefined : onClose}
-    >
-      <div
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,.30)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-white font-semibold text-lg">Batch send from Agent Wallet</div>
-            <div className="text-[11px] text-white/40 font-mono mt-0.5">
-              {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}
+  let body: React.ReactNode;
+  let footer: React.ReactNode;
+
+  if (resp) {
+    body = (
+      <>
+        <AlertBox variant="success">
+          Batch processed — {settled} settled, {failed} failed.{resp.idempotent ? " (Returned from idempotency cache.)" : ""}
+        </AlertBox>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {(resp.results ?? []).map((r, i) => (
+            <div
+              key={`${r.to}-${i}`}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 12, borderRadius: 10, padding: "8px 11px", border: `1px solid ${r.ok ? "rgba(88,199,244,.24)" : "rgba(248,113,113,.26)"}`, background: r.ok ? "rgba(88,199,244,.06)" : "rgba(248,113,113,.05)" }}
+            >
+              <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: "rgba(255,255,255,.75)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {r.to.slice(0, 8)}…{r.to.slice(-4)} · {r.amount} {token}
+              </span>
+              {r.ok && r.txHash ? (
+                <a href={explorerTxUrl(chain, r.txHash)} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, color: GOLD_TEXT, fontSize: 11, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
+                  {r.txHash.slice(0, 8)}… · {explorerLabel(chain)}
+                </a>
+              ) : (
+                <span style={{ color: "rgba(252,165,165,.8)", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "40%" }}>{r.error ?? "failed"}</span>
+              )}
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={submitting ? undefined : onClose}
-            disabled={submitting}
-            className="text-white/40 hover:text-white text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Close"
-          >
-            ×
-          </button>
+          ))}
+        </div>
+      </>
+    );
+    footer = <PrimaryCTA onClick={onSent}>Done</PrimaryCTA>;
+  } else {
+    body = (
+      <>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Chain">
+            <ThemedSelect<ChainKey> value={chain} onChange={setChain} options={CHAIN_OPTIONS.map((c) => ({ value: c.key, label: c.label }))} ariaLabel="Chain" />
+          </Field>
+          <Field label="Token">
+            <Segmented cols={2} value={token} onChange={setToken} options={(["USDT", "USDC"] as Token[]).map((t) => ({ value: t, label: t, disabled: !allowedTokens.includes(t) }))} />
+          </Field>
         </div>
 
-        {resp ? (
-          <div className="space-y-3">
-            <div
-              className="rounded-md border px-3 py-2 text-sm"
-              style={{ border: "1px solid rgba(85,230,165,.30)", background: "rgba(85,230,165,.06)", color: "#9af0c9" }}
-            >
-              Batch processed — {settled} settled, {failed} failed.
-              {resp.idempotent ? " (Returned from idempotency cache.)" : ""}
-            </div>
-            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-              {(resp.results ?? []).map((r, i) => (
-                <div
-                  key={`${r.to}-${i}`}
-                  className="rounded-md border px-3 py-2 text-[12px] flex items-center justify-between gap-2"
-                  style={{
-                    background: r.ok ? "rgba(85,230,165,0.06)" : "rgba(248,113,113,0.05)",
-                    borderColor: r.ok ? "rgba(85,230,165,0.22)" : "rgba(248,113,113,0.25)",
-                  }}
-                >
-                  <div className="font-mono text-white/75 truncate">
-                    {r.to.slice(0, 8)}…{r.to.slice(-4)} · {r.amount} {token}
-                  </div>
-                  {r.ok && r.txHash ? (
-                    <a
-                      href={explorerTxUrl(chain, r.txHash)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-emerald-300 hover:text-emerald-200 text-[11px] font-mono shrink-0"
-                    >
-                      {r.txHash.slice(0, 8)}… ↗ {explorerLabel(chain)}
-                    </a>
-                  ) : (
-                    <span className="text-red-300/80 text-[11px] truncate max-w-[40%]">
-                      {r.error ?? "failed"}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={onSent}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300"
-            >
-              Done
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)" }}>Batch sends require an active multichain subscription — trial keys hit the gate.</div>
+
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(255,255,255,.5)" }}>Recipients ({rows.length} / {MAX_ROWS})</span>
+            <button type="button" onClick={addRow} disabled={rows.length >= MAX_ROWS} className="transition-colors disabled:opacity-40 disabled:cursor-not-allowed" style={{ fontSize: 12, fontWeight: 600, color: GOLD_TEXT, background: "transparent" }}>
+              + Add row
             </button>
           </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Chain</div>
-                <ThemedSelect<ChainKey>
-                  value={chain}
-                  onChange={setChain}
-                  options={CHAIN_OPTIONS.map((c) => ({ value: c.key, label: c.label }))}
-                  ariaLabel="Chain"
-                />
-              </div>
-              <div>
-                <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Token</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["USDT", "USDC"] as Token[]).map((t) => {
-                    const enabled = allowedTokens.includes(t);
-                    const active = token === t;
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        disabled={!enabled}
-                        onClick={() => enabled && setToken(t)}
-                        className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                          !enabled
-                            ? "border-white/5 text-white/25 cursor-not-allowed"
-                            : active
-                              ? "border-emerald-400 text-emerald-300 bg-emerald-400/8"
-                              : "border-white/10 text-white/55 hover:text-white"
-                        }`}
-                      >
-                        {t}
-                        {!enabled && <span className="ml-1 text-[9px]">N/A</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            <div className="text-[10px] text-white/40">
-              Batch sends require an active multichain subscription — trial keys hit the gate.
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-[11px] text-white/45 uppercase tracking-widest">
-                  Recipients ({rows.length} / {MAX_ROWS})
-                </div>
-                <button
-                  type="button"
-                  onClick={addRow}
-                  disabled={rows.length >= MAX_ROWS}
-                  className="text-[12px] text-emerald-300 hover:text-emerald-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  + Add row
-                </button>
-              </div>
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                {rows.map((row, i) => {
-                  const recipientOk = row.to === "" || isAddress(row.to);
-                  const amountOk = row.amount === "" || isDecimalAmount(row.amount);
-                  return (
-                    <div key={i} className="flex gap-2 items-start">
-                      <input
-                        type="text"
-                        value={row.to}
-                        onChange={(e) => updateRow(i, { to: e.target.value })}
-                        placeholder="0x…"
-                        spellCheck={false}
-                        className="flex-1 rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25"
-                        style={{
-                          background: "rgba(255,255,255,0.02)",
-                          borderColor: recipientOk ? "rgba(255,255,255,0.05)" : "rgba(248,113,113,0.45)",
-                        }}
-                      />
-                      <input
-                        type="text"
-                        value={row.amount}
-                        onChange={(e) => updateRow(i, { amount: e.target.value })}
-                        placeholder="1.50"
-                        inputMode="decimal"
-                        className="w-28 rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25"
-                        style={{
-                          background: "rgba(255,255,255,0.02)",
-                          borderColor: amountOk ? "rgba(255,255,255,0.05)" : "rgba(248,113,113,0.45)",
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeRow(i)}
-                        disabled={rows.length === 1}
-                        className="text-white/40 hover:text-red-300 text-lg leading-none px-1 disabled:opacity-30 disabled:cursor-not-allowed"
-                        aria-label="Remove row"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-[12px] text-white/55 pt-2 border-t"
-              style={{ borderColor: "rgba(255,255,255,0.06)" }}
-            >
-              <span>Total</span>
-              <span className="text-white font-mono">
-                {total.toFixed(2)} {token}
-              </span>
-            </div>
-
-            {error && (
-              <div
-                className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed flex items-start justify-between gap-3"
-                style={{
-                  background: "rgba(248,113,113,0.06)",
-                  borderColor: "rgba(248,113,113,0.22)",
-                  color: "#fecaca",
-                }}
-              >
-                <span>{error.headline}</span>
-                {error.next && (
-                  <a
-                    href={error.next.href}
-                    className="shrink-0 text-emerald-300 hover:text-emerald-200 underline underline-offset-2"
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {rows.map((row, i) => {
+              const recipientOk = row.to === "" || isAddress(row.to);
+              const amountOk = row.amount === "" || isDecimalAmount(row.amount);
+              return (
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <input
+                    type="text"
+                    value={row.to}
+                    onChange={(e) => updateRow(i, { to: e.target.value })}
+                    placeholder="0x…"
+                    spellCheck={false}
+                    className="placeholder-white/25"
+                    style={{ ...inputStyle({ mono: true, invalid: !recipientOk }), flex: 1 }}
+                  />
+                  <input
+                    type="text"
+                    value={row.amount}
+                    onChange={(e) => updateRow(i, { amount: e.target.value })}
+                    placeholder="1.50"
+                    inputMode="decimal"
+                    className="placeholder-white/25"
+                    style={{ ...inputStyle({ mono: true, invalid: !amountOk }), width: 104 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeRow(i)}
+                    disabled={rows.length === 1}
+                    aria-label="Remove row"
+                    className="transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={{ flexShrink: 0, width: 30, height: 38, display: "grid", placeItems: "center", color: "rgba(255,255,255,.4)", fontSize: 18, lineHeight: 1, background: "transparent" }}
                   >
-                    {error.next.label}
-                  </a>
-                )}
-              </div>
-            )}
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-            <button
-              type="button"
-              disabled={!canSubmit}
-              onClick={submit}
-              className="w-full px-3 py-2 rounded-md text-sm font-semibold bg-emerald-400 text-slate-900 hover:bg-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {submitting
-                ? "Submitting…"
-                : `Send ${total > 0 ? total.toFixed(2) : "—"} ${token} to ${rows.length} recipient${rows.length === 1 ? "" : "s"}`}
-            </button>
-            <div className="text-[10px] text-white/30 text-center">
-              Gas sponsored by Q402&apos;s relayer. Each row is one on-chain transfer.
-            </div>
-          </>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, color: "rgba(255,255,255,.55)", paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+          <span>Total</span>
+          <span style={{ color: "#fff", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{total.toFixed(2)} {token}</span>
+        </div>
+
+        {error && (
+          <AlertBox variant="error" action={error.next ? <a href={error.next.href} style={{ color: GOLD_TEXT, textDecoration: "underline", textUnderlineOffset: 2 }}>{error.next.label}</a> : undefined}>
+            {error.headline}
+          </AlertBox>
         )}
-      </div>
-    </div>,
-    document.body,
+
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", textAlign: "center" }}>Gas sponsored by Q402&apos;s relayer. Each row is one on-chain transfer.</div>
+      </>
+    );
+    footer = (
+      <PrimaryCTA onClick={submit} disabled={!canSubmit} busy={submitting}>
+        Send {total > 0 ? total.toFixed(2) : "—"} {token} to {rows.length} recipient{rows.length === 1 ? "" : "s"}
+      </PrimaryCTA>
+    );
+  }
+
+  return (
+    <ModalShell
+      icon={<BatchGlyph size={19} color={GOLD} />}
+      title="Batch send"
+      subtitle={<MonoAddr>{walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}</MonoAddr>}
+      size="lg"
+      onClose={onClose}
+      closeDisabled={submitting}
+      footer={footer}
+    >
+      {body}
+    </ModalShell>
   );
 }

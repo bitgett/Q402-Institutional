@@ -1,21 +1,19 @@
 "use client";
 
 /**
- * AgenticWalletReceiveModal — chain-first deposit flow.
+ * AgenticWalletReceiveModal — chain-first deposit flow, Command-deck system.
  *
- * Every supported EVM chain shares the same address (one EOA, ten
- * domains), but the safety story changes per chain — Stable speaks
- * USDT0, and a wrong-network deposit is
- * unrecoverable. So the modal puts the network choice *up front* as a
- * grid of pills, then folds the address, supported tokens, and the
- * scoped explorer link below.
+ * Every supported EVM chain shares the same address (one EOA, ten domains),
+ * but the safety story changes per chain (Stable speaks USDT0, a wrong-network
+ * deposit is unrecoverable). So the network choice is up front as a Segmented
+ * grid; address + tokens + the scoped explorer link fold below.
  */
 
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import type { ChainKey } from "@/app/lib/relayer";
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
-import { useModalEscape } from "./useModalEscape";
+import { ModalShell, Field, Segmented, AlertBox, INPUT_FILL, GOLD, GOLD_TEXT, CYAN } from "./modal-kit";
+import { ReceiveGlyph } from "./action-icons";
 
 interface ChainOption {
   key: ChainKey;
@@ -46,8 +44,6 @@ interface Props {
 export function AgenticWalletReceiveModal({ walletAddress, onClose }: Props) {
   const [chain, setChain] = useState<ChainKey>("bnb");
   const [copied, setCopied] = useState(false);
-  // Receive is read-only — Escape is always safe.
-  useModalEscape(onClose, false);
   const chainCfg = RECEIVE_CHAINS.find((c) => c.key === chain) ?? RECEIVE_CHAINS[0];
 
   async function copy() {
@@ -60,128 +56,72 @@ export function AgenticWalletReceiveModal({ walletAddress, onClose }: Props) {
     }
   }
 
-  // Portal escapes the v2 glass Surface's filter/transform ancestor so the
-  // overlay centers on the real viewport. SSR-safe: this modal renders only
-  // after a client interaction, so document is always present here.
-  if (typeof document === "undefined") return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border p-6 space-y-4"
-        style={{ background: "#0F1929", borderColor: "rgba(247,202,22,0.20)" }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="text-white font-semibold text-lg">Deposit to your Agent Wallet</div>
-            <div className="text-[11px] text-white/50 mt-0.5 leading-relaxed">
-              Same address across every chain. Pick the network you&apos;re sending from
-              — the explorer link below updates to match.
-            </div>
-          </div>
-          <button onClick={onClose} className="text-white/40 hover:text-white text-lg leading-none">
-            ×
-          </button>
-        </div>
-
-        {/* Chain grid — visible up-front so the user picks before reading the address */}
-        <div>
-          <div className="text-[11px] text-white/45 uppercase tracking-widest mb-2">
-            Deposit on
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {RECEIVE_CHAINS.map((c) => {
-              const active = c.key === chain;
-              return (
-                <button
-                  key={c.key}
-                  type="button"
-                  onClick={() => setChain(c.key)}
-                  className={`rounded-md border px-2 py-2 text-[12px] font-medium transition-colors text-left ${
-                    active
-                      ? "border-emerald-400 text-emerald-300 bg-emerald-400/8"
-                      : "border-white/10 text-white/55 hover:text-white hover:border-white/20"
-                  }`}
-                >
-                  <div className="leading-tight">{c.label}</div>
-                  <div className="text-[10px] text-white/40 mt-0.5">
-                    {c.tokens.join(" + ")}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Chain-scoped detail */}
-        <div className="space-y-3">
-          <div
-            className="rounded-md border px-3 py-2.5 text-[12px]"
-            style={{
-              background: "rgba(247,202,22,0.05)",
-              borderColor: "rgba(247,202,22,0.18)",
-              color: "rgba(226,232,240,0.88)",
-            }}
+  return (
+    <ModalShell
+      icon={<ReceiveGlyph size={19} color={CYAN} />}
+      accent={CYAN}
+      title="Deposit to your Agent Wallet"
+      subtitle="Same address on every chain. Pick the network you're sending from."
+      size="md"
+      onClose={onClose}
+      footer={
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={copy}
+            className="transition-opacity"
+            style={{ flex: 1, padding: "11px 14px", borderRadius: 11, border: "none", background: GOLD, color: "#101722", fontSize: 14, fontWeight: 700, cursor: "pointer" }}
           >
-            <span className="font-medium">Depositing on {chainCfg.label}</span>
-            <span className="text-white/60"> · accepts {chainCfg.tokens.join(", ")}</span>
-            {chainCfg.note && (
-              <div className="text-[11px] text-white/55 mt-1">{chainCfg.note}</div>
-            )}
-          </div>
-
-          <div>
-            <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Address</div>
-            <div
-              className="rounded-md border px-3 py-3 font-mono text-[12px] text-white/85 break-all leading-relaxed"
-              style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}
-            >
-              {walletAddress}
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={copy}
-              className="flex-1 px-3 py-2 rounded-full text-sm font-medium"
-              style={{
-                background: "rgba(247,202,22,0.10)",
-                color: "#f9d64a",
-                border: "1px solid rgba(247,202,22,0.25)",
-              }}
-            >
-              {copied ? "Copied!" : "Copy address"}
-            </button>
-            <a
-              href={explorerAddressUrl(chain, walletAddress)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 px-3 py-2 rounded-full text-sm font-medium text-center text-white/65 hover:text-white border border-white/10 hover:bg-white/[0.04]"
-            >
-              View on {explorerLabel(chain)} ↗
-            </a>
-          </div>
+            {copied ? "Copied" : "Copy address"}
+          </button>
+          <a
+            href={explorerAddressUrl(chain, walletAddress)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors"
+            style={{ flex: 1, padding: "11px 14px", borderRadius: 11, border: "1px solid rgba(255,255,255,.1)", color: "rgba(255,255,255,.7)", fontSize: 13, fontWeight: 600, textAlign: "center" }}
+          >
+            View on {explorerLabel(chain)}
+          </a>
         </div>
+      }
+    >
+      <Field label="Deposit on">
+        <Segmented
+          cols={3}
+          value={chain}
+          onChange={setChain}
+          options={RECEIVE_CHAINS.map((c) => ({ value: c.key, label: c.label, sub: c.tokens.join(" + ") }))}
+        />
+      </Field>
 
-        {/* Wrong-network warning — last and explicit */}
+      <AlertBox variant="info">
+        <span style={{ fontWeight: 600, color: GOLD_TEXT }}>Depositing on {chainCfg.label}</span>
+        <span style={{ opacity: 0.85 }}> · accepts {chainCfg.tokens.join(", ")}</span>
+        {chainCfg.note && <div style={{ marginTop: 3, opacity: 0.8 }}>{chainCfg.note}</div>}
+      </AlertBox>
+
+      <Field label="Address">
         <div
-          className="rounded-md border px-3 py-2.5 text-[11px] leading-relaxed"
           style={{
-            background: "rgba(248,113,113,0.05)",
-            borderColor: "rgba(248,113,113,0.22)",
-            color: "#fecaca",
+            background: INPUT_FILL,
+            border: "1px solid rgba(255,255,255,.07)",
+            borderRadius: 10,
+            padding: "11px 12px",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: 12,
+            color: "rgba(255,255,255,.85)",
+            wordBreak: "break-all",
+            lineHeight: 1.55,
           }}
         >
-          Send only {chainCfg.tokens.join(" or ")} on the {chainCfg.label} network.
-          A deposit from another network can&apos;t be recovered.
+          {walletAddress}
         </div>
-      </div>
-    </div>,
-    document.body,
+      </Field>
+
+      <AlertBox variant="error">
+        Send only {chainCfg.tokens.join(" or ")} on the {chainCfg.label} network. A deposit from another network can&apos;t be recovered.
+      </AlertBox>
+    </ModalShell>
   );
 }

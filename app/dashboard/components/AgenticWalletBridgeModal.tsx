@@ -29,11 +29,10 @@
  */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
 import { getActionAuth } from "@/app/lib/auth-client";
-import { useModalEscape } from "./useModalEscape";
 import { ThemedSelect } from "./ThemedSelect";
 import { ChainIcon } from "../v2/logos";
+import { ModalShell, Field, Segmented, PrimaryCTA, AlertBox, inputStyle, MonoAddr, GOLD_TEXT } from "./modal-kit";
 
 type CCIPChainKey = "eth" | "avax" | "arbitrum";
 type FeeTokenKind = "LINK" | "native";
@@ -202,12 +201,6 @@ export function AgenticWalletBridgeModal({
   useEffect(() => {
     formStateRef.current = { src, dst, amount, feeToken };
   }, [src, dst, amount, feeToken]);
-
-  useModalEscape(onClose, submitting);
-
-  // Portal mount guard (SSR-safe) — see SendModal for rationale.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   // Auto-pick a compatible destination if the user flips src to a chain
   // that doesn't support the currently-selected dst (can't happen with
@@ -537,296 +530,148 @@ export function AgenticWalletBridgeModal({
   const srcMeta = chainMeta(src);
   const dstMeta = chainMeta(dst);
 
-  if (!mounted) return null;
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ background: "rgba(2,6,15,0.72)" }}
-      onClick={submitting ? undefined : onClose}
+  const footer = !result ? (
+    <PrimaryCTA onClick={submit} disabled={!canSubmit || !hasMultichainScope} busy={submitting}>
+      Bridge {amount || "—"} USDC · {srcMeta.label} → {dstMeta.label}
+    </PrimaryCTA>
+  ) : (
+    <PrimaryCTA onClick={onSent}>Done</PrimaryCTA>
+  );
+
+  // eslint-disable-next-line @next/next/no-img-element
+  const ccipIcon = <img src="/link.jpg" alt="" width={20} height={20} style={{ borderRadius: 5 }} />;
+
+  return (
+    <ModalShell
+      icon={ccipIcon}
+      title="Bridge USDC · CCIP"
+      subtitle={<MonoAddr>{walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}</MonoAddr>}
+      size="md"
+      onClose={onClose}
+      closeDisabled={submitting}
+      footer={footer}
     >
-      <div
-        className="w-full max-w-lg rounded-2xl border flex flex-col max-h-[92vh] overflow-hidden"
-        style={{ background: "#0F1929", borderColor: "rgba(245,197,24,0.22)" }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header — pinned (no scroll) so title + close X stay visible. */}
-        <div className="flex items-start justify-between px-6 pt-5 pb-3 shrink-0">
-          <div>
-            <div className="text-white font-semibold text-lg flex items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/link.jpg" alt="" width={20} height={20} style={{ borderRadius: 5, flexShrink: 0 }} />
-              Bridge USDC · Chainlink CCIP
-            </div>
-            <div className="text-[11px] text-white/40 font-mono mt-0.5">
-              {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}
+      {!hasMultichainScope && !result && (
+        <AlertBox variant="warn" action={<a href="/payment" style={{ color: GOLD_TEXT, textDecoration: "underline" }}>View plans →</a>}>
+          Cross-chain USDC bridging needs an active Multichain subscription.
+        </AlertBox>
+      )}
+
+      {!result ? (
+        <>
+          <div style={{ borderRadius: 10, border: "1px solid rgba(245,197,24,.2)", background: "rgba(245,197,24,.05)", padding: "10px 12px", fontSize: 12, lineHeight: 1.5, color: "rgba(226,232,240,0.78)" }}>
+            Same EOA on the destination chain. Q402 markup is zero — you only pay the actual CCIP fee out of your Gas Tank{" "}
+            <span style={{ color: GOLD_TEXT }}>{feeToken === "LINK" ? "LINK" : srcMeta.native}</span> bucket on {srcMeta.label}.
+            <div style={{ marginTop: 7, paddingTop: 7, borderTop: "1px solid rgba(245,197,24,.15)", color: "rgba(255,255,255,.6)" }}>
+              Q402 auto-funds source-chain bridge gas (~$0.05–$0.50 {srcMeta.native}) from your Gas Tank {srcMeta.native} bucket — you never have to touch the Agent Wallet directly. The Gas Tank deposit covers everything.
             </div>
           </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="From">
+              <ThemedSelect<CCIPChainKey>
+                value={src}
+                onChange={setSrc}
+                options={CHAINS.map((c) => ({ value: c.key, label: c.label, icon: <ChainIcon chain={c.key} size={16} /> }))}
+                ariaLabel="Source chain"
+                disabled={formLocked}
+              />
+            </Field>
+            <Field label="To">
+              <ThemedSelect<CCIPChainKey>
+                value={dst}
+                onChange={setDst}
+                options={LANES[src].map((k) => ({ value: k, label: chainMeta(k).label, icon: <ChainIcon chain={k} size={16} /> }))}
+                ariaLabel="Destination chain"
+                disabled={formLocked}
+              />
+            </Field>
+          </div>
+
+          <Field label="Amount (USDC)">
+            <input
+              type="text"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="1.50"
+              inputMode="decimal"
+              disabled={formLocked}
+              className="placeholder-white/25"
+              style={{ ...inputStyle({ mono: true, invalid: !(amount === "" || amountValid) }), ...(formLocked ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}
+            />
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", marginTop: 6 }}>USDC has 6 decimals — max precision 0.000001 USDC.</div>
+          </Field>
+
+          <Field label="Pay fee in">
+            <Segmented
+              cols={2}
+              value={feeToken}
+              onChange={setFeeToken}
+              options={(["LINK", "native"] as FeeTokenKind[]).map((t) => ({
+                value: t,
+                label: t === "LINK" ? "LINK · ~10% cheaper" : `${srcMeta.native} native`,
+                disabled: formLocked,
+              }))}
+            />
+          </Field>
+
           <button
             type="button"
-            onClick={submitting ? undefined : onClose}
-            disabled={submitting}
-            className="text-white/40 hover:text-white text-lg leading-none disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Close"
+            disabled={!canQuote}
+            onClick={fetchQuote}
+            className="transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,.16)", background: "rgba(255,255,255,.04)", color: "#e2e8f0", fontSize: 13, fontWeight: 600, cursor: canQuote ? "pointer" : "not-allowed" }}
           >
-            ×
+            {quoteLoading ? "Quoting…" : quote ? "Refresh quote" : "Get quote"}
           </button>
-        </div>
 
-        {/* Scrollable middle band — soaks the variable-length form/quote/result. */}
-        <div className="px-6 pb-2 space-y-4 flex-1 overflow-y-auto">
-        {!hasMultichainScope && !result && (
-          <div
-            className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed"
-            style={{
-              background: "rgba(245,197,24,0.07)",
-              borderColor: "rgba(245,197,24,0.25)",
-              color: "rgba(254,240,138,0.95)",
-            }}
-          >
-            Cross-chain USDC bridging needs an active Multichain subscription.{" "}
-            <a href="/payment" className="underline hover:text-yellow-hover">View plans →</a>
-          </div>
-        )}
+          {quoteError && <div style={{ fontSize: 12, color: "rgba(252,165,165,.85)" }}>{quoteError}</div>}
 
-        {!result ? (
-          <>
-            <div
-              className="rounded-md border px-3 py-2.5 text-[11.5px] leading-relaxed"
-              style={{
-                background: "rgba(245,197,24,0.05)",
-                borderColor: "rgba(245,197,24,0.18)",
-                color: "rgba(226,232,240,0.78)",
-              }}
-            >
-              Same EOA on the destination chain. Q402 markup is zero — you only pay the
-              actual CCIP fee out of your Gas Tank{" "}
-              <span className="text-yellow">{feeToken === "LINK" ? "LINK" : srcMeta.native}</span>{" "}
-              bucket on {srcMeta.label}.
-              <div
-                className="mt-1.5 pt-1.5 border-t text-white/60"
-                style={{ borderColor: "rgba(245,197,24,0.15)" }}
-              >
-                Q402 auto-funds source-chain bridge gas (~$0.05–$0.50 {srcMeta.native}) from
-                your Gas Tank {srcMeta.native} bucket — you never have to touch the Agent
-                Wallet directly. The Gas Tank deposit covers everything.
+          {quote && (
+            <div style={{ borderRadius: 12, border: "1px solid rgba(247,202,22,.3)", background: "rgba(247,202,22,.06)", padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".09em", fontWeight: 600, color: GOLD_TEXT }}>CCIP fee quote</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <FeeCell label="LINK" whole={quote.fee.link.whole} usd={quote.fee.link.usd} highlighted={feeToken === "LINK"} recommended={quote.recommended === "link"} />
+                <FeeCell label={srcMeta.native} whole={quote.fee.native.whole} usd={quote.fee.native.usd} highlighted={feeToken === "native"} recommended={quote.recommended === "native"} />
               </div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,.45)" }}>Quote is on-chain at this block. Server caps slippage at +10% before rejecting — re-quote if more than a minute has passed.</div>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">From</div>
-                <ThemedSelect<CCIPChainKey>
-                  value={src}
-                  onChange={setSrc}
-                  options={CHAINS.map(c => ({ value: c.key, label: c.label, icon: <ChainIcon chain={c.key} size={16} /> }))}
-                  ariaLabel="Source chain"
-                  disabled={formLocked}
-                />
-              </div>
-              <div>
-                <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">To</div>
-                <ThemedSelect<CCIPChainKey>
-                  value={dst}
-                  onChange={setDst}
-                  options={LANES[src].map(k => ({ value: k, label: chainMeta(k).label, icon: <ChainIcon chain={k} size={16} /> }))}
-                  ariaLabel="Destination chain"
-                  disabled={formLocked}
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">
-                Amount (USDC)
-              </div>
-              <input
-                type="text"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                placeholder="1.50"
-                inputMode="decimal"
-                disabled={formLocked}
-                className="w-full rounded-md border px-3 py-2 text-sm font-mono text-white placeholder-white/25 disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{
-                  background: "rgba(255,255,255,0.02)",
-                  borderColor:
-                    amount === "" || amountValid ? "rgba(255,255,255,0.05)" : "rgba(248,113,113,0.45)",
-                }}
-              />
-              <div className="text-[10px] text-white/40 mt-1">
-                USDC has 6 decimals — max precision 0.000001 USDC.
-              </div>
-            </div>
-
-            <div>
-              <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">
-                Pay fee in
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {(["LINK", "native"] as FeeTokenKind[]).map(t => {
-                  const active = feeToken === t;
-                  const label = t === "LINK" ? "LINK (≈10% cheaper)" : `${srcMeta.native} (native)`;
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setFeeToken(t)}
-                      disabled={formLocked}
-                      className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                        active
-                          ? "text-yellow"
-                          : "border-white/10 text-white/55 hover:text-white"
-                      }`}
-                      style={
-                        active
-                          ? {
-                              borderColor: "#F5C518",
-                              background: "rgba(245,197,24,0.08)",
-                            }
-                          : undefined
-                      }
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={!canQuote}
-                onClick={fetchQuote}
-                className="flex-1 px-3 py-2 rounded-md text-sm font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{
-                  borderColor: "rgba(255,255,255,0.18)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "#e2e8f0",
-                }}
-              >
-                {quoteLoading ? "Quoting…" : quote ? "Refresh quote" : "Get quote"}
-              </button>
-            </div>
-
-            {quoteError && (
-              <div className="text-[12px] text-red-300/85 px-2">{quoteError}</div>
-            )}
-
-            {quote && (
-              <div
-                className="rounded-xl border p-3 space-y-2"
-                style={{
-                  background: "rgba(247,202,22,.06)",
-                  borderColor: "rgba(247,202,22,.30)",
-                }}
-              >
-                <div className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: "#f9d64a" }}>
-                  CCIP fee quote
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-[12px]">
-                  <FeeCell
-                    label="LINK"
-                    whole={quote.fee.link.whole}
-                    usd={quote.fee.link.usd}
-                    highlighted={feeToken === "LINK"}
-                    recommended={quote.recommended === "link"}
-                  />
-                  <FeeCell
-                    label={srcMeta.native}
-                    whole={quote.fee.native.whole}
-                    usd={quote.fee.native.usd}
-                    highlighted={feeToken === "native"}
-                    recommended={quote.recommended === "native"}
-                  />
-                </div>
-                <div className="text-[10px] text-white/45">
-                  Quote is on-chain at this block. Server caps slippage at +10% before
-                  rejecting — re-quote if more than a minute has passed.
-                </div>
-              </div>
-            )}
-
-            {error && (
-              <div
-                className="rounded-md border px-3 py-2.5 text-[12px] leading-relaxed space-y-2"
-                style={{
-                  background: "rgba(248,113,113,0.06)",
-                  borderColor: "rgba(248,113,113,0.22)",
-                  color: "#fecaca",
-                }}
-              >
-                <div>{error}</div>
-                {errorCode === "AGENT_WALLET_DELEGATED" && clearing !== "ok" && (
-                  <button
-                    type="button"
-                    onClick={handleClearDelegation}
-                    disabled={clearing === "signing" || clearing === "broadcasting" || clearing === "propagating"}
-                    className="w-full px-3 py-2 rounded-md text-[12px] font-semibold bg-yellow text-navy hover:bg-yellow-hover disabled:opacity-70 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {clearing === "signing"
-                      ? "Waiting for wallet signature…"
-                      : clearing === "broadcasting"
-                        ? `Clearing delegation on chain · ${clearElapsedSec}s elapsed (≈25–35s typical)`
-                        : clearing === "propagating"
-                          ? `Propagation buffer · ${clearElapsedSec}s left, then bridge fires`
-                          : clearing === "failed"
-                            ? "Clear delegation & retry bridge"
-                            : `Clear delegation & retry bridge (~25s, debits Gas Tank ${srcMeta.native})`}
-                  </button>
-                )}
-                {errorCode === "AGENT_WALLET_DELEGATED" && (
-                  <div className="text-[10.5px] text-white/55 leading-relaxed">
-                    One tap clears the EIP-7702 delegation on your Agent Wallet,
-                    then re-fires this bridge automatically. The clear-tx gas
-                    (~$0.05–$0.20) debits from your Gas Tank {srcMeta.native} bucket
-                    on {srcMeta.label}. A future Q402 send will re-delegate the
-                    wallet — so bridge first if you have both to do.
-                  </div>
-                )}
-              </div>
-            )}
-
-          </>
-        ) : (
-          <BridgeResult
-            result={result}
-            confirmStatus={confirmStatus}
-            confirmTxHash={confirmTxHash}
-            srcMeta={srcMeta}
-            dstMeta={dstMeta}
-          />
-        )}
-        </div>
-        {/* Sticky footer — action button stays visible without scroll. */}
-        <div
-          className="px-6 py-4 shrink-0 border-t"
-          style={{ borderColor: "rgba(255,255,255,0.06)", background: "#0F1929" }}
-        >
-          {!result ? (
-            <button
-              type="button"
-              disabled={!canSubmit || !hasMultichainScope}
-              onClick={submit}
-              className="w-full px-3 py-2.5 rounded-md text-sm font-semibold bg-yellow text-navy hover:bg-yellow-hover disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {submitting
-                ? "Bridging…"
-                : `Bridge ${amount || "—"} USDC · ${srcMeta.label} → ${dstMeta.label}`}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onSent}
-              className="w-full px-3 py-2.5 rounded-md text-sm font-semibold bg-emerald-400 text-navy hover:bg-emerald-300"
-            >
-              Done
-            </button>
           )}
-        </div>
-      </div>
-    </div>,
-    document.body,
+
+          {error && (
+            <AlertBox variant="error">
+              <div>{error}</div>
+              {errorCode === "AGENT_WALLET_DELEGATED" && clearing !== "ok" && (
+                <button
+                  type="button"
+                  onClick={handleClearDelegation}
+                  disabled={clearing === "signing" || clearing === "broadcasting" || clearing === "propagating"}
+                  className="transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+                  style={{ width: "100%", marginTop: 8, padding: "8px 12px", borderRadius: 9, border: "none", background: GOLD_TEXT, color: "#101722", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+                >
+                  {clearing === "signing"
+                    ? "Waiting for wallet signature…"
+                    : clearing === "broadcasting"
+                      ? `Clearing delegation on chain · ${clearElapsedSec}s elapsed (≈25–35s typical)`
+                      : clearing === "propagating"
+                        ? `Propagation buffer · ${clearElapsedSec}s left, then bridge fires`
+                        : clearing === "failed"
+                          ? "Clear delegation & retry bridge"
+                          : `Clear delegation & retry bridge (~25s, debits Gas Tank ${srcMeta.native})`}
+                </button>
+              )}
+              {errorCode === "AGENT_WALLET_DELEGATED" && (
+                <div style={{ marginTop: 8, fontSize: 10.5, color: "rgba(255,255,255,.55)", lineHeight: 1.5 }}>
+                  One tap clears the EIP-7702 delegation on your Agent Wallet, then re-fires this bridge automatically. The clear-tx gas (~$0.05–$0.20) debits from your Gas Tank {srcMeta.native} bucket on {srcMeta.label}. A future Q402 send will re-delegate the wallet — so bridge first if you have both to do.
+                </div>
+              )}
+            </AlertBox>
+          )}
+        </>
+      ) : (
+        <BridgeResult result={result} confirmStatus={confirmStatus} confirmTxHash={confirmTxHash} srcMeta={srcMeta} dstMeta={dstMeta} />
+      )}
+    </ModalShell>
   );
 }
 
@@ -854,7 +699,7 @@ function FeeCell({
       <div className="flex items-center justify-between">
         <span className="text-white/65 text-[10px] uppercase tracking-widest font-medium">{label}</span>
         {recommended && (
-          <span className="text-[9px] text-emerald-300/85 uppercase tracking-widest font-semibold">
+          <span className="text-[9px] uppercase tracking-widest font-semibold" style={{ color: "rgba(143,214,247,.9)" }}>
             best
           </span>
         )}
@@ -862,7 +707,7 @@ function FeeCell({
       <div className="text-white text-sm font-mono mt-0.5">
         {whole.toLocaleString("en-US", { maximumFractionDigits: 6 })}
       </div>
-      <div className="text-emerald-300/85 text-[11px] font-mono">
+      <div className="text-[11px] font-mono" style={{ color: "rgba(143,214,247,.85)" }}>
         ≈ ${usd.toFixed(usd < 1 ? 4 : 2)}
       </div>
     </div>
@@ -888,14 +733,13 @@ function BridgeResult({
     : confirmStatus === "unknown" ? "Still in flight — check CCIP Explorer ↗"
     : "Bridging…";
   const statusTone =
-    confirmStatus === "delivered" ? "text-emerald-300 border-emerald-400/30 bg-emerald-400/5"
-    : confirmStatus === "failed"  ? "text-red-300 border-red-400/30 bg-red-400/5"
+    confirmStatus === "failed"  ? "text-red-300 border-red-400/30 bg-red-400/5"
     : confirmStatus === "unknown" ? "text-white/70 border-white/15 bg-white/[0.02]"
-    : "text-yellow";
+    : "";
   const statusInlineStyle: CSSProperties =
-    confirmStatus === "delivered" || confirmStatus === "failed" || confirmStatus === "unknown"
-      ? {}
-      : { borderColor: "rgba(245,197,24,0.30)", background: "rgba(245,197,24,0.05)" };
+    confirmStatus === "delivered" ? { color: "#8fd6f7", borderColor: "rgba(88,199,244,.34)", background: "rgba(88,199,244,.06)" }
+    : confirmStatus === "failed" || confirmStatus === "unknown" ? {}
+    : { color: "#f9d64a", borderColor: "rgba(245,197,24,0.30)", background: "rgba(245,197,24,0.05)" };
 
   return (
     <div className="space-y-3">
@@ -979,7 +823,8 @@ function ResultRow({
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-emerald-300 hover:text-emerald-200 font-mono break-all"
+        className="text-xs font-mono break-all"
+        style={{ color: GOLD_TEXT }}
       >
         {value} ↗
       </a>
