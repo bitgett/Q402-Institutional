@@ -57,9 +57,11 @@ export function AgenticWalletStakeModal({
       return;
     }
     setBusy(true);
-    // "max" (stake only) is resolved server-side to the wallet's exact Q
-    // balance; the user signs the literal "max" so the challenge matches.
+    // "max" (stake only): the user signs "max" PLUS a numeric cap = the balance
+    // they see right now. The server stakes min(on-chain balance, cap), so a
+    // deposit arriving after sign-time can never stake more than was consented.
     const sendAmount = stakeMax ? "max" : amount.trim();
+    const cap = stakeMax ? String(maxAvail) : null;
     try {
       // Intent MUST equal the server's requireIntentAuth rebuild (string values).
       const intent: Record<string, string> = {
@@ -67,6 +69,7 @@ export function AgenticWalletStakeModal({
         action: mode,
         stakeType: String(mode === "stake" ? stakeType : 0),
         amount: sendAmount,
+        ...(cap ? { cap } : {}),
       };
       const auth = await getActionAuth(ownerAddress, "agentic.stake", intent, signMessage);
       if (!auth) {
@@ -84,6 +87,7 @@ export function AgenticWalletStakeModal({
           action: mode,
           ...(mode === "stake" ? { stakeType } : {}),
           amount: sendAmount,
+          ...(cap ? { cap } : {}),
         }),
       });
       if (res.status === 401) {
