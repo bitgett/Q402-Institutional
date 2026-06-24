@@ -12,6 +12,39 @@ import { privateKeyToAccount } from "viem/accounts";
 import { loadRelayerKey } from "./relayer-key";
 import { isChainDisabled } from "./chain-status";
 
+// ── Relayer nonce-collision retry ─────────────────────────────────────────────
+// The relayer EOA is shared across every settlement. When several type-4 TXs
+// from it broadcast near-simultaneously (a batch's parallel rows, or two users
+// settling at once), each sendTransaction with no pinned nonce reads the same
+// eth_getTransactionCount(relayer,'pending') and they collide — the node keeps
+// one and rejects the rest with "nonce too low" / "replacement underpriced" /
+// "already known". Those are TRANSIENT: retrying refetches 'pending' (now past
+// the winner already sitting in the mempool) and lands a fresh nonce. We retry
+// ONLY on these nonce-race errors, with randomized backoff so concurrent
+// siblings de-sync their next refetch instead of colliding again in lockstep.
+// Safe against double-spend: the inner transferWithAuthorization is pinned to a
+// single-use witness nonce (usedNonces), so even a rejected-but-somehow-
+// broadcast TX would revert at the contract rather than pay twice. A rejected
+// attempt never enters the mempool, so the row broadcasts at most once.
+const NONCE_RACE_RE =
+  /nonce too low|replacement transaction underpriced|replacement underpriced|already known|known transaction|nonce has already been used|tx already in mempool|invalid nonce|OldNonce/i;
+
+async function sendWithNonceRetry(send: () => Promise<Hex>, maxAttempts = 6): Promise<Hex> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await send();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!NONCE_RACE_RE.test(msg)) throw e; // a real failure — surface immediately
+      lastErr = e;
+      const backoff = 100 + Math.floor(Math.random() * 250) * (attempt + 1);
+      await new Promise((r) => setTimeout(r, backoff));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr ?? "nonce retry exhausted"));
+}
+
 // ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
 // All 11 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad / scroll / arbitrum / base) default to EIP-7702 Type 4 TXs.
 // X Layer additionally supports EIP-3009 as a USDC-only fallback.
@@ -453,22 +486,24 @@ export async function settlePaymentXLayerEIP7702(params: XLayerEIP7702PayParams)
     });
 
     // EIP-7702 Type 4 TX: to = owner's EOA, authorizationList delegates impl code
-    const txHash = await walletClient.sendTransaction({
-      chain: null,
-      to: params.owner,
-      data: callData,
-      gas: BigInt(300000),
-      authorizationList: [
-        {
-          chainId: params.authorization.chainId,
-          address: params.authorization.address,
-          nonce: params.authorization.nonce,
-          yParity: params.authorization.yParity,
-          r: params.authorization.r,
-          s: params.authorization.s,
-        },
-      ],
-    });
+    const txHash = await sendWithNonceRetry(() =>
+      walletClient.sendTransaction({
+        chain: null,
+        to: params.owner,
+        data: callData,
+        gas: BigInt(300000),
+        authorizationList: [
+          {
+            chainId: params.authorization.chainId,
+            address: params.authorization.address,
+            nonce: params.authorization.nonce,
+            yParity: params.authorization.yParity,
+            r: params.authorization.r,
+            s: params.authorization.s,
+          },
+        ],
+      }),
+    );
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
     const gasUsed  = receipt.gasUsed        ?? 0n;
@@ -621,22 +656,24 @@ export async function settlePayment(params: PayParams): Promise<SettleResult> {
     // EIP-7702 Type 4 transaction
     // The `to` is the owner's EOA; the authorizationList delegates the impl
     // code to the owner's EOA for this transaction.
-    const txHash = await walletClient.sendTransaction({
-      chain: null,
-      to: params.owner,        // call the owner's EOA (which now runs impl code)
-      data: callData,
-      gas: BigInt(300000),
-      authorizationList: [
-        {
-          chainId: params.authorization.chainId,
-          address: params.authorization.address,
-          nonce: params.authorization.nonce,
-          yParity: params.authorization.yParity,
-          r: params.authorization.r,
-          s: params.authorization.s,
-        },
-      ],
-    });
+    const txHash = await sendWithNonceRetry(() =>
+      walletClient.sendTransaction({
+        chain: null,
+        to: params.owner,        // call the owner's EOA (which now runs impl code)
+        data: callData,
+        gas: BigInt(300000),
+        authorizationList: [
+          {
+            chainId: params.authorization.chainId,
+            address: params.authorization.address,
+            nonce: params.authorization.nonce,
+            yParity: params.authorization.yParity,
+            r: params.authorization.r,
+            s: params.authorization.s,
+          },
+        ],
+      }),
+    );
 
     // Wait for receipt
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
