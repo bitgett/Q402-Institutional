@@ -775,6 +775,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
     note: string;
     archived: boolean;
     isDefault: boolean;
+    num: number;
   }> = demoMode
     ? DEMO.wallets.map((w, i) => ({
         walletId: w.walletId,
@@ -784,6 +785,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
         note: w.note,
         archived: false,
         isDefault: i === 0,
+        num: i + 1,
       }))
     : (wallets ?? []).map((w, i) => ({
         walletId: w.walletId,
@@ -799,6 +801,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
               : "Managed wallet",
         archived: w.deletedAt != null,
         isDefault: w.walletId === wallets?.[0]?.walletId,
+        num: i + 1,
       }));
 
   // Active-wallet view model (identity + balance).
@@ -866,23 +869,26 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                   style={{ ...styles.walletItem, ...(isActive ? styles.walletItemActive : null) }}
                   title={w.address}
                 >
-                  <div style={styles.walletName}>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: isActive ? v2.text : "#9aa4b2" }}>
-                      {w.label ?? "Agent wallet"}
-                    </span>
-                    {isActive ? (
-                      <span style={styles.viewingBadge}>
-                        <span style={styles.viewDot} /> Viewing
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600, fontSize: 13, color: isActive ? v2.text : "#9aa4b2" }}>
+                        {w.label ?? `Agent wallet ${w.num}`}
                       </span>
-                    ) : w.archived ? (
-                      <span style={styles.archBadge}>Archived</span>
-                    ) : null}
+                      {isActive ? (
+                        <span style={styles.viewingBadge}>
+                          <span style={styles.viewDot} /> Viewing
+                        </span>
+                      ) : w.archived ? (
+                        <span style={styles.archBadge}>Archived</span>
+                      ) : null}
+                    </span>
+                    <span style={{ font: `600 15px ${displayFont}`, letterSpacing: "-.03em", color: isActive ? v2.text : v2.muted, flexShrink: 0 }}>
+                      {w.balanceUsd != null ? fmtUsd(w.balanceUsd) : "$—"}
+                    </span>
                   </div>
-                  <div style={styles.addr}>{shortAddr(w.address)}</div>
-                  <div style={styles.walletBal}>
-                    {w.balanceUsd != null ? fmtUsd(w.balanceUsd) : "$—"}
+                  <div style={{ fontSize: fs.label, color: v2.muted2, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {shortAddr(w.address)} · {w.note}
                   </div>
-                  <div style={styles.walletNote}>{w.note}</div>
                 </button>
               );
             })
@@ -1924,10 +1930,10 @@ const styles: Record<string, React.CSSProperties> = {
   // Col 1 — rail
   rail: { padding: 14, display: "flex", flexDirection: "column" },
   walletItem: {
-    marginTop: 11,
-    padding: 13,
+    marginTop: 7,
+    padding: "9px 11px",
     border: "1px solid transparent",
-    borderRadius: 14,
+    borderRadius: 11,
     cursor: "pointer",
     textAlign: "left",
     background: "none",
