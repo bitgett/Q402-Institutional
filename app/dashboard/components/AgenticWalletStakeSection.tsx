@@ -105,9 +105,10 @@ export function AgenticWalletStakeSection({
       <div className="flex items-center gap-2.5 mb-3">
         <span
           aria-hidden
-          style={{ width: 26, height: 26, borderRadius: 8, display: "grid", placeItems: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#8fd6f7", background: "rgba(88,199,244,.10)", border: "1px solid rgba(88,199,244,.28)" }}
+          style={{ width: 26, height: 26, borderRadius: 8, display: "grid", placeItems: "center", flexShrink: 0, overflow: "hidden", background: "rgba(247,202,22,.10)", border: "1px solid rgba(247,202,22,.26)" }}
         >
-          Q
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logos/quack.svg" alt="" width={16} height={16} style={{ display: "block" }} />
         </span>
         <div className="min-w-0 leading-tight">
           <div className="text-[15px] font-semibold text-white/90">Q Staking</div>

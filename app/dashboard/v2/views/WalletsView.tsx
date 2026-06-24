@@ -54,7 +54,7 @@ import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
 import type { AgenticWalletPublic } from "@/app/dashboard/components/AgenticWalletTab";
 import { AgenticWalletEarnSection } from "@/app/dashboard/components/AgenticWalletEarnSection";
-import { AgenticWalletStakeSection } from "@/app/dashboard/components/AgenticWalletStakeSection";
+import { AgenticWalletStakeModal } from "@/app/dashboard/components/AgenticWalletStakeModal";
 import { AgenticWalletRecurringSection } from "@/app/dashboard/components/AgenticWalletRecurringSection";
 import { RequestComposerModal } from "./RequestComposerModal";
 import { AgenticWalletSendModal } from "@/app/dashboard/components/AgenticWalletSendModal";
@@ -377,6 +377,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
 
   // Modal open flags — each opens an EXISTING self-authing modal.
   const [sendOpen, setSendOpen] = useState(false);
+  const [stakeOpen, setStakeOpen] = useState(false);
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
   const [bridgeOpen, setBridgeOpen] = useState(false);
@@ -589,6 +590,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
   // wallet — every open modal / picker / bucket resets when activeId changes.
   useEffect(() => {
     setSendOpen(false);
+    setStakeOpen(false);
     setReceiveOpen(false);
     setBatchOpen(false);
     setBridgeOpen(false);
@@ -1130,6 +1132,8 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                           padding: "2px 8px",
                         }}
                       >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/logos/quack.svg" alt="" width={13} height={13} style={{ display: "block", flexShrink: 0 }} />
                         {vmQuack.toLocaleString(undefined, { maximumFractionDigits: 2 })} Q
                       </span>
                     )}
@@ -1218,6 +1222,20 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                   >
                     Withdraw
                     <small style={styles.actionSmall}>Sweep out</small>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={demoMode || archived}
+                    onClick={() => setStakeOpen(true)}
+                    title={demoMode ? "Connect your wallet" : "Lock Q into QuackAiStake on BNB, gasless"}
+                    style={{ ...styles.action, ...(demoMode || archived ? styles.actionDisabled : null) }}
+                  >
+                    Stake
+                    <small style={{ ...styles.actionSmall, display: "flex", alignItems: "center", gap: 4 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src="/logos/quack.svg" alt="" width={11} height={11} style={{ flexShrink: 0 }} />
+                      Earn Q
+                    </small>
                   </button>
                 </div>
 
@@ -1407,19 +1425,6 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       )}
                     </div>
                   </div>
-
-                  {/* Q Staking — gasless Q lock into QuackAiStake (BNB). Own card
-                      at the foot of the wallet overview; real wallets only (needs
-                      an owner signature). */}
-                  {!demoMode && activeWallet && (
-                    <div style={{ ...subCard(13), padding: 14, marginTop: 11 }}>
-                      <AgenticWalletStakeSection
-                        ownerAddress={addr ?? activeWallet.ownerAddr}
-                        walletId={activeWallet.walletId}
-                        signMessage={signMessage}
-                      />
-                    </div>
-                  )}
                 </section>
 
                 {/* Recent activity — real settlements scoped to this wallet
@@ -1742,6 +1747,14 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
           scope={scope}
           agentWallet={activeWallet ? { address: activeWallet.address, label: activeWallet.label } : undefined}
           onClose={() => setComposeOpen(false)}
+        />
+      )}
+      {activeWallet && stakeOpen && (
+        <AgenticWalletStakeModal
+          ownerAddress={addr ?? activeWallet.ownerAddr}
+          walletId={activeWallet.walletId}
+          signMessage={signMessage}
+          onClose={() => setStakeOpen(false)}
         />
       )}
       {activeWallet && sendOpen && (
@@ -2197,7 +2210,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   actions: {
     display: "grid",
-    gridTemplateColumns: "1.45fr 1fr 1fr 1fr 1fr",
+    gridTemplateColumns: "1.45fr 1fr 1fr 1fr 1fr 1fr",
     gap: 8,
     marginTop: 20,
     position: "relative",
