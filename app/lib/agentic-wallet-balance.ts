@@ -42,6 +42,10 @@ export interface ChainBalance {
   chain: AgenticChainKey;
   usdc: TokenBalance | null;
   usdt: TokenBalance | null;
+  /** QuackAI Q token (BNB-only). Tracked in TOKEN UNITS (`amount`), NOT USD —
+   *  Q is not 1:1 pegged, so it is deliberately excluded from `totalUsd`.
+   *  null on chains without Q configured or when the read failed. */
+  quack: { raw: string; amount: number } | null;
   /** Sum of usdc + usdt usd. `null` when the chain RPC failed (so the
    *  UI can render "—" instead of misleading "$0"). */
   totalUsd: number | null;
@@ -65,6 +69,10 @@ export interface AgenticBalances {
    *  the keystore. */
   unreachableChains: string[];
   perChain: ChainBalance[];
+  /** Aggregate Q token balance across chains (TOKEN UNITS, not USD). Q is
+   *  BNB-only today so this is effectively the BNB Q balance, but kept as a
+   *  sum for forward-compat. Separate from totalUsd by design (not pegged). */
+  quackTotal: number;
 }
 
 function tokenBalanceFromRaw(raw: bigint, decimals: number): TokenBalance {
@@ -117,7 +125,7 @@ async function readChainBalances(
       // under USDT and leave USDC null so
       // the UI doesn't double-count.
       const tb = tokenBalanceFromRaw(raw, cfg.tokens.USDT.decimals);
-      return { chain, usdc: null, usdt: tb, totalUsd: tb.usd };
+      return { chain, usdc: null, usdt: tb, quack: null, totalUsd: tb.usd };
     }
 
     const reads = [
@@ -134,14 +142,28 @@ async function readChainBalances(
         args: [walletAddr] as const,
       },
     ];
+    // Q (QuackAI token) is configured on BNB only — read it alongside the
+    // stablecoins when present. It is NOT 1:1 USD-pegged, so it is tracked in
+    // token units (`quack`) and never folded into totalUsd; USD valuation
+    // comes from the Q/USDT TWAP at spend time.
+    const qCfg = cfg.tokens.Q;
+    if (qCfg) {
+      reads.push({
+        address: qCfg.address,
+        abi: ERC20_BALANCE_OF_ABI,
+        functionName: "balanceOf" as const,
+        args: [walletAddr] as const,
+      });
+    }
 
     // viem.multicall falls back to N individual calls if multicall3 isn't
-    // deployed on the chain. The user pays one RPC instead of two on the
+    // deployed on the chain. The user pays one RPC instead of N on the
     // happy path and the same as today on the fallback path.
     const results = await client.multicall({ contracts: reads, allowFailure: true });
 
     const usdcResult = results[0];
     const usdtResult = results[1];
+    const quackResult = qCfg ? results[2] : null;
 
     const usdc =
       usdcResult.status === "success"
@@ -150,6 +172,15 @@ async function readChainBalances(
     const usdt =
       usdtResult.status === "success"
         ? tokenBalanceFromRaw(usdtResult.result as bigint, cfg.tokens.USDT.decimals)
+        : null;
+    // Reuse tokenBalanceFromRaw's raw->amount math (its `usd` field IS the
+    // token amount); relabel as `amount` so nothing reads Q as USD.
+    const quack =
+      qCfg && quackResult && quackResult.status === "success"
+        ? (() => {
+            const b = tokenBalanceFromRaw(quackResult.result as bigint, qCfg.decimals);
+            return { raw: b.raw, amount: b.usd };
+          })()
         : null;
 
     if (!usdc && !usdt) {
@@ -164,6 +195,7 @@ async function readChainBalances(
         chain,
         usdc: null,
         usdt: null,
+        quack,
         totalUsd: null,
         error:
           (usdcResult.status === "failure" ? errorMessage(usdcResult.error) : "") ||
@@ -176,6 +208,7 @@ async function readChainBalances(
       chain,
       usdc,
       usdt,
+      quack,
       totalUsd: (usdc?.usd ?? 0) + (usdt?.usd ?? 0),
     };
   } catch (e) {
@@ -183,6 +216,7 @@ async function readChainBalances(
       chain,
       usdc: null,
       usdt: null,
+      quack: null,
       totalUsd: null,
       error: e instanceof Error ? e.message : String(e),
     };
@@ -209,6 +243,8 @@ export async function fetchAgenticBalances(walletAddr: string): Promise<AgenticB
   const chains = Object.keys(AGENTIC_CHAINS) as AgenticChainKey[];
   const perChain = await Promise.all(chains.map((c) => readChainBalances(c, addr)));
   const totalUsd = perChain.reduce((sum, c) => sum + (c.totalUsd ?? 0), 0);
+  // Q is token-unit, not USD — summed separately and kept out of totalUsd.
+  const quackTotal = perChain.reduce((sum, c) => sum + (c.quack?.amount ?? 0), 0);
   const unreachableChains = perChain
     .filter((c) => c.totalUsd === null)
     .map((c) => c.chain);
@@ -217,6 +253,7 @@ export async function fetchAgenticBalances(walletAddr: string): Promise<AgenticB
     totalUsd,
     unreachableChains,
     perChain,
+    quackTotal,
   };
 }
 
