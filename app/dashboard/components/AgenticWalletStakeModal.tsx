@@ -25,21 +25,28 @@ export function AgenticWalletStakeModal({
   walletId,
   signMessage,
   onClose,
+  quackBalance,
 }: {
   ownerAddress: string;
   walletId: string;
   signMessage: (message: string) => Promise<string | null>;
   onClose: () => void;
+  /** Wallet's available Q balance (token units) — powers the stake Max button. */
+  quackBalance?: number;
 }) {
   const [mode, setMode] = useState<"stake" | "unstake">("stake");
   const [stakeType, setStakeType] = useState(0);
   const [amount, setAmount] = useState("");
+  const [useMax, setUseMax] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<{ action: string; txHash: string } | null>(null);
 
-  const amountValid = /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount.trim()) > 0;
+  const maxAvail = quackBalance ?? 0;
+  const stakeMax = mode === "stake" && useMax;
+  const amountValid = stakeMax ? maxAvail > 0 : /^\d+(\.\d+)?$/.test(amount.trim()) && Number(amount.trim()) > 0;
   const tier = TIERS.find((t) => t.stakeType === stakeType)!;
+  const fmtQ = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 
   async function submit() {
     if (busy) return;
@@ -50,13 +57,16 @@ export function AgenticWalletStakeModal({
       return;
     }
     setBusy(true);
+    // "max" (stake only) is resolved server-side to the wallet's exact Q
+    // balance; the user signs the literal "max" so the challenge matches.
+    const sendAmount = stakeMax ? "max" : amount.trim();
     try {
       // Intent MUST equal the server's requireIntentAuth rebuild (string values).
       const intent: Record<string, string> = {
         walletId,
         action: mode,
         stakeType: String(mode === "stake" ? stakeType : 0),
-        amount: amount.trim(),
+        amount: sendAmount,
       };
       const auth = await getActionAuth(ownerAddress, "agentic.stake", intent, signMessage);
       if (!auth) {
@@ -73,7 +83,7 @@ export function AgenticWalletStakeModal({
           walletId,
           action: mode,
           ...(mode === "stake" ? { stakeType } : {}),
-          amount: amount.trim(),
+          amount: sendAmount,
         }),
       });
       if (res.status === 401) {
@@ -92,6 +102,7 @@ export function AgenticWalletStakeModal({
       }
       setOkMsg({ action: mode === "stake" ? "Staked" : "Unstaked", txHash: String(data.txHash ?? "") });
       setAmount("");
+      setUseMax(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -112,7 +123,11 @@ export function AgenticWalletStakeModal({
       closeDisabled={busy}
       footer={
         <PrimaryCTA onClick={submit} disabled={!amountValid} busy={busy}>
-          {mode === "stake" ? `Stake${amountValid ? ` ${amount.trim()} Q` : " Q"}` : `Unstake${amountValid ? ` ${amount.trim()} Q` : " Q"}`}
+          {mode === "stake"
+            ? stakeMax
+              ? `Stake all Q${maxAvail > 0 ? ` (${fmtQ(maxAvail)})` : ""}`
+              : `Stake${amountValid ? ` ${amount.trim()} Q` : " Q"}`
+            : `Unstake${amountValid ? ` ${amount.trim()} Q` : " Q"}`}
         </PrimaryCTA>
       }
     >
@@ -120,7 +135,7 @@ export function AgenticWalletStakeModal({
         <Segmented
           cols={2}
           value={mode}
-          onChange={(m) => { setMode(m); setErr(null); setOkMsg(null); }}
+          onChange={(m) => { setMode(m); setUseMax(false); setErr(null); setOkMsg(null); }}
           options={[
             { value: "stake", label: "Stake" },
             { value: "unstake", label: "Unstake" },
@@ -139,20 +154,48 @@ export function AgenticWalletStakeModal({
         </Field>
       )}
 
-      <Field label={mode === "stake" ? "Amount to stake" : "Amount to unstake"} htmlFor="stake-amount">
-        <input
-          id="stake-amount"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="0.00"
-          inputMode="decimal"
-          style={inputStyle()}
-        />
+      <Field
+        label={mode === "stake" ? "Amount to stake" : "Amount to unstake"}
+        htmlFor="stake-amount"
+        hint={mode === "stake" && quackBalance != null ? `Balance ${fmtQ(maxAvail)} Q` : undefined}
+      >
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            id="stake-amount"
+            value={stakeMax ? fmtQ(maxAvail) : amount}
+            onChange={(e) => { setAmount(e.target.value); setUseMax(false); }}
+            placeholder="0.00"
+            inputMode="decimal"
+            disabled={stakeMax}
+            style={{ ...inputStyle(), flex: 1, ...(stakeMax ? { opacity: 0.65 } : {}) }}
+          />
+          {mode === "stake" && (
+            <button
+              type="button"
+              onClick={() => { setUseMax((v) => !v); setErr(null); }}
+              disabled={maxAvail <= 0}
+              className="transition-colors disabled:opacity-35 disabled:cursor-not-allowed"
+              style={{
+                flexShrink: 0,
+                padding: "0 14px",
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: maxAvail > 0 ? "pointer" : "not-allowed",
+                color: stakeMax ? "#101722" : "#f9d64a",
+                background: stakeMax ? "#F5C518" : "rgba(247,202,22,.12)",
+                border: `1px solid ${stakeMax ? "#F5C518" : "rgba(247,202,22,.34)"}`,
+              }}
+            >
+              Max
+            </button>
+          )}
+        </div>
       </Field>
 
       {mode === "stake" && (
         <div style={{ fontSize: 12, color: "rgba(255,255,255,.42)", lineHeight: 1.5 }}>
-          Locks {amount.trim() || "—"} Q for {tier.lockDays} days at ~{tier.aprPct}% APR. Gasless — the relayer pays.
+          Locks {stakeMax ? `all your Q (${fmtQ(maxAvail)})` : amount.trim() || "—"} {stakeMax ? "" : "Q "}for {tier.lockDays} days at ~{tier.aprPct}% APR. Gasless — the relayer pays.
         </div>
       )}
 

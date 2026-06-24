@@ -1776,6 +1776,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
           walletId={activeWallet.walletId}
           signMessage={signMessage}
           onClose={() => setStakeOpen(false)}
+          quackBalance={vmQuack}
         />
       )}
       {activeWallet && sendOpen && (

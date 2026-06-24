@@ -30,8 +30,10 @@ import {
   signStakeAction,
   stakeImplAddress,
   STAKE_TIERS,
+  Q_TOKEN,
   type StakeAction,
 } from "@/app/lib/staking/sign";
+import { AGENTIC_CHAINS } from "@/app/lib/agentic-wallet-sign";
 import {
   settleStakeAction,
   stakeFacilitator,
@@ -82,10 +84,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (action !== "stake" && action !== "unstake") {
     return NextResponse.json({ error: "INVALID_ACTION", message: 'action must be "stake" or "unstake".' }, { status: 400 });
   }
-  if (!isPositiveDecimalString(body.amount)) {
+  // amount: a positive decimal OR the sentinel "max" (stake-only — resolved to
+  // the wallet's full Q balance server-side just before signing, so no
+  // JS-number precision/dust risk).
+  const isMax = body.amount === "max";
+  if (!isMax && !isPositiveDecimalString(body.amount)) {
     return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
   }
-  const amount = body.amount;
+  if (isMax && action !== "stake") {
+    return NextResponse.json({ error: "MAX_UNSTAKE_UNSUPPORTED", message: 'amount "max" is only supported for stake. Enter an explicit amount to unstake.' }, { status: 400 });
+  }
+  const amount = body.amount as string;
   const stakeType = action === "stake" ? Number(body.stakeType ?? 0) : 0;
   if (action === "stake" && !STAKE_TIERS.some((t) => t.stakeType === stakeType)) {
     return NextResponse.json(
@@ -206,6 +215,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "key_decrypt_failed" }, { status: 503 });
   }
 
+  // Resolve "max" -> the wallet's exact full Q balance at settle time (stake
+  // only). Reading on-chain (not a cached UI number) keeps it dust-free: the
+  // impl's exact-approve + balance-delta assert demand an amount <= balance.
+  let settleAmount = amount;
+  if (isMax) {
+    try {
+      const provider = new ethers.JsonRpcProvider(AGENTIC_CHAINS.bnb.rpc);
+      const q = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
+      const bal = (await q.balanceOf(wallet.address)) as bigint;
+      if (bal <= 0n) {
+        await cleanup();
+        return NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 });
+      }
+      settleAmount = ethers.formatUnits(bal, 18);
+    } catch (e) {
+      await cleanup();
+      return NextResponse.json({ error: "Q_BALANCE_READ_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
+    }
+  }
+
   let result;
   try {
     const signed = await signStakeAction({
@@ -214,7 +243,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       chain: "bnb",
       action: action as StakeAction,
       stakeType,
-      amount,
+      amount: settleAmount,
       facilitator,
     });
     result = await settleStakeAction(signed);
@@ -252,7 +281,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     action,
     chain: "bnb",
     stakeType: action === "stake" ? stakeType : undefined,
-    amount,
+    amount: settleAmount,
     txHash: result.txHash,
     walletId,
   });
