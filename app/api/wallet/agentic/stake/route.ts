@@ -300,7 +300,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     result = await settleStakeAction(signed);
   } catch (e) {
     await cleanup();
-    return NextResponse.json({ error: "stake_sign_failed", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
+    // This path handled a decrypted key — keep the raw error server-side only and
+    // return a fixed message (signStakeAction's throws are typed codes; never echo
+    // an arbitrary error from a key-touching path to the client).
+    console.error("[agentic/stake] sign/settle failed:", e);
+    return NextResponse.json({ error: "stake_sign_failed", message: "Could not sign or settle the staking action. Retry shortly." }, { status: 502 });
   }
 
   if (result.uncertain) {
