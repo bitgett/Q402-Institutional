@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ethers } from "ethers";
 import { requireAuth } from "@/app/lib/auth";
-import { getApiKeyRecord } from "@/app/lib/db";
+import { getApiKeyRecord, getSubscription, hasMultichainScope } from "@/app/lib/db";
 import { resolveWallet } from "@/app/lib/agentic-wallet";
 import { readStakePositions } from "@/app/lib/staking/positions";
 import { Q_TOKEN } from "@/app/lib/staking/sign";
@@ -33,7 +33,18 @@ async function ownerFromApiKey(apiKey: string | undefined): Promise<string | Nex
   if (!rec || !rec.active || rec.isSandbox) {
     return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
   }
-  return rec.address.toLowerCase();
+  const owner = rec.address.toLowerCase();
+  // Parity with the write route: reject a rotated-but-still-active key + a
+  // downgraded (non-Multichain) plan, so a revoked-by-rotation key can't keep
+  // reading the owner's stake positions / Q balance.
+  const sub = await getSubscription(owner);
+  if (apiKey !== sub?.apiKey) {
+    return NextResponse.json({ error: "STALE_API_KEY", message: "This apiKey is no longer the live multichain key. Rotate in your dashboard." }, { status: 401 });
+  }
+  if (!hasMultichainScope(sub)) {
+    return NextResponse.json({ error: "SUBSCRIPTION_REQUIRED", message: "Q staking reads require a paid Multichain plan." }, { status: 402 });
+  }
+  return owner;
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {

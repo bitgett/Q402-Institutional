@@ -31,8 +31,11 @@ function stakeDailyOpCap(): number {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 50;
 }
 
-/** Reserve one stake-op against the owner's daily cap (fail-OPEN on KV error —
- *  the lock + idempotency guard funds; this only bounds relayer gas abuse). */
+/** Reserve one stake-op against the owner's daily cap (fail-CLOSED on KV error.
+ *  A stake op can't proceed without KV anyway — the wallet-chain lock + the
+ *  idempotency SET NX both run on KV just before this and already 409/503 when
+ *  KV is down — so denying here adds no new false-negative, and it closes the
+ *  gas-rail bypass a fail-open would allow during a partial KV degradation.) */
 export async function chargeStakeOpBudget(owner: string): Promise<{ allowed: boolean; count: number; cap: number }> {
   const cap = stakeDailyOpCap();
   const dateUtc = new Date().toISOString().slice(0, 10);
@@ -41,7 +44,7 @@ export async function chargeStakeOpBudget(owner: string): Promise<{ allowed: boo
   try {
     count = await kv.incr(key);
   } catch {
-    return { allowed: true, count: 0, cap };
+    return { allowed: false, count: 0, cap };
   }
   if (count === 1) {
     try { await kv.expire(key, STAKE_OP_DAY_TTL_SEC); } catch { /* best-effort */ }
