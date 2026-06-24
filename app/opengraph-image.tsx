@@ -79,12 +79,9 @@ export default async function Image() {
             <div style={{ display: "flex", width: "32px", height: "4px", borderRadius: "2px", background: "#F5C518" }} />
             <span style={{ color: "#F5C518", fontSize: "25px", fontWeight: 600, letterSpacing: "4px" }}>AGENTIC WALLET</span>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", fontSize: "76px", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-3px" }}>
-            <span style={{ color: "#ffffff" }}>Gasless payments</span>
-            <div style={{ display: "flex" }}>
-              <span style={{ color: "#ffffff" }}>for</span>
-              <span style={{ color: "#F5C518", marginLeft: "21px" }}>AI agents</span>
-            </div>
+          <div style={{ display: "flex", alignItems: "baseline", fontSize: "60px", fontWeight: 800, letterSpacing: "-2px", whiteSpace: "nowrap" }}>
+            <span style={{ color: "#ffffff" }}>Gasless payments for</span>
+            <span style={{ color: "#F5C518", marginLeft: "17px" }}>AI agents</span>
           </div>
         </div>
       </div>
