@@ -32,6 +32,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
+import { quackAmountToUsd } from "@/app/lib/quack-price";
 import {
   decryptPrivateKey,
   isKeystoreReady,
@@ -284,7 +285,7 @@ async function resolveOwner(
   if (typeof body.signature === "string" && body.signature.length > 0) {
     if (
       !isAgenticChainKey(body.chain) ||
-      (body.token !== "USDC" && body.token !== "USDT") ||
+      (body.token !== "USDC" && body.token !== "USDT" && body.token !== "Q") ||
       !isHexAddress(body.to) ||
       !isPositiveDecimalString(body.amount) ||
       !body.walletId ||
@@ -366,8 +367,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (isChainDisabled(body.chain)) {
     return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
-  if (body.token !== "USDC" && body.token !== "USDT") {
+  if (body.token !== "USDC" && body.token !== "USDT" && body.token !== "Q") {
     return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
+  }
+  // Q (QuackAI token) is BNB-only. Reject early on any other chain so the
+  // caller gets a clear hint instead of a relay-time revert.
+  if (body.token === "Q" && body.chain !== "bnb") {
+    return NextResponse.json(
+      { error: "TOKEN_NOT_ON_CHAIN", message: "Q is only available on BNB Chain." },
+      { status: 400 },
+    );
   }
   if (!isHexAddress(body.to)) {
     return NextResponse.json({ error: "INVALID_RECIPIENT" }, { status: 400 });
@@ -455,6 +464,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const relaySource: "send" | "request" =
     trustedInternal && body.source === "request" ? "request" : "send";
 
+  // USD value of this transfer for ALL hook + limit checks. Stablecoins are
+  // 1:1; Q is priced via the Q/USDT TWAP. Fail CLOSED if Q can't be priced — an
+  // unpriced Q transfer must never slip past the USD spend limits. Nothing is
+  // claimed/charged yet here, so an early 503 needs no cleanup.
+  let amountUsd = Number(body.amount);
+  if (body.token === "Q") {
+    try {
+      amountUsd = await quackAmountToUsd(Number(body.amount));
+    } catch {
+      return NextResponse.json(
+        { error: "PRICE_UNAVAILABLE", message: "Could not price Q for the spend limit right now. Retry shortly." },
+        { status: 503 },
+      );
+    }
+  }
+
   // ── Q402 Hooks — beforeAuthorize ───────────────────────────────────────
   // Runs at the EARLIEST point we have (owner, walletId, recipient,
   // amount) — before the idempotency claim or any daily-limit charge.
@@ -469,7 +494,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     token: body.token,
     recipient: body.to.toLowerCase(),
     amount: body.amount,
-    amountUsd: Number(body.amount),
+    amountUsd,
     source: "send",
     params: trustedHookParams,
   });
@@ -503,7 +528,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       token: body.token,
       recipient: body.to.toLowerCase(),
       amount: body.amount,
-      amountUsd: Number(body.amount),
+      amountUsd,
       source: "send",
       params: trustedHookParams,
     });
@@ -679,7 +704,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await kv.del(idempotencyKey).catch(() => {});
   };
 
-  const numAmount = Number(body.amount);
+  // numAmount is the USD VALUE for every limit/budget/refund check below (Q
+  // priced via TWAP above; stablecoins 1:1). The on-chain transfer uses the
+  // human token amount (body.amount) via signAgenticPayment, not this.
+  const numAmount = amountUsd;
   if (!Number.isFinite(numAmount) || numAmount <= 0) {
     await releaseClaim();
     return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
