@@ -59,6 +59,10 @@ interface StakeBody {
   action?: string;
   stakeType?: number;
   amount?: string;
+  /** Signed numeric ceiling for amount:"max" — the balance the user saw at
+   *  sign time. The server stakes min(on-chain balance, cap), so it can never
+   *  exceed what the user actually consented to. */
+  cap?: string;
   walletId?: string;
 }
 
@@ -95,6 +99,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "MAX_UNSTAKE_UNSUPPORTED", message: 'amount "max" is only supported for stake. Enter an explicit amount to unstake.' }, { status: 400 });
   }
   const amount = body.amount as string;
+  // "max" must carry a numeric cap (the balance the user saw + signed) so the
+  // server stakes min(on-chain balance, cap) — never more than was consented.
+  if (isMax && !isPositiveDecimalString(body.cap)) {
+    return NextResponse.json({ error: "MAX_CAP_REQUIRED", message: 'amount "max" requires a numeric cap.' }, { status: 400 });
+  }
   const stakeType = action === "stake" ? Number(body.stakeType ?? 0) : 0;
   if (action === "stake" && !STAKE_TIERS.some((t) => t.stakeType === stakeType)) {
     return NextResponse.json(
@@ -128,7 +137,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       challenge: body.nonce ?? null,
       signature: body.signature ?? null,
       action: "agentic.stake",
-      intent: { walletId: requestedWalletId, action, stakeType: String(stakeType), amount },
+      intent: { walletId: requestedWalletId, action, stakeType: String(stakeType), amount, ...(isMax ? { cap: body.cap as string } : {}) },
     });
     if (typeof authResult !== "string") {
       return NextResponse.json({ error: authResult.error, code: authResult.code }, { status: authResult.status });
@@ -224,11 +233,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const provider = new ethers.JsonRpcProvider(AGENTIC_CHAINS.bnb.rpc);
       const q = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
       const bal = (await q.balanceOf(wallet.address)) as bigint;
-      if (bal <= 0n) {
+      // Cap at the user's signed ceiling: stake min(balance, cap) so a deposit
+      // arriving after sign-time can never inflate the stake past consent.
+      const capRaw = ethers.parseUnits(body.cap as string, 18);
+      const useRaw = bal < capRaw ? bal : capRaw;
+      if (useRaw <= 0n) {
         await cleanup();
         return NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 });
       }
-      settleAmount = ethers.formatUnits(bal, 18);
+      settleAmount = ethers.formatUnits(useRaw, 18);
     } catch (e) {
       await cleanup();
       return NextResponse.json({ error: "Q_BALANCE_READ_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });

@@ -151,7 +151,7 @@ export function ThemedSelect<V extends string>({
         className="w-full flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         style={{
           background: "#0B1626",
-          borderColor: open ? "rgba(74,222,128,0.40)" : "rgba(255,255,255,0.10)",
+          borderColor: open ? "rgba(247,202,22,0.40)" : "rgba(255,255,255,0.10)",
         }}
       >
         <span className="text-left flex-1 min-w-0 flex items-center gap-2">
@@ -206,9 +206,9 @@ export function ThemedSelect<V extends string>({
                 className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 style={{
                   background: isHighlight && !opt.disabled
-                    ? "rgba(74,222,128,0.10)"
+                    ? "rgba(247,202,22,0.10)"
                     : "transparent",
-                  color: isSelected ? "#86efac" : "#E2E8F0",
+                  color: isSelected ? "#f9d64a" : "#E2E8F0",
                 }}
               >
                 <span className="flex-1 min-w-0 flex items-center gap-2">
