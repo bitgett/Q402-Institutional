@@ -94,6 +94,9 @@ interface BalancePayload {
   asOf: number;
   totalUsd: number;
   perChain: ChainBucket[];
+  /** QuackAI Q token total in TOKEN UNITS (BNB-only). Separate from totalUsd
+   *  by design — Q is not 1:1 USD-pegged. Undefined on older server payloads. */
+  quackTotal?: number;
 }
 
 /** /api/transactions row — mirrors app/lib/db.ts RelayedTx (subset used here). */
@@ -499,6 +502,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
             asOf: data.balances.asOf,
             totalUsd: data.balances.totalUsd,
             perChain: data.balances.perChain ?? [],
+            quackTotal: data.balances.quackTotal ?? 0,
           };
           setBalances((prev) => ({ ...prev, [wallet.walletId]: next }));
         }
@@ -797,6 +801,9 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
   const vmLabel = demoMode ? DEMO.wallets[0].label : (activeWallet?.label ?? "Agent wallet");
   const vmAddress = demoMode ? DEMO.wallets[0].address : (activeWallet?.address ?? "");
   const vmTotalUsd = demoMode ? DEMO.wallets[0].balanceUsd : activeBalance?.totalUsd;
+  // Q is token-unit (not USD) so it rides next to the total as its own chip,
+  // never folded into the portfolio $ figure.
+  const vmQuack = demoMode ? 0 : activeBalance?.quackTotal ?? 0;
   const agentNum = demoMode ? DEMO.wallets[0].erc8004 : agentIdFromTag(activeWallet?.erc8004AgentId);
 
   // Capital allocation segments.
@@ -1104,6 +1111,27 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                     <strong style={styles.heroBalValue}>
                       {!demoMode && activeBalanceLoading && !activeBalance ? "…" : fmtUsd(vmTotalUsd)}
                     </strong>
+                    {vmQuack > 0 && (
+                      <span
+                        title="QuackAI Q token balance on BNB. Held in token units (not USD-valued)."
+                        style={{
+                          marginTop: 4,
+                          alignSelf: "flex-start",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: "#8fd6f7",
+                          background: "rgba(88,199,244,.10)",
+                          border: "1px solid rgba(88,199,244,.28)",
+                          borderRadius: 6,
+                          padding: "2px 8px",
+                        }}
+                      >
+                        {vmQuack.toLocaleString(undefined, { maximumFractionDigits: 2 })} Q
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => activeWallet && fetchBalance(activeWallet, { active: true, force: true })}
