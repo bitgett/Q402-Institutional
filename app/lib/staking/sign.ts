@@ -63,7 +63,9 @@ const UNSTAKE_AUTH_TYPES = {
     { name: "owner", type: "address" },
     { name: "facilitator", type: "address" },
     { name: "stakeContract", type: "address" },
-    { name: "amount", type: "uint256" },
+    // ith: 0-based record index to exit (QuackAiStake.exit(ith), requires ith>0).
+    // Per-record, all-or-nothing — NOT an amount.
+    { name: "ith", type: "uint256" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
   ],
@@ -85,10 +87,13 @@ export interface SignStakeParams {
   expectedOwner: Address;
   chain: AgenticChainKey;
   action: StakeAction;
-  /** Tier 0-5 (stake only; ignored for unstake). */
+  /** Tier 0-3 (stake only; ignored for unstake). */
   stakeType: number;
-  /** Human Q decimal string. */
-  amount: string;
+  /** Human Q decimal string (stake only). */
+  amount?: string;
+  /** 0-based record index to exit (unstake only; MUST be >= 1 — index 0 is
+   *  un-exitable on QuackAiStake). */
+  ith?: number;
   facilitator: Address;
   authorizationNonce?: number;
   deadlineSeconds?: number;
@@ -103,8 +108,12 @@ export interface SignedStakeAction {
   fromAddr: Address;
   /** The facilitator bound into the witness — the relayer MUST match it. */
   signedFacilitator: Address;
+  /** stake: the human Q amount; unstake: "" (the realized amount is on-chain). */
   amount: string;
+  /** stake: raw staked amount; unstake: 0n. */
   amountRaw: bigint;
+  /** unstake: the 0-based record index bound into the witness; undefined for stake. */
+  ith?: number;
   nonceUint: bigint;
   deadline: bigint;
   witnessSig: Hex;
@@ -122,13 +131,21 @@ export async function signStakeAction(p: SignStakeParams): Promise<SignedStakeAc
   const fromAddr = account.address as Address;
   if (fromAddr.toLowerCase() !== p.expectedOwner.toLowerCase()) throw new Error("SIGNER_OWNER_MISMATCH");
 
-  let amountRaw: bigint;
-  try {
-    amountRaw = parseUnitsStrict(p.amount, Q_DECIMALS);
-  } catch {
-    throw new Error("AMOUNT_PRECISION_TOO_HIGH");
+  // stake binds an amount; unstake binds a record index (ith >= 1).
+  let amountRaw = 0n;
+  let ith = 0;
+  if (p.action === "stake") {
+    try {
+      amountRaw = parseUnitsStrict(p.amount ?? "", Q_DECIMALS);
+    } catch {
+      throw new Error("AMOUNT_PRECISION_TOO_HIGH");
+    }
+    if (amountRaw <= 0n) throw new Error("INVALID_AMOUNT");
+  } else {
+    ith = Number(p.ith);
+    // index 0 is permanently un-exitable on QuackAiStake (exit requires ith>0).
+    if (!Number.isInteger(ith) || ith < 1) throw new Error("INVALID_ITH");
   }
-  if (amountRaw <= 0n) throw new Error("INVALID_AMOUNT");
 
   const nonceUint = randomUint256Nonce();
   const deadline = BigInt(Math.floor(Date.now() / 1000) + (p.deadlineSeconds ?? DEFAULT_DEADLINE_AHEAD));
@@ -157,7 +174,7 @@ export async function signStakeAction(p: SignStakeParams): Promise<SignedStakeAc
   } else {
     const message = {
       owner: fromAddr, facilitator: p.facilitator, stakeContract: QUACK_STAKE,
-      amount: amountRaw, nonce: nonceUint, deadline,
+      ith: BigInt(ith), nonce: nonceUint, deadline,
     };
     witnessSig = (await walletClient.signTypedData({ domain, types: UNSTAKE_AUTH_TYPES, primaryType: "UnstakeAuthorization", message })) as Hex;
   }
@@ -181,8 +198,9 @@ export async function signStakeAction(p: SignStakeParams): Promise<SignedStakeAc
     stakeType: p.stakeType,
     fromAddr,
     signedFacilitator: p.facilitator,
-    amount: p.amount,
+    amount: p.action === "stake" ? (p.amount ?? "") : "",
     amountRaw,
+    ith: p.action === "unstake" ? ith : undefined,
     nonceUint,
     deadline,
     witnessSig,

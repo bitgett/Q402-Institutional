@@ -165,7 +165,7 @@ export default function AgentsPage() {
           <Section index="03" label="Capabilities" title="Well past a single payment.">
             <CapabilityGrid />
           </Section>
-          <Section index="04" label="29 tools" title="The whole surface, one package.">
+          <Section index="04" label="30 tools" title="The whole surface, one package.">
             <InstallBlock />
             <ToolIndex />
             <ChainStrip />

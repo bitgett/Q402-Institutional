@@ -27,8 +27,9 @@ describe("staking witness typehash drift", () => {
 
   it("UnstakeAuthorization off-chain types == the contract typehash string", () => {
     const s = typeString("UnstakeAuthorization", __test.UNSTAKE_AUTH_TYPES.UnstakeAuthorization);
+    // Unstake binds the record index `ith` (QuackAiStake.exit(ith)), not an amount.
     expect(s).toBe(
-      "UnstakeAuthorization(address owner,address facilitator,address stakeContract,uint256 amount,uint256 nonce,uint256 deadline)",
+      "UnstakeAuthorization(address owner,address facilitator,address stakeContract,uint256 ith,uint256 nonce,uint256 deadline)",
     );
     expect(sol).toContain(`"${s}"`);
   });
