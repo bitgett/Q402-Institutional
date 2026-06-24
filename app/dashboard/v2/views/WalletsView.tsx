@@ -870,24 +870,22 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                   title={w.address}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600, fontSize: 13, color: isActive ? v2.text : "#9aa4b2" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                      {isActive && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff", boxShadow: "0 0 7px rgba(255,255,255,.7)", flexShrink: 0 }} />}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: isActive ? 700 : 600, fontSize: 13, color: isActive ? "#ffffff" : "#9aa4b2" }}>
                         {w.label ?? `Agent wallet ${w.num}`}
                       </span>
-                      {isActive ? (
-                        <span style={styles.viewingBadge}>
-                          <span style={styles.viewDot} /> Viewing
-                        </span>
-                      ) : w.archived ? (
-                        <span style={styles.archBadge}>Archived</span>
-                      ) : null}
+                      {w.archived && <span style={styles.archBadge}>Archived</span>}
                     </span>
-                    <span style={{ font: `600 15px ${displayFont}`, letterSpacing: "-.03em", color: isActive ? v2.text : v2.muted, flexShrink: 0 }}>
+                    <span style={{ font: `600 15px ${displayFont}`, letterSpacing: "-.03em", color: isActive ? "#ffffff" : v2.muted, flexShrink: 0 }}>
                       {w.balanceUsd != null ? fmtUsd(w.balanceUsd) : "$—"}
                     </span>
                   </div>
-                  <div style={{ fontSize: fs.label, color: v2.muted2, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {shortAddr(w.address)} · {w.note}
+                  <div style={{ fontSize: fs.body, color: isActive ? "rgba(255,255,255,.65)" : v2.muted, marginTop: 4, fontFamily: displayFont, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {shortAddr(w.address)}
+                  </div>
+                  <div style={{ fontSize: fs.label, color: v2.muted2, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {w.note}
                   </div>
                 </button>
               );
@@ -1931,7 +1929,7 @@ const styles: Record<string, React.CSSProperties> = {
   rail: { padding: 14, display: "flex", flexDirection: "column" },
   walletItem: {
     marginTop: 7,
-    padding: "9px 11px",
+    padding: "11px 12px",
     border: "1px solid transparent",
     borderRadius: 11,
     cursor: "pointer",
@@ -1943,8 +1941,8 @@ const styles: Record<string, React.CSSProperties> = {
     transition: "background-color .15s ease, border-color .16s ease",
   },
   walletItemActive: {
-    borderColor: "rgba(247,202,22,.45)",
-    background: "linear-gradient(135deg, rgba(247,202,22,.13), rgba(247,202,22,.03))",
+    borderColor: "rgba(255,255,255,.22)",
+    background: "rgba(255,255,255,.055)",
   },
   walletName: {
     display: "flex",
