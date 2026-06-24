@@ -226,20 +226,23 @@ export default function Hero() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.55 }}
-                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 max-w-5xl"
+                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 max-w-6xl"
               >
                 {[
                   { value: "99.99%",  label: "Uptime",            sub: "180-day rolling",  live: true,  accent: "yellow" },
                   { value: "<0.9 s",  label: "Inclusion time",    sub: "median, all chains", live: true,  accent: "yellow" },
-                  { value: "13K+",    label: "MCP installs",      sub: "and growing",      live: true,  accent: "yellow" },
+                  { value: "17K+",    label: "MCP installs",      sub: "and growing",      live: true,  accent: "yellow" },
+                  { value: "100K+",   label: "Settlements",       sub: "gasless, onchain", live: true,  accent: "cyan" },
                   { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "white" },
                   { value: "11",      label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
                 ].map((s, i) => {
                   const stripeColor =
                     s.accent === "yellow" ? "rgba(245,197,24,0.55)"
+                    : s.accent === "cyan" ? "rgba(34,211,238,0.55)"
                     : "rgba(255,255,255,0.35)";
                   const dotColor =
                     s.accent === "yellow" ? "#F5C518"
+                    : s.accent === "cyan" ? "#22D3EE"
                     : "rgba(255,255,255,0.5)";
                   return (
                     <motion.div
@@ -272,6 +275,7 @@ export default function Hero() {
                       <div
                         className={`font-display font-extrabold text-3xl leading-none mb-2 tracking-[-0.02em] ${
                           s.accent === "yellow" ? "text-yellow"
+                          : s.accent === "cyan" ? "text-cyan-300"
                           : "text-white"
                         }`}
                       >

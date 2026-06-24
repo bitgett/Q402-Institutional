@@ -699,15 +699,15 @@ export default function LandingBody() {
 .c1-bento{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:26px;
   grid-template-areas:
     "tank tank aave ccip"
-    "tank tank wallet recur"
-    "batch batch morpho morpho";}
+    "tank tank morpho morpho"
+    "batch batch wallet recur";}
 @media(max-width:860px){.c1-bento{grid-template-columns:repeat(2,1fr);
   grid-template-areas:
     "tank tank"
     "aave ccip"
-    "wallet recur"
+    "morpho morpho"
     "batch batch"
-    "morpho morpho";}}
+    "wallet recur";}}
 @media(max-width:560px){.c1-bento{grid-template-columns:1fr;grid-template-areas:none;}}
 .c1-bento-tile{display:flex;flex-direction:column;justify-content:flex-start;gap:14px;
   border:1px solid var(--line);border-radius:16px;background:var(--panel);box-shadow:var(--panel-sh);
