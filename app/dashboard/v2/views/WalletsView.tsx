@@ -1244,19 +1244,18 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
 
                     <button
                       type="button"
-                      className="v2-tile"
+                      className="v2-tile v2-tile-shine"
                       disabled={demoMode || archived}
                       onClick={() => setStakeOpen(true)}
                       title={demoMode ? "Connect your wallet" : "Lock Q into Quack AI staking on BNB, gasless"}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
                     >
-                      {!demoMode && <span style={styles.newChip}>New</span>}
-                      <span style={{ width: 26, height: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                      <span style={{ width: 26, height: 26, display: "grid", placeItems: "center", flexShrink: 0, position: "relative", zIndex: 1 }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src="/logos/quack.svg" alt="" width={26} height={26} style={{ flexShrink: 0, display: "block" }} />
                       </span>
-                      <span style={styles.tileLabel}>Stake</span>
-                      <span style={styles.tileSub}>Earn Q</span>
+                      <span style={{ ...styles.tileLabel, position: "relative", zIndex: 1 }}>Stake</span>
+                      <span style={{ ...styles.tileSub, position: "relative", zIndex: 1 }}>Earn Q</span>
                     </button>
                   </div>
                 </div>

@@ -127,7 +127,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   let body: {
     apiKey:       string;
     chain:        ChainKey;
-    token:        "USDC" | "USDT" | "RLUSD";
+    token:        "USDC" | "USDT" | "RLUSD" | "Q";
     from:         string;
     to:           string;
     amount:       string;

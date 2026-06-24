@@ -34,6 +34,7 @@ import {
   type StakeAction,
 } from "@/app/lib/staking/sign";
 import { AGENTIC_CHAINS } from "@/app/lib/agentic-wallet-sign";
+import { readStakePositions } from "@/app/lib/staking/positions";
 import {
   settleStakeAction,
   stakeFacilitator,
@@ -88,15 +89,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (action !== "stake" && action !== "unstake") {
     return NextResponse.json({ error: "INVALID_ACTION", message: 'action must be "stake" or "unstake".' }, { status: 400 });
   }
-  // amount: a positive decimal OR the sentinel "max" (stake-only — resolved to
-  // the wallet's full Q balance server-side just before signing, so no
-  // JS-number precision/dust risk).
+  // amount: a positive decimal OR the sentinel "max". For stake, "max" resolves
+  // to the wallet's Q balance; for unstake, to its withdrawable (matured) staked
+  // total. Both are resolved server-side at execution + capped by the signed cap.
   const isMax = body.amount === "max";
   if (!isMax && !isPositiveDecimalString(body.amount)) {
     return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
-  }
-  if (isMax && action !== "stake") {
-    return NextResponse.json({ error: "MAX_UNSTAKE_UNSUPPORTED", message: 'amount "max" is only supported for stake. Enter an explicit amount to unstake.' }, { status: 400 });
   }
   const amount = body.amount as string;
   // "max" must carry a numeric cap (the balance the user saw + signed) so the
@@ -224,27 +222,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "key_decrypt_failed" }, { status: 503 });
   }
 
-  // Resolve "max" -> the wallet's exact full Q balance at settle time (stake
-  // only). Reading on-chain (not a cached UI number) keeps it dust-free: the
-  // impl's exact-approve + balance-delta assert demand an amount <= balance.
+  // Resolve "max" at settle time, capped by the user's signed ceiling. Reading
+  // on-chain (not a cached UI number) keeps it exact. For STAKE: min(Q balance,
+  // cap). For UNSTAKE: min(withdrawable matured staked total, cap).
   let settleAmount = amount;
   if (isMax) {
     try {
-      const provider = new ethers.JsonRpcProvider(AGENTIC_CHAINS.bnb.rpc);
-      const q = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
-      const bal = (await q.balanceOf(wallet.address)) as bigint;
-      // Cap at the user's signed ceiling: stake min(balance, cap) so a deposit
-      // arriving after sign-time can never inflate the stake past consent.
       const capRaw = ethers.parseUnits(body.cap as string, 18);
-      const useRaw = bal < capRaw ? bal : capRaw;
+      let availRaw: bigint;
+      if (action === "stake") {
+        const provider = new ethers.JsonRpcProvider(AGENTIC_CHAINS.bnb.rpc);
+        const q = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
+        availRaw = (await q.balanceOf(wallet.address)) as bigint;
+      } else {
+        const { withdrawableRaw } = await readStakePositions(wallet.address);
+        availRaw = BigInt(withdrawableRaw);
+      }
+      const useRaw = availRaw < capRaw ? availRaw : capRaw;
       if (useRaw <= 0n) {
         await cleanup();
-        return NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 });
+        return action === "stake"
+          ? NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 })
+          : NextResponse.json({ error: "NOTHING_TO_UNSTAKE", message: "No unlocked (matured) Q position to unstake." }, { status: 400 });
       }
       settleAmount = ethers.formatUnits(useRaw, 18);
     } catch (e) {
       await cleanup();
-      return NextResponse.json({ error: "Q_BALANCE_READ_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
+      return NextResponse.json({ error: "MAX_RESOLVE_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
     }
   }
 
