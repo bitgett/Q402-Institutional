@@ -17,7 +17,7 @@ export default function Image() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: "76px 80px",
+          padding: "80px",
           background: "linear-gradient(140deg, #16345c 0%, #0b1729 50%, #060c17 100%)",
           position: "relative",
         }}
@@ -36,31 +36,30 @@ export default function Image() {
           }}
         />
 
-        {/* Top-left: logo + wordmark */}
-        <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-          <svg width="58" height="58" viewBox="0 0 390.12 383.13">
-            <path
-              fill="#FFDA00"
-              d="M327.66,367.55H62.91c-23.88,0-43.24-19.36-43.24-43.24V59.55c0-23.88,19.36-43.24,43.24-43.24h264.76c23.88,0,43.24,19.36,43.24,43.24v264.76C370.9,348.19,351.55,367.55,327.66,367.55z"
-            />
-            <polygon fill="#0b1729" points="227.9,120.01 227.9,76.52 184.42,76.52 140.93,76.52 140.93,120.01 184.42,120.01" />
-            <polygon fill="#0b1729" points="140.93,250.47 140.93,293.95 184.42,293.95 227.9,293.95 227.9,250.47 184.42,250.47" />
-            <polygon fill="#0b1729" points="271.39,163.49 271.39,120.01 227.9,120.01 227.9,163.49 227.9,206.98 227.9,250.47 271.39,250.47 271.39,206.98" />
-            <rect fill="#0b1729" x="271.39" y="250.47" width="43.49" height="43.49" />
-            <polygon fill="#0b1729" points="140.93,163.49 140.93,120.01 97.44,120.01 97.44,163.49 97.44,206.98 97.44,250.47 140.93,250.47 140.93,206.98" />
-          </svg>
-          <span style={{ color: "#ffffff", fontSize: "42px", fontWeight: 800, letterSpacing: "-1px" }}>Q402</span>
+        {/* Top-left: the Navbar logo — yellow mark + Q402 wordmark + by Quack AI */}
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div
+            style={{
+              display: "flex",
+              width: "56px",
+              height: "56px",
+              borderRadius: "13px",
+              background: "#F5C518",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 0 24px rgba(245,197,24,0.45)",
+            }}
+          >
+            <div style={{ display: "flex", width: "24px", height: "24px", borderRadius: "5px", background: "rgba(7,16,31,0.9)" }} />
+          </div>
+          <span style={{ color: "#F5C518", fontSize: "44px", fontWeight: 700, letterSpacing: "-1.5px" }}>Q402</span>
+          <span style={{ color: "rgba(255,255,255,0.32)", fontSize: "24px", fontWeight: 300, marginLeft: "4px", marginTop: "8px" }}>by Quack AI</span>
         </div>
 
-        {/* Bottom-left: headline + one-line subtitle */}
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", flexDirection: "column", fontSize: "72px", fontWeight: 800, color: "#ffffff", lineHeight: 1.06, letterSpacing: "-2.5px" }}>
-            <span>Gasless payments for</span>
-            <span>the agentic web</span>
-          </div>
-          <div style={{ display: "flex", marginTop: "28px", fontSize: "27px", color: "rgba(255,255,255,0.55)", fontWeight: 500 }}>
-            Zero gas for your users · 11 EVM chains · MCP-native
-          </div>
+        {/* Bottom-left: two-line headline, nothing else */}
+        <div style={{ display: "flex", flexDirection: "column", fontSize: "76px", fontWeight: 800, color: "#ffffff", lineHeight: 1.05, letterSpacing: "-2.5px" }}>
+          <span>Gasless payments for</span>
+          <span>the agentic web</span>
         </div>
       </div>
     ),
