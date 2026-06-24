@@ -258,7 +258,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const provider = new ethers.JsonRpcProvider(AGENTIC_CHAINS.bnb.rpc);
       const q = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
       const availRaw = (await q.balanceOf(wallet.address)) as bigint;
-      const useRaw = availRaw < capRaw ? availRaw : capRaw;
+      // The impl seeds a SEED_DUST (1e4 wei) record at index 0 on the wallet's
+      // FIRST stake, so a first-ever stake pulls amount + SEED_DUST. Reserve that
+      // headroom from "max" so it can never request more Q than the wallet holds
+      // (which would revert). For a non-first stake this leaves ~1e-14 Q liquid —
+      // negligible, and far simpler than reading stakeNum to branch.
+      const SEED_DUST_WEI = 10000n;
+      const spendableRaw = availRaw > SEED_DUST_WEI ? availRaw - SEED_DUST_WEI : 0n;
+      const useRaw = spendableRaw < capRaw ? spendableRaw : capRaw;
       if (useRaw <= 0n) {
         await cleanup();
         return NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 });

@@ -139,10 +139,22 @@ describe("/api/mcp/info tools[] == MCP server tool handlers (drift guard)", () =
     "utf8",
   );
   const indexPath = resolve(__dirname, "..", "mcp-server", "src", "index.ts");
+  const mcpPkgPath = resolve(__dirname, "..", "mcp-server", "package.json");
 
   const infoTools = [...infoSrc.matchAll(/name:\s*"(q402_[a-z_]+)"/g)].map((m) => m[1]).sort();
 
-  it.skipIf(!existsSync(indexPath))(
+  // The info route lives in THIS repo; the MCP handlers live in the separate
+  // q402-mcp repo (cloned as mcp-server/ on CI). During a release the two repos
+  // are pushed moments apart, so a strict compare would spuriously fail in that
+  // window (CI clones whichever MCP HEAD exists when the landing push lands).
+  // Only enforce when the cloned MCP is at the SAME version this repo advertises —
+  // a same-version list mismatch is the real "added a tool, forgot info" drift.
+  const mcpVersion = existsSync(mcpPkgPath)
+    ? (JSON.parse(readFileSync(mcpPkgPath, "utf8")) as { version?: string }).version
+    : null;
+  const versionsInSync = mcpVersion != null && mcpVersion === PACKAGE_VERSION;
+
+  it.skipIf(!existsSync(indexPath) || !versionsInSync)(
     "every MCP CallTool handler is advertised in /api/mcp/info, and vice versa",
     () => {
       const indexSrc = readFileSync(indexPath, "utf8");
