@@ -68,6 +68,7 @@ const ALLOWED_ACTIONS = new Set([
   // opens. Allowlisted at build time alongside the routes.
   "agentic.yield_deposit",
   "agentic.yield_withdraw",
+  "agentic.stake",
   "agentic.restore",
   "agentic.recurring.create",
   "agentic.recurring.update",

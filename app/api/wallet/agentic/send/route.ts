@@ -463,10 +463,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const relaySource: "send" | "request" =
     trustedInternal && body.source === "request" ? "request" : "send";
 
-  // USD value of this transfer for ALL hook + limit checks. Stablecoins are
-  // 1:1; Q is priced via the Q/USDT TWAP. Fail CLOSED if Q can't be priced — an
-  // unpriced Q transfer must never slip past the USD spend limits. Nothing is
-  // claimed/charged yet here, so an early 503 needs no cleanup.
   // Q (the owner's own token) is EXEMPT from the USD per-tx + daily caps and
   // the SpendCap hook: usdPerToken=0 makes every limit/budget + hook-USD figure
   // a no-op for Q, while stablecoins stay 1:1. OFAC/ComplianceGate still screens
@@ -700,11 +696,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await kv.del(idempotencyKey).catch(() => {});
   };
 
-  // numAmount is the USD VALUE for every limit/budget/refund check below (Q
-  // priced via TWAP above; stablecoins 1:1). The on-chain transfer uses the
+  // numAmount is the USD VALUE for every limit/budget/refund check below
+  // (0 for the limit-exempt Q; stablecoins 1:1). The on-chain transfer uses the
   // human token amount (body.amount) via signAgenticPayment, not this.
   const numAmount = amountUsd;
-  if (!Number.isFinite(numAmount) || numAmount <= 0) {
+  // The token amount was validated positive up top (isPositiveDecimalString);
+  // Q's amountUsd is intentionally 0 (limit-exempt), so don't reject it here —
+  // only a non-finite value, or a stablecoin's non-positive USD.
+  if (!Number.isFinite(numAmount) || (numAmount <= 0 && body.token !== "Q")) {
     await releaseClaim();
     return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
   }
