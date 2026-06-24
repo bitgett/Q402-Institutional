@@ -1177,7 +1177,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       title={demoMode ? "Connect your wallet" : undefined}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
                     >
-                      <span style={styles.tileIcon}><ReceiveGlyph size={16} color={v2.cyan} /></span>
+                      <span style={{ ...styles.tileIcon, background: "rgba(88,199,244,.1)" }}><ReceiveGlyph size={16} color={v2.cyan} /></span>
                       <span style={styles.tileLabel}>Receive</span>
                       <span style={styles.tileSub}>Show address</span>
                     </button>
@@ -1199,7 +1199,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       style={{ ...styles.actionTile, ...(demoMode || archived || !multichainActive ? styles.tileDisabled : null) }}
                     >
                       {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
-                      <span style={styles.tileIcon}><BatchGlyph size={16} color={v2.cyan} /></span>
+                      <span style={{ ...styles.tileIcon, background: "rgba(88,199,244,.1)" }}><BatchGlyph size={16} color={v2.cyan} /></span>
                       <span style={styles.tileLabel}>Batch</span>
                       <span style={styles.tileSub}>Up to 20</span>
                     </button>
@@ -1221,7 +1221,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       style={{ ...styles.actionTile, ...(demoMode || archived || !multichainActive ? styles.tileDisabled : null) }}
                     >
                       {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
-                      <span style={styles.tileIcon}>
+                      <span style={{ ...styles.tileIcon, background: "rgba(88,199,244,.08)" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src="/link.jpg" alt="" width={16} height={16} style={{ borderRadius: 4, flexShrink: 0 }} />
                       </span>
@@ -1237,7 +1237,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       title={demoMode ? "Connect your wallet" : "Sweep a chain/token bucket back to your wallet"}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
                     >
-                      <span style={styles.tileIcon}><WithdrawGlyph size={16} color={v2.cyan} /></span>
+                      <span style={{ ...styles.tileIcon, background: "rgba(88,199,244,.1)" }}><WithdrawGlyph size={16} color={v2.cyan} /></span>
                       <span style={styles.tileLabel}>Withdraw</span>
                       <span style={styles.tileSub}>Sweep out</span>
                     </button>
@@ -1250,9 +1250,9 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       title={demoMode ? "Connect your wallet" : "Lock Q into QuackAiStake on BNB, gasless"}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
                     >
-                      <span style={styles.tileIcon}>
+                      <span style={{ ...styles.tileIcon, background: "rgba(247,202,22,.16)", border: "1px solid rgba(247,202,22,.28)" }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/logos/quack.svg" alt="" width={16} height={16} style={{ flexShrink: 0 }} />
+                        <img src="/logos/quack.svg" alt="" width={18} height={18} style={{ flexShrink: 0 }} />
                       </span>
                       <span style={styles.tileLabel}>Stake</span>
                       <span style={styles.tileSub}>Earn Q</span>
