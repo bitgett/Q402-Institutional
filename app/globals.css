@@ -255,9 +255,10 @@ html { scroll-behavior: smooth; }
 .v2-manage[open] > .v2-manage-summary::after { transform: rotate(180deg); }
 
 /* Action-row hover micro-interaction (enabled buttons only) */
-.v2-actions > button { transition: background-color .16s ease, border-color .16s ease, transform .12s ease, box-shadow .2s ease; }
-.v2-actions > button:not(:disabled):hover { background: rgba(255,255,255,.05); border-color: rgba(247,202,22,.30); }
-.v2-actions > button:not(:disabled):active { transform: translateY(1px) scale(.995); }
+.v2-hero, .v2-tile { transition: background-color .16s ease, border-color .16s ease, transform .12s ease, filter .16s ease, box-shadow .2s ease; }
+.v2-tile:not(:disabled):hover { background: rgba(255,255,255,.05); border-color: rgba(247,202,22,.30); }
+.v2-hero:not(:disabled):hover { filter: brightness(1.05); }
+.v2-hero:not(:disabled):active, .v2-tile:not(:disabled):active { transform: translateY(1px) scale(.995); }
 
 /* responsive: collapse columns (!important beats the inline grid) */
 @media (max-width: 1080px) {
