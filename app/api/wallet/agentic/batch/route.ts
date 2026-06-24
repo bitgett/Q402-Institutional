@@ -40,7 +40,6 @@ import { randomBytes } from "node:crypto";
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
-import { quackUsdPrice } from "@/app/lib/quack-price";
 import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import {
   decryptPrivateKey,
@@ -301,20 +300,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const walletId = wallet.address.toLowerCase();
 
-  // Per-token USD multiplier for all limit/budget math. Stablecoins are 1:1;
-  // Q is priced via the Q/USDT TWAP. Fail CLOSED if Q can't be priced — an
-  // unpriced Q batch must never slip past the USD caps. Nothing claimed yet.
-  let usdPerToken = 1;
-  if (body.token === "Q") {
-    try {
-      usdPerToken = await quackUsdPrice();
-    } catch {
-      return NextResponse.json(
-        { error: "PRICE_UNAVAILABLE", message: "Could not price Q for the batch spend limit. Retry shortly." },
-        { status: 503 },
-      );
-    }
-  }
+  // Q (the owner's own token) is EXEMPT from the USD per-tx + daily caps and
+  // the SpendCap hook: usdPerToken=0 makes every per-row + total + reconciliation
+  // limit/hook-USD figure a no-op for Q; stablecoins stay 1:1. OFAC still screens
+  // each row. Public stats value Q via the TWAP in the relay route.
+  const usdPerToken = body.token === "Q" ? 0 : 1;
 
   // ── Q402 Hooks — beforeAuthorize, screened per recipient ───────────────
   // ComplianceGate (OFAC) is GLOBAL — it must cover EVERY payment surface,

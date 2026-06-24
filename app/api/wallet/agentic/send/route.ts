@@ -32,7 +32,6 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
-import { quackUsdPrice } from "@/app/lib/quack-price";
 import {
   decryptPrivateKey,
   isKeystoreReady,
@@ -468,19 +467,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // 1:1; Q is priced via the Q/USDT TWAP. Fail CLOSED if Q can't be priced — an
   // unpriced Q transfer must never slip past the USD spend limits. Nothing is
   // claimed/charged yet here, so an early 503 needs no cleanup.
-  let usdPerToken = 1;
-  let amountUsd = Number(body.amount);
-  if (body.token === "Q") {
-    try {
-      usdPerToken = await quackUsdPrice();
-      amountUsd = Number(body.amount) * usdPerToken;
-    } catch {
-      return NextResponse.json(
-        { error: "PRICE_UNAVAILABLE", message: "Could not price Q for the spend limit right now. Retry shortly." },
-        { status: 503 },
-      );
-    }
-  }
+  // Q (the owner's own token) is EXEMPT from the USD per-tx + daily caps and
+  // the SpendCap hook: usdPerToken=0 makes every limit/budget + hook-USD figure
+  // a no-op for Q, while stablecoins stay 1:1. OFAC/ComplianceGate still screens
+  // Q (it doesn't read amountUsd). The on-chain transfer still moves the real
+  // token amount via signAgenticPayment. Public stats value Q via the TWAP in
+  // the relay route, separately from limits.
+  const usdPerToken = body.token === "Q" ? 0 : 1;
+  const amountUsd = Number(body.amount) * usdPerToken;
 
   // ── Q402 Hooks — beforeAuthorize ───────────────────────────────────────
   // Runs at the EARLIEST point we have (owner, walletId, recipient,
