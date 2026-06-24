@@ -108,7 +108,7 @@ Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
 Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything else → Multichain.
 6+ BNB batches return `status="ambiguous"` so the agent asks the user how to split.
 
-**27 tools** (all sandbox by default; live needs an API key + a signing path):
+**29 tools** (all sandbox by default; live needs an API key + a signing path):
 
 | Tool | Auth | What it does |
 |---|---|---|
@@ -136,11 +136,13 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_yield_positions` | api key | The Agent Wallet's current Q402 Yield positions (value + APY). Read-only. |
 | `q402_yield_deposit` | live key | Supply the Agent Wallet's stablecoin into Aave V3 on BNB (USDC/USDT) or the Morpho vault on Base (USDC only) via `chain` (Mode C). **Paid Multichain plan only. Trial cannot deposit.** Confirm + sandbox-by-default. |
 | `q402_yield_withdraw` | live key | Withdraw the Agent Wallet's supplied stablecoin from Aave (BNB) or Morpho (Base) per `chain` (`amount="max"` for the full position). Always allowed, even after downgrade. |
+| `q402_stake` | live mode | Gasless Q (QuackAI) staking into QuackAiStake on BNB Chain. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). Confirm + sandbox-by-default. |
+| `q402_unstake` | live mode | Gasless unstake (withdraw) of Q from QuackAiStake on BNB back to the wallet. |
 | `q402_request_create` | api key | Publish a payment request (invoice). No funds move; returns a /pay link + req_ id. Recipient defaults to the Agent Wallet. |
 | `q402_request_status` | none | Look up a request by req_ id (amount, recipient, status). Read-only. |
 | `q402_request_pay` | live key | Pay a request gaslessly from your own Agent Wallet (Mode C). Terms locked to the request. Two-phase consent (same as `q402_pay`). |
 
-The six fund-moving tools (`q402_pay`, `q402_batch_pay`, `q402_bridge_send`, `q402_yield_deposit`, `q402_yield_withdraw`, `q402_request_pay`) use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one. `confirm: true` alone no longer fires a payment. `q402_clear_delegation` uses the same two-phase consent — it broadcasts a real tx and, on Ethereum, bills your Gas Tank.
+The eight fund-moving tools (`q402_pay`, `q402_batch_pay`, `q402_bridge_send`, `q402_yield_deposit`, `q402_yield_withdraw`, `q402_stake`, `q402_unstake`, `q402_request_pay`) use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one. `confirm: true` alone no longer fires a payment. `q402_clear_delegation` uses the same two-phase consent — it broadcasts a real tx and, on Ethereum, bills your Gas Tank.
 
 Q402 Yield is a **paid-only** feature: depositing requires a live Multichain plan, Trial accounts cannot supply, and withdrawals are always allowed so deposited funds can always be recovered. Two protocols are wired behind the `chain` argument: Aave V3 on BNB Chain (USDC and USDT) and Morpho on Base (a Gauntlet USDC Prime MetaMorpho ERC-4626 vault, USDC only). The Base impl is deployed to Base mainnet (`0xd4f703683acac7C02bf482A061C9E1F8DEdA467c`).
 

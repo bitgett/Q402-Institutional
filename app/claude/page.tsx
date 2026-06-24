@@ -12,7 +12,7 @@
  * only) so the two product pages read as one family. But the composition is its
  * own: this is the hands-on page, so it leads with an interactive multi-client
  * install (Claude, Codex, Cursor, Cline, Copilot, Hermes), a wallet-mode
- * picker, a live q402_quote ranking, and the 27-tool
+ * picker, a live q402_quote ranking, and the 29-tool
  * surface. No marketing-landing motifs (corner glows, gradient sheen titles).
  */
 
@@ -87,7 +87,7 @@ const MODES: { tag: string; title: string; desc: React.ReactNode; env: string[];
   },
 ];
 
-// ── the 27-tool surface (grouped, with auth + one-line note) ────────────────
+// ── the 29-tool surface (grouped, with auth + one-line note) ────────────────
 const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: string }[] }[] = [
   {
     label: "Setup and read",
@@ -134,6 +134,13 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
     ],
   },
   {
+    label: "Staking",
+    tools: [
+      { name: "q402_stake", auth: "live mode", note: "Gasless Q staking into QuackAiStake on BNB. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). Sandbox by default." },
+      { name: "q402_unstake", auth: "live mode", note: "Gasless unstake (withdraw) of Q from QuackAiStake on BNB back to the wallet. Sandbox by default." },
+    ],
+  },
+  {
     label: "Bridge",
     tools: [
       { name: "q402_bridge_quote", auth: "no auth", note: "Quote CCIP fee for a USDC bridge on eth / avax / arbitrum." },
@@ -157,7 +164,7 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
     ],
   },
 ];
-const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 27
+const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 29
 
 const rise = {
   initial: { opacity: 0, y: 10 },
