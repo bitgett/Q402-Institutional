@@ -199,6 +199,10 @@ export async function signStakeAction(p: SignStakeParams): Promise<SignedStakeAc
   };
 }
 
+/** Test seam — the witness type tables, asserted byte-identical to the on-chain
+ *  typehash strings by __tests__/staking-typehash-drift.test.ts. */
+export const __test = { STAKE_AUTH_TYPES, UNSTAKE_AUTH_TYPES };
+
 /** parseUnits that rejects extra precision (mirrors the agentic transfer path). */
 function parseUnitsStrict(value: string, decimals: number): bigint {
   const [whole, frac = ""] = value.trim().split(".");

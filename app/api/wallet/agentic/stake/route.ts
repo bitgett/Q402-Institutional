@@ -42,7 +42,9 @@ import type { Address, Hex } from "viem";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const IDEM_TTL_SEC = 5 * 60;
+// 15 min: comfortably outlives a slow BNB settle so an in-flight claim can't
+// expire mid-settlement (which would briefly weaken the double-stake guard).
+const IDEM_TTL_SEC = 15 * 60;
 
 interface StakeBody {
   apiKey?: string;
@@ -203,7 +205,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   if (!result.success) {
-    await cleanup();
+    // The tx WAS broadcast and reverted — the relayer already paid gas, so the
+    // op-budget slot stays CONSUMED (mirrors yield; the cap bounds relayer gas
+    // abuse incl. spammed reverts). Release the lock + clear the claim only.
+    await releaseWalletChainLock(walletId, "bnb", lockToken).catch(() => {});
+    await kv.del(idemKey).catch(() => {});
     return NextResponse.json({ error: "stake_failed", message: result.error ?? "Transaction reverted." }, { status: 502 });
   }
 
