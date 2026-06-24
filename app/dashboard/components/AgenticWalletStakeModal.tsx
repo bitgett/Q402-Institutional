@@ -88,7 +88,7 @@ export function AgenticWalletStakeModal({
       });
       if (res.status === 401) {
         clearAuthCache(ownerAddress);
-        setErr("Session expired — refresh and retry.");
+        setErr("Session expired. Refresh and retry.");
         return;
       }
       const data = await res.json().catch(() => ({}));
@@ -111,7 +111,7 @@ export function AgenticWalletStakeModal({
   }
 
   // eslint-disable-next-line @next/next/no-img-element
-  const quackIcon = <img src="/logos/quack.svg" alt="" width={20} height={20} />;
+  const quackIcon = <img src="/logos/quack.svg" alt="" width={28} height={28} style={{ display: "block" }} />;
 
   return (
     <ModalShell
@@ -195,7 +195,7 @@ export function AgenticWalletStakeModal({
 
       {mode === "stake" && (
         <div style={{ fontSize: 12, color: "rgba(255,255,255,.42)", lineHeight: 1.5 }}>
-          Locks {stakeMax ? `all your Q (${fmtQ(maxAvail)})` : amount.trim() || "—"} {stakeMax ? "" : "Q "}for {tier.lockDays} days at ~{tier.aprPct}% APR. Gasless — the relayer pays.
+          Locks {stakeMax ? `all your Q (${fmtQ(maxAvail)})` : amount.trim() || "0"} {stakeMax ? "" : "Q "}for {tier.lockDays} days at ~{tier.aprPct}% APR. Gasless. The relayer pays.
         </div>
       )}
 

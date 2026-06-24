@@ -1221,9 +1221,9 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       style={{ ...styles.actionTile, ...(demoMode || archived || !multichainActive ? styles.tileDisabled : null) }}
                     >
                       {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
-                      <span style={{ ...styles.tileIcon, background: "rgba(88,199,244,.08)" }}>
+                      <span style={{ width: 26, height: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/link.jpg" alt="" width={16} height={16} style={{ borderRadius: 4, flexShrink: 0 }} />
+                        <img src="/link.jpg" alt="" width={24} height={24} style={{ borderRadius: 6, flexShrink: 0, display: "block" }} />
                       </span>
                       <span style={styles.tileLabel}>Bridge</span>
                       <span style={styles.tileSub}>CCIP</span>
@@ -1250,9 +1250,9 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       title={demoMode ? "Connect your wallet" : "Lock Q into QuackAiStake on BNB, gasless"}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
                     >
-                      <span style={{ ...styles.tileIcon, background: "rgba(247,202,22,.16)", border: "1px solid rgba(247,202,22,.28)" }}>
+                      <span style={{ width: 26, height: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/logos/quack.svg" alt="" width={18} height={18} style={{ flexShrink: 0 }} />
+                        <img src="/logos/quack.svg" alt="" width={26} height={26} style={{ flexShrink: 0, display: "block" }} />
                       </span>
                       <span style={styles.tileLabel}>Stake</span>
                       <span style={styles.tileSub}>Earn Q</span>

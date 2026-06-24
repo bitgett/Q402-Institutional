@@ -539,7 +539,7 @@ export function AgenticWalletBridgeModal({
   );
 
   // eslint-disable-next-line @next/next/no-img-element
-  const ccipIcon = <img src="/link.jpg" alt="" width={20} height={20} style={{ borderRadius: 5 }} />;
+  const ccipIcon = <img src="/link.jpg" alt="" width={28} height={28} style={{ borderRadius: 6, display: "block" }} />;
 
   return (
     <ModalShell
