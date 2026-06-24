@@ -1116,33 +1116,33 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       {!demoMode && activeBalanceLoading && !activeBalance ? "…" : fmtUsd(vmTotalUsd)}
                     </strong>
                     {vmQuack > 0 && (
-                      <span
-                        title="QuackAI Q token balance on BNB. Held in token units (not USD-valued)."
-                        style={{
-                          marginTop: 4,
-                          alignSelf: "flex-start",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 5,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: "#8fd6f7",
-                          background: "rgba(88,199,244,.10)",
-                          border: "1px solid rgba(88,199,244,.28)",
-                          borderRadius: 6,
-                          padding: "2px 8px",
-                        }}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/logos/quack.svg" alt="" width={13} height={13} style={{ display: "block", flexShrink: 0 }} />
-                        {vmQuack.toLocaleString(undefined, { maximumFractionDigits: 2 })} Q
-                      </span>
+                      <div style={{ marginTop: 7 }}>
+                        <span
+                          title="QuackAI Q token balance on BNB. Held in token units (not USD-valued)."
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "#8fd6f7",
+                            background: "rgba(88,199,244,.10)",
+                            border: "1px solid rgba(88,199,244,.28)",
+                            borderRadius: 8,
+                            padding: "3px 10px",
+                          }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="/logos/quack.svg" alt="" width={15} height={15} style={{ display: "block", flexShrink: 0 }} />
+                          {vmQuack.toLocaleString(undefined, { maximumFractionDigits: 2 })} Q
+                        </span>
+                      </div>
                     )}
                     <button
                       type="button"
                       onClick={() => activeWallet && fetchBalance(activeWallet, { active: true, force: true })}
                       disabled={demoMode || activeBalanceLoading}
-                      style={styles.refreshLink}
+                      style={{ ...styles.refreshLink, display: "block", marginLeft: "auto" }}
                     >
                       {demoMode ? "Sample data" : activeBalanceLoading ? "Refreshing…" : "Updated · refresh ↻"}
                     </button>
