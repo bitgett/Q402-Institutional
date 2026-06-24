@@ -60,7 +60,7 @@ interface Props {
   dailyLimitUsd?: number | null;
 }
 
-type Token = "USDC" | "USDT";
+type Token = "USDC" | "USDT" | "Q";
 
 type ChainKey =
   | "bnb"
@@ -87,7 +87,7 @@ interface ChainMeta {
 }
 
 const CHAIN_META: ChainMeta[] = [
-  { key: "bnb",       label: "BNB Chain",  tokens: ["USDT", "USDC"], explorerTxBase: "https://bscscan.com/tx/",                    explorerLabel: "BscScan" },
+  { key: "bnb",       label: "BNB Chain",  tokens: ["USDT", "USDC", "Q"], explorerTxBase: "https://bscscan.com/tx/",                    explorerLabel: "BscScan" },
   { key: "eth",       label: "Ethereum",   multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://etherscan.io/tx/",                   explorerLabel: "Etherscan" },
   { key: "avax",      label: "Avalanche",  multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://snowtrace.io/tx/",                   explorerLabel: "Snowtrace" },
   { key: "xlayer",    label: "X Layer",    multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://www.oklink.com/xlayer/tx/",          explorerLabel: "OKLink" },
@@ -420,8 +420,8 @@ export function AgenticWalletSendModal({
 
               <div>
                 <div className="text-[11px] text-white/45 uppercase tracking-widest mb-1">Token</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["USDT", "USDC"] as Token[]).map(t => {
+                <div className={`grid gap-2 ${allowedTokens.length >= 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+                  {allowedTokens.map(t => {
                     const enabled = allowedTokens.includes(t);
                     const active = token === t;
                     return (
