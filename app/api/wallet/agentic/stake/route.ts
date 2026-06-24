@@ -17,6 +17,7 @@ import { kv } from "@vercel/kv";
 import { ethers } from "ethers";
 
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
+import { requireIntentAuth } from "@/app/lib/auth";
 import {
   decryptPrivateKey,
   isKeystoreReady,
@@ -47,7 +48,12 @@ export const maxDuration = 60;
 const IDEM_TTL_SEC = 15 * 60;
 
 interface StakeBody {
+  // Mode C — server-mediated MCP path
   apiKey?: string;
+  // Mode A/B — dashboard owner-sig (intent-bound challenge)
+  ownerAddress?: string;
+  nonce?: string;
+  signature?: string;
   action?: string;
   stakeType?: number;
   amount?: string;
@@ -97,27 +103,53 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "relay_unavailable" }, { status: 503 });
   }
 
-  // ── Auth (Mode C, apiKey) ────────────────────────────────────────────────
-  const presented = typeof body.apiKey === "string" ? body.apiKey : "";
-  if (!presented) {
-    return NextResponse.json({ error: "API_KEY_REQUIRED" }, { status: 401 });
+  // ── Auth: Mode A/B (owner-sig intent) OR Mode C (apiKey) ──────────────────
+  const requestedWalletId =
+    typeof body.walletId === "string" && body.walletId.length > 0 ? body.walletId.toLowerCase() : null;
+  const isOwnerSig = typeof body.signature === "string" && body.signature.length > 0;
+  let owner: string;
+  if (isOwnerSig) {
+    // Mode A/B — dashboard. The intent binds to (walletId, action, stakeType,
+    // amount) so a signature can't be replayed for a different stake.
+    if (!requestedWalletId) {
+      return NextResponse.json({ error: "walletId_required" }, { status: 400 });
+    }
+    const authResult = await requireIntentAuth({
+      address: body.ownerAddress ?? null,
+      challenge: body.nonce ?? null,
+      signature: body.signature ?? null,
+      action: "agentic.stake",
+      intent: { walletId: requestedWalletId, action, stakeType: String(stakeType), amount },
+    });
+    if (typeof authResult !== "string") {
+      return NextResponse.json({ error: authResult.error, code: authResult.code }, { status: authResult.status });
+    }
+    owner = authResult;
+  } else {
+    // Mode C — apiKey (MCP server-mediated path).
+    const presented = typeof body.apiKey === "string" ? body.apiKey : "";
+    if (!presented) {
+      return NextResponse.json({ error: "API_KEY_REQUIRED" }, { status: 401 });
+    }
+    if (presented.startsWith("q402_test_") || presented.startsWith("q402_sandbox_")) {
+      return NextResponse.json({ error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet staking." }, { status: 401 });
+    }
+    const rec = await getApiKeyRecord(presented);
+    if (!rec || !rec.active || rec.isSandbox) {
+      return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
+    }
+    owner = rec.address.toLowerCase();
+    // Mode C must present the live multichain key, not a stale/rotated one.
+    const subC = await getSubscription(owner);
+    if (presented !== subC?.apiKey) {
+      return NextResponse.json({ error: "STALE_API_KEY", message: "This apiKey is no longer the live multichain key. Rotate in your dashboard." }, { status: 401 });
+    }
   }
-  if (presented.startsWith("q402_test_") || presented.startsWith("q402_sandbox_")) {
-    return NextResponse.json({ error: "SANDBOX_KEY_REJECTED", message: "Use a live apiKey for Agent Wallet staking." }, { status: 401 });
-  }
-  const rec = await getApiKeyRecord(presented);
-  if (!rec || !rec.active || rec.isSandbox) {
-    return NextResponse.json({ error: "INVALID_API_KEY" }, { status: 401 });
-  }
-  const owner = rec.address.toLowerCase();
 
-  // Staking is a multichain-tier action (live key required).
+  // Both modes: staking requires a paid Multichain plan.
   const sub = await getSubscription(owner);
   if (!hasMultichainScope(sub)) {
     return NextResponse.json({ error: "SUBSCRIPTION_REQUIRED", message: "Q staking requires a paid Multichain plan." }, { status: 402 });
-  }
-  if (presented !== sub?.apiKey) {
-    return NextResponse.json({ error: "STALE_API_KEY", message: "This apiKey is no longer the live multichain key. Rotate in your dashboard." }, { status: 401 });
   }
 
   // ── Wallet + keystore ─────────────────────────────────────────────────────
@@ -125,8 +157,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!ready.ok) {
     return NextResponse.json({ error: "keystore_unavailable" }, { status: 503 });
   }
-  const requestedWalletId =
-    typeof body.walletId === "string" && body.walletId.length > 0 ? body.walletId.toLowerCase() : null;
   const wallet = await resolveWallet(owner, requestedWalletId);
   if (!wallet) {
     return NextResponse.json({ error: "AGENTIC_WALLET_NOT_FOUND" }, { status: 404 });
