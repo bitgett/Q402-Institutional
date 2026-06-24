@@ -10,6 +10,11 @@ const nextConfig = {
   // package-lock.json in the parent directory (e.g. C:\Users\user\), which
   // makes serverless deploy traces bundle unrelated files. Explicit > inferred.
   outputFileTracingRoot: __dirname,
+  // Ship the OG card's Poppins TTFs with the route in case it is served
+  // dynamically (the fs.readFile in app/opengraph-image.tsx is not auto-traced).
+  outputFileTracingIncludes: {
+    "/opengraph-image": ["./app/_fonts/**"],
+  },
   // Clean URL for the standalone Vision page (static file in /public).
   async rewrites() {
     return [{ source: "/vision", destination: "/vision.html" }];
