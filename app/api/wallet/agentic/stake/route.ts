@@ -183,7 +183,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const walletId = wallet.address.toLowerCase();
 
   // ── Idempotency window (avoid double-stake on a quick retry) ──────────────
-  const fp = ethers.keccak256(ethers.toUtf8Bytes(`${owner}:${walletId}:${action}:${stakeType}:${amount}`)).slice(2, 26);
+  // Include the cap so two "max" calls with DIFFERENT caps (e.g. before vs after
+  // a top-up) don't collide on one idempotency slot and block the second for 15m.
+  const fp = ethers.keccak256(ethers.toUtf8Bytes(`${owner}:${walletId}:${action}:${stakeType}:${amount}:${body.cap ?? ""}`)).slice(2, 26);
   const idemKey = `aw:stake:${fp}`;
   const claimed = await kv.set(idemKey, { status: "processing", at: Date.now() }, { nx: true, ex: IDEM_TTL_SEC });
   if (!claimed) {

@@ -179,7 +179,10 @@ export function AgenticWalletSendModal({
 
   // Soft per-tx cap check — surface the issue before the user signs.
   const amountNum = isDecimalAmount(amount) ? Number(amount) : 0;
-  const overPerTxCap = typeof perTxMaxUsd === "number" && amountNum > perTxMaxUsd;
+  // Q is exempt from USD limits (it's the owner's own token, not USD-valued) —
+  // the server treats Q's amountUsd as 0, so the UI must NOT apply the per-tx
+  // cap to Q either, or the two policies disagree and block a valid Q send.
+  const overPerTxCap = token !== "Q" && typeof perTxMaxUsd === "number" && amountNum > perTxMaxUsd;
 
   const canSubmit = !submitting && isAddress(recipient) && isDecimalAmount(amount) && !overPerTxCap;
 
@@ -380,7 +383,7 @@ export function AgenticWalletSendModal({
         <Field
           label="Amount"
           hint={
-            (typeof perTxMaxUsd === "number" || typeof dailyLimitUsd === "number") ? (
+            token !== "Q" && (typeof perTxMaxUsd === "number" || typeof dailyLimitUsd === "number") ? (
               <>
                 {typeof perTxMaxUsd === "number" && <>per-tx ${perTxMaxUsd}</>}
                 {typeof perTxMaxUsd === "number" && typeof dailyLimitUsd === "number" && <> · </>}

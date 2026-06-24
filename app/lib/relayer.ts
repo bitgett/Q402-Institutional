@@ -337,8 +337,9 @@ export interface EIP3009PayParams {
   /** Chain key — X Layer (EIP-3009 fallback) or Base (x402 rail). Generic over
    *  any chain whose USDC implements the standard EIP-3009 9-param form. */
   chainKey: ChainKey;
-  /** Token symbol */
-  token: "USDC" | "USDT" | "RLUSD" | "Q";
+  /** Token symbol. Q never rides the EIP-3009 / x402 rail (BNB-only, EIP-7702),
+   *  so it is intentionally NOT in this union. */
+  token: "USDC" | "USDT" | "RLUSD";
 }
 
 /**
