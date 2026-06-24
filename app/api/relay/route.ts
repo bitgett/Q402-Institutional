@@ -35,6 +35,7 @@ import { validateWebhookUrl } from "@/app/lib/webhook-validator";
 import { safeWebhookFetch } from "@/app/lib/safe-fetch";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
 import { isSanctioned } from "@/app/lib/hooks/compliance";
+import { quackAmountToUsd } from "@/app/lib/quack-price";
 import {
   CHAIN_CONFIG,
   getTokenConfig,
@@ -1130,11 +1131,19 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   if (!isSandbox) {
     after(async () => {
       try {
+        // Q is not USD-pegged — value it via the TWAP so public volume isn't
+        // inflated by the raw token count. Fail to 0 (don't poison the metric).
+        // (token is typed USDC/USDT/RLUSD; Q reaches here as a runtime string
+        // via the allowlist + getTokenConfig — compare as string.)
+        const volumeUsd =
+          (token as string) === "Q"
+            ? await quackAmountToUsd(Number(tokenAmount)).catch(() => 0)
+            : Number(tokenAmount);
         await incrStatsCounters({
           payer:     from,
           recipient: to,
           chain,
-          amountUsd: Number(tokenAmount),
+          amountUsd: volumeUsd,
         });
       } catch (e) {
         console.error("[relay] stats counter incr failed (after-response):", e);
