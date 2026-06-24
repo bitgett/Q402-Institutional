@@ -1318,7 +1318,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                             <div>
                               Q402 Yield
                               <div style={{ ...styles.sub, display: "inline-flex", alignItems: "center", gap: 5 }}>
-                                <TokenIcon src="/aave.svg" size={13} /> Aave V3 · ~2.33% APY · paid plans
+                                <TokenIcon src="/aave.svg" size={13} /> <TokenIcon src="/logos/morpho.png" size={13} /> Aave V3 · Morpho · paid plans
                               </div>
                             </div>
                           </div>

@@ -214,8 +214,14 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
     <div className="relative">
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/aave.svg" alt="Aave" width={26} height={26} className="rounded-full shrink-0" />
+          {/* Q402 Yield spans two protocols — show both marks (Aave V3 on BNB,
+              Morpho on Base) as an overlapping pair, mirroring the subtitle. */}
+          <div className="flex items-center shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/aave.svg" alt="Aave" width={26} height={26} className="rounded-full" style={{ boxShadow: "0 0 0 2px #0c1626" }} />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logos/morpho.png" alt="Morpho" width={26} height={26} className="rounded-full" style={{ marginLeft: -9, boxShadow: "0 0 0 2px #0c1626" }} />
+          </div>
           <div className="min-w-0 leading-tight">
             <div className="text-[15px] font-semibold text-white/90">Q402 Yield</div>
             <div className="text-[12px] text-white/55 mt-0.5">Aave V3 · Morpho</div>

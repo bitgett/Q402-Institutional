@@ -116,7 +116,7 @@ const RAIL: { id: RailTab; label: string; hint: string }[] = [
   { id: "all", label: "All settlements", hint: "Every relayed payment" },
   { id: "manual", label: "Manual sends", hint: "Send · batch · API" },
   { id: "recurring", label: "Recurring fires", hint: "Scheduled payouts" },
-  { id: "yield", label: "Yield", hint: "Aave deposits · withdrawals" },
+  { id: "yield", label: "Yield", hint: "Aave + Morpho deposits · withdrawals" },
   { id: "request", label: "Requests", hint: "Inbound payment requests" },
   { id: "bridge", label: "Bridge history", hint: "CCIP cross-chain" },
   { id: "receipts", label: "Trust Receipts", hint: "Verifiable receipts" },
