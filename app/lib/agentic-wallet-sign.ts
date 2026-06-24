@@ -52,7 +52,9 @@ interface ChainCfg {
   impl: Address;
   domainName: string;
   domainVersion: "1";
-  tokens: { USDC: TokenCfg; USDT: TokenCfg };
+  /** Q (QuackAI token) is optional and BNB-only; it is NOT a stablecoin so
+   *  callers must value it via the Q/USDT TWAP, never as 1:1 USD. */
+  tokens: { USDC: TokenCfg; USDT: TokenCfg; Q?: TokenCfg };
 }
 
 /** Mirrors contracts.manifest.json `chains.*` for the fields needed by
@@ -70,6 +72,8 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     tokens: {
       USDC: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
       USDT: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
+      // QuackAI token (BNB-only). Priced via the Q/USDT V3 pool TWAP, not 1:1.
+      Q: { address: "0xc07e1300dc138601FA6B0b59f8D0FA477e690589", decimals: 18 },
     },
   },
   eth: {
