@@ -1173,6 +1173,19 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       type="button"
                       className="v2-tile"
                       disabled={demoMode || archived}
+                      onClick={() => setWithdrawOpen(true)}
+                      title={demoMode ? "Connect your wallet" : "Sweep a chain/token bucket back to your wallet"}
+                      style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
+                    >
+                      <span style={{ ...styles.tileIcon, background: "rgba(88,199,244,.1)" }}><WithdrawGlyph size={16} color={v2.cyan} /></span>
+                      <span style={styles.tileLabel}>Withdraw</span>
+                      <span style={styles.tileSub}>Sweep out</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="v2-tile"
+                      disabled={demoMode || archived}
                       onClick={() => setReceiveOpen(true)}
                       title={demoMode ? "Connect your wallet" : undefined}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
@@ -1233,23 +1246,11 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       type="button"
                       className="v2-tile"
                       disabled={demoMode || archived}
-                      onClick={() => setWithdrawOpen(true)}
-                      title={demoMode ? "Connect your wallet" : "Sweep a chain/token bucket back to your wallet"}
-                      style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
-                    >
-                      <span style={{ ...styles.tileIcon, background: "rgba(88,199,244,.1)" }}><WithdrawGlyph size={16} color={v2.cyan} /></span>
-                      <span style={styles.tileLabel}>Withdraw</span>
-                      <span style={styles.tileSub}>Sweep out</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="v2-tile"
-                      disabled={demoMode || archived}
                       onClick={() => setStakeOpen(true)}
-                      title={demoMode ? "Connect your wallet" : "Lock Q into QuackAiStake on BNB, gasless"}
+                      title={demoMode ? "Connect your wallet" : "Lock Q into Quack AI staking on BNB, gasless"}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
                     >
+                      {!demoMode && <span style={styles.newChip}>New</span>}
                       <span style={{ width: 26, height: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src="/logos/quack.svg" alt="" width={26} height={26} style={{ flexShrink: 0, display: "block" }} />
@@ -2275,14 +2276,16 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     display: "flex",
     flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
     gap: 4,
     minHeight: 60,
-    padding: "8px 10px 9px",
+    padding: "9px 10px",
     borderRadius: 11,
     border: `1px solid ${v2.line}`,
     background: "rgba(255,255,255,.025)",
     color: v2.text,
-    textAlign: "left",
+    textAlign: "center",
     cursor: "pointer",
   },
   tileDisabled: { opacity: 0.45, cursor: "not-allowed", background: "rgba(255,255,255,.012)" },
@@ -2310,6 +2313,20 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid rgba(247,202,22,.3)",
     borderRadius: 5,
     padding: "1px 5px",
+  },
+  newChip: {
+    position: "absolute",
+    top: 7,
+    right: 7,
+    fontSize: 8.5,
+    fontWeight: 800,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: "#0b1729",
+    background: "linear-gradient(135deg,#7ad4f7,#58c7f4)",
+    borderRadius: 5,
+    padding: "1px 5px",
+    boxShadow: "0 0 0 1px rgba(88,199,244,.25)",
   },
   command: {
     marginTop: 11,

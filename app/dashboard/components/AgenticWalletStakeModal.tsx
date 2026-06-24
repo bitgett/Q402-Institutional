@@ -111,13 +111,14 @@ export function AgenticWalletStakeModal({
   }
 
   // eslint-disable-next-line @next/next/no-img-element
-  const quackIcon = <img src="/logos/quack.svg" alt="" width={28} height={28} style={{ display: "block" }} />;
+  const quackIcon = <img src="/logos/quack.svg" alt="" width={36} height={36} style={{ display: "block" }} />;
 
   return (
     <ModalShell
       icon={quackIcon}
+      iconBare
       title="Stake Q"
-      subtitle="QuackAiStake · BNB Chain · gasless"
+      subtitle="Quack AI · BNB Chain · gasless"
       size="sm"
       onClose={onClose}
       closeDisabled={busy}

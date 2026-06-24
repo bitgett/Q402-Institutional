@@ -539,11 +539,12 @@ export function AgenticWalletBridgeModal({
   );
 
   // eslint-disable-next-line @next/next/no-img-element
-  const ccipIcon = <img src="/link.jpg" alt="" width={28} height={28} style={{ borderRadius: 6, display: "block" }} />;
+  const ccipIcon = <img src="/link.jpg" alt="" width={34} height={34} style={{ borderRadius: 8, display: "block" }} />;
 
   return (
     <ModalShell
       icon={ccipIcon}
+      iconBare
       title="Bridge USDC · CCIP"
       subtitle={<MonoAddr>{walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}</MonoAddr>}
       size="md"
