@@ -877,7 +877,16 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       </span>
                       {w.archived && <span style={styles.archBadge}>Archived</span>}
                     </span>
-                    <span style={{ font: `600 15px ${displayFont}`, letterSpacing: "-.03em", color: (w.balanceUsd ?? 0) > 0 ? "#8fd6f7" : v2.muted2, flexShrink: 0 }}>
+                    <span
+                      style={{
+                        font: `600 13px ${displayFont}`,
+                        letterSpacing: "-.02em",
+                        flexShrink: 0,
+                        ...((w.balanceUsd ?? 0) > 0
+                          ? { color: "#f9d64a", background: "rgba(247,202,22,.12)", border: "1px solid rgba(247,202,22,.30)", borderRadius: 7, padding: "2px 8px" }
+                          : { color: v2.muted2 }),
+                      }}
+                    >
                       {w.balanceUsd != null ? fmtUsd(w.balanceUsd) : "$—"}
                     </span>
                   </div>
