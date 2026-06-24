@@ -41,9 +41,13 @@ export function ModalShell({
   closeDisabled = false,
   footer,
   children,
+  iconBare = false,
 }: {
   /** Icon node rendered in the accent chip at the header's left. */
   icon?: ReactNode;
+  /** Drop the accent chip box and render the icon (logo) directly — for image
+   *  marks (Quack, Chainlink) that look cramped inside the glyph chip. */
+  iconBare?: boolean;
   /** Accent for the icon chip + (by convention) the modal's identity. */
   accent?: string;
   title: string;
@@ -95,18 +99,22 @@ export function ModalShell({
           {icon != null && (
             <span
               aria-hidden
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 11,
-                flexShrink: 0,
-                display: "grid",
-                placeItems: "center",
-                background: `${accent}1a`,
-                border: `1px solid ${accent}44`,
-                color: accent,
-                overflow: "hidden",
-              }}
+              style={
+                iconBare
+                  ? { width: 38, height: 38, flexShrink: 0, display: "grid", placeItems: "center" }
+                  : {
+                      width: 38,
+                      height: 38,
+                      borderRadius: 11,
+                      flexShrink: 0,
+                      display: "grid",
+                      placeItems: "center",
+                      background: `${accent}1a`,
+                      border: `1px solid ${accent}44`,
+                      color: accent,
+                      overflow: "hidden",
+                    }
+              }
             >
               {icon}
             </span>
