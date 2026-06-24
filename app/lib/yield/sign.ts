@@ -140,7 +140,9 @@ interface SignYieldParams {
    *  signing (F5 — a swapped key blob can't sign from another record). */
   expectedOwner: Address;
   chain: AgenticChainKey;
-  token: AgenticToken;
+  // Yield is stablecoin-only (Aave/Morpho USDC/USDT markets). Q is NOT a yield
+  // asset — narrow here so the union can never route Q into a vault.
+  token: "USDC" | "USDT";
   action: YieldAction;
   /** Human decimal string. For withdraw, "max" = full position. */
   amount: string;

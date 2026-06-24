@@ -174,7 +174,8 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
   }
   const chain = body.chain as AgenticChainKey;
-  const token = body.token as AgenticToken;
+  // Guaranteed USDC/USDT by the validation above — yield never handles Q.
+  const token = body.token as "USDC" | "USDT";
   const amount = body.amount as string;
 
   const owner = await resolveOwner(body, action);

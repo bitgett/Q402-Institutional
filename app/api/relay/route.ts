@@ -243,10 +243,10 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   //     the XRPL EVM Sidechain yet, and Q402 is EVM-only so XRPL native is
   //     out of scope. Non-Ethereum chains reject RLUSD via the absence of the
   //     token from their allowlist entry.
-  const FULL_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
+  const FULL_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD" | "Q">>> = {
     injective: ["USDT", "USDC"],
     eth:       ["USDC", "USDT", "RLUSD"],
-    bnb:       ["USDC", "USDT"],
+    bnb:       ["USDC", "USDT", "Q"],
     avax:      ["USDC", "USDT"],
     xlayer:    ["USDC", "USDT"],
     mantle:    ["USDC", "USDT"],
@@ -256,8 +256,8 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     arbitrum:  ["USDC", "USDT"],
     base:      ["USDC", "USDT"],
   };
-  const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD">>> = {
-    bnb: ["USDC", "USDT"],
+  const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD" | "Q">>> = {
+    bnb: ["USDC", "USDT", "Q"],
   };
   const CHAIN_TOKEN_ALLOWLIST = BNB_FOCUS_MODE
     ? SPRINT_CHAIN_TOKEN_ALLOWLIST

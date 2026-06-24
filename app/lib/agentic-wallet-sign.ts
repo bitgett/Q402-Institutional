@@ -220,7 +220,7 @@ export function isAgenticChainKey(s: unknown): s is AgenticChainKey {
   return typeof s === "string" && s in AGENTIC_CHAINS;
 }
 
-export type AgenticToken = "USDC" | "USDT";
+export type AgenticToken = "USDC" | "USDT" | "Q";
 
 /** Cryptographically-random uint256 nonce for the EIP-712 witness. */
 export function randomUint256Nonce(): bigint {
@@ -319,6 +319,11 @@ const DEFAULT_DEADLINE_AHEAD = 600;
 export async function signAgenticPayment(p: SignParams): Promise<SignedPayment> {
   const cfg = AGENTIC_CHAINS[p.chain];
   const tokenCfg = cfg.tokens[p.token];
+  // Q is an optional BNB-only token slot; reject before signing on any chain
+  // where it isn't configured rather than crash on an undefined token config.
+  if (!tokenCfg) {
+    throw new Error(`TOKEN_NOT_ON_CHAIN: ${p.token} is not available on ${p.chain}`);
+  }
 
   let amountRaw: bigint;
   try {

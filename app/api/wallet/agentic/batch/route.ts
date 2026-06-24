@@ -40,6 +40,7 @@ import { randomBytes } from "node:crypto";
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
+import { quackUsdPrice } from "@/app/lib/quack-price";
 import { agenticBatchFingerprint } from "@/app/lib/agentic-batch-fingerprint";
 import {
   decryptPrivateKey,
@@ -166,8 +167,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (isChainDisabled(body.chain)) {
     return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
-  if (body.token !== "USDC" && body.token !== "USDT") {
+  if (body.token !== "USDC" && body.token !== "USDT" && body.token !== "Q") {
     return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
+  }
+  // Q (QuackAI token) is BNB-only.
+  if (body.token === "Q" && body.chain !== "bnb") {
+    return NextResponse.json(
+      { error: "TOKEN_NOT_ON_CHAIN", message: "Q is only available on BNB Chain." },
+      { status: 400 },
+    );
   }
   if (!Array.isArray(body.recipients) || body.recipients.length === 0) {
     return NextResponse.json({ error: "EMPTY_RECIPIENTS" }, { status: 400 });
@@ -293,6 +301,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const walletId = wallet.address.toLowerCase();
 
+  // Per-token USD multiplier for all limit/budget math. Stablecoins are 1:1;
+  // Q is priced via the Q/USDT TWAP. Fail CLOSED if Q can't be priced — an
+  // unpriced Q batch must never slip past the USD caps. Nothing claimed yet.
+  let usdPerToken = 1;
+  if (body.token === "Q") {
+    try {
+      usdPerToken = await quackUsdPrice();
+    } catch {
+      return NextResponse.json(
+        { error: "PRICE_UNAVAILABLE", message: "Could not price Q for the batch spend limit. Retry shortly." },
+        { status: 503 },
+      );
+    }
+  }
+
   // ── Q402 Hooks — beforeAuthorize, screened per recipient ───────────────
   // ComplianceGate (OFAC) is GLOBAL — it must cover EVERY payment surface,
   // not just /send, or a sanctioned recipient is one endpoint-swap away
@@ -309,7 +332,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       token: body.token,
       recipient: r.to.toLowerCase(),
       amount: r.amount,
-      amountUsd: Number(r.amount),
+      amountUsd: Number(r.amount) * usdPerToken,
       source: "batch",
       // Batch has no per-payment hook params surface in v1; stored
       // per-wallet config (e.g. ComplianceGate's global list) applies.
@@ -401,7 +424,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const perTxMax = wallet.perTxMaxUsd;
   let totalAmount = 0;
   for (const r of rows) {
-    const v = Number(r.amount);
+    const v = Number(r.amount) * usdPerToken;
     if (typeof perTxMax === "number" && v > perTxMax) {
       return NextResponse.json(
         { error: "PER_TX_LIMIT_EXCEEDED", limit: perTxMax, row: r },
@@ -601,7 +624,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         token: body.token as AgenticToken,
         recipient: row.to.toLowerCase(),
         amount: row.amount,
-        amountUsd: Number(row.amount),
+        amountUsd: Number(row.amount) * usdPerToken,
         source: "batch",
         params: undefined,
       });
@@ -780,10 +803,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // (different recipient set) keep their budget. Uncertain rows may have
   // settled on-chain — keep their reservation so a same-day re-attempt can't
   // over-spend the daily cap.
-  const successfulSum = successful.reduce((s, r) => s + Number(r.amount), 0);
+  const successfulSum = successful.reduce((s, r) => s + Number(r.amount) * usdPerToken, 0);
   const uncertainSum = results
     .filter((r) => r.uncertain)
-    .reduce((s, r) => s + Number(r.amount), 0);
+    .reduce((s, r) => s + Number(r.amount) * usdPerToken, 0);
   const refundAmount = totalAmount - successfulSum - uncertainSum;
   if (refundAmount > 0) {
     await refundDailySpend(owner, walletId, refundAmount).catch(() => {});

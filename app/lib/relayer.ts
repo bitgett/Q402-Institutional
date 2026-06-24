@@ -150,6 +150,9 @@ export const CHAIN_CONFIG = {
     implContract: process.env.BNB_IMPLEMENTATION_CONTRACT?.trim() || "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
     usdc: { address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18, symbol: "USDC" },
     usdt: { address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18, symbol: "USDT" },
+    // QuackAI Q token (BNB-only). The relay resolves this address from the
+    // "Q" symbol so it matches the witness the Agent Wallet signed.
+    q: { address: "0xc07e1300dc138601FA6B0b59f8D0FA477e690589", decimals: 18, symbol: "Q" },
   },
   eth: {
     name: "Ethereum",
@@ -537,8 +540,16 @@ export function getRelayerWallet(chainKey: ChainKey): ethers.Wallet {
   return new ethers.Wallet(key.privateKey, provider);
 }
 
-export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT" | "RLUSD") {
+export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT" | "RLUSD" | "Q") {
   const cfg = CHAIN_CONFIG[chainKey];
+  if (tokenSymbol === "Q") {
+    // Q (QuackAI) is BNB-only — mirror RLUSD's eth-only narrowing. The relay
+    // route's CHAIN_TOKEN_ALLOWLIST rejects chain≠bnb + token=Q before here.
+    if (chainKey !== "bnb") {
+      throw new Error(`Q is only supported on BNB Chain (got chain=${chainKey})`);
+    }
+    return (cfg as typeof CHAIN_CONFIG.bnb).q;
+  }
   if (tokenSymbol === "RLUSD") {
     // RLUSD is Ethereum-only. The relay route's CHAIN_TOKEN_ALLOWLIST rejects
     // chain≠eth + token=RLUSD before we reach here, so this access is safe.
