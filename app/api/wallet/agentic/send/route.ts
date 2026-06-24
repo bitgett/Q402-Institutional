@@ -32,7 +32,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { requireIntentAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
-import { quackAmountToUsd } from "@/app/lib/quack-price";
+import { quackUsdPrice } from "@/app/lib/quack-price";
 import {
   decryptPrivateKey,
   isKeystoreReady,
@@ -468,10 +468,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // 1:1; Q is priced via the Q/USDT TWAP. Fail CLOSED if Q can't be priced — an
   // unpriced Q transfer must never slip past the USD spend limits. Nothing is
   // claimed/charged yet here, so an early 503 needs no cleanup.
+  let usdPerToken = 1;
   let amountUsd = Number(body.amount);
   if (body.token === "Q") {
     try {
-      amountUsd = await quackAmountToUsd(Number(body.amount));
+      usdPerToken = await quackUsdPrice();
+      amountUsd = Number(body.amount) * usdPerToken;
     } catch {
       return NextResponse.json(
         { error: "PRICE_UNAVAILABLE", message: "Could not price Q for the spend limit right now. Retry shortly." },
@@ -907,7 +909,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         token: body.token,
         recipient: leg.recipient.toLowerCase(),
         amount: leg.amount,
-        amountUsd: Number(leg.amount),
+        amountUsd: Number(leg.amount) * usdPerToken,
         source: "send",
         params: undefined,
       });
@@ -948,7 +950,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         token: body.token,
         recipient: leg.recipient.toLowerCase(),
         amount: leg.amount,
-        amountUsd: Number(leg.amount),
+        amountUsd: Number(leg.amount) * usdPerToken,
         source: "send",
         params: undefined,
       });
@@ -1029,7 +1031,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // Refund the UNSETTLED portion of the daily reservation. The
     // reservation was charged for numAmount (the full total); we only
     // actually spent the sum of settled legs.
-    const settledUsd = settledLegs.reduce((acc, l) => acc + Number(l.amount), 0);
+    const settledUsd = settledLegs.reduce((acc, l) => acc + Number(l.amount) * usdPerToken, 0);
     const unsettledUsd = Math.max(0, numAmount - settledUsd);
     if (unsettledUsd > 0) {
       await refundDailySpend(owner, walletId, unsettledUsd).catch(() => {});
