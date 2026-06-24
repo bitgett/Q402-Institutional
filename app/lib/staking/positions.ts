@@ -1,10 +1,20 @@
 /**
  * Read a wallet's Q staking positions from the live QuackAiStake contract
  * (0x8f5aF1…) on BNB. getStakeData(account) returns a flat uint256[] of
- * 8-field records: [stakeTime, amount, stakeType, flag, id, unlockTime,
- * aprRaw, reward]. We parse those into typed positions + a withdrawable
- * (matured) total. Read-only; used by the positions endpoint (display) and
- * the unstake "max" resolution (route).
+ * 8-field records: [stakeTime, amount, stakeType, _bExit, stakeId, unlockTime,
+ * aprRaw, reward].
+ *
+ * VERIFIED CONTRACT SEMANTICS (Sourcify full-match, BSC 56):
+ *  - `_bExit` (index 3) is the closed flag: 1 == already exited. On exit the
+ *    contract sets _bExit=1 but LEAVES `amount` (index 1) non-zero, so a record
+ *    with amount>0 can still be closed. We MUST skip _bExit!=0 records, else
+ *    exited principal inflates stakedTotal/withdrawable.
+ *  - Unstake is `exit(ith)` where `ith` is the 0-based ARRAY index (this record's
+ *    position in getStakeData order, counting exited records too). `exit` requires
+ *    ith>0 — index 0 is permanently un-exitable, so `exitable` is false for it.
+ *
+ * Read-only; drives the positions endpoint (display) + the unstake "max"
+ * resolution (route picks the exitable records to exit).
  */
 import { ethers } from "ethers";
 import { QUACK_STAKE } from "./sign";
@@ -16,6 +26,9 @@ const STAKE_ABI = [
 ];
 
 export interface StakePosition {
+  /** 0-based array index — the argument to QuackAiStake.exit(ith). */
+  ith: number;
+  /** On-chain stakeId (global counter, index 4) — display only, NOT the exit arg. */
   id: number;
   stakeType: number;
   amount: string; // human Q (18 dec)
@@ -23,15 +36,18 @@ export interface StakePosition {
   stakedAt: number; // unix seconds
   unlockAt: number; // unix seconds
   matured: boolean;
+  /** matured && ith>=1 && not exited — can be unstaked now via exit(ith). */
+  exitable: boolean;
 }
 
 export interface StakePositionsResult {
+  /** Active (non-exited) positions only. */
   positions: StakePosition[];
-  /** Sum of all active staked principal (human Q). */
+  /** Sum of all active (non-exited) staked principal (human Q). */
   stakedTotal: string;
-  /** Sum of matured (unlockable) principal (human Q) — the unstake "max". */
+  /** Sum of EXITABLE (matured, non-exited, ith>=1) principal — the unstake "max". */
   withdrawable: string;
-  /** Raw withdrawable in wei — for exact-amount unstake resolution. */
+  /** Raw withdrawable in wei. */
   withdrawableRaw: string;
 }
 
@@ -47,13 +63,20 @@ export async function readStakePositions(wallet: string): Promise<StakePositions
   let stakedRaw = 0n;
   let withdrawableRaw = 0n;
   const F = 8;
-  for (let i = 0; i + F <= sd.length; i += F) {
+  // `ith` MUST be the absolute array index (count exited records too) because
+  // exit(ith) indexes the full on-chain array.
+  const recordCount = Math.floor(sd.length / F);
+  for (let ith = 0; ith < recordCount; ith++) {
+    const i = ith * F;
+    const exited = sd[i + 3] !== 0n; // _bExit
     const amountRaw = sd[i + 1];
-    if (amountRaw <= 0n) continue; // withdrawn / empty slot
+    if (exited || amountRaw <= 0n) continue; // closed or empty slot — not active
     const stakedAt = Number(sd[i]);
     const unlockAt = Number(sd[i + 5]);
     const matured = now >= unlockAt;
+    const exitable = matured && ith >= 1; // index 0 is un-exitable on-chain
     positions.push({
+      ith,
       id: Number(sd[i + 4]),
       stakeType: Number(sd[i + 2]),
       amount: ethers.formatUnits(amountRaw, 18),
@@ -61,9 +84,10 @@ export async function readStakePositions(wallet: string): Promise<StakePositions
       stakedAt,
       unlockAt,
       matured,
+      exitable,
     });
     stakedRaw += amountRaw;
-    if (matured) withdrawableRaw += amountRaw;
+    if (exitable) withdrawableRaw += amountRaw;
   }
 
   return {

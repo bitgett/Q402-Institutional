@@ -13,7 +13,8 @@ pragma solidity ^0.8.20;
  *      impls. Under 7702 `address(this)` == the owner EOA, so when this code calls
  *      `QuackAiStake.stake()`, the staking contract sees the OWNER as the staker
  *      (it pulls Q from the owner via the approval set here and records the
- *      position for the owner); `withdraw()` returns Q to the owner.
+ *      position for the owner); `exit(ith)` returns the record's Q + reward to the
+ *      owner. (`withdraw()` is an onlyOwner BNB sweep on QuackAiStake — NOT used.)
  *
  *  STORAGE COMPATIBILITY (CRITICAL): `usedNonces` is slot 0 + `_reentrancyStatus`
  *    slot 1 — byte-identical to the BNB payment/yield impls so a wallet that
@@ -31,7 +32,8 @@ pragma solidity ^0.8.20;
  *    - Independent adversarial audit (external-DeFi + approve surface).
  *    - Verify on-chain that QuackAiStake.stake(stakeType,amount) pulls `amount`
  *      Q via transferFrom (so the approval is required + sufficient) and that
- *      withdraw(amount) returns Q to msg.sender.
+ *      exit(ith) returns principal + reward in Q to msg.sender (verified against
+ *      the Sourcify full-match source for 0x8f5aF1…4f94, BSC chainId 56).
  *    - Compile solc 0.8.20 / optimizer 200 / evmVersion london (match the
  *      deployed BNB impls + the landing deploy script).
  *
@@ -52,21 +54,33 @@ contract Q402StakingImplementationBNB {
         "StakeAuthorization(address owner,address facilitator,address stakeContract,address token,uint256 stakeType,uint256 amount,uint256 nonce,uint256 deadline)"
     );
 
+    // Unstake is per-record: `ith` is the 0-based position of the stake in the
+    // owner's QuackAiStake record array (the same order getStakeData returns), NOT
+    // an amount. QuackAiStake.exit(ith) is all-or-nothing per record.
     bytes32 public constant UNSTAKE_AUTHORIZATION_TYPEHASH = keccak256(
-        "UnstakeAuthorization(address owner,address facilitator,address stakeContract,uint256 amount,uint256 nonce,uint256 deadline)"
+        "UnstakeAuthorization(address owner,address facilitator,address stakeContract,uint256 ith,uint256 nonce,uint256 deadline)"
     );
 
     string public constant NAME    = "Q402 BNB Chain";
     string public constant VERSION = "1";
 
     /// @notice Impl version tag — lets the SDK detect the staking impl.
-    string public constant IMPL_VERSION = "2-staking";
+    /// 3-staking-exit: unstake calls QuackAiStake.exit(ith) (the real principal-
+    /// returning unstake), NOT withdraw() (which is an onlyOwner BNB sweep).
+    string public constant IMPL_VERSION = "3-staking-exit";
 
     // ─── Allowlist (BNB Chain, immutable) ────────────────────────────────────
     // Never trust the signed stakeContract/token unchecked.
 
     address internal constant QUACK_STAKE = 0x8f5aF1E069Cf63118bdD018203F5228343cc4f94;
     address internal constant Q_TOKEN     = 0xc07e1300dc138601FA6B0b59f8D0FA477e690589;
+
+    /// One-time index-0 seed: QuackAiStake.exit(ith) requires ith>0, so array
+    /// index 0 is permanently un-exitable. On the owner's FIRST stake we plant a
+    /// dust record (= the contract's minimum stake, 1e4 wei ≈ $0) at index 0 so
+    /// every REAL stake lands at index>=1 and remains exitable. Bounded, one-time,
+    /// to the same allowlisted staking contract — not a drain vector.
+    uint256 internal constant SEED_DUST = 1e4;
 
     function isAllowedStake(address stakeContract) public pure returns (bool) { return stakeContract == QUACK_STAKE; }
     function isAllowedToken(address token) public pure returns (bool) { return token == Q_TOKEN; }
@@ -93,7 +107,7 @@ contract Q402StakingImplementationBNB {
     );
     event Unstaked(
         address indexed owner, address indexed stakeContract,
-        uint256 amount, uint256 nonce
+        uint256 ith, uint256 amountOut, uint256 nonce
     );
 
     // ─── Errors ─────────────────────────────────────────────────────────────
@@ -109,6 +123,7 @@ contract Q402StakingImplementationBNB {
     error TokenNotAllowed();
     error ApproveFailed();
     error StakeAmountMismatch();
+    error UnstakeNoReturn();
 
     // ─── Gasless Q stake ─────────────────────────────────────────────────────
 
@@ -146,47 +161,69 @@ contract Q402StakingImplementationBNB {
         // `amount` Q from the owner. QuackAiStake's source isn't BscScan-verified,
         // so if it pulls nothing (records-only) or a different amount (fee-on-
         // transfer), we revert LOUDLY rather than burn the nonce on a no-op stake.
+        // INDEX-0 SEED (one-time): plant a dust record at index 0 on the owner's
+        // first stake so the real stake lands at index>=1 (exit() requires ith>0).
         uint256 balBefore = IERC20(token).balanceOf(address(this));
-        _setApproval(token, stakeContract, amount);   // exact-amount, reset-to-zero safe
+        uint256 seed = IQuackStake(stakeContract).stakeNum(owner) == 0 ? SEED_DUST : 0;
+        _setApproval(token, stakeContract, amount + seed);   // exact-amount, reset-to-zero safe
+        if (seed != 0) IQuackStake(stakeContract).stake(0, seed); // index 0 = dust (un-exitable)
         IQuackStake(stakeContract).stake(stakeType, amount);
         // Defensive: never leave a residual allowance to the staking contract.
         _setApproval(token, stakeContract, 0);
         // balBefore >= balAfter always (a stake can't increase the owner's Q).
-        if (balBefore - IERC20(token).balanceOf(address(this)) != amount) revert StakeAmountMismatch();
+        if (balBefore - IERC20(token).balanceOf(address(this)) != amount + seed) revert StakeAmountMismatch();
 
         emit Staked(owner, stakeContract, stakeType, amount, nonce);
     }
 
-    // ─── Gasless Q unstake (withdraw) ────────────────────────────────────────
+    // ─── Gasless Q unstake (exit a single matured record) ────────────────────
 
     /**
-     * @notice Withdraw `amount` Q from QuackAiStake back to the owner EOA, gasless.
-     * @dev QuackAiStake.withdraw(amount) returns Q to msg.sender (== owner under
-     *      7702); no approval needed. Lock-period / amount validity is enforced by
-     *      the staking contract (reverts if locked or over-withdraw).
+     * @notice Unstake the Q record at array index `ith` from QuackAiStake back to
+     *         the owner EOA, gasless.
+     * @dev QuackAiStake.exit(ith) returns principal + reward in Q to msg.sender
+     *      (== owner under 7702); no approval needed. The staking contract enforces
+     *      `ith > 0`, the lock period, and the not-already-exited check (reverts
+     *      otherwise). `ith` is the 0-based position in the owner's record array
+     *      (getStakeData order). NOTE: QuackAiStake.exit requires ith > 0 — the
+     *      first record (index 0) is un-exitable on-chain, which is why the server
+     *      seeds a throwaway index-0 stake so no real principal lands there. We
+     *      also reject ith == 0 here so the nonce isn't burned on a guaranteed
+     *      revert.
+     *
+     *      `withdraw()` is deliberately NOT called: on QuackAiStake it is an
+     *      onlyOwner native-BNB sweep to the fund address, unrelated to staking —
+     *      the prior impl wired unstake to it and every unstake reverted.
      */
     function unstakeQuack(
         address owner, address facilitator, address stakeContract,
-        uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
+        uint256 ith, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external nonReentrant {
         if (msg.sender != facilitator)      revert UnauthorizedFacilitator();
         if (owner != address(this))         revert OwnerMismatch();
         if (block.timestamp > deadline)     revert SignatureExpired();
-        if (amount == 0)                    revert BadAmount();
+        if (ith == 0)                       revert BadAmount(); // exit() requires ith > 0
         if (!isAllowedStake(stakeContract)) revert StakeNotAllowed();
         if (usedNonces[owner][nonce])       revert NonceAlreadyUsed();
 
         bytes32 structHash = keccak256(abi.encode(
             UNSTAKE_AUTHORIZATION_TYPEHASH,
-            owner, facilitator, stakeContract, amount, nonce, deadline
+            owner, facilitator, stakeContract, ith, nonce, deadline
         ));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
         if (_recoverSigner(digest, witnessSignature) != owner) revert InvalidSignature();
 
         usedNonces[owner][nonce] = true;
 
-        IQuackStake(stakeContract).withdraw(amount);
-        emit Unstaked(owner, stakeContract, amount, nonce);
+        // exit(ith) returns principal + reward in Q. Assert the owner's Q actually
+        // increased so we never burn the nonce on a no-op (e.g. a contract that
+        // silently returns nothing). Q is the only allowlisted staking token.
+        uint256 balBefore = IERC20(Q_TOKEN).balanceOf(address(this));
+        IQuackStake(stakeContract).exit(ith);
+        uint256 balAfter = IERC20(Q_TOKEN).balanceOf(address(this));
+        if (balAfter <= balBefore) revert UnstakeNoReturn();
+
+        emit Unstaked(owner, stakeContract, ith, balAfter - balBefore, nonce);
     }
 
     // ─── View helpers ─────────────────────────────────────────────────────────
@@ -249,5 +286,10 @@ interface IERC20 {
 
 interface IQuackStake {
     function stake(uint256 stakeType, uint256 amount) external;
-    function withdraw(uint256 amount) external;
+    // Per-record unstake: ith is the 0-based array position (requires ith > 0
+    // on-chain). Returns principal + reward in the staking token to msg.sender.
+    function exit(uint256 ith) external;
+    // Number of stake records the account has ever created (incl. exited) — used
+    // to detect the first stake for the index-0 seed.
+    function stakeNum(address account) external view returns (uint256);
 }

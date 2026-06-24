@@ -101,7 +101,7 @@ const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: stri
 ];
 
 /**
- * Canonical @quackai/q402-mcp tool surface — 29 tools, source of truth is
+ * Canonical @quackai/q402-mcp tool surface — 30 tools, source of truth is
  * mcp-server/src/index.ts (ListTools order). One-line purposes condensed from
  * each tool's own `description` + app/docs/page.tsx. Grouped so the grid reads
  * as Core → Recurring → Bridge (CCIP) → Yield (Aave) → Staking.
@@ -136,8 +136,9 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Yield", name: "q402_yield_deposit", purpose: "Supply stablecoins into Aave (BNB) or Morpho (Base, USDC only) to earn APY. Moves funds, needs confirm." },
   { group: "Yield", name: "q402_yield_withdraw", purpose: `Withdraw stablecoin from Aave or Morpho (amount "max" = full). Moves funds, needs confirm.` },
   // Staking (Q / QuackAI on BNB)
-  { group: "Staking", name: "q402_stake", purpose: "Gasless Q (QuackAI) staking into QuackAiStake on BNB. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). Moves funds, needs confirm." },
-  { group: "Staking", name: "q402_unstake", purpose: "Gasless unstake (withdraw) of Q from QuackAiStake on BNB back to the wallet. Moves funds, needs confirm." },
+  { group: "Staking", name: "q402_stake", purpose: `Gasless Q (QuackAI) staking into QuackAiStake on BNB. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). amount "max" stakes the whole Q balance. Moves funds, needs confirm.` },
+  { group: "Staking", name: "q402_unstake", purpose: "Gasless unstake of matured Q on BNB. Per-record: exit one stake by index (ith) or all matured. Moves funds, needs confirm." },
+  { group: "Staking", name: "q402_stake_positions", purpose: "The Agent Wallet's Q stakes (indices, maturity, exitable) + liquid Q balance. Read-only." },
   // Requests
   { group: "Requests", name: "q402_request_create", purpose: "Publish a payment request (invoice). No funds move — returns a /pay link + req_ id." },
   { group: "Requests", name: "q402_request_status", purpose: "Look up a request by req_ id (amount, recipient, status). Read-only, no auth." },
@@ -471,7 +472,7 @@ const SECTIONS = [
   { id: "credentials", label: "Credentials", hint: "API keys · scopes" },
   { id: "integration", label: "Integration guide", hint: "SDK in 4 steps" },
   { id: "mcp", label: "MCP setup", hint: "Claude · Cursor · Cline" },
-  { id: "tools", label: "MCP tool reference", hint: "29 tools" },
+  { id: "tools", label: "MCP tool reference", hint: "30 tools" },
   { id: "webhook", label: "Webhook", hint: "Signed settlement POSTs" },
   { id: "playground", label: "API playground", hint: "Simulate a quote" },
   { id: "docs", label: "Documentation", hint: "Full reference" },
@@ -1878,7 +1879,7 @@ function IntegrationGuide() {
   );
 }
 
-// ── MCP tool reference grid (29 tools) ───────────────────────────────────────
+// ── MCP tool reference grid (30 tools) ───────────────────────────────────────
 // The full @quackai/q402-mcp tool surface with one-line purposes + npm/GitHub
 // source links. Grouped Core → Recurring → Bridge → Yield → Staking.
 function McpToolGrid() {
@@ -2292,7 +2293,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
             <McpSetupCard sandboxKey={mcpSandboxKey} demo={demoMode} />
           </div>
 
-          {/* ── MCP tool reference grid (29 tools) ──────────────────── */}
+          {/* ── MCP tool reference grid (30 tools) ──────────────────── */}
           <div ref={refs.tools} style={section(3)}>
             <McpToolGrid />
           </div>

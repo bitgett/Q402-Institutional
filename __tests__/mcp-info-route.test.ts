@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import {
@@ -125,4 +125,31 @@ describe("buildQ402AgentMetadata MCP service endpoint", () => {
     });
     expect(meta.services.find((s) => s.name === "MCP")).toBeUndefined();
   });
+});
+
+describe("/api/mcp/info tools[] == MCP server tool handlers (drift guard)", () => {
+  // The discovery endpoint hardcodes a tools[] array; the MCP server registers
+  // its real tools as CallTool `case "q402_…"` handlers. These drifted before:
+  // q402_stake / q402_unstake shipped on npm but were missing from /api/mcp/info,
+  // so an indexer saw 27 tools where the package exposed 29. This pins the two
+  // together. Reads the gitignored mcp-server/ workspace off disk — skips if it
+  // isn't checked out (the local pre-publish run is the real gate).
+  const infoSrc = readFileSync(
+    resolve(__dirname, "..", "app", "api", "mcp", "info", "route.ts"),
+    "utf8",
+  );
+  const indexPath = resolve(__dirname, "..", "mcp-server", "src", "index.ts");
+
+  const infoTools = [...infoSrc.matchAll(/name:\s*"(q402_[a-z_]+)"/g)].map((m) => m[1]).sort();
+
+  it.skipIf(!existsSync(indexPath))(
+    "every MCP CallTool handler is advertised in /api/mcp/info, and vice versa",
+    () => {
+      const indexSrc = readFileSync(indexPath, "utf8");
+      // CallTool handlers — the authoritative enumeration of callable tools.
+      const handlerTools = [...indexSrc.matchAll(/case\s+"(q402_[a-z_]+)":/g)].map((m) => m[1]).sort();
+      expect(handlerTools.length).toBeGreaterThan(0);
+      expect(infoTools).toEqual(handlerTools);
+    },
+  );
 });

@@ -75,7 +75,7 @@ const STAKE_IMPL_ABI = [
     type: "function", name: "unstakeQuack", stateMutability: "nonpayable",
     inputs: [
       { name: "owner", type: "address" }, { name: "facilitator", type: "address" },
-      { name: "stakeContract", type: "address" }, { name: "amount", type: "uint256" },
+      { name: "stakeContract", type: "address" }, { name: "ith", type: "uint256" },
       { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" },
       { name: "witnessSignature", type: "bytes" },
     ],
@@ -133,7 +133,7 @@ export async function settleStakeAction(a: SignedStakeAction): Promise<StakeSett
         })
       : encodeFunctionData({
           abi: STAKE_IMPL_ABI, functionName: "unstakeQuack",
-          args: [a.fromAddr, account.address, a.stakeContract, a.amountRaw, a.nonceUint, a.deadline, a.witnessSig],
+          args: [a.fromAddr, account.address, a.stakeContract, BigInt(a.ith ?? 0), a.nonceUint, a.deadline, a.witnessSig],
         });
 
   const authorizationList = [{

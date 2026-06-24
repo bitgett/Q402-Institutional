@@ -62,8 +62,13 @@ interface StakeBody {
   amount?: string;
   /** Signed numeric ceiling for amount:"max" — the balance the user saw at
    *  sign time. The server stakes min(on-chain balance, cap), so it can never
-   *  exceed what the user actually consented to. */
+   *  exceed what the user actually consented to. (stake only) */
   cap?: string;
+  /** Unstake target: the 0-based record index to exit (QuackAiStake.exit(ith)).
+   *  Per-record, all-or-nothing; MUST be >= 1 (index 0 is un-exitable). Resolve
+   *  via GET /api/wallet/agentic/stake/positions. "Unstake all matured" is a
+   *  client-side loop over the exitable indices. (unstake only) */
+  ith?: number;
   walletId?: string;
 }
 
@@ -89,21 +94,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (action !== "stake" && action !== "unstake") {
     return NextResponse.json({ error: "INVALID_ACTION", message: 'action must be "stake" or "unstake".' }, { status: 400 });
   }
-  // amount: a positive decimal OR the sentinel "max". For stake, "max" resolves
-  // to the wallet's Q balance; for unstake, to its withdrawable (matured) staked
-  // total. Both are resolved server-side at execution + capped by the signed cap.
-  const isMax = body.amount === "max";
-  if (!isMax && !isPositiveDecimalString(body.amount)) {
-    return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+  const isStake = action === "stake";
+
+  // STAKE: amount is a positive decimal OR the sentinel "max" (resolves to the
+  // wallet's Q balance, capped by the signed cap). UNSTAKE: a record index `ith`
+  // (exit(ith) is per-record, all-or-nothing); index 0 is un-exitable. "Unstake
+  // all matured" is a client-side loop over the exitable indices, not a route mode.
+  let amount = "";
+  let isMax = false;
+  let unstakeIth = 0;
+  if (isStake) {
+    isMax = body.amount === "max";
+    if (!isMax && !isPositiveDecimalString(body.amount)) {
+      return NextResponse.json({ error: "INVALID_AMOUNT" }, { status: 400 });
+    }
+    amount = body.amount as string;
+    // "max" must carry a numeric cap (the balance the user saw + signed) so the
+    // server stakes min(on-chain balance, cap) — never more than was consented.
+    if (isMax && !isPositiveDecimalString(body.cap)) {
+      return NextResponse.json({ error: "MAX_CAP_REQUIRED", message: 'amount "max" requires a numeric cap.' }, { status: 400 });
+    }
+  } else {
+    unstakeIth = Number(body.ith);
+    if (!Number.isInteger(unstakeIth) || unstakeIth < 1) {
+      return NextResponse.json({ error: "INVALID_ITH", message: "unstake requires a record index ith >= 1 (GET .../stake/positions). Index 0 is un-exitable." }, { status: 400 });
+    }
   }
-  const amount = body.amount as string;
-  // "max" must carry a numeric cap (the balance the user saw + signed) so the
-  // server stakes min(on-chain balance, cap) — never more than was consented.
-  if (isMax && !isPositiveDecimalString(body.cap)) {
-    return NextResponse.json({ error: "MAX_CAP_REQUIRED", message: 'amount "max" requires a numeric cap.' }, { status: 400 });
-  }
-  const stakeType = action === "stake" ? Number(body.stakeType ?? 0) : 0;
-  if (action === "stake" && !STAKE_TIERS.some((t) => t.stakeType === stakeType)) {
+  const stakeType = isStake ? Number(body.stakeType ?? 0) : 0;
+  if (isStake && !STAKE_TIERS.some((t) => t.stakeType === stakeType)) {
     return NextResponse.json(
       { error: "INVALID_STAKE_TYPE", message: `stakeType must be one of ${STAKE_TIERS.map((t) => t.stakeType).join(", ")}.`, tiers: STAKE_TIERS },
       { status: 400 },
@@ -135,7 +153,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       challenge: body.nonce ?? null,
       signature: body.signature ?? null,
       action: "agentic.stake",
-      intent: { walletId: requestedWalletId, action, stakeType: String(stakeType), amount, ...(isMax ? { cap: body.cap as string } : {}) },
+      intent: isStake
+        ? { walletId: requestedWalletId, action, stakeType: String(stakeType), amount, ...(isMax ? { cap: body.cap as string } : {}) }
+        : { walletId: requestedWalletId, action, ith: String(unstakeIth) },
     });
     if (typeof authResult !== "string") {
       return NextResponse.json({ error: authResult.error, code: authResult.code }, { status: authResult.status });
@@ -185,7 +205,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── Idempotency window (avoid double-stake on a quick retry) ──────────────
   // Include the cap so two "max" calls with DIFFERENT caps (e.g. before vs after
   // a top-up) don't collide on one idempotency slot and block the second for 15m.
-  const fp = ethers.keccak256(ethers.toUtf8Bytes(`${owner}:${walletId}:${action}:${stakeType}:${amount}:${body.cap ?? ""}`)).slice(2, 26);
+  const fpInput = isStake
+    ? `${owner}:${walletId}:stake:${stakeType}:${amount}:${body.cap ?? ""}`
+    : `${owner}:${walletId}:unstake:ith:${unstakeIth}`;
+  const fp = ethers.keccak256(ethers.toUtf8Bytes(fpInput)).slice(2, 26);
   const idemKey = `aw:stake:${fp}`;
   const claimed = await kv.set(idemKey, { status: "processing", at: Date.now() }, { nx: true, ex: IDEM_TTL_SEC });
   if (!claimed) {
@@ -224,33 +247,42 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "key_decrypt_failed" }, { status: 503 });
   }
 
-  // Resolve "max" at settle time, capped by the user's signed ceiling. Reading
-  // on-chain (not a cached UI number) keeps it exact. For STAKE: min(Q balance,
-  // cap). For UNSTAKE: min(withdrawable matured staked total, cap).
+  // STAKE "max": resolve to min(on-chain Q balance, signed cap) at settle time —
+  // reading on-chain (not a cached UI number) keeps it exact + never exceeds what
+  // the user signed. UNSTAKE: validate the requested record is actually exitable
+  // now, so we return a clear error instead of burning relayer gas on a revert.
   let settleAmount = amount;
-  if (isMax) {
+  if (isStake && isMax) {
     try {
       const capRaw = ethers.parseUnits(body.cap as string, 18);
-      let availRaw: bigint;
-      if (action === "stake") {
-        const provider = new ethers.JsonRpcProvider(AGENTIC_CHAINS.bnb.rpc);
-        const q = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
-        availRaw = (await q.balanceOf(wallet.address)) as bigint;
-      } else {
-        const { withdrawableRaw } = await readStakePositions(wallet.address);
-        availRaw = BigInt(withdrawableRaw);
-      }
+      const provider = new ethers.JsonRpcProvider(AGENTIC_CHAINS.bnb.rpc);
+      const q = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
+      const availRaw = (await q.balanceOf(wallet.address)) as bigint;
       const useRaw = availRaw < capRaw ? availRaw : capRaw;
       if (useRaw <= 0n) {
         await cleanup();
-        return action === "stake"
-          ? NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 })
-          : NextResponse.json({ error: "NOTHING_TO_UNSTAKE", message: "No unlocked (matured) Q position to unstake." }, { status: 400 });
+        return NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 });
       }
       settleAmount = ethers.formatUnits(useRaw, 18);
     } catch (e) {
       await cleanup();
       return NextResponse.json({ error: "MAX_RESOLVE_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
+    }
+  } else if (!isStake) {
+    try {
+      const { positions } = await readStakePositions(wallet.address);
+      const pos = positions.find((p) => p.ith === unstakeIth);
+      if (!pos) {
+        await cleanup();
+        return NextResponse.json({ error: "NO_SUCH_STAKE", message: `No active stake at index ${unstakeIth} (already exited or never existed).` }, { status: 400 });
+      }
+      if (!pos.exitable) {
+        await cleanup();
+        return NextResponse.json({ error: "NOT_MATURED", message: "This stake has not matured yet — it cannot be unstaked.", unlockAt: pos.unlockAt }, { status: 400 });
+      }
+    } catch (e) {
+      await cleanup();
+      return NextResponse.json({ error: "POSITIONS_READ_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
     }
   }
 
@@ -262,7 +294,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       chain: "bnb",
       action: action as StakeAction,
       stakeType,
-      amount: settleAmount,
+      ...(isStake ? { amount: settleAmount } : { ith: unstakeIth }),
       facilitator,
     });
     result = await settleStakeAction(signed);
@@ -299,8 +331,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     status: "settled",
     action,
     chain: "bnb",
-    stakeType: action === "stake" ? stakeType : undefined,
-    amount: settleAmount,
+    ...(isStake ? { stakeType, amount: settleAmount } : { ith: unstakeIth }),
     txHash: result.txHash,
     walletId,
   });

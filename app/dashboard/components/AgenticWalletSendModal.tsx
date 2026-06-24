@@ -313,7 +313,7 @@ export function AgenticWalletSendModal({
       <>
         {/* Source-of-funds primer — clears "is this my MetaMask?" + the gas model. */}
         <div style={{ borderRadius: 10, border: "1px solid rgba(247,202,22,.26)", background: "rgba(247,202,22,.05)", padding: "10px 12px", fontSize: 12, lineHeight: 1.5, color: "rgba(226,232,240,0.78)" }}>
-          Sending from your <span style={{ color: GOLD_TEXT }}>Agent Wallet</span>, not your MetaMask. Only the stablecoin moves from your Agent Wallet balance.
+          Sending from your <span style={{ color: GOLD_TEXT }}>Agent Wallet</span>, not your MetaMask. Only the selected token moves from your Agent Wallet balance.
           <div style={{ marginTop: 7, paddingTop: 7, borderTop: "1px solid rgba(247,202,22,.15)", color: "rgba(255,255,255,.55)" }}>
             Gas: <span style={{ color: GOLD_TEXT }}>Trial</span> = Q402 sponsors <span style={{ color: GOLD_TEXT }}>BNB Chain only</span>.{" "}
             <span style={{ color: GOLD_TEXT }}>Multichain</span> = relay gas debits from your Gas Tank on the selected chain. Top up via the Treasury.
