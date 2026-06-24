@@ -54,6 +54,7 @@ import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
 import type { AgenticWalletPublic } from "@/app/dashboard/components/AgenticWalletTab";
 import { AgenticWalletEarnSection } from "@/app/dashboard/components/AgenticWalletEarnSection";
+import { AgenticWalletStakeSection } from "@/app/dashboard/components/AgenticWalletStakeSection";
 import { AgenticWalletRecurringSection } from "@/app/dashboard/components/AgenticWalletRecurringSection";
 import { RequestComposerModal } from "./RequestComposerModal";
 import { AgenticWalletSendModal } from "@/app/dashboard/components/AgenticWalletSendModal";
@@ -1406,6 +1407,19 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       )}
                     </div>
                   </div>
+
+                  {/* Q Staking — gasless Q lock into QuackAiStake (BNB). Own card
+                      at the foot of the wallet overview; real wallets only (needs
+                      an owner signature). */}
+                  {!demoMode && activeWallet && (
+                    <div style={{ ...subCard(13), padding: 14, marginTop: 11 }}>
+                      <AgenticWalletStakeSection
+                        ownerAddress={addr ?? activeWallet.ownerAddr}
+                        walletId={activeWallet.walletId}
+                        signMessage={signMessage}
+                      />
+                    </div>
+                  )}
                 </section>
 
                 {/* Recent activity — real settlements scoped to this wallet

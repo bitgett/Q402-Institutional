@@ -13,12 +13,10 @@ import { useState } from "react";
 import { getActionAuth, clearAuthCache } from "@/app/lib/auth-client";
 
 const TIERS = [
-  { stakeType: 0, lockDays: 14, aprPct: 10 },
-  { stakeType: 1, lockDays: 30, aprPct: 20 },
-  { stakeType: 2, lockDays: 90, aprPct: 30 },
-  { stakeType: 3, lockDays: 140, aprPct: 40 },
-  { stakeType: 4, lockDays: 120, aprPct: 50 },
-  { stakeType: 5, lockDays: 180, aprPct: 30 },
+  { stakeType: 0, lockDays: 30, aprPct: 10 },
+  { stakeType: 1, lockDays: 60, aprPct: 15 },
+  { stakeType: 2, lockDays: 120, aprPct: 32 },
+  { stakeType: 3, lockDays: 180, aprPct: 40 },
 ] as const;
 
 export function AgenticWalletStakeSection({
@@ -137,7 +135,7 @@ export function AgenticWalletStakeSection({
         {mode === "stake" && (
           <div>
             <div className="text-[10px] text-white/45 uppercase tracking-widest mb-1">Lock tier</div>
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 gap-1.5">
               {TIERS.map((t) => (
                 <button
                   key={t.stakeType}
