@@ -5,7 +5,7 @@ import { join } from "node:path";
 // Node.js runtime — the edge bundle exceeded Vercel's 1 MB edge-function limit
 // after the Next 16 / React 19 upgrade. OG image generation is not latency-sensitive.
 export const runtime = "nodejs";
-export const alt = "Q402 | Gasless payments on any EVM chain";
+export const alt = "Q402 Agentic Wallet | Gasless payments for AI agents";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -17,10 +17,10 @@ export const contentType = "image/png";
 // outputFileTracingIncludes ships the fonts in case the route is served dynamically.
 export default async function Image() {
   const fontDir = join(process.cwd(), "app", "_fonts");
-  const [extraBold, bold, light] = await Promise.all([
+  const [extraBold, bold, semiBold] = await Promise.all([
     readFile(join(fontDir, "Poppins-ExtraBold.ttf")),
     readFile(join(fontDir, "Poppins-Bold.ttf")),
-    readFile(join(fontDir, "Poppins-Light.ttf")),
+    readFile(join(fontDir, "Poppins-SemiBold.ttf")),
   ]);
 
   return new ImageResponse(
@@ -32,7 +32,7 @@ export default async function Image() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: "80px",
+          padding: "78px 80px",
           fontFamily: "Poppins",
           background: "linear-gradient(140deg, #16345c 0%, #0b1729 50%, #060c17 100%)",
           position: "relative",
@@ -52,7 +52,7 @@ export default async function Image() {
           }}
         />
 
-        {/* Top-left: the Navbar logo — yellow mark + Q402 wordmark + by Quack AI */}
+        {/* Top-left: the Navbar logo lockup — mark + Q402 + divider + by Quack AI */}
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <div
             style={{
@@ -69,13 +69,23 @@ export default async function Image() {
             <div style={{ display: "flex", width: "24px", height: "24px", borderRadius: "5px", background: "rgba(7,16,31,0.9)" }} />
           </div>
           <span style={{ color: "#F5C518", fontSize: "44px", fontWeight: 700, letterSpacing: "-1.5px" }}>Q402</span>
-          <span style={{ color: "rgba(255,255,255,0.32)", fontSize: "24px", fontWeight: 300, marginLeft: "4px", marginTop: "8px" }}>by Quack AI</span>
+          <div style={{ display: "flex", width: "2px", height: "30px", borderRadius: "1px", background: "rgba(255,255,255,0.20)" }} />
+          <span style={{ color: "rgba(255,255,255,0.52)", fontSize: "25px", fontWeight: 600 }}>by Quack AI</span>
         </div>
 
-        {/* Bottom-left: two-line headline, nothing else */}
-        <div style={{ display: "flex", flexDirection: "column", fontSize: "78px", fontWeight: 800, color: "#ffffff", lineHeight: 1.05, letterSpacing: "-3px" }}>
-          <span>Gasless payments</span>
-          <span>on any EVM chain</span>
+        {/* Bottom-left: gold eyebrow + two-line headline */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "22px" }}>
+            <div style={{ display: "flex", width: "32px", height: "4px", borderRadius: "2px", background: "#F5C518" }} />
+            <span style={{ color: "#F5C518", fontSize: "25px", fontWeight: 600, letterSpacing: "4px" }}>AGENTIC WALLET</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", fontSize: "76px", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-3px" }}>
+            <span style={{ color: "#ffffff" }}>Gasless payments</span>
+            <div style={{ display: "flex" }}>
+              <span style={{ color: "#ffffff" }}>for</span>
+              <span style={{ color: "#F5C518", marginLeft: "21px" }}>AI agents</span>
+            </div>
+          </div>
         </div>
       </div>
     ),
@@ -84,7 +94,7 @@ export default async function Image() {
       fonts: [
         { name: "Poppins", data: extraBold, weight: 800, style: "normal" },
         { name: "Poppins", data: bold, weight: 700, style: "normal" },
-        { name: "Poppins", data: light, weight: 300, style: "normal" },
+        { name: "Poppins", data: semiBold, weight: 600, style: "normal" },
       ],
     },
   );
