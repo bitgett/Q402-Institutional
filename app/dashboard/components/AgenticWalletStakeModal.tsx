@@ -69,6 +69,9 @@ export function AgenticWalletStakeModal({
   const tier = TIERS.find((t) => t.stakeType === stakeType)!;
   const fmtQ = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 6 });
   const fmtDate = (s: number) => new Date(s * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  // Simple-interest estimate over the lock period: amount * APR * (days/365).
+  const stakeAmt = useMax ? maxAvail : Number(amount.trim()) || 0;
+  const estReward = stakeAmt * (tier.aprPct / 100) * (tier.lockDays / 365);
 
   const loadPositions = useCallback(async () => {
     try {
@@ -231,9 +234,21 @@ export function AgenticWalletStakeModal({
         </div>
       </Field>
 
+      {mode === "stake" && stakeAmt > 0 && (
+        <div style={{ borderRadius: 11, border: "1px solid rgba(247,202,22,.22)", background: "linear-gradient(135deg, rgba(247,202,22,.07), rgba(88,199,244,.04))", padding: "11px 13px", display: "grid", gap: 7 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,.6)" }}>Estimated reward</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#8fd6f7" }}>+{fmtQ(estReward)} Q</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", paddingTop: 6, borderTop: "1px solid rgba(255,255,255,.07)" }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,.6)" }}>Total at maturity ({tier.lockDays}d)</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#f9d64a" }}>{fmtQ(stakeAmt + estReward)} Q</span>
+          </div>
+        </div>
+      )}
       {mode === "stake" && (
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,.42)", lineHeight: 1.5 }}>
-          Locks {useMax ? `all your Q (${fmtQ(maxAvail)})` : amount.trim() || "0"} {useMax ? "" : "Q "}for {tier.lockDays} days at ~{tier.aprPct}% APR. Gasless. The relayer pays.
+        <div style={{ fontSize: 11.5, color: "rgba(255,255,255,.4)", lineHeight: 1.5 }}>
+          {tier.lockDays}-day lock at ~{tier.aprPct}% APR. Gasless. The relayer pays the gas.
         </div>
       )}
       {mode === "unstake" && (
@@ -254,13 +269,18 @@ export function AgenticWalletStakeModal({
         </AlertBox>
       )}
 
-      {/* ── Your positions ── */}
-      {pos && pos.positions.length > 0 && (
+      {/* ── Your positions (this Agent Wallet) ── */}
+      {pos && (
         <div>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 7 }}>
             <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(255,255,255,.5)" }}>Your stakes</span>
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)" }}>Total {fmtQ(Number(pos.stakedTotal))} Q</span>
+            {pos.positions.length > 0 && <span style={{ fontSize: 11, color: "rgba(255,255,255,.45)" }}>Total {fmtQ(Number(pos.stakedTotal))} Q</span>}
           </div>
+          {pos.positions.length === 0 ? (
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,.4)", lineHeight: 1.5, borderRadius: 9, border: "1px dashed rgba(255,255,255,.1)", background: "rgba(255,255,255,.015)", padding: "10px 12px" }}>
+              No stakes in this Agent Wallet yet. Stake above and your positions (with unlock dates) appear here.
+            </div>
+          ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {pos.positions.map((p) => {
               const t = TIERS.find((x) => x.stakeType === p.stakeType);
@@ -277,6 +297,7 @@ export function AgenticWalletStakeModal({
               );
             })}
           </div>
+          )}
         </div>
       )}
     </ModalShell>

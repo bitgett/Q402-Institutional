@@ -887,7 +887,9 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
       nonce:       eip3009Nonce!,
       sig:         witnessSig,
       chainKey:    chain,
-      token,
+      // Q never rides the EIP-3009 / x402 rail (BNB-only EIP-7702); the rail
+      // selection upstream guarantees token is a stablecoin here.
+      token:       token as "USDC" | "USDT" | "RLUSD",
     };
     result = await settlePaymentEIP3009(eip3009Params);
 
