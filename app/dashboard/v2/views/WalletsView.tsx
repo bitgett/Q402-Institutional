@@ -805,7 +805,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
       }));
 
   // Active-wallet view model (identity + balance).
-  const vmLabel = demoMode ? DEMO.wallets[0].label : (activeWallet?.label ?? "Agent wallet");
+  const vmLabel = demoMode ? DEMO.wallets[0].label : (activeWallet?.label ?? "Agent Wallet");
   const vmAddress = demoMode ? DEMO.wallets[0].address : (activeWallet?.address ?? "");
   const vmTotalUsd = demoMode ? DEMO.wallets[0].balanceUsd : activeBalance?.totalUsd;
   // Q is token-unit (not USD) so it rides next to the total as its own chip,
@@ -873,11 +873,11 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                     <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
                       {isActive && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff", boxShadow: "0 0 7px rgba(255,255,255,.7)", flexShrink: 0 }} />}
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: isActive ? 700 : 600, fontSize: 13, color: isActive ? "#ffffff" : "#9aa4b2" }}>
-                        {w.label ?? `Agent wallet ${w.num}`}
+                        {w.label ?? `Agent Wallet ${w.num}`}
                       </span>
                       {w.archived && <span style={styles.archBadge}>Archived</span>}
                     </span>
-                    <span style={{ font: `600 15px ${displayFont}`, letterSpacing: "-.03em", color: isActive ? "#ffffff" : v2.muted, flexShrink: 0 }}>
+                    <span style={{ font: `600 15px ${displayFont}`, letterSpacing: "-.03em", color: (w.balanceUsd ?? 0) > 0 ? "#8fd6f7" : v2.muted2, flexShrink: 0 }}>
                       {w.balanceUsd != null ? fmtUsd(w.balanceUsd) : "$—"}
                     </span>
                   </div>
