@@ -298,6 +298,10 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           onChanged={() => { void loadPositions(); }}
           canDeposit={canDeposit}
           defaultToken={positions?.positions?.[0]?.asset === "USDT" ? "USDT" : "USDC"}
+          // Seed the chain tab to where the wallet actually holds a position so
+          // a withdraw doesn't default to BNB-Aave (empty) and revert on-chain
+          // when the only position is Base-Morpho. Falls back to bnb (deposit).
+          defaultChain={positions?.positions?.[0]?.chain === "base" ? "base" : "bnb"}
         />
       )}
     </div>
@@ -325,6 +329,7 @@ function AgenticWalletEarnActions({
   onChanged,
   canDeposit,
   defaultToken,
+  defaultChain,
 }: {
   ownerAddress: string;
   walletId: string;
@@ -334,9 +339,13 @@ function AgenticWalletEarnActions({
   /** Seeds the deposit/withdraw token to the wallet's supplied asset so the
    *  control doesn't default to USDC while the position is USDT (and vice versa). */
   defaultToken: "USDC" | "USDT";
+  /** Seeds the chain tab to the wallet's position chain so a withdraw targets
+   *  where the funds actually are (BNB-Aave vs Base-Morpho) instead of always
+   *  defaulting to BNB and reverting when the position lives on Base. */
+  defaultChain: "bnb" | "base";
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
-  const [chain, setChain] = useState<"bnb" | "base">("bnb");
+  const [chain, setChain] = useState<"bnb" | "base">(defaultChain);
   const [token, setToken] = useState<"USDC" | "USDT">(defaultToken);
   const [amount, setAmount] = useState("");
   const [maxWithdraw, setMaxWithdraw] = useState(false);

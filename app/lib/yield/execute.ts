@@ -34,7 +34,7 @@ import {
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { isAgenticChainKey, type AgenticChainKey, type AgenticToken } from "@/app/lib/agentic-wallet-sign";
 import { signYieldAction, type YieldAction } from "./sign";
-import { listAllPositions } from "./index";
+import { listAllPositions, listAllPositionsStrict } from "./index";
 import {
   settleYieldAction,
   yieldFacilitator,
@@ -537,6 +537,44 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       }
     }
 
+    // Withdraw preflight — confirm the wallet holds a position for this
+    // (chain, token) before signing. Without it a withdraw on a chain where the
+    // wallet has nothing (e.g. the UI defaulting to BNB-Aave while the position
+    // is Base-Morpho) sails through to an on-chain revert that burns relayer gas
+    // and surfaces only as "Transaction reverted". STRICT read so a transient
+    // RPC error fails OPEN — withdrawal availability is sacred, we never block
+    // fund recovery on a flaky read; only a clean read with no position rejects.
+    let withdrawPositions: Awaited<ReturnType<typeof listAllPositionsStrict>> | null = null;
+    if (action === "withdraw") {
+      try {
+        withdrawPositions = await listAllPositionsStrict(chain, walletAddr);
+      } catch {
+        withdrawPositions = null; // read failed — fall through, let the chain decide
+      }
+      if (withdrawPositions) {
+        const pos = withdrawPositions.find((p) => p.asset === token);
+        const bal = pos ? Number(pos.balance) : 0;
+        if (!pos || !(bal > 0)) {
+          await refundOp();
+          await kv.del(idemKey).catch(() => {});
+          await releaseLock();
+          return NextResponse.json(
+            { error: "NO_POSITION", message: `No ${token} position to withdraw on ${chain}. Switch to the chain holding your funds.` },
+            { status: 400 },
+          );
+        }
+        if (amount !== "max" && Number(amount) - bal > 1e-6) {
+          await refundOp();
+          await kv.del(idemKey).catch(() => {});
+          await releaseLock();
+          return NextResponse.json(
+            { error: "INSUFFICIENT_POSITION", message: `Position is ${bal} ${token} on ${chain}; cannot withdraw ${amount}.` },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
     const signed = await signYieldAction({ privateKey, expectedOwner: wallet.address as Address, chain, token, action, amount, facilitator });
 
     // For a withdraw-all ("max"), the exact drawn amount isn't known at sign
@@ -547,7 +585,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     let displayAmount = signed.amount;
     if (action === "withdraw" && signed.amount === "max") {
       try {
-        const positions = await listAllPositions(chain, walletAddr);
+        const positions = withdrawPositions ?? await listAllPositions(chain, walletAddr);
         const pos = positions.find((p) => p.asset === token);
         if (pos && Number.isFinite(Number(pos.balance)) && Number(pos.balance) > 0) {
           displayAmount = pos.balance;
