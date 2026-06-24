@@ -1161,7 +1161,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                     title={demoMode ? "Connect your wallet" : undefined}
                     style={{ ...styles.actionHero, ...(demoMode || archived ? styles.heroDisabled : null) }}
                   >
-                    <span style={styles.heroIcon}><SendGlyph size={20} color={v2.actionText} /></span>
+                    <span style={styles.heroIcon}><SendGlyph size={18} color={v2.actionText} /></span>
                     <span style={{ display: "grid", gap: 2, minWidth: 0 }}>
                       <span style={styles.heroTitle}>Send payment</span>
                       <span style={styles.heroSub}>USDC / USDT</span>
@@ -1177,7 +1177,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       title={demoMode ? "Connect your wallet" : undefined}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
                     >
-                      <span style={styles.tileIcon}><ReceiveGlyph size={17} color={v2.cyan} /></span>
+                      <span style={styles.tileIcon}><ReceiveGlyph size={16} color={v2.cyan} /></span>
                       <span style={styles.tileLabel}>Receive</span>
                       <span style={styles.tileSub}>Show address</span>
                     </button>
@@ -1199,7 +1199,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       style={{ ...styles.actionTile, ...(demoMode || archived || !multichainActive ? styles.tileDisabled : null) }}
                     >
                       {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
-                      <span style={styles.tileIcon}><BatchGlyph size={17} color={v2.cyan} /></span>
+                      <span style={styles.tileIcon}><BatchGlyph size={16} color={v2.cyan} /></span>
                       <span style={styles.tileLabel}>Batch</span>
                       <span style={styles.tileSub}>Up to 20</span>
                     </button>
@@ -1223,7 +1223,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
                       <span style={styles.tileIcon}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/link.jpg" alt="" width={17} height={17} style={{ borderRadius: 4, flexShrink: 0 }} />
+                        <img src="/link.jpg" alt="" width={16} height={16} style={{ borderRadius: 4, flexShrink: 0 }} />
                       </span>
                       <span style={styles.tileLabel}>Bridge</span>
                       <span style={styles.tileSub}>CCIP</span>
@@ -1237,7 +1237,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       title={demoMode ? "Connect your wallet" : "Sweep a chain/token bucket back to your wallet"}
                       style={{ ...styles.actionTile, ...(demoMode || archived ? styles.tileDisabled : null) }}
                     >
-                      <span style={styles.tileIcon}><WithdrawGlyph size={17} color={v2.cyan} /></span>
+                      <span style={styles.tileIcon}><WithdrawGlyph size={16} color={v2.cyan} /></span>
                       <span style={styles.tileLabel}>Withdraw</span>
                       <span style={styles.tileSub}>Sweep out</span>
                     </button>
@@ -1252,7 +1252,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                     >
                       <span style={styles.tileIcon}>
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/logos/quack.svg" alt="" width={17} height={17} style={{ flexShrink: 0 }} />
+                        <img src="/logos/quack.svg" alt="" width={16} height={16} style={{ flexShrink: 0 }} />
                       </span>
                       <span style={styles.tileLabel}>Stake</span>
                       <span style={styles.tileSub}>Earn Q</span>
@@ -2237,34 +2237,34 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     zIndex: 1,
   },
-  // Send hero — gold, icon + label stacked, visually the primary action.
+  // Send hero — gold, icon + label INLINE (horizontal); the primary action.
   actionHero: {
     display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
-    gap: 18,
-    minHeight: 92,
-    padding: "13px 14px",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 60,
+    padding: "10px 16px",
     borderRadius: 13,
     border: `1px solid ${v2.yellow}`,
-    background: v2.yellow,
+    background: "linear-gradient(135deg, #ffd941, #f5c518 62%)",
     color: v2.actionText,
     textAlign: "left",
     cursor: "pointer",
   },
   heroDisabled: { opacity: 0.45, cursor: "not-allowed" },
   heroIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    flexShrink: 0,
     display: "grid",
     placeItems: "center",
-    background: "rgba(11,18,32,.14)",
+    background: "rgba(7,16,31,.16)",
     color: v2.actionText,
   },
-  heroTitle: { fontSize: fs.cardTitle, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.15 },
-  heroSub: { fontSize: fs.label, fontWeight: 600, opacity: 0.66 },
-  // Utility tile cluster — 5 compact dark tiles.
+  heroTitle: { fontSize: fs.cardTitle, fontWeight: 700, letterSpacing: "-0.01em", lineHeight: 1.12, whiteSpace: "nowrap" },
+  heroSub: { fontSize: fs.label, fontWeight: 600, opacity: 0.6, whiteSpace: "nowrap" },
+  // Utility tile cluster — 5 compact dark tiles (icon top, label, sub).
   utilGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(5, minmax(0,1fr))",
@@ -2274,10 +2274,10 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     display: "flex",
     flexDirection: "column",
-    gap: 6,
-    minHeight: 92,
-    padding: "11px 11px 10px",
-    borderRadius: 12,
+    gap: 4,
+    minHeight: 60,
+    padding: "8px 10px 9px",
+    borderRadius: 11,
     border: `1px solid ${v2.line}`,
     background: "rgba(255,255,255,.025)",
     color: v2.text,
@@ -2286,17 +2286,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tileDisabled: { opacity: 0.45, cursor: "not-allowed", background: "rgba(255,255,255,.012)" },
   tileIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    flexShrink: 0,
     display: "grid",
     placeItems: "center",
-    background: "rgba(255,255,255,.04)",
-    border: `1px solid ${v2.line}`,
-    marginBottom: 2,
+    background: "rgba(255,255,255,.05)",
   },
-  tileLabel: { fontSize: fs.body, fontWeight: 600, color: v2.text, lineHeight: 1.1 },
-  tileSub: { fontSize: fs.micro, color: v2.muted2, lineHeight: 1.1 },
+  tileLabel: { fontSize: fs.body, fontWeight: 600, color: v2.text, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  tileSub: { fontSize: 10, color: v2.muted2, lineHeight: 1.1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   paidChip: {
     position: "absolute",
     top: 8,
