@@ -29,7 +29,7 @@ import {
 export type StakeAction = "stake" | "unstake";
 
 /** QuackAiStake + Q on BNB — MUST equal the impl's immutable allowlist. */
-export const QUACK_STAKE: Address = "0x7D23C17cE1baFaD881582DaE54C386feE515E96b";
+export const QUACK_STAKE: Address = "0x8f5aF1E069Cf63118bdD018203F5228343cc4f94";
 export const Q_TOKEN: Address = "0xc07e1300dc138601FA6B0b59f8D0FA477e690589";
 const Q_DECIMALS = 18;
 const DEFAULT_DEADLINE_AHEAD = 600;

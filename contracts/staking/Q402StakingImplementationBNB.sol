@@ -65,7 +65,7 @@ contract Q402StakingImplementationBNB {
     // ─── Allowlist (BNB Chain, immutable) ────────────────────────────────────
     // Never trust the signed stakeContract/token unchecked.
 
-    address internal constant QUACK_STAKE = 0x7D23C17cE1baFaD881582DaE54C386feE515E96b;
+    address internal constant QUACK_STAKE = 0x8f5aF1E069Cf63118bdD018203F5228343cc4f94;
     address internal constant Q_TOKEN     = 0xc07e1300dc138601FA6B0b59f8D0FA477e690589;
 
     function isAllowedStake(address stakeContract) public pure returns (bool) { return stakeContract == QUACK_STAKE; }

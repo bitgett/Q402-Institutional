@@ -26,7 +26,7 @@ const RPC = process.env.BNB_RPC_URL || "https://bsc-dataseed.binance.org";
 const SOURCE = "contracts/staking/Q402StakingImplementationBNB.sol";
 const NAME = "Q402StakingImplementationBNB";
 const DOMAIN_NAME = "Q402 BNB Chain";
-const QUACK_STAKE = "0x7D23C17cE1baFaD881582DaE54C386feE515E96b";
+const QUACK_STAKE = "0x8f5aF1E069Cf63118bdD018203F5228343cc4f94";
 const Q_TOKEN = "0xc07e1300dc138601FA6B0b59f8D0FA477e690589";
 
 const compileOnly = process.argv.includes("--compile-only");
