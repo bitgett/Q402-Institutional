@@ -37,12 +37,10 @@ const DEFAULT_DEADLINE_AHEAD = 600;
 /** Lock-tier metadata (mirrors fuibox stakeConfig.stakeTypes). Display only —
  *  the staking contract is the source of truth + reverts on an unknown tier. */
 export const STAKE_TIERS: ReadonlyArray<{ stakeType: number; lockDays: number; aprPct: number }> = [
-  { stakeType: 0, lockDays: 14, aprPct: 10 },
-  { stakeType: 1, lockDays: 30, aprPct: 20 },
-  { stakeType: 2, lockDays: 90, aprPct: 30 },
-  { stakeType: 3, lockDays: 140, aprPct: 40 },
-  { stakeType: 4, lockDays: 120, aprPct: 50 },
-  { stakeType: 5, lockDays: 180, aprPct: 30 },
+  { stakeType: 0, lockDays: 30, aprPct: 10 },
+  { stakeType: 1, lockDays: 60, aprPct: 15 },
+  { stakeType: 2, lockDays: 120, aprPct: 32 },
+  { stakeType: 3, lockDays: 180, aprPct: 40 },
 ];
 
 // Field order is normative — keeps the off-chain witness byte-identical to the

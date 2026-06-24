@@ -71,7 +71,6 @@ import {
 } from "@/app/lib/wallet";
 import { explorerAddressUrl, explorerLabel } from "@/app/lib/eip7702";
 import { AgenticWalletEarnSection } from "@/app/dashboard/components/AgenticWalletEarnSection";
-import { AgenticWalletStakeSection } from "@/app/dashboard/components/AgenticWalletStakeSection";
 import { AgenticWalletBridgeModal } from "@/app/dashboard/components/AgenticWalletBridgeModal";
 import { useDashboardIdentity } from "../identity-context";
 
@@ -587,22 +586,15 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   />
                 )}
                 {ownerAddress && agentWallet ? (
-                  // Earn (yield) + Q staking share the card; both own their actions.
-                  // Mounted inside V2AccentScope so emerald re-skins to gold.
-                  <>
-                    <AgenticWalletEarnSection
-                      ownerAddress={ownerAddress}
-                      walletId={agentWallet.walletId}
-                      signMessage={signMessage}
-                      canDeposit={identity.hasPaid === true}
-                    />
-                    <div style={{ height: 1, background: "rgba(255,255,255,0.08)", margin: "16px 0" }} />
-                    <AgenticWalletStakeSection
-                      ownerAddress={ownerAddress}
-                      walletId={agentWallet.walletId}
-                      signMessage={signMessage}
-                    />
-                  </>
+                  // AgenticWalletEarnSection owns its own fetch + deposit/withdraw
+                  // actions. Mounted inside V2AccentScope (this whole view) so its
+                  // emerald accent resolves via the re-skin tokens.
+                  <AgenticWalletEarnSection
+                    ownerAddress={ownerAddress}
+                    walletId={agentWallet.walletId}
+                    signMessage={signMessage}
+                    canDeposit={identity.hasPaid === true}
+                  />
                 ) : demoMode ? (
                   // Demo: show a populated, $0.00 supplied position with the best
                   // available APY so the card reads complete without a wallet.
