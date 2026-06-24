@@ -1116,25 +1116,22 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       {!demoMode && activeBalanceLoading && !activeBalance ? "…" : fmtUsd(vmTotalUsd)}
                     </strong>
                     {vmQuack > 0 && (
-                      <div style={{ marginTop: 7 }}>
+                      <div style={{ marginTop: 6 }}>
                         <span
                           title="QuackAI Q token balance on BNB. Held in token units (not USD-valued)."
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: 6,
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: "#8fd6f7",
-                            background: "rgba(88,199,244,.10)",
-                            border: "1px solid rgba(88,199,244,.28)",
-                            borderRadius: 8,
-                            padding: "3px 10px",
+                            gap: 7,
+                            fontSize: 15,
+                            fontWeight: 600,
+                            color: "#f2f0e8",
+                            letterSpacing: "-0.01em",
                           }}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src="/logos/quack.svg" alt="" width={15} height={15} style={{ display: "block", flexShrink: 0 }} />
-                          {vmQuack.toLocaleString(undefined, { maximumFractionDigits: 2 })} Q
+                          <img src="/logos/quack.svg" alt="" width={19} height={19} style={{ display: "block", flexShrink: 0 }} />
+                          {vmQuack.toLocaleString(undefined, { maximumFractionDigits: 2 })} <span style={{ color: "rgba(242,240,232,.55)" }}>Q</span>
                         </span>
                       </div>
                     )}
