@@ -609,7 +609,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 27 total</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 29 total</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <table className="w-full text-sm">
                 <thead>
@@ -645,6 +645,8 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_yield_positions",     auth: "api key",     purpose: "The Agent Wallet's current Q402 Yield positions — value + live supply APY. Read-only." },
                     { name: "q402_yield_deposit",       auth: "live mode",   purpose: "Supply the Agent Wallet's stablecoins into Aave (BNB, USDC/USDT) or Morpho (Base, USDC). Mode C, PAID feature — Trial cannot deposit. Confirm-gated + sandbox by default." },
                     { name: "q402_yield_withdraw",      auth: "live mode",   purpose: "Withdraw supplied stablecoin out of Aave or Morpho (amount=\"max\" for the full position). Always allowed, even after a plan downgrade." },
+                    { name: "q402_stake",               auth: "live mode",   purpose: "Gasless Q (QuackAI) staking into QuackAiStake on BNB Chain. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). Confirm-gated + sandbox by default." },
+                    { name: "q402_unstake",             auth: "live mode",   purpose: "Gasless unstake (withdraw) of Q from QuackAiStake on BNB back to the wallet." },
                     { name: "q402_request_create",      auth: "api key",     purpose: "Publish a payment request (invoice). No funds move; returns a /pay link + req_ id. Recipient defaults to the Agent Wallet." },
                     { name: "q402_request_status",      auth: "none",        purpose: "Look up a request by req_ id (amount, token, chain, recipient, status). Read-only; notFound instead of throwing." },
                     { name: "q402_request_pay",         auth: "live mode",   purpose: "Pay a request gaslessly from your own Agent Wallet (Mode C). Two-phase consent, same as q402_pay." },

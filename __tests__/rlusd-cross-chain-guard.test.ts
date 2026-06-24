@@ -228,8 +228,10 @@ describe.skipIf(!mcpAvailable)("RLUSD: Ethereum-only invariant — MCP server lo
   });
 
   it("MCP q402_pay tool accepts RLUSD in its token enum", () => {
+    // RLUSD must be present; the optional trailing "Q" (QuackAI, BNB-only) is
+    // allowed since q402_pay gained Q support without dropping RLUSD.
     expect(mcpPayToolSource).toMatch(
-      /token:\s*z\.enum\(\[\s*["']USDC["']\s*,\s*["']USDT["']\s*,\s*["']RLUSD["']\s*\]\)/,
+      /token:\s*z\.enum\(\[\s*["']USDC["']\s*,\s*["']USDT["']\s*,\s*["']RLUSD["']\s*(?:,\s*["']Q["']\s*)?\]\)/,
     );
   });
 
