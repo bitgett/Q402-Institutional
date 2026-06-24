@@ -45,15 +45,15 @@ export const metadata: Metadata = {
   description:
     "Q402 is a gasless payment protocol for EVM chains. Your users pay zero gas. You sponsor it, invisibly and instantly.",
   openGraph: {
-    title: "Q402 | Gasless Payments on EVM",
-    description: "Your users pay zero gas. Powered by EIP-712 + EIP-7702.",
+    title: "Q402 | Gasless payments for the agentic web",
+    description: "Zero gas for your users. 11 EVM chains, one signature. MCP-native.",
     siteName: "Quack AI",
     images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Q402 | Gasless Payments on EVM",
-    description: "Your users pay zero gas. Powered by EIP-712 + EIP-7702.",
+    title: "Q402 | Gasless payments for the agentic web",
+    description: "Zero gas for your users. 11 EVM chains, one signature. MCP-native.",
     images: ["/opengraph-image"],
   },
 };
