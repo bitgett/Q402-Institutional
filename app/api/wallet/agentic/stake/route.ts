@@ -10,7 +10,9 @@
  * token) — staking is bounded by a per-day op count (relayer gas rail) + the
  * per-(wallet,chain) lock + a short idempotency window, NOT a USD cap.
  *
- * Body: { apiKey, action: "stake"|"unstake", stakeType?, amount, walletId? }
+ * Body (stake):   { apiKey|ownerSig, action:"stake", stakeType, amount ("max" + cap), walletId? }
+ * Body (unstake): { apiKey|ownerSig, action:"unstake", ith (0-based record index, >=1), walletId? }
+ *   — unstake is per-record (QuackAiStake.exit(ith)); there is no `amount`.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
@@ -31,6 +33,7 @@ import {
   stakeImplAddress,
   STAKE_TIERS,
   Q_TOKEN,
+  QUACK_STAKE,
   type StakeAction,
 } from "@/app/lib/staking/sign";
 import { AGENTIC_CHAINS } from "@/app/lib/agentic-wallet-sign";
@@ -252,30 +255,45 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // the user signed. UNSTAKE: validate the requested record is actually exitable
   // now, so we return a clear error instead of burning relayer gas on a revert.
   let settleAmount = amount;
-  if (isStake && isMax) {
+  // The impl plants a SEED_DUST (1e4 wei) index-0 record on a wallet's FIRST stake,
+  // so a first-ever stake pulls amount + SEED_DUST. We read stakeNum to learn if
+  // this is the first stake and reserve that headroom ONLY then — for "max" we
+  // subtract it (so it can't request more than the wallet holds), and for an
+  // explicit amount we fail fast with a clear error instead of an on-chain revert.
+  // A non-first stake pulls exactly `amount` (seed=0), so no reservation/loss.
+  const SEED_DUST_WEI = 10000n;
+  if (isStake) {
     try {
-      const capRaw = ethers.parseUnits(body.cap as string, 18);
       const provider = new ethers.JsonRpcProvider(AGENTIC_CHAINS.bnb.rpc);
-      const q = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
-      const availRaw = (await q.balanceOf(wallet.address)) as bigint;
-      // The impl seeds a SEED_DUST (1e4 wei) record at index 0 on the wallet's
-      // FIRST stake, so a first-ever stake pulls amount + SEED_DUST. Reserve that
-      // headroom from "max" so it can never request more Q than the wallet holds
-      // (which would revert). For a non-first stake this leaves ~1e-14 Q liquid —
-      // negligible, and far simpler than reading stakeNum to branch.
-      const SEED_DUST_WEI = 10000n;
-      const spendableRaw = availRaw > SEED_DUST_WEI ? availRaw - SEED_DUST_WEI : 0n;
-      const useRaw = spendableRaw < capRaw ? spendableRaw : capRaw;
-      if (useRaw <= 0n) {
-        await cleanup();
-        return NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 });
+      const qToken = new ethers.Contract(Q_TOKEN, ["function balanceOf(address) view returns (uint256)"], provider);
+      const stakeCtr = new ethers.Contract(QUACK_STAKE, ["function stakeNum(address) view returns (uint256)"], provider);
+      const firstStake = ((await stakeCtr.stakeNum(wallet.address)) as bigint) === 0n;
+      const seedReserve = firstStake ? SEED_DUST_WEI : 0n;
+      if (isMax) {
+        const capRaw = ethers.parseUnits(body.cap as string, 18);
+        const availRaw = (await qToken.balanceOf(wallet.address)) as bigint;
+        const spendableRaw = availRaw > seedReserve ? availRaw - seedReserve : 0n;
+        const useRaw = spendableRaw < capRaw ? spendableRaw : capRaw;
+        if (useRaw <= 0n) {
+          await cleanup();
+          return NextResponse.json({ error: "INSUFFICIENT_Q", message: "No Q balance to stake." }, { status: 400 });
+        }
+        settleAmount = ethers.formatUnits(useRaw, 18);
+      } else if (firstStake) {
+        // Explicit amount on the first stake: ensure amount + the one-time seed
+        // fits the balance, so we don't burn relayer gas on a guaranteed revert.
+        const wantRaw = ethers.parseUnits(amount, 18);
+        const availRaw = (await qToken.balanceOf(wallet.address)) as bigint;
+        if (wantRaw + seedReserve > availRaw) {
+          await cleanup();
+          return NextResponse.json({ error: "INSUFFICIENT_Q", message: "Amount plus the one-time index-0 seed (~0 Q) exceeds your Q balance. Use Max, or stake a hair less." }, { status: 400 });
+        }
       }
-      settleAmount = ethers.formatUnits(useRaw, 18);
     } catch (e) {
       await cleanup();
       return NextResponse.json({ error: "MAX_RESOLVE_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
     }
-  } else if (!isStake) {
+  } else {
     try {
       const { positions } = await readStakePositions(wallet.address);
       const pos = positions.find((p) => p.ith === unstakeIth);
