@@ -229,6 +229,7 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
               {req.status === "open" && (
                 <div className="px-7 py-5 border-t border-white/8">
                   <SectionHeader>Pay with an agent</SectionHeader>
+                  <div className="text-[10px] uppercase tracking-wider text-white/35 mb-1.5">Step 1 · preview command (does not move funds)</div>
                   <div className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-black/30 px-3 py-2.5">
                     <code className="font-mono text-[11px] text-yellow/90 truncate">
                       q402_request_pay {"{"} requestId: &quot;{req.id}&quot;, confirm: true {"}"}
