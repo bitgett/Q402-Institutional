@@ -50,10 +50,12 @@ export async function GET(req: NextRequest) {
   }
   const addr = authResult;
 
-  // Fetch a 12-month window (was the 2-month default) so older history isn't
-  // silently dropped from the Activity feed / stats / chart.
+  // Fetch a 12-month window (was the 2-month default) with a high per-month cap
+  // (was the 1,000 default) so the Activity feed / stats / chart reflect the
+  // real settlement count instead of being silently clamped at 1,000/month.
   const HISTORY_MONTHS = recentMonths(12);
-  const ownTxs = await getRelayedTxs(addr, HISTORY_MONTHS);
+  const HISTORY_LIMIT = 20_000;
+  const ownTxs = await getRelayedTxs(addr, HISTORY_MONTHS, HISTORY_LIMIT);
 
   // Bridge read: include the bound email pseudo's tx history if any.
   // Same null-return discipline as /api/keys/provision's loadBoundEmailTrial
@@ -65,7 +67,7 @@ export async function GET(req: NextRequest) {
     if (linkedEmail) {
       const pseudoAddr = await kv.get<string>(emailToAddrKey(linkedEmail));
       if (pseudoAddr && pseudoAddr !== addr) {
-        pseudoTxs = await getRelayedTxs(pseudoAddr, HISTORY_MONTHS);
+        pseudoTxs = await getRelayedTxs(pseudoAddr, HISTORY_MONTHS, HISTORY_LIMIT);
         bridgedFromPseudo = pseudoAddr;
       }
     }

@@ -1094,6 +1094,13 @@ function DailyLineChart({ data, labels }: { data: number[]; labels: string[] }) 
             />
           );
         })}
+        {/* Invisible per-day hover columns so the exact count shows when hovering
+            anywhere over a day's slice (the line/dots alone are hard to hit). */}
+        <div style={{ position: "absolute", inset: 0, display: "flex" }} aria-hidden>
+          {data.map((v, i) => (
+            <div key={i} style={{ flex: 1, minWidth: 0 }} title={`${labels[i]}: ${fmtNum(v ?? 0)} tx`} />
+          ))}
+        </div>
       </div>
       <div style={{ display: "flex", marginTop: 6 }}>
         {labels.map((lab, i) => (
