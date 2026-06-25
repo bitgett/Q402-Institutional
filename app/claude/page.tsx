@@ -103,7 +103,7 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
     label: "Pay",
     tools: [
       { name: "q402_pay", auth: "live mode", note: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
-      { name: "q402_batch_pay", auth: "live mode", note: "Up to 20 recipients in one signed batch (trial: 5)." },
+      { name: "q402_batch_pay", auth: "live mode", note: "Up to 20 recipients in one signed batch (trial: 5 with your own key; server-managed Agent Wallet batch is paid Multichain-only)." },
     ],
   },
   {

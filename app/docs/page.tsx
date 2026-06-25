@@ -683,7 +683,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_quote",               auth: "none",        purpose: "Compare gas + supported tokens across 11 chains." },
                     { name: "q402_balance",             auth: "api key",     purpose: "Verify key + remaining quota. Returns Trial + Multichain in one read when both keys set." },
                     { name: "q402_pay",                 auth: "live mode",   purpose: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
-                    { name: "q402_batch_pay",           auth: "live mode",   purpose: "Up to 20 recipients per call (trial: 5). 6+ BNB batches with Trial → status=\"ambiguous\" so the agent asks how to split." },
+                    { name: "q402_batch_pay",           auth: "live mode",   purpose: "Up to 20 recipients per call (trial: 5 with your own key; server-managed Agent Wallet batch is paid Multichain-only). 6+ BNB batches with Trial → status=\"ambiguous\" so the agent asks how to split." },
                     { name: "q402_receipt",             auth: "none",        purpose: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery against the relayer EOA)." },
                     { name: "q402_wallet_status",       auth: "private key", purpose: "Per-chain EIP-7702 delegation state for the EOA derived from Q402_PRIVATE_KEY. Read-only." },
                     { name: "q402_clear_delegation",    auth: "private key / api key", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (billed to Gas Tank). Two-phase consentToken (preview then execute)." },
