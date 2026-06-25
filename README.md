@@ -116,7 +116,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_quote` | none | Compare gas across 11 chains |
 | `q402_balance` | api key | Verify key + remaining quota |
 | `q402_pay` | live mode | Single-recipient gasless transfer |
-| `q402_batch_pay` | live mode | Up to 20 recipients per call (trial: 5) |
+| `q402_batch_pay` | live mode | Up to 20 recipients per call (trial: 5 with your own key; server-managed Agent Wallet batch is paid Multichain-only) |
 | `q402_receipt` | none | Fetch + verify a Trust Receipt |
 | `q402_wallet_status` | private key | Per-chain EIP-7702 state |
 | `q402_clear_delegation` | private key / api key | Reset EIP-7702 delegation (Mode A/B local key OR Mode C api key, server-signed). Sponsored on every chain except Ethereum (billed to your Gas Tank). Two-phase consent (`consentToken`) |
