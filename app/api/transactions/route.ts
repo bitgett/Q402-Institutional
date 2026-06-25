@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRelayedTxs } from "@/app/lib/db";
+import { getRelayedTxs, recentMonths } from "@/app/lib/db";
 import { requireAuth } from "@/app/lib/auth";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { kv } from "@vercel/kv";
@@ -50,7 +50,10 @@ export async function GET(req: NextRequest) {
   }
   const addr = authResult;
 
-  const ownTxs = await getRelayedTxs(addr);
+  // Fetch a 12-month window (was the 2-month default) so older history isn't
+  // silently dropped from the Activity feed / stats / chart.
+  const HISTORY_MONTHS = recentMonths(12);
+  const ownTxs = await getRelayedTxs(addr, HISTORY_MONTHS);
 
   // Bridge read: include the bound email pseudo's tx history if any.
   // Same null-return discipline as /api/keys/provision's loadBoundEmailTrial
@@ -62,7 +65,7 @@ export async function GET(req: NextRequest) {
     if (linkedEmail) {
       const pseudoAddr = await kv.get<string>(emailToAddrKey(linkedEmail));
       if (pseudoAddr && pseudoAddr !== addr) {
-        pseudoTxs = await getRelayedTxs(pseudoAddr);
+        pseudoTxs = await getRelayedTxs(pseudoAddr, HISTORY_MONTHS);
         bridgedFromPseudo = pseudoAddr;
       }
     }

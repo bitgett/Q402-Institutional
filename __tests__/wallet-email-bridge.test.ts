@@ -172,7 +172,7 @@ describe("/api/transactions — pseudo tx history merged into wallet response", 
     // pseudoAddr !== addr guards against a self-loop if some future
     // migration ever writes wallet_email_link → email_to_addr → wallet.
     expect(transactionsSource).toMatch(/pseudoAddr\s*!==\s*addr/);
-    expect(transactionsSource).toMatch(/getRelayedTxs\(pseudoAddr\)/);
+    expect(transactionsSource).toMatch(/getRelayedTxs\(pseudoAddr\b/);
   });
 
   it("dedups by relayTxHash so a tx recorded under both lists never doubles", () => {

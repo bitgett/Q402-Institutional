@@ -43,7 +43,7 @@ const CHAIN_OPTIONS: ChainOption[] = [
   { key: "eth",       label: "Ethereum",  tokens: ["USDT", "USDC"] },
   { key: "avax",      label: "Avalanche", tokens: ["USDT", "USDC"] },
   { key: "xlayer",    label: "X Layer",   tokens: ["USDT", "USDC"] },
-  { key: "stable",    label: "Stable",    tokens: ["USDT", "USDC"] },
+  { key: "stable",    label: "Stable",    tokens: ["USDT"] },
   { key: "mantle",    label: "Mantle",    tokens: ["USDT", "USDC"] },
   { key: "injective", label: "Injective", tokens: ["USDT", "USDC"] },
   { key: "monad",     label: "Monad",     tokens: ["USDT", "USDC"] },
