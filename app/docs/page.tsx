@@ -1019,7 +1019,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
                     { name: "Ethereum",   color: "#627EEA", param: "eth",    id: "1",     gasToken: "ETH",              gas: "~$0.19",  stableNote: false },
                     { name: "Avalanche",  color: "#E84142", param: "avax",   id: "43114", gasToken: "AVAX",             gas: "~$0.002", stableNote: false },
                     { name: "X Layer",    color: "#CCCCCC", param: "xlayer", id: "196",   gasToken: "OKB",              gas: "~$0.001", stableNote: false },
-                    { name: "Stable",     color: "#5BC8FA", param: "stable", id: "988",   gasToken: "USDT0 ★",          gas: "~$0.001", stableNote: true  },
+                    { name: "Stable",     color: "#4AE54A", param: "stable", id: "988",   gasToken: "USDT0 ★",          gas: "~$0.001", stableNote: true  },
                     { name: "Mantle",     color: "#000000", param: "mantle", id: "5000",  gasToken: "MNT",              gas: "~$0.001", stableNote: false },
                     { name: "Injective",  color: "#0082FA", param: "injective", id: "1776", gasToken: "INJ",            gas: "~$0.10",  stableNote: false },
                     { name: "Monad",      color: "#836EF9", param: "monad", id: "143",   gasToken: "MON",              gas: "~$0.001", stableNote: false },
