@@ -25,6 +25,10 @@ const STAKE_ABI = [
   "function getNowTIme() view returns (uint256)",
 ];
 
+/** Mirrors Q402StakingImplementationBNB.SEED_DUST (1e4 wei) — the dust record the
+ *  impl plants at index 0 on a wallet's first stake. Internal plumbing, hidden. */
+const SEED_DUST_WEI = 10000n;
+
 export interface StakePosition {
   /** 0-based array index — the argument to QuackAiStake.exit(ith). */
   ith: number;
@@ -71,6 +75,10 @@ export async function readStakePositions(wallet: string): Promise<StakePositions
     const exited = sd[i + 3] !== 0n; // _bExit
     const amountRaw = sd[i + 1];
     if (exited || amountRaw <= 0n) continue; // closed or empty slot — not active
+    // Hide the index-0 seed dust (un-exitable internal plumbing, ~$0) from the
+    // positions list + stakedTotal. A real index-0 stake (amount != SEED_DUST) is
+    // still shown (exitable:false) so a pre-seed stranded position stays visible.
+    if (ith === 0 && amountRaw === SEED_DUST_WEI) continue;
     const stakedAt = Number(sd[i]);
     const unlockAt = Number(sd[i + 5]);
     const matured = now >= unlockAt;
