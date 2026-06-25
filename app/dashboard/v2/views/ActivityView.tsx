@@ -175,11 +175,14 @@ function settlementKind(tx: RelayedTx): string {
   return tx.source ? SOURCE_LABEL[tx.source] : "Settlement";
 }
 
-// Sources where value flows INTO the Agent Wallet rather than out of it. Used
-// only for the in/out arrow — everything else reads as outbound.
-const INBOUND_SOURCES = new Set<string>(["yield_withdraw", "unstake", "request"]);
-function txInbound(tx: RelayedTx): boolean {
-  return !!tx.source && INBOUND_SOURCES.has(tx.source);
+// Direction is decided by whether one of the viewer's OWN wallets (owner EOA +
+// every Agent Wallet) is the recipient (inbound) vs the sender (outbound) — NOT
+// by source, because a source like "request" can be either side (the creator
+// RECEIVES a paid request; a payer SENDS to settle the same request).
+function txInbound(tx: RelayedTx, owned: Set<string>): boolean {
+  const to = tx.toUser?.toLowerCase();
+  const from = tx.fromUser?.toLowerCase();
+  return !!to && owned.has(to) && !(from !== undefined && owned.has(from));
 }
 
 function fmtDate(iso: string | number): string {
@@ -606,6 +609,15 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
   const srcBridges = demoMode ? DEMO_BRIDGES : bridges;
   const srcWallets = demoMode ? DEMO_WALLETS : wallets;
 
+  // The viewer's own addresses (owner EOA + every Agent Wallet) — drives the
+  // in/out direction and the "this wallet" filter so inbound rows aren't lost.
+  const ownedAddrs = useMemo(() => {
+    const s = new Set<string>();
+    if (ownerAddress) s.add(ownerAddress.toLowerCase());
+    for (const w of srcWallets) if (w.address) s.add(w.address.toLowerCase());
+    return s;
+  }, [ownerAddress, srcWallets]);
+
   // ── Derived: scope + rail-tab + filter chips ─────────────────────────────
   const scopeKeys = demoMode ? DEMO_KEYS : scope === "trial" ? trialKeys : paidKeys;
 
@@ -672,7 +684,12 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
         : srcWallets.find((w) => w.walletId === walletFilter)?.address.toLowerCase() ?? null;
     return [...railTxs]
       .filter((tx) => {
-        if (selectedWalletAddr && tx.fromUser.toLowerCase() !== selectedWalletAddr) return false;
+        if (
+          selectedWalletAddr &&
+          tx.fromUser.toLowerCase() !== selectedWalletAddr &&
+          tx.toUser?.toLowerCase() !== selectedWalletAddr
+        )
+          return false;
         if (chainFilter !== "all" && tx.chain !== chainFilter) return false;
         return true;
       })
@@ -878,7 +895,7 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
             ) : showBridge ? (
               <BridgeTable bridges={visibleBridges} />
             ) : (
-              <SettlementTable txs={visibleTxs} emptyFor={tab} />
+              <SettlementTable txs={visibleTxs} emptyFor={tab} ownedAddrs={ownedAddrs} />
             )}
           </div>
           </Surface>
@@ -1168,7 +1185,7 @@ function FilterChip({
 }
 
 // ── Settlement table (relayed txs) ───────────────────────────────────────────
-function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTab }) {
+function SettlementTable({ txs, emptyFor, ownedAddrs }: { txs: RelayedTx[]; emptyFor: RailTab; ownedAddrs: Set<string> }) {
   if (txs.length === 0) {
     const msg =
       emptyFor === "recurring"
@@ -1210,11 +1227,11 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                 <Td>
                   <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500, display: "flex", alignItems: "center", gap: 7 }}>
                     <span
-                      title={txInbound(tx) ? "Inbound" : "Outbound"}
+                      title={txInbound(tx, ownedAddrs) ? "Inbound" : "Outbound"}
                       aria-hidden
-                      style={{ color: txInbound(tx) ? v2.mint : v2.muted2, fontFamily: displayFont }}
+                      style={{ color: txInbound(tx, ownedAddrs) ? v2.mint : v2.muted2, fontFamily: displayFont }}
                     >
-                      {txInbound(tx) ? "↓" : "↑"}
+                      {txInbound(tx, ownedAddrs) ? "↓" : "↑"}
                     </span>
                     {tx._demoKind ?? settlementKind(tx)}
                     {tx.rail === "x402" && (

@@ -191,10 +191,10 @@ describe("/api/transactions — pseudo tx history merged into wallet response", 
   });
 
   it("never throws when the bridge can't be loaded — degrades to wallet-only txs", () => {
-    // The whole bridge load is inside try/catch; the comment in the
-    // catch block explicitly says "fall through with own txs only".
+    // The whole bridge load is inside try/catch; on failure it falls through
+    // with own txs only and flags `pseudoLoadFailed` (no rethrow).
     expect(transactionsSource).toMatch(
-      /catch\s*\{\s*\/\*[^*]*bridge[^*]*own txs/,
+      /catch\s*\{[\s\S]*?own txs only[\s\S]*?pseudoLoadFailed\s*=\s*true/,
     );
   });
 
