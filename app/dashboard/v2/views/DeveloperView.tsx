@@ -112,7 +112,7 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Core", name: "q402_quote", purpose: "Compare gas + supported tokens across 11 chains. No auth." },
   { group: "Core", name: "q402_balance", purpose: "Verify key + remaining quota. Returns Trial + Multichain in one read." },
   { group: "Core", name: "q402_pay", purpose: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
-  { group: "Core", name: "q402_batch_pay", purpose: "Up to 20 recipients per call (trial: 5) in one settlement." },
+  { group: "Core", name: "q402_batch_pay", purpose: "Up to 20 recipients per call (trial: 5 with your own key; server-managed Agent Wallet batch is paid Multichain-only) in one settlement." },
   { group: "Core", name: "q402_receipt", purpose: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery)." },
   { group: "Core", name: "q402_wallet_status", purpose: "Per-chain EIP-7702 delegation state for the configured EOA. Read-only." },
   { group: "Core", name: "q402_clear_delegation", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (Gas Tank). Two-phase consentToken (preview then execute)." },
