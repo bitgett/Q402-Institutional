@@ -136,7 +136,7 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
   {
     label: "Staking",
     tools: [
-      { name: "q402_stake", auth: "live mode", note: "Gasless Q staking into QuackAiStake on BNB. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). amount \"max\" supported. Sandbox by default." },
+      { name: "q402_stake", auth: "live mode", note: "Gasless Q staking on BNB. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). amount \"max\" supported. Sandbox by default." },
       { name: "q402_unstake", auth: "live mode", note: "Gasless unstake of matured Q on BNB by record index, or all matured (per-record exit). Sandbox by default." },
       { name: "q402_stake_positions", auth: "live mode", note: "Read-only: the Agent Wallet's Q stakes (indices, maturity, exitable) + liquid Q balance." },
     ],
