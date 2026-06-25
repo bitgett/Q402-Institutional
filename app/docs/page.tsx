@@ -189,23 +189,81 @@ export default function DocsPage() {
                 <span className="text-[10px] text-white/30 uppercase tracking-[0.18em] font-semibold">Architecture</span>
                 <span className="text-[10px] text-white/25 font-mono">end-to-end flow</span>
               </div>
-              <pre className="p-5 overflow-x-auto text-[11px] leading-[1.7] font-mono text-white/65 whitespace-pre">
-{`  User wallet              Q402 API                 On-chain                 Your app
-  ───────────              ────────                 ────────                 ────────
+              <div className="p-5 sm:p-6">
+                <ol className="flex flex-col gap-4">
+                  {/* 1 — sign */}
+                  <li className="flex gap-3.5">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold text-yellow" style={{ background: "rgba(245,197,24,0.10)", border: "1px solid rgba(245,197,24,0.30)" }}>1</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-white/90">Sign EIP-712 <span className="font-normal text-white/40">in your wallet</span></div>
+                      <div className="mt-2 flex flex-col gap-1.5">
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                          <code className="text-[11px] font-mono px-2 py-0.5 rounded text-white/80" style={{ background: "rgba(91,200,250,0.08)", border: "1px solid rgba(91,200,250,0.20)" }}>POST /api/payment/intent</code>
+                          <span className="text-xs text-white/45">lock the quote, plan the chain</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                          <code className="text-[11px] font-mono px-2 py-0.5 rounded text-white/80" style={{ background: "rgba(91,200,250,0.08)", border: "1px solid rgba(91,200,250,0.20)" }}>POST /api/payment/activate</code>
+                          <span className="text-xs text-white/45">scan the TX, grant credits</span>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
 
-  1. Sign EIP-712  ──▶  /api/payment/intent   lock quote, planChain
-                        /api/payment/activate scan TX, grant credits
-  2. Get API key   ◀──  (sandbox or live)
+                  {/* 2 — api key */}
+                  <li className="flex gap-3.5">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold text-yellow" style={{ background: "rgba(245,197,24,0.10)", border: "1px solid rgba(245,197,24,0.30)" }}>2</span>
+                    <div className="flex-1">
+                      <div className="text-sm font-semibold text-white/90">Get your API key <span className="font-normal text-white/40">from the dashboard</span></div>
+                      <div className="mt-2 flex items-center gap-2.5">
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded text-white/70" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>sandbox</span>
+                        <span className="text-xs text-white/35">or</span>
+                        <span className="text-[11px] font-mono px-2 py-0.5 rounded" style={{ color: "#8fd6f7", background: "rgba(91,200,250,0.10)", border: "1px solid rgba(91,200,250,0.28)" }}>live</span>
+                      </div>
+                    </div>
+                  </li>
 
-  3. Call pay()    ──▶  /api/relay            ──▶  EIP-7702 Type-4 TX
-                        verify · decrement         USDC/USDT transfer
-                        credits · cap checks       user EOA ──▶ recipient
-                                                                          ◀── webhook
-                                                                              HMAC-signed
-                                                                              relay.success
+                  {/* 3 — pay + on-chain settlement */}
+                  <li className="flex gap-3.5">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold text-yellow" style={{ background: "rgba(245,197,24,0.10)", border: "1px solid rgba(245,197,24,0.30)" }}>3</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-white/90">Call pay() <span className="font-normal text-white/40">from the SDK or MCP</span></div>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                        <code className="text-[11px] font-mono px-2 py-0.5 rounded text-white/80" style={{ background: "rgba(91,200,250,0.08)", border: "1px solid rgba(91,200,250,0.20)" }}>POST /api/relay</code>
+                        <span className="text-xs text-white/45">verify · decrement credits · cap checks</span>
+                      </div>
 
-                        Dashboard ◀── delivery log · key rotation · gas tank balance`}
-              </pre>
+                      <div className="mt-3 rounded-lg p-3.5" style={{ background: "rgba(245,197,24,0.04)", border: "1px solid rgba(245,197,24,0.16)" }}>
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className="text-[12px] font-mono text-white/85">EIP-7702 Type-4 TX</span>
+                          <span className="text-xs text-white/45">Q402 relayer pays the gas</span>
+                        </div>
+                        <div className="text-white/25 text-xs font-mono my-1.5 leading-none">↓</div>
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                          <span className="text-[12px] font-mono text-white/85">stablecoin transfer</span>
+                          <span className="text-xs text-white/45">your EOA <span className="text-white/30">→</span> recipient</span>
+                        </div>
+                        <div className="text-white/25 text-xs font-mono my-1.5 leading-none">↓</div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div className="rounded-md px-2.5 py-1.5" style={{ background: "rgba(91,200,250,0.07)", border: "1px solid rgba(91,200,250,0.20)" }}>
+                            <div className="text-[12px] font-mono" style={{ color: "#8fd6f7" }}>Trust Receipt</div>
+                            <div className="text-[11px] text-white/40">EIP-191 signed, verifiable</div>
+                          </div>
+                          <div className="rounded-md px-2.5 py-1.5" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.09)" }}>
+                            <div className="text-[12px] font-mono text-white/80">webhook relay.success</div>
+                            <div className="text-[11px] text-white/40">HMAC-signed <span className="text-white/30">→</span> your app</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                </ol>
+
+                <div className="mt-4 pt-3.5 border-t border-white/8 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-xs font-mono text-white/55">Dashboard</span>
+                  <span className="text-white/25 text-xs">←</span>
+                  <span className="text-xs text-white/45">delivery log · key rotation · gas tank balance</span>
+                </div>
+              </div>
             </div>
 
             <p className="text-white/60 text-sm leading-relaxed mb-6">
@@ -961,7 +1019,7 @@ Claude → q402_receipt → verified: true · signed by 0xfc77...74ff466`} />
                     { name: "Ethereum",   color: "#627EEA", param: "eth",    id: "1",     gasToken: "ETH",              gas: "~$0.19",  stableNote: false },
                     { name: "Avalanche",  color: "#E84142", param: "avax",   id: "43114", gasToken: "AVAX",             gas: "~$0.002", stableNote: false },
                     { name: "X Layer",    color: "#CCCCCC", param: "xlayer", id: "196",   gasToken: "OKB",              gas: "~$0.001", stableNote: false },
-                    { name: "Stable",     color: "#4AE54A", param: "stable", id: "988",   gasToken: "USDT0 ★",          gas: "~$0.001", stableNote: true  },
+                    { name: "Stable",     color: "#5BC8FA", param: "stable", id: "988",   gasToken: "USDT0 ★",          gas: "~$0.001", stableNote: true  },
                     { name: "Mantle",     color: "#000000", param: "mantle", id: "5000",  gasToken: "MNT",              gas: "~$0.001", stableNote: false },
                     { name: "Injective",  color: "#0082FA", param: "injective", id: "1776", gasToken: "INJ",            gas: "~$0.10",  stableNote: false },
                     { name: "Monad",      color: "#836EF9", param: "monad", id: "143",   gasToken: "MON",              gas: "~$0.001", stableNote: false },
