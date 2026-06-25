@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
   // — any missing index entry just degrades to "no bridge", never throws.
   let pseudoTxs: typeof ownTxs = [];
   let bridgedFromPseudo: string | null = null;
+  let pseudoLoadFailed = false;
   try {
     const linkedEmail = await kv.get<string>(walletEmailLinkKey(addr));
     if (linkedEmail) {
@@ -72,7 +73,9 @@ export async function GET(req: NextRequest) {
       }
     }
   } catch {
-    /* bridge load failed — fall through with own txs only */
+    // Bridge load failed — fall through with own txs only, but flag it so the
+    // client knows the merged ledger may be incomplete (not "no activity").
+    pseudoLoadFailed = true;
   }
 
   // Dedup defence: pseudo and wallet write into different per-address
@@ -103,5 +106,6 @@ export async function GET(req: NextRequest) {
     // (trial keys go to Trial view, paid keys to Multichain view), so
     // this field is informational.
     bridgedFromPseudo,
+    ...(pseudoLoadFailed ? { warnings: ["pseudo_history_unavailable"] } : {}),
   });
 }

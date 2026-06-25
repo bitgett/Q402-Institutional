@@ -106,6 +106,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let amount = "";
   let isMax = false;
   let unstakeIth = 0;
+  let unstakePrincipal = ""; // staked principal of the record being exited (for the Activity row)
   if (isStake) {
     isMax = body.amount === "max";
     if (!isMax && !isPositiveDecimalString(body.amount)) {
@@ -305,6 +306,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         await cleanup();
         return NextResponse.json({ error: "NOT_MATURED", message: "This stake has not matured yet — it cannot be unstaked.", unlockAt: pos.unlockAt }, { status: 400 });
       }
+      unstakePrincipal = String(pos.amount ?? "");
     } catch (e) {
       await cleanup();
       return NextResponse.json({ error: "POSITIONS_READ_FAILED", message: e instanceof Error ? e.message : String(e) }, { status: 502 });
@@ -364,9 +366,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       apiKey: sub?.apiKey ?? "",
       address: wallet.address,
       chain: "bnb",
-      fromUser: wallet.address,
-      toUser: QUACK_STAKE,
-      tokenAmount: isStake ? settleAmount : "",
+      // stake: wallet -> contract (outbound). unstake: contract -> wallet (inbound).
+      fromUser: isStake ? wallet.address : QUACK_STAKE,
+      toUser: isStake ? QUACK_STAKE : wallet.address,
+      tokenAmount: isStake ? settleAmount : unstakePrincipal,
       tokenSymbol: "Q",
       gasCostNative: 0,
       relayTxHash: result.txHash ?? "",
