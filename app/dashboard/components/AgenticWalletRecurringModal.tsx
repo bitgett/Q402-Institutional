@@ -77,7 +77,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "eth",       label: "Ethereum",   multichainOnly: true, tokens: ["USDT", "USDC"] },
   { key: "avax",      label: "Avalanche",  multichainOnly: true, tokens: ["USDT", "USDC"] },
   { key: "xlayer",    label: "X Layer",    multichainOnly: true, tokens: ["USDT", "USDC"] },
-  { key: "stable",    label: "Stable",     multichainOnly: true, tokens: ["USDT", "USDC"] },
+  { key: "stable",    label: "Stable",     multichainOnly: true, tokens: ["USDT"] },
   { key: "mantle",    label: "Mantle",     multichainOnly: true, tokens: ["USDT", "USDC"] },
   { key: "injective", label: "Injective",  multichainOnly: true, tokens: ["USDT"] },
   { key: "monad",     label: "Monad",      multichainOnly: true, tokens: ["USDT", "USDC"] },

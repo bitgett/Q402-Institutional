@@ -349,8 +349,19 @@ export function AgenticWalletStakeModal({
                       Unstake
                     </button>
                   ) : (
-                    <span style={{ fontSize: 11, color: p.matured ? "#8fd6f7" : "rgba(255,255,255,.5)" }}>
-                      {p.matured ? "Unlocked" : `Unlocks ${fmtDate(p.unlockAt)}`}
+                    <span
+                      title={
+                        p.matured && !p.exitable
+                          ? "Index-0 stake: the contract permanently reserves index 0, so this position cannot be unstaked. New stakes land at index 1+, so this only affects a legacy index-0 stake."
+                          : undefined
+                      }
+                      style={{ fontSize: 11, color: p.matured ? "#8fd6f7" : "rgba(255,255,255,.5)" }}
+                    >
+                      {p.matured
+                        ? p.exitable
+                          ? "Unlocked"
+                          : "Matured · index 0 (can't be unstaked)"
+                        : `Unlocks ${fmtDate(p.unlockAt)}`}
                     </span>
                   )}
                 </div>

@@ -73,7 +73,7 @@ interface RelayedTx {
   relayTxHash: string;
   relayedAt: string;
   receiptId?: string;
-  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request";
+  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request" | "stake" | "unstake";
   ruleId?: string;
   /** Settlement rail — only set to "x402" for Coinbase x402 (Base USDC
    *  EIP-3009) rows; q402 (default) is left undefined and shows no badge. */
@@ -110,13 +110,14 @@ interface WalletRow {
   label: string | null;
 }
 
-type RailTab = "all" | "manual" | "recurring" | "yield" | "request" | "bridge" | "receipts";
+type RailTab = "all" | "manual" | "recurring" | "yield" | "staking" | "request" | "bridge" | "receipts";
 
 const RAIL: { id: RailTab; label: string; hint: string }[] = [
   { id: "all", label: "All settlements", hint: "Every relayed payment" },
   { id: "manual", label: "Manual sends", hint: "Send · batch · API" },
   { id: "recurring", label: "Recurring fires", hint: "Scheduled payouts" },
   { id: "yield", label: "Yield", hint: "Aave + Morpho deposits · withdrawals" },
+  { id: "staking", label: "Staking", hint: "Q stake · unstake" },
   { id: "request", label: "Requests", hint: "Inbound payment requests" },
   { id: "bridge", label: "Bridge history", hint: "CCIP cross-chain" },
   { id: "receipts", label: "Trust Receipts", hint: "Verifiable receipts" },
@@ -166,10 +167,19 @@ const SOURCE_LABEL: Record<NonNullable<RelayedTx["source"]>, string> = {
   yield_deposit: "Yield deposit",
   yield_withdraw: "Yield withdrawal",
   request: "Payment request",
+  stake: "Q stake",
+  unstake: "Q unstake",
 };
 
 function settlementKind(tx: RelayedTx): string {
   return tx.source ? SOURCE_LABEL[tx.source] : "Settlement";
+}
+
+// Sources where value flows INTO the Agent Wallet rather than out of it. Used
+// only for the in/out arrow — everything else reads as outbound.
+const INBOUND_SOURCES = new Set<string>(["yield_withdraw", "unstake", "request"]);
+function txInbound(tx: RelayedTx): boolean {
+  return !!tx.source && INBOUND_SOURCES.has(tx.source);
 }
 
 function fmtDate(iso: string | number): string {
@@ -191,7 +201,11 @@ function fmtNum(n: number): string {
 // numerically would surface "NaN". Show "All" instead, and degrade any other
 // non-finite value to a dash rather than NaN.
 function fmtTxAmount(v: number | string): string {
-  if (typeof v === "string" && v.trim().toLowerCase() === "max") return "All";
+  if (typeof v === "string") {
+    const t = v.trim().toLowerCase();
+    if (t === "max") return "All";
+    if (t === "") return "—"; // unstake records no amount (variable principal+reward)
+  }
   const n = Number(v);
   return Number.isFinite(n) ? n.toFixed(2) : "—";
 }
@@ -453,6 +467,9 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
       if (d.code === "NONCE_EXPIRED") clearAuthCache(ownerAddress);
       return;
     }
+    // Surface non-401 failures (5xx etc.) instead of silently rendering an
+    // empty table — the outer load effect catches this and shows the error.
+    if (!res.ok) throw new Error(`Activity failed to load (HTTP ${res.status}).`);
     const data = await res.json();
     if (Array.isArray(data.txs)) setTxs(data.txs as RelayedTx[]);
   }, [ownerAddress, signMessage]);
@@ -641,6 +658,7 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
       );
     if (tab === "recurring") return scopedTxs.filter((tx) => tx.source === "recurring");
     if (tab === "yield") return scopedTxs.filter((tx) => tx.source === "yield_deposit" || tx.source === "yield_withdraw");
+    if (tab === "staking") return scopedTxs.filter((tx) => tx.source === "stake" || tx.source === "unstake");
     if (tab === "request") return scopedTxs.filter((tx) => tx.source === "request");
     if (tab === "receipts") return scopedTxs.filter((tx) => !!tx.receiptId);
     return scopedTxs; // "all"
@@ -1001,67 +1019,102 @@ function ActivityStatsStrip({
             </span>
           </div>
         </div>
-        <DailyBarChart data={dailyData} labels={dailyLabels} />
+        <DailyLineChart data={dailyData} labels={dailyLabels} />
       </div>
     </Surface>
   );
 }
 
-// ── 14-day bar chart (v2 re-skin of the legacy BarChart) ──────────────────────
+// ── 14-day line chart ────────────────────────────────────────────────────────
 /**
- * Yellow-on-glass daily bars. The final bar (today) is full-opacity yellow;
- * earlier days use the muted accent line tone. Heights are normalised to the
- * 14-day max; any day with activity shows at least a hairline so empty
- * stretches read as gaps, not absence. Every 3rd day prints a muted axis label
- * (day-of-month), and each bar carries an accessible title with its exact
- * count (no hover tooltip needed in a styles-only port).
+ * Yellow-on-glass daily LINE chart: a gold polyline over a faded area fill.
+ * Today's point is a larger glowing dot; earlier days are small muted markers,
+ * each carrying an accessible title with its exact count. Every 3rd day prints a
+ * muted axis label (day-of-month). The line uses a non-scaling stroke so it
+ * stays crisp under the non-uniform SVG stretch to the container width.
  */
-function DailyBarChart({ data, labels }: { data: number[]; labels: string[] }) {
+function DailyLineChart({ data, labels }: { data: number[]; labels: string[] }) {
   const max = Math.max(...data, 1);
+  const n = data.length;
+  const xPad = 2;
+  const yTop = 10;
+  const yBot = 94;
+  const px = (i: number) => (n <= 1 ? 50 : xPad + (i / (n - 1)) * (100 - 2 * xPad));
+  const py = (v: number) => yBot - (v / max) * (yBot - yTop);
+  const pts = data.map((v, i) => [px(i), py(v)] as const);
+  const linePath = "M " + pts.map(([x, y]) => `${x} ${y}`).join(" L ");
+  const areaPath =
+    `M ${px(0)} ${yBot} L ` + pts.map(([x, y]) => `${x} ${y}`).join(" L ") + ` L ${px(n - 1)} ${yBot} Z`;
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 108, marginTop: 16 }}>
-      {data.map((v, i) => {
-        const isToday = i === data.length - 1;
-        const hPct = v > 0 ? Math.max((v / max) * 100, 5) : 0;
-        return (
-          <div
+    <div style={{ marginTop: 16 }}>
+      <div style={{ position: "relative", height: 108 }}>
+        <svg
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          width="100%"
+          height="100%"
+          style={{ display: "block" }}
+          aria-hidden
+        >
+          <defs>
+            <linearGradient id="dailyLineFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={v2.yellow} stopOpacity={0.16} />
+              <stop offset="100%" stopColor={v2.yellow} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <path d={areaPath} fill="url(#dailyLineFill)" />
+          <path
+            d={linePath}
+            fill="none"
+            stroke={v2.yellow}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        {pts.map(([x, y], i) => {
+          const isToday = i === n - 1;
+          return (
+            <span
+              key={i}
+              title={`${labels[i]}: ${fmtNum(data[i] ?? 0)} tx`}
+              style={{
+                position: "absolute",
+                left: `${x}%`,
+                top: `${y}%`,
+                width: isToday ? 8 : 4,
+                height: isToday ? 8 : 4,
+                marginLeft: isToday ? -4 : -2,
+                marginTop: isToday ? -4 : -2,
+                borderRadius: "50%",
+                background: isToday ? v2.yellow : V2_ACCENT_LINE,
+                boxShadow: isToday ? `0 0 6px ${v2.yellow}` : "none",
+              }}
+            />
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", marginTop: 6 }}>
+        {labels.map((lab, i) => (
+          <span
             key={i}
-            title={`${labels[i]}: ${fmtNum(v)} tx`}
             style={{
               flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 6,
               minWidth: 0,
+              textAlign: "center",
+              fontSize: fs.micro,
+              fontFamily: displayFont,
+              color: v2.muted2,
+              whiteSpace: "nowrap",
+              visibility: i % 3 === 0 ? "visible" : "hidden",
             }}
+            aria-hidden={i % 3 !== 0}
           >
-            <div style={{ display: "flex", alignItems: "flex-end", width: "100%", height: "100%" }}>
-              <div
-                style={{
-                  width: "100%",
-                  height: `${hPct}%`,
-                  minHeight: v > 0 ? 2 : 0,
-                  borderRadius: 3,
-                  background: isToday ? v2.yellow : V2_ACCENT_LINE,
-                }}
-              />
-            </div>
-            <span
-              style={{
-                fontSize: fs.micro,
-                fontFamily: displayFont,
-                color: v2.muted2,
-                whiteSpace: "nowrap",
-                visibility: i % 3 === 0 ? "visible" : "hidden",
-              }}
-              aria-hidden={i % 3 !== 0}
-            >
-              {labels[i]?.split(" ")[1]}
-            </span>
-          </div>
-        );
-      })}
+            {lab?.split(" ")[1]}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1117,11 +1170,13 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
           ? "No manual sends (send / batch / API) in this scope yet."
           : emptyFor === "yield"
             ? "No yield settlements in this scope yet. Aave deposits and withdrawals appear here once you supply or redeem."
-            : emptyFor === "request"
-              ? "No payment-request settlements in this scope yet. A paid invoice shows here once a payer or agent settles it."
-              : emptyFor === "receipts"
-                ? "No Trust Receipts yet. Settlements with a verifiable receipt show a View link."
-                : "No settlements in this scope yet.";
+            : emptyFor === "staking"
+              ? "No Q staking activity in this scope yet. Stake and unstake settlements appear here once you stake Q."
+              : emptyFor === "request"
+                ? "No payment-request settlements in this scope yet. A paid invoice shows here once a payer or agent settles it."
+                : emptyFor === "receipts"
+                  ? "No Trust Receipts yet. Settlements with a verifiable receipt show a View link."
+                  : "No settlements in this scope yet.";
     return <Empty text={msg} />;
   }
 
@@ -1131,7 +1186,7 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
         <thead>
           <Tr head>
             <Th>Settlement</Th>
-            <Th>Wallet</Th>
+            <Th>From → To</Th>
             <Th>Network</Th>
             <Th>Status</Th>
             <Th align="right">Amount</Th>
@@ -1147,6 +1202,13 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
               <Tr key={`${tx.relayTxHash}-${i}`}>
                 <Td>
                   <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500, display: "flex", alignItems: "center", gap: 7 }}>
+                    <span
+                      title={txInbound(tx) ? "Inbound" : "Outbound"}
+                      aria-hidden
+                      style={{ color: txInbound(tx) ? v2.mint : v2.muted2, fontFamily: displayFont }}
+                    >
+                      {txInbound(tx) ? "↓" : "↑"}
+                    </span>
                     {tx._demoKind ?? settlementKind(tx)}
                     {tx.rail === "x402" && (
                       <span
@@ -1202,10 +1264,10 @@ function SettlementTable({ txs, emptyFor }: { txs: RelayedTx[]; emptyFor: RailTa
                 </Td>
                 <Td>
                   <span
-                    style={{ fontSize: fs.base, color: v2.muted, fontFamily: displayFont }}
+                    style={{ fontSize: fs.base, color: v2.muted, fontFamily: displayFont, whiteSpace: "nowrap" }}
                     title={`${tx.fromUser} → ${tx.toUser}`}
                   >
-                    {shortAddr(tx.fromUser)}
+                    {shortAddr(tx.fromUser)} <span style={{ color: v2.muted2 }}>→</span> {shortAddr(tx.toUser)}
                   </span>
                 </Td>
                 <Td>

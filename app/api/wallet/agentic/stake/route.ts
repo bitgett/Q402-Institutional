@@ -27,7 +27,7 @@ import {
   acquireWalletChainLock,
   releaseWalletChainLock,
 } from "@/app/lib/agentic-wallet";
-import { getApiKeyRecord, getSubscription, hasMultichainScope } from "@/app/lib/db";
+import { getApiKeyRecord, getSubscription, hasMultichainScope, recordRelayedTx } from "@/app/lib/db";
 import {
   signStakeAction,
   stakeImplAddress,
@@ -355,6 +355,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Success — mark idempotency settled, release the lock (keep the op-budget spent).
   await kv.set(idemKey, { status: "settled", txHash: result.txHash, at: Date.now() }, { ex: IDEM_TTL_SEC }).catch(() => {});
   await releaseWalletChainLock(walletId, "bnb", lockToken).catch(() => {});
+
+  // Best-effort: surface the staking settlement in the owner's Activity feed
+  // (keyed by owner, like yield). Never let a history-write failure affect the
+  // already-settled stake response.
+  try {
+    await recordRelayedTx(owner, {
+      apiKey: sub?.apiKey ?? "",
+      address: wallet.address,
+      chain: "bnb",
+      fromUser: wallet.address,
+      toUser: QUACK_STAKE,
+      tokenAmount: isStake ? settleAmount : "",
+      tokenSymbol: "Q",
+      gasCostNative: 0,
+      relayTxHash: result.txHash ?? "",
+      relayedAt: new Date().toISOString(),
+      source: isStake ? "stake" : "unstake",
+    });
+  } catch (e) {
+    console.error("[agentic/stake] recordRelayedTx failed (non-fatal):", e);
+  }
 
   return NextResponse.json({
     status: "settled",
