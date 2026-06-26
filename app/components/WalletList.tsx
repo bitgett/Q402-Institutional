@@ -16,7 +16,7 @@
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import { useWallet } from "../context/WalletContext";
-import { isWalletInstalled, type WalletType } from "../lib/wallet";
+import { isWalletInstalled, isMobileDevice, type WalletType } from "../lib/wallet";
 
 interface WalletDef {
   id: WalletType;
@@ -24,6 +24,34 @@ interface WalletDef {
   desc: string;
   installUrl: string;
   icon: ReactNode;
+}
+
+// Wallets that expose a universal link to reopen the current dapp inside
+// their in-app browser. On mobile, tapping a non-injected wallet should
+// deep-link here (where window.ethereum exists) rather than dead-ending at
+// an app-store page. Binance Web3 has no stable dapp universal link, so it
+// falls back to install.
+const HAS_DEEPLINK: ReadonlySet<WalletType> = new Set(["metamask", "okx", "coinbase", "bitget"]);
+
+/** Build the universal link that reopens THIS page in the wallet's browser. */
+function dappDeeplink(kind: WalletType): string | null {
+  if (typeof window === "undefined") return null;
+  const href = window.location.href;
+  const hostPath = window.location.host + window.location.pathname + window.location.search;
+  switch (kind) {
+    case "metamask":
+      return `https://metamask.app.link/dapp/${hostPath}`;
+    case "okx":
+      return `https://www.okx.com/download?deeplink=${encodeURIComponent(
+        `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(href)}`,
+      )}`;
+    case "coinbase":
+      return `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(href)}`;
+    case "bitget":
+      return `https://bkcode.vip/?action=dapp&url=${encodeURIComponent(href)}`;
+    default:
+      return null;
+  }
 }
 
 const WALLETS: WalletDef[] = [
@@ -111,6 +139,9 @@ export default function WalletList({ onConnected }: Props) {
   const { connectWith } = useWallet();
   const [loading, setLoading] = useState<WalletType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Modal mounts client-side only (parent gates on `mounted`), so reading
+  // the UA inline is safe — no SSR/hydration mismatch on the row label.
+  const mobile = isMobileDevice();
 
   // Detection is read-only against `window` and SSR-safe (the helper
   // short-circuits to false when window is undefined). Computing inline
@@ -128,6 +159,13 @@ export default function WalletList({ onConnected }: Props) {
   async function handleConnect(wallet: WalletDef) {
     setError(null);
     if (!installedFlags[wallet.id]) {
+      // Mobile + no injected provider: reopen the page inside the wallet's
+      // in-app browser via its universal link, where the provider exists.
+      const dl = mobile ? dappDeeplink(wallet.id) : null;
+      if (dl) {
+        window.location.assign(dl);
+        return;
+      }
       window.open(wallet.installUrl, "_blank", "noopener,noreferrer");
       return;
     }
@@ -181,6 +219,8 @@ export default function WalletList({ onConnected }: Props) {
                 <span className="text-[10px] text-yellow font-semibold bg-yellow/10 border border-yellow/20 px-2 py-0.5 rounded-full flex-shrink-0">
                   Detected
                 </span>
+              ) : mobile && HAS_DEEPLINK.has(wallet.id) ? (
+                <span className="text-[10px] text-white/30 flex-shrink-0">Open →</span>
               ) : (
                 <span className="text-[10px] text-white/30 flex-shrink-0">Install →</span>
               )}

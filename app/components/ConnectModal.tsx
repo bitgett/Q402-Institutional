@@ -21,7 +21,7 @@
  * Navbar's backdrop-filter can't trap us as a fixed-position root.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -30,10 +30,9 @@ import WalletList from "./WalletList";
 
 // Desktop-ideal width for the Google + Email rail. The modal panel is
 // max-w-md (448px) minus p-7 (56px) → 392px inner. On narrow viewports
-// (sub-448px after backdrop padding) the inner content shrinks and the
-// fixed-pixel GIS button used to overflow the panel; the ResizeObserver
-// below tracks the actual rendered content width and clamps the Google
-// button to it.
+// (sub-448px after backdrop padding) the inner content shrinks; the
+// viewport-driven effect below clamps the fixed-pixel GIS button so it
+// never overflows the panel.
 const GOOGLE_DESKTOP_WIDTH = 392;
 const GOOGLE_MIN_WIDTH = 200;  // GIS docs: minimum allowed renderButton width
 
@@ -53,27 +52,22 @@ export default function ConnectModal({ onClose }: Props) {
     setMounted(true);
   }, []);
 
-  // Tracks the rendered width of the Google+Email rail so the
-  // fixed-pixel GIS button never exceeds it on narrow viewports.
-  // Initialised to the desktop ideal so the first paint matches the
-  // common case; the observer updates within a frame when smaller.
-  const railRef = useRef<HTMLDivElement>(null);
+  // Size the fixed-pixel GIS button from the viewport, NOT from the rail
+  // that contains it. Measuring the rail is circular — the button's own
+  // 392px width floors the rail's measured width, so the clamp can never
+  // shrink it and the panel overflows narrow phones. The panel is max-w-md
+  // (448) inside px-4 backdrop padding; inner content = panel − p-7 − border.
   const [googleWidth, setGoogleWidth] = useState<number>(GOOGLE_DESKTOP_WIDTH);
   useEffect(() => {
-    if (!railRef.current) return;
-    if (typeof ResizeObserver === "undefined") return;
-    const measure = (target: HTMLElement) => {
-      const w = Math.floor(target.getBoundingClientRect().width);
-      if (w <= 0) return;
-      setGoogleWidth(Math.max(GOOGLE_MIN_WIDTH, Math.min(GOOGLE_DESKTOP_WIDTH, w)));
+    const compute = () => {
+      const panel = Math.min(448, window.innerWidth - 32);
+      const inner = panel - 56 - 2;
+      setGoogleWidth(Math.max(GOOGLE_MIN_WIDTH, Math.min(GOOGLE_DESKTOP_WIDTH, inner)));
     };
-    measure(railRef.current);
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) measure(entry.target as HTMLElement);
-    });
-    observer.observe(railRef.current);
-    return () => observer.disconnect();
-  }, [view]);
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
 
   async function submitEmail() {
     if (!email.trim()) {
@@ -182,7 +176,7 @@ export default function ConnectModal({ onClose }: Props) {
                     pixel-driven GIS button clamps to the actual rail
                     on narrow viewports. The other two CTAs are
                     `w-full` so they shrink naturally. */}
-                <div ref={railRef} className="space-y-2.5 flex flex-col items-stretch">
+                <div className="space-y-2.5 flex flex-col items-stretch min-w-0">
                   <GoogleSigninButton
                     width={googleWidth}
                     onSuccess={() => {

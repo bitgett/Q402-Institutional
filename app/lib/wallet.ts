@@ -221,6 +221,14 @@ export function isWalletInstalled(type: WalletType): boolean {
   return !!getProvider(type);
 }
 
+// True on phones/tablets. Used to decide between "install the extension"
+// (desktop) and "deep-link into the wallet app's in-app browser" (mobile,
+// where regular browsers + social-app webviews inject no provider). SSR-safe.
+export function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+}
+
 export function walletErrorMessage(err: unknown): string {
   const { code, message } = asProviderError(err);
   if (code === 4001) return "Wallet request was rejected.";
