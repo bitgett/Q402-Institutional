@@ -50,6 +50,7 @@ import type { Scope, V2ViewId } from "../theme";
 import { ChainIcon, TokenIcon, StablePair, Q402Mark, SparkIcon, AgentBadgeIcon, GasTankIcon, GearIcon } from "../logos";
 import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
+import { useIsMobile } from "@/app/lib/use-is-mobile";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
 import type { AgenticWalletPublic } from "@/app/dashboard/components/AgenticWalletTab";
@@ -351,6 +352,7 @@ const DEMO = {
 } as const;
 
 export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: WalletsViewProps) {
+  const isMobile = useIsMobile();
   // ── Wallet list (same contract as AgenticWalletTab) ──────────────────────
   const [wallets, setWallets] = useState<AgenticWalletPublic[] | undefined>(undefined);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -1319,7 +1321,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                 {/* Capital overview — Stablecoins + Gas Tank on one row, Yield below */}
                 <section>
                   <SectionHead title="Capital overview" meta="11 networks monitored" />
-                  <div style={styles.allocation}>
+                  <div style={{ ...styles.allocation, gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr" }}>
                     <div style={{ ...subCard(13), padding: 14 }}>
                       <div style={styles.assetTop}>
                         <div style={styles.token}>

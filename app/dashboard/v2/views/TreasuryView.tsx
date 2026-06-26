@@ -769,7 +769,8 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   }
                 />
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: fs.base }}>
+              <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 580, borderCollapse: "collapse", fontSize: fs.base }}>
                 <thead>
                   <tr style={{ color: v2.muted2 }}>
                     <Th style={{ paddingLeft: 17 }}>Network</Th>
@@ -885,6 +886,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   })}
                 </tbody>
               </table>
+              </div>
 
               {/* Tank activity (deposit history) */}
               <div style={{ padding: "15px 19px", borderTop: `1px solid ${v2.line}` }}>
