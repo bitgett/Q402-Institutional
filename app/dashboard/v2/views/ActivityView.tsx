@@ -1051,6 +1051,7 @@ function ActivityStatsStrip({
  * stays crisp under the non-uniform SVG stretch to the container width.
  */
 function DailyLineChart({ data, labels }: { data: number[]; labels: string[] }) {
+  const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(...data, 1);
   const n = data.length;
   const xPad = 2;
@@ -1062,9 +1063,12 @@ function DailyLineChart({ data, labels }: { data: number[]; labels: string[] }) 
   const linePath = "M " + pts.map(([x, y]) => `${x} ${y}`).join(" L ");
   const areaPath =
     `M ${px(0)} ${yBot} L ` + pts.map(([x, y]) => `${x} ${y}`).join(" L ") + ` L ${px(n - 1)} ${yBot} Z`;
+  const hp = hover !== null ? pts[hover] : undefined;
+  const tip =
+    hp && hover !== null ? { x: hp[0], y: hp[1], label: labels[hover] ?? "", count: data[hover] ?? 0 } : null;
   return (
     <div style={{ marginTop: 16 }}>
-      <div style={{ position: "relative", height: 108 }}>
+      <div style={{ position: "relative", height: 108 }} onMouseLeave={() => setHover(null)}>
         <svg
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
@@ -1092,32 +1096,62 @@ function DailyLineChart({ data, labels }: { data: number[]; labels: string[] }) 
         </svg>
         {pts.map(([x, y], i) => {
           const isToday = i === n - 1;
+          const active = hover === i;
+          const sz = active ? 9 : isToday ? 8 : 4;
           return (
             <span
               key={i}
-              title={`${labels[i]}: ${fmtNum(data[i] ?? 0)} tx`}
               style={{
                 position: "absolute",
                 left: `${x}%`,
                 top: `${y}%`,
-                width: isToday ? 8 : 4,
-                height: isToday ? 8 : 4,
-                marginLeft: isToday ? -4 : -2,
-                marginTop: isToday ? -4 : -2,
+                width: sz,
+                height: sz,
+                marginLeft: -sz / 2,
+                marginTop: -sz / 2,
                 borderRadius: "50%",
-                background: isToday ? v2.yellow : V2_ACCENT_LINE,
-                boxShadow: isToday ? `0 0 6px ${v2.yellow}` : "none",
+                background: active || isToday ? v2.yellow : V2_ACCENT_LINE,
+                boxShadow: active || isToday ? `0 0 6px ${v2.yellow}` : "none",
+                transition: "width .08s ease, height .08s ease",
               }}
             />
           );
         })}
-        {/* Invisible per-day hover columns so the exact count shows when hovering
-            anywhere over a day's slice (the line/dots alone are hard to hit). */}
-        <div style={{ position: "absolute", inset: 0, display: "flex" }} aria-hidden>
-          {data.map((v, i) => (
-            <div key={i} style={{ flex: 1, minWidth: 0 }} title={`${labels[i]}: ${fmtNum(v ?? 0)} tx`} />
+        {/* Per-day hover columns drive an instant tooltip (the line/dots are hard to hit). */}
+        <div style={{ position: "absolute", inset: 0, display: "flex" }}>
+          {data.map((_v, i) => (
+            <div
+              key={i}
+              style={{ flex: 1, minWidth: 0, cursor: "crosshair" }}
+              onMouseEnter={() => setHover(i)}
+            />
           ))}
         </div>
+        {tip && (
+          <div
+            style={{
+              position: "absolute",
+              left: `${tip.x}%`,
+              top: `${tip.y}%`,
+              transform: "translate(-50%, calc(-100% - 10px))",
+              padding: "4px 9px",
+              borderRadius: 7,
+              background: "rgba(8,12,22,0.96)",
+              border: "1px solid rgba(140,160,200,0.18)",
+              boxShadow: "0 6px 18px rgba(0,0,0,0.45)",
+              whiteSpace: "nowrap",
+              fontSize: fs.micro,
+              fontFamily: displayFont,
+              color: v2.muted2,
+              pointerEvents: "none",
+              zIndex: 5,
+            }}
+          >
+            {tip.label}
+            {"  "}
+            <span style={{ fontWeight: 700, color: v2.yellow }}>{fmtNum(tip.count)}</span> tx
+          </div>
+        )}
       </div>
       <div style={{ display: "flex", marginTop: 6 }}>
         {labels.map((lab, i) => (
