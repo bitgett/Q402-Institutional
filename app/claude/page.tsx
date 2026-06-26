@@ -536,14 +536,12 @@ export default function ClaudePage() {
 
             {/* ranking */}
             <div className="border rounded-[4px] overflow-hidden" style={{ borderColor: LINE }}>
-              <div className="overflow-x-auto">
-              <div className="min-w-[480px]">
               <div className="px-5 py-3 flex items-center gap-3 border-b text-[10px] uppercase tracking-[0.18em] font-mono" style={{ borderColor: HAIR, color: MUT2 }}>
                 <span className="w-6">#</span>
                 <span className="flex-1">Chain</span>
-                <span className="w-20 text-right">Gas token</span>
+                <span className="w-20 text-right max-sm:hidden">Gas token</span>
                 <span className="w-28 text-right">Approx gas</span>
-                <span className="w-16 text-right">Sender</span>
+                <span className="w-16 text-right max-sm:hidden">Sender</span>
               </div>
               <ul>
                 <AnimatePresence initial={false}>
@@ -564,15 +562,13 @@ export default function ClaudePage() {
                         <span className="text-[10px] font-mono" style={{ color: MUT2 }}>chain {c.chainId}</span>
                         {c.note && <span className="hidden lg:inline text-[10px] truncate" style={{ color: MUT2 }}>{c.note}</span>}
                       </span>
-                      <span className="w-20 text-right font-mono text-xs" style={{ color: MUT }}>{c.gas}</span>
+                      <span className="w-20 text-right font-mono text-xs max-sm:hidden" style={{ color: MUT }}>{c.gas}</span>
                       <span className="w-28 text-right font-mono text-xs font-semibold" style={{ color: i === 0 ? YELLOW : MUT }}>${c.approxGasCostUsd.toFixed(c.approxGasCostUsd >= 1 ? 2 : 4)}</span>
-                      <span className="w-16 text-right font-mono font-bold text-xs" style={{ color: CYAN }}>$0.00</span>
+                      <span className="w-16 text-right font-mono font-bold text-xs max-sm:hidden" style={{ color: CYAN }}>$0.00</span>
                     </motion.li>
                   ))}
                 </AnimatePresence>
               </ul>
-              </div>
-              </div>
               <div className="px-5 py-3 text-[11px] border-t font-mono" style={{ borderColor: HAIR, color: MUT2 }}>
                 {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC, USDT, or RLUSD" : tokenFilter}. Agent picks ${ranked[0]?.name ?? "-"} by default. Sender always pays $0; gas comes from the developer's gas tank.`}
               </div>
