@@ -121,7 +121,7 @@ export default function Hero() {
                   Mainnet · 11 chains live
                 </span>
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {[
                   { img: "/bnb.png",       label: "BNB"  },
                   { img: "/eth.png",       label: "ETH"  },
