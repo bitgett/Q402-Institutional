@@ -151,7 +151,7 @@ export default function Hero() {
                 so the CTAs sit naturally at the bottom on tall viewports. */}
             <div className="mt-10 lg:mt-0">
               <h1
-                className="hero-rise font-display uppercase font-extrabold tracking-[-0.03em] leading-[0.92] text-[3.4rem] sm:text-[5rem] md:text-[6.4rem] lg:text-[8.2rem] xl:text-[9rem] max-w-[14ch]"
+                className="hero-rise font-display uppercase font-extrabold tracking-[-0.03em] leading-[0.92] text-[clamp(2.1rem,9vw,3.4rem)] sm:text-[5rem] md:text-[6.4rem] lg:text-[8.2rem] xl:text-[9rem] max-w-[14ch]"
                 style={{ animationDelay: "0.15s" }}
               >
                 <span className="block text-white">The final layer for</span>

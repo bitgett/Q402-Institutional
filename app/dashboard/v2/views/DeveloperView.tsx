@@ -55,6 +55,7 @@ import { v2, glass, subCard, fs, type Scope } from "../theme";
 import { CheckIcon, XIcon, SparkIcon, TimerIcon } from "../logos";
 import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
+import { useIsMobile } from "@/app/lib/use-is-mobile";
 import { MCP_VERSION as MCP_PKG_VERSION } from "@/app/lib/version";
 
 /** Published @quackai/q402-mcp version surfaced on the MCP setup card.
@@ -2033,6 +2034,7 @@ function DocsCard() {
 
 // ── View ─────────────────────────────────────────────────────────────────────
 export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperViewProps) {
+  const isMobile = useIsMobile();
   const [activeSection, setActiveSection] = useState<SectionId>("credentials");
   const {
     loading,
@@ -2213,11 +2215,13 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
             </div>
           )}
 
-          {/* ── Credentials: BOTH keys as a 2-col hero row, webhook below ── */}
+          {/* ── Credentials: BOTH keys as a 2-col hero row, webhook below.
+                Phones stack them (2-up cramps the key + breaks words). ── */}
           <div ref={refs.credentials} style={section(0)}>
             <div
               style={{
                 display: "flex",
+                flexDirection: isMobile ? "column" : "row",
                 gap: 14,
                 marginTop: 18,
                 flexWrap: "wrap",
