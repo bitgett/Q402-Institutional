@@ -624,12 +624,18 @@ describe("admin-grant.mjs seed-first parity", () => {
 describe("ConnectModal — responsive Google button width", () => {
   // The GIS rendered button takes a pixel-width API, so we can't just
   // make it `w-full`. On narrow mobile viewports the desktop-ideal
-  // 392px width used to overflow the modal panel. ConnectModal now
-  // measures the actual rendered rail and clamps the GIS button to
-  // it via a ResizeObserver. These guards keep that wiring intact.
+  // 392px width used to overflow the modal panel. ConnectModal sizes
+  // the GIS button from the viewport (window.innerWidth) on mount and
+  // on resize, then clamps it. (An earlier ResizeObserver that measured
+  // the rail *containing* the button was circular — the button's own
+  // 392px floored the measurement so it never shrank, and the panel
+  // overflowed phones.) These guards keep that wiring intact.
 
-  it("uses a ResizeObserver to track the Google+Email rail width", () => {
-    expect(connectModalSource).toMatch(/new\s+ResizeObserver/);
+  it("sizes the GIS button from the viewport on mount and on resize", () => {
+    expect(connectModalSource).toMatch(/window\.innerWidth/);
+    expect(connectModalSource).toMatch(/addEventListener\(\s*["']resize["']/);
+    // The old circular rail-measuring ResizeObserver must not creep back.
+    expect(connectModalSource).not.toMatch(/new\s+ResizeObserver/);
   });
 
   it("clamps the dynamic width between the GIS min and the desktop ideal", () => {
