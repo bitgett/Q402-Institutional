@@ -536,6 +536,8 @@ export default function ClaudePage() {
 
             {/* ranking */}
             <div className="border rounded-[4px] overflow-hidden" style={{ borderColor: LINE }}>
+              <div className="overflow-x-auto">
+              <div className="min-w-[480px]">
               <div className="px-5 py-3 flex items-center gap-3 border-b text-[10px] uppercase tracking-[0.18em] font-mono" style={{ borderColor: HAIR, color: MUT2 }}>
                 <span className="w-6">#</span>
                 <span className="flex-1">Chain</span>
@@ -569,6 +571,8 @@ export default function ClaudePage() {
                   ))}
                 </AnimatePresence>
               </ul>
+              </div>
+              </div>
               <div className="px-5 py-3 text-[11px] border-t font-mono" style={{ borderColor: HAIR, color: MUT2 }}>
                 {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC, USDT, or RLUSD" : tokenFilter}. Agent picks ${ranked[0]?.name ?? "-"} by default. Sender always pays $0; gas comes from the developer's gas tank.`}
               </div>

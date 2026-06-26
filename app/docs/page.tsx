@@ -87,7 +87,7 @@ export default function DocsPage() {
             outer is 96rem but content only fills aside (16rem) + main
             (max-w-6xl = 72rem), so the right 8rem is dead space and main has
             its own px-8 (2rem) for box borders → 8 + 2 = 10rem reclaim. */}
-        <div className="max-w-[96rem] mx-auto h-14 flex items-center justify-between pl-5 pr-[10rem]">
+        <div className="max-w-[96rem] mx-auto h-14 flex items-center justify-between pl-5 pr-5 lg:pr-[10rem]">
           <div className="flex items-center gap-5">
             <Link href="/" className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
@@ -669,7 +669,8 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
 
             <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 30 total</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead>
                   <tr className="text-left text-[11px] uppercase tracking-widest text-white/55" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                     <th className="px-4 py-3 font-semibold">Tool</th>
@@ -718,6 +719,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
 
             <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">5 · Sandbox vs live mode</h3>

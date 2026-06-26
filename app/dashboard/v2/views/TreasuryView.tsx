@@ -63,6 +63,7 @@ import type { Scope } from "../theme";
 import { ChainIcon, TokenIcon, Q402Mark, GasTankIcon, CheckIcon } from "../logos";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { GASTANK_ADDRESS } from "@/app/lib/wallets";
+import { useIsMobile } from "@/app/lib/use-is-mobile";
 import {
   sendNativeTransfer,
   waitForWalletReceipt,
@@ -185,6 +186,7 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewProps) {
   const identity = useDashboardIdentity();
   const isMultichain = scope === "multichain";
+  const isMobile = useIsMobile();
 
   // ── Gas Tank state (mirrors page.tsx) ──────────────────────────────────
   const [userGasBalance, setUserGasBalance] = useState<Record<string, number>>({});
@@ -478,10 +480,12 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
           </div>
 
           {/* ── treasury-grid (3 cards) ────────────────────────────────── */}
+          {/* Phones drop to 1 column — at 3 rigid columns the 34px USD figures
+              clip on a ~316px screen. Desktop keeps the exact 3-col grid. */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gridTemplateColumns: isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))",
               gap: 15,
               marginBottom: 19,
             }}
