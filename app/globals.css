@@ -41,6 +41,16 @@ html { scroll-behavior: smooth; }
   from { opacity: 0; transform: translateY(28px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* Fail-safe hero entrance: a pure-CSS fade-up (not framer/JS) so the
+   above-the-fold hero is visible in SSR, before hydration, with JS slow or
+   disabled, AND under reduced-motion. `both` holds opacity:0 through the
+   per-element animation-delay then settles at opacity:1; if the animation is
+   ever disabled the element keeps its default opacity:1 — never stuck hidden. */
+.hero-rise { animation: fadeUp 0.65s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise { animation: none; }
+}
 @keyframes fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
