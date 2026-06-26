@@ -180,7 +180,7 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
     return (
       <div
         className="inline-flex items-center justify-center rounded-full bg-white/5 border border-white/10 text-white/30 text-xs font-medium px-6 py-3 cursor-not-allowed"
-        style={{ width }}
+        style={{ width, maxWidth: "100%" }}
       >
         Google sign-in unavailable
       </div>
@@ -189,8 +189,8 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
 
   return (
     <div
-      className="relative inline-block"
-      style={{ width, height: 44 }}
+      className="relative inline-block overflow-hidden"
+      style={{ width, height: 44, maxWidth: "100%" }}
     >
       {/* Hidden GIS button — receives the real click. Opacity 0 + auto
           pointer events keeps it operable while invisible. */}
