@@ -87,7 +87,7 @@ export default function DocsPage() {
             outer is 96rem but content only fills aside (16rem) + main
             (max-w-6xl = 72rem), so the right 8rem is dead space and main has
             its own px-8 (2rem) for box borders → 8 + 2 = 10rem reclaim. */}
-        <div className="max-w-[96rem] mx-auto h-14 flex items-center justify-between pl-5 pr-5 lg:pr-[10rem]">
+        <div className="max-w-[96rem] mx-auto h-14 flex items-center justify-between pl-5 pr-5 md:pr-[10rem]">
           <div className="flex items-center gap-5">
             <Link href="/" className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)]">
