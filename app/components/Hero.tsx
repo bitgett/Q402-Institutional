@@ -111,13 +111,10 @@ export default function Hero() {
 
           {/* CONTENT */}
           <div className="relative h-full flex flex-col justify-between px-7 sm:px-12 lg:px-20 py-12 lg:py-16">
-            {/* Top: status pill + chain logos */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="flex items-center gap-3 flex-wrap"
-            >
+            {/* Top: status pill + chain logos. CSS `.hero-rise` (not framer) so
+                the above-the-fold hero is visible in SSR / before hydration /
+                with JS slow or disabled / under reduced-motion. */}
+            <div className="hero-rise flex items-center gap-3 flex-wrap">
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow/30 bg-yellow/[0.06]">
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-yellow/95">
@@ -138,52 +135,44 @@ export default function Hero() {
                   { img: "/arbitrum.png",  label: "ARB"  },
                   { img: "/base.png",      label: "BASE" },
                 ].map((c, i) => (
-                  <motion.span
+                  <span
                     key={c.label}
-                    initial={{ opacity: 0, scale: 0.7 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.4, delay: 0.15 + i * 0.06 }}
-                    className="w-6 h-6 rounded-full overflow-hidden border border-white/10 flex-shrink-0"
+                    className="hero-rise w-6 h-6 rounded-full overflow-hidden border border-white/10 flex-shrink-0"
+                    style={{ animationDelay: `${0.15 + i * 0.06}s` }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={c.img} alt={c.label} className="w-full h-full object-cover" />
-                  </motion.span>
+                  </span>
                 ))}
               </div>
-            </motion.div>
+            </div>
 
             {/* Middle: HEADLINE + subtitle. Pushed up a touch with margin-top:auto
                 so the CTAs sit naturally at the bottom on tall viewports. */}
             <div className="mt-10 lg:mt-0">
-              <motion.h1
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.15 }}
-                className="font-display uppercase font-extrabold tracking-[-0.03em] leading-[0.92] text-[3.4rem] sm:text-[5rem] md:text-[6.4rem] lg:text-[8.2rem] xl:text-[9rem] max-w-[14ch]"
+              <h1
+                className="hero-rise font-display uppercase font-extrabold tracking-[-0.03em] leading-[0.92] text-[3.4rem] sm:text-[5rem] md:text-[6.4rem] lg:text-[8.2rem] xl:text-[9rem] max-w-[14ch]"
+                style={{ animationDelay: "0.15s" }}
               >
                 <span className="block text-white">The final layer for</span>
                 <span className="block text-shimmer">stablecoin rails.</span>
-              </motion.h1>
-              <motion.p
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-                className="mt-7 text-base sm:text-lg lg:text-lg xl:text-xl text-white/65 font-light leading-relaxed lg:whitespace-nowrap"
+              </h1>
+              <p
+                className="hero-rise mt-7 text-base sm:text-lg lg:text-lg xl:text-xl text-white/65 font-light leading-relaxed lg:whitespace-nowrap"
+                style={{ animationDelay: "0.3s" }}
               >
                 <span className="text-yellow font-semibold">Zero gas.</span> Eleven EVM chains.{" "}
                 <span className="text-yellow font-semibold">Pure stablecoin flow.</span> Users pay in USDC, USDT, or RLUSD, and we cover the rest.
-              </motion.p>
+              </p>
             </div>
 
             {/* Bottom: CTAs + stats grid. Tight gap to subtitle now that
                 the subtitle is a single line on wide screens — too much
                 whitespace was making the card feel hollow. */}
             <div className="mt-8 lg:mt-10 flex flex-col gap-6">
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.45 }}
-                className="flex flex-wrap items-center gap-3"
+              <div
+                className="hero-rise flex flex-wrap items-center gap-3"
+                style={{ animationDelay: "0.45s" }}
               >
                 {/* Primary CTA — B2B / partnerships entry. */}
                 <a
@@ -215,18 +204,16 @@ export default function Hero() {
                 >
                   See plans
                 </a>
-              </motion.div>
+              </div>
 
               {/* Stats grid — 2-col on phones, 4-col from sm+. Each tile is
                   a small glass card with a colored top accent stripe that
                   brightens on hover; live metrics (uptime, inclusion) get
                   a pulsing green dot, capability metrics (1 tx, chains)
                   get a static dot. */}
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.55 }}
-                className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 max-w-6xl"
+              <div
+                className="hero-rise grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 max-w-6xl"
+                style={{ animationDelay: "0.55s" }}
               >
                 {[
                   { value: "99.99%",  label: "Uptime",            sub: "180-day rolling",  live: true,  accent: "yellow" },
@@ -245,11 +232,8 @@ export default function Hero() {
                     : s.accent === "cyan" ? "#22D3EE"
                     : "rgba(255,255,255,0.5)";
                   return (
-                    <motion.div
+                    <div
                       key={i}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, delay: 0.6 + i * 0.08 }}
                       className="group relative rounded-xl border border-white/10 backdrop-blur-sm px-5 py-4 overflow-hidden transition-all hover:border-yellow/30 hover:bg-white/[0.05] hover:-translate-y-0.5"
                       style={{ background: "rgba(255,255,255,0.03)" }}
                     >
@@ -285,10 +269,10 @@ export default function Hero() {
                         {s.label}
                       </div>
                       <div className="text-[10px] text-white/30 mt-0.5">{s.sub}</div>
-                    </motion.div>
+                    </div>
                   );
                 })}
-              </motion.div>
+              </div>
             </div>
           </div>
         </div>
