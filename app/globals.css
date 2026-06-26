@@ -26,11 +26,15 @@ body {
 
 html { scroll-behavior: smooth; }
 
-/* Backstop against horizontal overflow on mobile. `clip` (not `hidden`) so it
-   never creates a scroll container that would break position: sticky or trap
-   fixed/portal modals. Real overflow sources are still fixed per-component;
-   this only swallows stray spillover so the page never scrolls sideways. */
-body { overflow-x: clip; }
+/* Backstop against horizontal overflow on phones only — gated to <=760px so
+   desktop rendering is byte-identical (no global property change). `clip` (not
+   `hidden`) so it never creates a scroll container that would break position:
+   sticky or trap fixed/portal modals. Real overflow sources are still fixed
+   per-component; this only swallows stray spillover so phones never scroll
+   sideways. */
+@media (max-width: 760px) {
+  body { overflow-x: clip; }
+}
 
 /* ── Animations ── */
 @keyframes fadeUp {

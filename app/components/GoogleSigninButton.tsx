@@ -128,9 +128,10 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
     document.head.appendChild(script);
   }, [clientId, onError]);
 
+  // Initialize GIS once it's loaded (re-runs only if the callbacks change),
+  // kept separate from rendering so a width change doesn't re-initialize.
   useEffect(() => {
-    if (!loaded || !clientId || !gisRef.current || !window.google) return;
-
+    if (!loaded || !clientId || !window.google) return;
     window.google.accounts.id.initialize({
       client_id: clientId,
       callback: async ({ credential }) => {
@@ -158,12 +159,16 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
       cancel_on_tap_outside: true,
       locale: "en",
     });
+  }, [loaded, clientId, onSuccess, onError]);
 
-    // Render the GIS button at the parent's full width — it sits beneath
-    // our overlay at opacity 0 and accepts the actual click that triggers
-    // the consent popup. We pick the most neutral GIS theme so its
-    // computed size matches our overlay's footprint roughly; visual
-    // styling comes from the overlay regardless.
+  // Render the GIS button (and re-render when the responsive width changes).
+  // It sits beneath our overlay at opacity 0 and accepts the actual click that
+  // triggers the consent popup. Clear the container first: GIS APPENDS a fresh
+  // button on every renderButton call, so without this a width change would
+  // stack duplicate hidden widgets.
+  useEffect(() => {
+    if (!loaded || !clientId || !gisRef.current || !window.google) return;
+    gisRef.current.innerHTML = "";
     window.google.accounts.id.renderButton(gisRef.current, {
       type: "standard",
       theme: "filled_blue",
@@ -174,7 +179,7 @@ export default function GoogleSigninButton({ onSuccess, onError, width = 320 }: 
       width,
       locale: "en",
     });
-  }, [loaded, clientId, onSuccess, onError, width]);
+  }, [loaded, clientId, width]);
 
   if (!clientId) {
     return (
