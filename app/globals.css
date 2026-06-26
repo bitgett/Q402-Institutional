@@ -316,16 +316,27 @@ html { scroll-behavior: smooth; }
      above the console instead of the desktop sidebar. Only .v2-context (the
      secondary activity/help rail) stays hidden on mobile. */
   .v2-context { display: none !important; }
-  .v2-wallet-rail {
+  /* Wallet rail stays a full-width block on mobile (header / cards / new-wallet
+     button / footer stacked normally). Only the wallet CARDS scroll
+     horizontally — a snap carousel where each card keeps a readable ~76% width,
+     instead of crushing the whole rail (header + buttons included) into one
+     cramped strip. */
+  .v2-wallet-rail { width: 100% !important; margin-bottom: 12px; }
+  .v2-wallet-cards {
     display: flex !important;
     flex-direction: row !important;
     overflow-x: auto !important;
-    gap: 8px !important;
-    width: 100% !important;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-top: 10px;
+    padding-bottom: 6px;
+    scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
   }
-  .v2-wallet-rail > * { flex: 0 0 auto !important; }
+  .v2-wallet-cards > * {
+    flex: 0 0 76% !important;
+    margin-top: 0 !important;
+    scroll-snap-align: start;
+  }
   .v2-right { display: block !important; }
   .v2-console, .v2-view-main, .v2-side-card { width: 100% !important; margin-bottom: 12px; }
   /* Wallet actions: the desktop layout is "Send hero | 5 utility tiles". On

@@ -844,6 +844,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
         <Surface className="v2-wallet-rail" style={styles.rail}>
           <Eyebrow>Agent wallets</Eyebrow>
 
+          <div className="v2-wallet-cards">
           {railWallets.length === 0 ? (
             <div style={styles.railFirstRun}>
               <div style={styles.railFirstRunMark}>
@@ -902,6 +903,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
               );
             })
           )}
+          </div>
 
           <button
             type="button"
