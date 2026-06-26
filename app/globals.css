@@ -26,6 +26,12 @@ body {
 
 html { scroll-behavior: smooth; }
 
+/* Backstop against horizontal overflow on mobile. `clip` (not `hidden`) so it
+   never creates a scroll container that would break position: sticky or trap
+   fixed/portal modals. Real overflow sources are still fixed per-component;
+   this only swallows stray spillover so the page never scrolls sideways. */
+body { overflow-x: clip; }
+
 /* ── Animations ── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(28px); }
@@ -308,6 +314,11 @@ html { scroll-behavior: smooth; }
   .v2-wallet-rail > * { flex: 0 0 auto !important; }
   .v2-right { display: block !important; }
   .v2-console, .v2-view-main, .v2-side-card { width: 100% !important; margin-bottom: 12px; }
+  /* Wallet actions: the desktop layout is "Send hero | 5 utility tiles". On
+     phones the 168px hero floor + 5 rigid columns crush the tiles and their
+     icons clip. Stack the hero above the tiles and let the tiles reflow. */
+  .v2-actions { grid-template-columns: 1fr !important; }
+  .v2-actions > div { grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)) !important; }
 }
 /* narrow-phone topbar compression: keep brand + TopNav + ScopeChip + WalletButton
    from overflowing. Tighten gaps, let the brand group shrink, drop the

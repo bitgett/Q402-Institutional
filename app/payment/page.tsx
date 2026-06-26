@@ -295,7 +295,7 @@ export default function PaymentPage() {
             <span className="w-2.5 h-2.5 rounded-sm bg-navy/90" />
           </span>
           <span className="text-yellow font-bold text-lg tracking-tight leading-none">Q402</span>
-          <span className="text-white/30 text-sm">by Quack AI</span>
+          <span className="hidden sm:inline text-white/30 text-sm">by Quack AI</span>
         </Link>
         <div className="flex items-center gap-4">
           {isConnected && address ? (

@@ -23,6 +23,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { glass, v2, v2CssVars, fs, type Scope, type V2ViewId } from "./theme";
+import { useIsMobile } from "../../lib/use-is-mobile";
 
 /** Space Grotesk stack — display / numbers / addresses. */
 export const displayFont = 'var(--font-space-grotesk), "Space Grotesk", sans-serif';
@@ -147,10 +148,16 @@ export function TopNav({
   active: V2ViewId;
   onChange: (id: V2ViewId) => void;
 }) {
+  // On phones the 4 pills can't fit one rigid flex row, so they overflow the
+  // viewport. Below 480px switch to a full-width 2×2 grid (the topbar already
+  // wraps the nav onto its own row at ≤760px). Desktop is untouched.
+  const isMobile = useIsMobile(480);
   return (
     <nav
       style={{
-        display: "flex",
+        display: isMobile ? "grid" : "flex",
+        gridTemplateColumns: isMobile ? "1fr 1fr" : undefined,
+        width: isMobile ? "100%" : undefined,
         gap: 3,
         padding: 4,
         border: `1px solid ${v2.line}`,
@@ -174,6 +181,7 @@ export function TopNav({
               fontSize: fs.body,
               fontWeight: 600,
               cursor: "pointer",
+              textAlign: isMobile ? "center" : undefined,
             }}
           >
             {item.label}

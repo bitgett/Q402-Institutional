@@ -574,7 +574,7 @@ export default function LandingBody() {
   margin:18px 0 14px;
   background:linear-gradient(180deg,#fff 34%,rgba(255,255,255,.62));
   -webkit-background-clip:text;background-clip:text;color:transparent;}
-@media(max-width:560px){.c1-stitle{white-space:normal;}}
+@media(max-width:760px){.c1-stitle{white-space:normal;}}
 .c1-stitle .c1-acc{-webkit-text-fill-color:var(--acc);color:var(--acc);}
 .c1-stitle .c1-acc2{-webkit-text-fill-color:var(--acc2);color:var(--acc2);}
 .c1-sub{color:var(--mut);font-size:clamp(15px,1.5vw,16.5px);max-width:none;margin:0;}

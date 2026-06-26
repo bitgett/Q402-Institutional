@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Poppins, JetBrains_Mono, Bricolage_Grotesque, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import Providers from "./components/Providers";
@@ -56,6 +56,14 @@ export const metadata: Metadata = {
     description: "Gasless, bounded-spend wallets for AI agents. One signature, any EVM chain. MCP-native.",
     images: ["/opengraph-image"],
   },
+};
+
+// Explicit viewport so phones render at device width (not a zoomed-out
+// desktop). No maximumScale/userScalable lock — pinch-zoom stays enabled
+// for accessibility.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
