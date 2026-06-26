@@ -1060,7 +1060,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                   </div>
                 )}
 
-                <div style={styles.identity}>
+                <div style={{ ...styles.identity, flexDirection: isMobile ? "column" : "row" }}>
                   <div style={{ minWidth: 0 }}>
                     <Eyebrow>Agent Wallet</Eyebrow>
                     <h1 style={styles.heroH1}>{vmLabel}</h1>
@@ -1070,7 +1070,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       style={{ ...styles.address, ...(demoMode ? { cursor: "default" } : null) }}
                       title={demoMode ? "Sample address" : "Copy address"}
                     >
-                      <span style={{ overflowWrap: "anywhere" }}>{vmAddress}</span>
+                      <span style={{ overflowWrap: "anywhere" }}>{isMobile ? shortAddr(vmAddress) : vmAddress}</span>
                       {!demoMode && (
                         <span style={{ color: copied ? v2.mint : v2.yellow, marginLeft: 6 }}>{copied ? "Copied!" : "copy"}</span>
                       )}
@@ -1125,7 +1125,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       )}
                     </div>
                   </div>
-                  <div style={styles.heroBal}>
+                  <div style={{ ...styles.heroBal, textAlign: isMobile ? "left" : "right", marginTop: isMobile ? 14 : 0 }}>
                     <span style={styles.heroBalLabel}>Total portfolio</span>
                     <strong style={styles.heroBalValue}>
                       {!demoMode && activeBalanceLoading && !activeBalance ? "…" : fmtUsd(vmTotalUsd)}
@@ -2212,6 +2212,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 99,
     color: "#adb7c7",
     fontSize: fs.micro,
+    whiteSpace: "nowrap",
   },
   badgeGreen: {
     color: v2.yellow,
