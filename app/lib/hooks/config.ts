@@ -197,8 +197,8 @@ export function validateWalletHookConfig(config: WalletHookConfig): void {
       }
     }
     if (yp.allowedProtocols !== undefined) {
-      if (!Array.isArray(yp.allowedProtocols) || yp.allowedProtocols.some((p) => p !== "aave" && p !== "morpho")) {
-        throw new Error('yieldPolicy.allowedProtocols must be an array of "aave" | "morpho"');
+      if (!Array.isArray(yp.allowedProtocols) || yp.allowedProtocols.some((p) => p !== "aave" && p !== "morpho" && p !== "lista")) {
+        throw new Error('yieldPolicy.allowedProtocols must be an array of "aave" | "morpho" | "lista"');
       }
     }
     if (yp.maxAllocationPct !== undefined) {
@@ -232,7 +232,7 @@ export function validateWalletHookConfig(config: WalletHookConfig): void {
         throw new Error("yieldPolicy.allowedProtocols must be an array");
       }
       for (const p of yp.allowedProtocols) {
-        if (p !== "aave" && p !== "morpho") {
+        if (p !== "aave" && p !== "morpho" && p !== "lista") {
           throw new Error(`yieldPolicy.allowedProtocols has an unsupported protocol: ${p}`);
         }
       }

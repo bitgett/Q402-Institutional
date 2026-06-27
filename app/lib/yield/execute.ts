@@ -719,6 +719,10 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     const msg = e instanceof Error ? e.message : String(e);
     // Deploy-gated: signYieldAction throws YIELD_IMPL_NOT_DEPLOYED until the
     // audited v2 impl is live → surface as 503 (feature not yet enabled).
+    if (msg.startsWith("YIELD_INSUFFICIENT_LIQUIDITY")) {
+      const avail = msg.split(":")[1] ?? "";
+      return NextResponse.json({ error: "yield_insufficient_liquidity", message: `The yield vault can only return about ${avail} right now (high utilization). Withdraw a smaller amount or try again shortly.` }, { status: 400 });
+    }
     if (msg.includes("YIELD_NO_VAULT")) {
       return NextResponse.json({ error: "yield_token_not_supported", message: "This token is not supported for yield on this chain (Base yield is USDC only)." }, { status: 400 });
     }

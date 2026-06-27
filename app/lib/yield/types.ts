@@ -15,7 +15,7 @@
  * protocol-agnostic: Aave and Morpho both behind YieldAdapter.
  */
 
-export type YieldProtocol = "aave" | "morpho";
+export type YieldProtocol = "aave" | "morpho" | "lista";
 
 /** A lending market an agent can supply a stablecoin into. */
 export interface YieldMarket {
