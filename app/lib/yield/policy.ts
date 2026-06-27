@@ -26,6 +26,7 @@ import { getPrimaryRpc, CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
 import { getWalletHookConfig } from "@/app/lib/hooks/config";
 import { aaveTotalPositionValueStrict } from "./aave";
 import { morphoTotalPositionValueStrict } from "./morpho";
+import { listaTotalPositionValueStrict } from "./lista";
 import { yieldProtocolForChain, type YieldAction } from "./sign";
 
 export interface YieldPolicyInput {
@@ -119,7 +120,8 @@ export async function enforceYieldPolicy(input: YieldPolicyInput): Promise<Yield
     return { allow: true };
   }
 
-  // Which protocol settles this chain (aave=BNB, morpho=Base).
+  // Which protocol settles this chain (aave=BNB default, morpho=Base,
+  // lista=BNB when LISTA_YIELD_ENABLED).
   const protocol = yieldProtocolForChain(input.chain);
 
   // Asset allowlist.
@@ -151,9 +153,11 @@ export async function enforceYieldPolicy(input: YieldPolicyInput): Promise<Yield
       // swallow errors into an under-counted 0.)
       const [liquidBal, positionVal] = await Promise.all([
         readLiquidStableBalance(input.chain, input.walletId as Address),
-        protocol === "morpho"
-          ? morphoTotalPositionValueStrict(input.chain, input.walletId)
-          : aaveTotalPositionValueStrict(input.chain, input.walletId),
+        protocol === "lista"
+          ? listaTotalPositionValueStrict(input.chain, input.walletId)
+          : protocol === "morpho"
+            ? morphoTotalPositionValueStrict(input.chain, input.walletId)
+            : aaveTotalPositionValueStrict(input.chain, input.walletId),
       ]);
       liquid = liquidBal;
       currentPosition = positionVal;

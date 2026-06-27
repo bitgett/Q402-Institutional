@@ -37,6 +37,7 @@ import {
 import { fetchAgenticBalances } from "@/app/lib/agentic-wallet-balance";
 import { aaveTotalPositionValueStrict, aaveSupportedChains } from "@/app/lib/yield/aave";
 import { morphoTotalPositionValueStrict, morphoSupportedChains } from "@/app/lib/yield/morpho";
+import { listaTotalPositionValueStrict, listaSupportedChains } from "@/app/lib/yield/lista";
 import { yieldSupportedChains } from "@/app/lib/yield";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { requireCronAuth } from "@/app/lib/cron-auth";
@@ -193,28 +194,30 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       continue;
     }
 
-    // ── Q402 Yield (Aave V3) position check ───────────────────────────
+    // ── Q402 Yield position check ─────────────────────────────────────
     // A wallet that supplied ALL its stablecoins into yield shows a $0 token
-    // balance above but still holds the position token (Aave aToken or Morpho
-    // vault shares). Destroying its encrypted key would strand those funds
+    // balance above but still holds the position token (Aave aToken, Morpho or
+    // Lista vault shares). Destroying its encrypted key would strand those funds
     // FOREVER. fetchAgenticBalances only reads USDC/USDT balanceOf, so check
     // the Yield position across EVERY supported venue (Aave on BNB, Morpho on
-    // Base, plus any future chain in yieldSupportedChains). A NEW venue MUST
-    // surface here or this GC can silently strand its funds. Fail closed: a
-    // throw (RPC down) OR a position >= dust defers the delete + pages ops.
+    // Base, Lista on BNB, plus any future chain in yieldSupportedChains). A NEW
+    // venue MUST surface here or this GC can silently strand its funds. Fail
+    // closed: a throw (RPC down) OR a position >= dust defers the delete + pages ops.
     const morphoChains = new Set(morphoSupportedChains());
     const aaveChains = new Set(aaveSupportedChains());
+    const listaChains = new Set(listaSupportedChains());
     let yieldUsd: number | null = null;
     try {
       const perChain = await Promise.all(
         yieldSupportedChains().map(async (c) => {
-          // Sum BOTH protocols on the chain — if a chain ever enables Aave AND
-          // Morpho, picking only one would hide the other's funds and let a
-          // hard-delete strand them. Each value read THROWS on RPC fail → the
-          // outer catch defers the delete (fail-closed).
+          // Sum ALL protocols on the chain — a chain can host more than one
+          // venue (e.g. bnb has Aave AND Lista), so picking only one would hide
+          // the other's funds and let a hard-delete strand them. Each value read
+          // THROWS on RPC fail → the outer catch defers the delete (fail-closed).
           const reads: Promise<number>[] = [];
           if (aaveChains.has(c)) reads.push(aaveTotalPositionValueStrict(c, record.address));
           if (morphoChains.has(c)) reads.push(morphoTotalPositionValueStrict(c, record.address));
+          if (listaChains.has(c)) reads.push(listaTotalPositionValueStrict(c, record.address));
           return (await Promise.all(reads)).reduce((s, v) => s + v, 0);
         }),
       );
@@ -224,7 +227,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       void sendOpsAlert(
         `agentic-wallet-gc: could not verify Q402 Yield position for ${record.address} ` +
           `(owner ${record.ownerAddr}). Hard-delete deferred. Destroying the key with funds in ` +
-          `Aave or Morpho would strand them. Investigate before retrying.`,
+          `Aave, Morpho, or Lista would strand them. Investigate before retrying.`,
         "critical",
       );
       skipped.push({ key, reason: "yield_check_failed", balanceUsd });

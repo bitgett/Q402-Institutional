@@ -16,6 +16,7 @@
 import {
   createPublicClient,
   createWalletClient,
+  formatUnits,
   http,
   type Address,
   type Hex,
@@ -29,6 +30,7 @@ import {
   type SignedAuthorization,
 } from "@/app/lib/agentic-wallet-sign";
 import { morphoVaultFor, morphoSupportedChains } from "./morpho";
+import { listaVaultFor, listaSupportedChains } from "./lista";
 
 export type YieldAction = "supply" | "withdraw";
 
@@ -84,7 +86,7 @@ const ERC4626_WITHDRAW_AUTH_TYPES = {
   ],
 } as const;
 
-export type YieldProtocol = "aave" | "morpho";
+export type YieldProtocol = "aave" | "morpho" | "lista";
 
 /** Aave V3 Pool per chain — must equal the v2 impl's on-chain allowlist. */
 const AAVE_POOL: Partial<Record<AgenticChainKey, Address>> = {
@@ -94,14 +96,29 @@ const AAVE_POOL: Partial<Record<AgenticChainKey, Address>> = {
 const MAX_UINT256 = (1n << 256n) - 1n;
 const DEFAULT_DEADLINE_AHEAD = 600;
 
+/** Minimal ERC-4626 maxWithdraw read for the withdraw liquidity pre-check.
+ *  maxWithdraw(owner) = min(owner's redeemable assets, the vault's currently
+ *  available liquidity) — a Lista/Morpho lending vault can return less than the
+ *  owner's balance when utilization is high (Lista blocks only near ~99.99%). */
+const MAXWITHDRAW_ABI = [
+  { type: "function", name: "maxWithdraw", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
+] as const;
+
 /** v2 impl (with supplyToAave) per chain — set after the audited deploy. */
 export function yieldImplAddress(chain: AgenticChainKey): Address | undefined {
   const v = process.env[`YIELD_IMPL_${chain.toUpperCase()}`];
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as Address) : undefined;
 }
 
-/** Which yield protocol settles on this chain: Aave (BNB) or Morpho/ERC-4626 (Base). */
+/**
+ * Which yield protocol settles on this chain. Lista (BNB ERC-4626) takes
+ * precedence over Aave when LISTA_YIELD_ENABLED is on (listaSupportedChains is
+ * gated by it), so flipping the flag pivots BNB from Aave to Lista. Default off →
+ * BNB stays Aave, Base stays Morpho. The chosen impl (YIELD_IMPL_<CHAIN>) MUST
+ * match: an ERC-4626 venue needs the ERC-4626 impl, not the Aave one.
+ */
 export function yieldProtocolForChain(chain: AgenticChainKey): YieldProtocol | null {
+  if (listaSupportedChains().includes(chain)) return "lista"; // gated by LISTA_YIELD_ENABLED
   if (AAVE_POOL[chain]) return "aave";
   if (morphoVaultFor(chain) !== null) return "morpho";
   return null;
@@ -111,7 +128,8 @@ export function yieldProtocolForChain(chain: AgenticChainKey): YieldProtocol | n
 export function yieldExecChains(): AgenticChainKey[] {
   const aave = (Object.keys(AAVE_POOL) as AgenticChainKey[]).filter((c) => yieldImplAddress(c));
   const morpho = (morphoSupportedChains() as AgenticChainKey[]).filter((c) => yieldImplAddress(c));
-  return [...new Set([...aave, ...morpho])];
+  const lista = (listaSupportedChains() as AgenticChainKey[]).filter((c) => yieldImplAddress(c));
+  return [...new Set([...aave, ...morpho, ...lista])];
 }
 
 export interface SignedYieldAction {
@@ -161,12 +179,17 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
   if (!cfg) throw new Error(`UNSUPPORTED_CHAIN:${p.chain}`);
   const protocol = yieldProtocolForChain(p.chain);
   if (!protocol) throw new Error(`YIELD_NO_PROTOCOL:${p.chain}`);
-  // Settle target: Aave Pool, or the curated ERC-4626 vault (Morpho, USDC-only).
+  // Settle target: Aave Pool, the curated Morpho vault (Base, USDC-only), or the
+  // curated Lista MoolahVault (BNB ERC-4626).
   let target: Address;
   if (protocol === "aave") {
     const pool = AAVE_POOL[p.chain];
     if (!pool) throw new Error(`YIELD_NO_POOL:${p.chain}`);
     target = pool;
+  } else if (protocol === "lista") {
+    const vault = listaVaultFor(p.chain, p.token);
+    if (!vault) throw new Error(`YIELD_NO_VAULT:${p.chain}:${p.token}`);
+    target = vault;
   } else {
     const vault = morphoVaultFor(p.chain, p.token);
     if (!vault) throw new Error(`YIELD_NO_VAULT:${p.chain}:${p.token}`);
@@ -211,6 +234,24 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
     nativeCurrency: { name: cfg.name, symbol: cfg.name, decimals: 18 },
     rpcUrls: { default: { http: [cfg.rpc] } },
   } as const;
+
+  // Liquidity pre-check for ERC-4626 withdraws (Lista / Morpho): a fixed-amount
+  // withdraw whose assets exceed the vault's available liquidity reverts on-chain
+  // AFTER the relayer paid gas. Reject pre-broadcast with the available amount so
+  // the caller can size down (Lista blocks withdraws only near ~99.99% utilization,
+  // but the edge is real for pay-from-yield). A "max" withdraw uses redeem(maxRedeem),
+  // which is already liquidity-bounded, so it is exempt. RPC read failures are
+  // swallowed — the on-chain call still guards funds; we just don't block an honest
+  // withdraw on a transient blip.
+  if (p.action === "withdraw" && !isMax && (protocol === "lista" || protocol === "morpho")) {
+    try {
+      const pub = createPublicClient({ chain: viemChain, transport: http(cfg.rpc) });
+      const maxW = (await pub.readContract({ address: target, abi: MAXWITHDRAW_ABI, functionName: "maxWithdraw", args: [fromAddr] })) as bigint;
+      if (amountRaw > maxW) throw new Error(`YIELD_INSUFFICIENT_LIQUIDITY:${formatUnits(maxW, tokenCfg.decimals)}`);
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("YIELD_INSUFFICIENT_LIQUIDITY")) throw e;
+    }
+  }
 
   const walletClient = createWalletClient({ account, chain: viemChain, transport: http(cfg.rpc) });
 

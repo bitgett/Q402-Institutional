@@ -8,6 +8,7 @@
 
 import { aaveAdapter, aaveSupportedChains } from "./aave";
 import { morphoAdapter, morphoSupportedChains } from "./morpho";
+import { listaAdapter, listaSupportedChains } from "./lista";
 import type { YieldAdapter, YieldMarket, YieldPosition } from "./types";
 
 export type {
@@ -18,12 +19,13 @@ export type {
   YieldAdapter,
 } from "./types";
 
-/** All installed yield adapters. Aave (BNB) + Morpho (Base/Arbitrum, ENV-gated). */
-export const YIELD_ADAPTERS: YieldAdapter[] = [aaveAdapter, morphoAdapter];
+/** All installed yield adapters. Aave (BNB) + Morpho (Base/Arbitrum, ENV-gated)
+ *  + Lista Lending (BNB ERC-4626, gated by LISTA_YIELD_ENABLED). */
+export const YIELD_ADAPTERS: YieldAdapter[] = [aaveAdapter, morphoAdapter, listaAdapter];
 
 /** Chains with at least one yield market (union across adapters). */
 export function yieldSupportedChains(): string[] {
-  return Array.from(new Set([...aaveSupportedChains(), ...morphoSupportedChains()]));
+  return Array.from(new Set([...aaveSupportedChains(), ...morphoSupportedChains(), ...listaSupportedChains()]));
 }
 
 /** Live markets across all adapters for a chain (read, best-effort). */
