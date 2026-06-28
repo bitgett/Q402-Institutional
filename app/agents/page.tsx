@@ -104,8 +104,8 @@ const CAPS = [
     tools: ["q402_recurring_*"],
   },
   {
-    title: "Aave V3 yield",
-    body: "Park idle USDC or USDT into Aave V3 straight from a prompt, then withdraw on demand. Live on BNB Chain to start.",
+    title: "Stablecoin yield",
+    body: "Park idle USDC or USDT into curated lending vaults straight from a prompt, then withdraw on demand. Live on BNB Chain to start.",
     tools: ["q402_yield_*"],
   },
   {

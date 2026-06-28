@@ -119,7 +119,7 @@ const RAIL: { id: RailTab; label: string; hint: string }[] = [
   { id: "all", label: "All settlements", hint: "Every relayed payment" },
   { id: "manual", label: "Manual sends", hint: "Send · batch · API" },
   { id: "recurring", label: "Recurring fires", hint: "Scheduled payouts" },
-  { id: "yield", label: "Yield", hint: "Aave + Morpho deposits · withdrawals" },
+  { id: "yield", label: "Yield", hint: "Lending vault deposits · withdrawals" },
   { id: "staking", label: "Staking", hint: "Q stake · unstake" },
   { id: "request", label: "Requests", hint: "Inbound payment requests" },
   { id: "bridge", label: "Bridge history", hint: "CCIP cross-chain" },
@@ -1236,7 +1236,7 @@ function SettlementTable({ txs, emptyFor, ownedAddrs }: { txs: RelayedTx[]; empt
         : emptyFor === "manual"
           ? "No manual sends (send / batch / API) in this scope yet."
           : emptyFor === "yield"
-            ? "No yield settlements in this scope yet. Aave deposits and withdrawals appear here once you supply or redeem."
+            ? "No yield settlements in this scope yet. Lending vault deposits and withdrawals appear here once you supply or redeem."
             : emptyFor === "staking"
               ? "No Q staking activity in this scope yet. Stake and unstake settlements appear here once you stake Q."
               : emptyFor === "request"

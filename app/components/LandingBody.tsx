@@ -59,7 +59,7 @@ const USE_CASES = [
   {
     key: 'ai', label: 'AI Agents', tag: 'NEW',
     hook: 'Tell your agent. It pays.',
-    body: 'Let Claude, Codex, Cursor, Cline, or your own agent call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Thirty tools (q402_doctor for one-prompt setup, q402_agentic_info for Agent-Wallet introspection, recurring schedule with per-rule fire history, Aave V3 yield, Q staking, CCIP bridge, payment requests), signed Trust Receipts on every settlement, sandbox-safe defaults.',
+    body: 'Let Claude, Codex, Cursor, Cline, or your own agent call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Thirty tools (q402_doctor for one-prompt setup, q402_agentic_info for Agent-Wallet introspection, recurring schedule with per-rule fire history, stablecoin yield, Q staking, CCIP bridge, payment requests), signed Trust Receipts on every settlement, sandbox-safe defaults.',
     chips: ['30 MCP tools', 'Batch × 20', 'Trust Receipts'],
     chat: [
       { who: 'you', t: 'Send 5 USDC to 0xd8dA…6045 on BNB.' },
@@ -92,7 +92,7 @@ const SECURITY = [
 // laid out as an asymmetric bento (areas map to .c1-bento grid-template-areas)
 const CAPABILITIES = [
   { t: 'Multichain Gas Tank', s: 'One pre-funded tank sponsors gas on all 11 chains. Top up once, your agents spend anywhere.', tag: 'Live', area: 'tank', icon: 'tank', feature: true },
-  { t: 'Aave V3 yield routing', s: 'Park idle balances into Aave V3 from an agent prompt.', tag: 'Live', logo: '/aave.svg', area: 'aave', icon: 'aave' },
+  { t: 'Stablecoin yield routing', s: 'Park idle balances into curated lending vaults from an agent prompt.', tag: 'Live', logo: '/aave.svg', area: 'aave', icon: 'aave' },
   { t: 'CCIP cross-chain bridge', s: 'Move value across ETH / AVAX / ARB via Chainlink CCIP.', tag: 'Live', logo: '/link.jpg', area: 'ccip', icon: 'ccip' },
   { t: 'Agentic Wallets', s: 'Multi-wallet pipelines with per-wallet daily-spend caps.', tag: 'Live', area: 'wallet', icon: 'wallet' },
   { t: 'Recurring payments', s: 'Scheduled fires with a cancel window before each run.', tag: 'Live', area: 'recur', icon: 'recur' },

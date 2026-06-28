@@ -381,6 +381,17 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           // chain -> deposit venue from the (de-duped) public markets, so the
           // selector shows the REAL venue (BNB shows Lista once the flag flips).
           venueByChain={Object.fromEntries((markets ?? []).filter((m) => m.protocol).map((m) => [m.chain, m.protocol as string]))}
+          // `${chain}:${asset}` -> venues the wallet actually holds, so a withdraw
+          // can disambiguate when the same token sits in two venues on one chain.
+          withdrawVenues={(() => {
+            const m: Record<string, string[]> = {};
+            for (const p of positions?.positions ?? []) {
+              if (!(Number(p.balance) > 0) || !p.protocol) continue;
+              const k = `${p.chain}:${p.asset}`;
+              (m[k] ??= []).push(p.protocol);
+            }
+            return m;
+          })()}
         />
       )}
     </div>
@@ -410,6 +421,7 @@ function AgenticWalletEarnActions({
   defaultToken,
   defaultChain,
   venueByChain,
+  withdrawVenues,
 }: {
   ownerAddress: string;
   walletId: string;
@@ -427,12 +439,17 @@ function AgenticWalletEarnActions({
    *  selector label tracks the actual venue (BNB flips Aave->Lista at flip time)
    *  instead of a hardcoded "Aave". */
   venueByChain?: Record<string, string>;
+  /** `${chain}:${asset}` -> protocols the wallet holds a position in. When a
+   *  withdraw selection maps to >1 venue, the user picks which to pull from (the
+   *  server otherwise replies AMBIGUOUS_POSITION). */
+  withdrawVenues?: Record<string, string[]>;
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [chain, setChain] = useState<"bnb" | "base">(defaultChain);
   const [token, setToken] = useState<"USDC" | "USDT">(defaultToken);
   const [amount, setAmount] = useState("");
   const [maxWithdraw, setMaxWithdraw] = useState(false);
+  const [venue, setVenue] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<{ action: string; txHash: string; chain: "bnb" | "base" } | null>(null);
@@ -446,6 +463,16 @@ function AgenticWalletEarnActions({
   const baseOnly = chain === "base";
   const effToken: "USDC" | "USDT" = baseOnly ? "USDC" : token;
   const comingSoon = comingSoonChains.has(chain);
+
+  // Withdraw venue disambiguation: if the wallet holds this (chain, token) in more
+  // than one venue (e.g. legacy Aave + Lista on BNB), the user must choose which to
+  // pull from; otherwise the server replies AMBIGUOUS_POSITION. Deposits never need
+  // this (one deposit venue per chain).
+  const venuesForSel = withdrawVenues?.[`${chain}:${effToken}`] ?? [];
+  const ambiguousVenue = mode === "withdraw" && venuesForSel.length > 1;
+  const effProtocol = ambiguousVenue
+    ? (venue && venuesForSel.includes(venue) ? venue : venuesForSel[0])
+    : undefined;
 
   const action = mode === "deposit" ? "agentic.yield_deposit" : "agentic.yield_withdraw";
   const endpoint =
@@ -500,6 +527,9 @@ function AgenticWalletEarnActions({
           chain,
           token: effToken,
           amount: amountValue,
+          // Venue choice for a multi-venue withdraw. NOT part of the signed intent
+          // (server reads it only to route), so it needs no re-sign.
+          ...(effProtocol ? { protocol: effProtocol } : {}),
         }),
       });
       if (res.status === 401) {
@@ -572,6 +602,25 @@ function AgenticWalletEarnActions({
           </button>
         ))}
       </div>
+
+      {/* Venue selector — only when a withdraw is ambiguous (same token in >1 venue
+          on this chain, e.g. legacy Aave + Lista on BNB). */}
+      {ambiguousVenue && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-white/40 mr-0.5 uppercase tracking-widest">From</span>
+          {venuesForSel.map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => { setVenue(v); setErr(null); setOkMsg(null); }}
+              className="px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition-colors"
+              style={effProtocol === v ? segSel : segUnsel}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
+      )}
 
       {comingSoon ? (
         <div className="text-[11.5px] text-white/45">

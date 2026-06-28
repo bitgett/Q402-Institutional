@@ -568,7 +568,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
             {/* Q402 Yield card */}
             <Surface radius={15} style={{ padding: 19 }}>
               <div id="treasury-yield" style={{ scrollMarginTop: 84 }}>
-                {/* The embedded EarnSection renders its OWN "Q402 Yield / Aave V3"
+                {/* The embedded EarnSection renders its OWN "Q402 Yield" venue
                     header (with the supplied total), so only show this card-level
                     SectionHead when EarnSection is NOT mounted (demo / no wallet) —
                     otherwise the header doubles up. */}
@@ -584,7 +584,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: v2.mint }}>
                         <TokenIcon src="/aave.svg" size={15} />
                         <TokenIcon src="/logos/morpho.png" size={15} />
-                        Aave V3 · Morpho{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
+                        Aave, Morpho, Lista{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
                       </span>
                     }
                   />
@@ -614,7 +614,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                       {fmtUsd(DEMO.yieldUsd)}
                     </div>
                     <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6 }}>
-                      Supplied to Aave V3 · best {DEMO.yieldApy} APY
+                      Supplied to curated lending markets · best {DEMO.yieldApy} APY
                     </div>
                     <div
                       title={connectHint}
@@ -637,7 +637,7 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                   </>
                 ) : (
                   <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.6, marginTop: 10 }}>
-                    Create an Agent Wallet to supply idle USDC / USDT and earn Aave V3 yield.
+                    Create an Agent Wallet to supply idle USDC / USDT and earn yield in curated lending markets.
                   </div>
                 )}
               </div>
