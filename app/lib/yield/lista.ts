@@ -65,14 +65,27 @@ const LISTA_DEFAULT_VAULT: Record<string, Partial<Record<StableAsset, Address>>>
 };
 
 /**
- * Master gate. Lista yield (read + write) is INERT until ops sets
- * LISTA_YIELD_ENABLED=true — flipped only AFTER the BNB ERC-4626 impl is deployed
- * and YIELD_IMPL_BNB is re-pointed at it (else a deposit would sign an ERC-4626
- * witness and delegate to the Aave impl, which lacks supplyToErc4626, and revert).
- * Default off → zero behavior change vs the Aave-on-BNB path.
+ * DEPOSIT gate. LISTA_YIELD_ENABLED controls only whether NEW deposits route to
+ * Lista (and whether Lista deposit markets are advertised) — NOT reads/withdraws.
+ * Reads, withdraw-target resolution, GC counting and allocation are
+ * flag-INDEPENDENT (keyed on whether a vault is configured), so funds already
+ * supplied to Lista stay visible and recoverable even after the flag is turned
+ * back off (no "rollback orphans funds"). Default off → zero behavior change vs
+ * the Aave-on-BNB deposit path.
+ *
+ * Per-protocol impl: a Lista deposit/withdraw delegates to YIELD_IMPL_<CHAIN>_LISTA
+ * (the ERC-4626 impl), NEVER the chain's default Aave impl (yieldImplFor in
+ * sign.ts). Enabling the flag without that env set fails closed — no Aave-impl
+ * mis-delegation that would burn gas on every deposit.
  */
-export function listaEnabled(): boolean {
+export function listaDepositsEnabled(): boolean {
   return (process.env.LISTA_YIELD_ENABLED ?? "").trim().toLowerCase() === "true";
+}
+/** @deprecated Ambiguous old name (it used to gate reads too). Use
+ *  listaDepositsEnabled() for the deposit gate; reads/withdraws are no longer
+ *  flag-gated. Kept only so any stale import still resolves. */
+export function listaEnabled(): boolean {
+  return listaDepositsEnabled();
 }
 
 /** Comma-separated ENV list of addresses → deduped, order-preserving. */
@@ -96,7 +109,9 @@ function envVaults(varName: string): Address[] {
  *  curated default; a malformed ENV falls through to the default so a typo can't
  *  blank the panel. Empty when the chain has neither. */
 function listaConfig(chain: string): { vaults: VaultCfg[] } | null {
-  if (!listaEnabled()) return null;
+  // Flag-INDEPENDENT: a configured vault is readable + withdrawable regardless of
+  // the deposit flag (funds stay recoverable after a rollback). Deposit
+  // advertising is gated separately (listMarkets / listaDepositChains).
   const envMap = LISTA_ENV[chain];
   if (!envMap) return null;
   const vaults: VaultCfg[] = [];
@@ -222,6 +237,7 @@ export const listaAdapter: YieldAdapter = {
   protocol: "lista",
 
   async listMarkets(chain: string): Promise<YieldMarket[]> {
+    if (!listaDepositsEnabled()) return []; // advertise deposit markets only when enabled
     const cfg = listaConfig(chain);
     if (!cfg) return [];
     const c = client(chain);
@@ -238,6 +254,7 @@ export const listaAdapter: YieldAdapter = {
   },
 
   async listMarketsStrict(chain: string): Promise<YieldMarket[]> {
+    if (!listaDepositsEnabled()) return [];
     const cfg = listaConfig(chain);
     if (!cfg) return [];
     const c = client(chain);
@@ -270,7 +287,7 @@ export const listaAdapter: YieldAdapter = {
         continue;
       }
       const apy = await fetchListaApy(chain, v.vault); // best-effort (0 on fail)
-      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:${v.asset}`], apy));
+      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:lista:${v.asset}`], apy));
     }
     return out;
   },
@@ -287,27 +304,44 @@ export const listaAdapter: YieldAdapter = {
       if (shares === 0n) continue; // no position — omit
       const assets = await sharesToAssets(c, v.vault, shares);
       const apy = await fetchListaApy(chain, v.vault); // best-effort (0 on fail)
-      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:${v.asset}`], apy));
+      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:lista:${v.asset}`], apy));
     }
     return out;
   },
 };
 
-/** Chains where a Lista vault is configured (default or ENV). */
-export function listaSupportedChains(): string[] {
+/** Chains with a configured Lista vault, REGARDLESS of the deposit flag. Drives
+ *  reads / withdraw / GC / allocation so Lista funds stay recoverable even with
+ *  deposits disabled. */
+export function listaConfiguredChains(): string[] {
   return Object.keys(LISTA_ENV).filter((chain) => listaConfig(chain) !== null);
 }
 
-/** The ERC-4626 vault the WRITE path signs for, or null if unconfigured.
- *  Resolves the CURATED default ONLY (LISTA_DEFAULT_VAULT) so it always equals
- *  the impl's immutable allowlist (pinned by yield-bnb-lista-vault-drift.test).
- *  It deliberately ignores the read adapter's ENV-flexible multi-vault list: an
- *  ENV-diverged vault would pass off-chain signing but revert on-chain
- *  (VaultNotAllowed) AFTER the relayer paid gas. Both USDT and USDC resolve to
- *  their curated default vault (each pinned in the impl's immutable allowlist). */
+/** Chains where NEW Lista deposits are enabled (configured AND the deposit flag).
+ *  Drives deposit protocol selection + market de-dup. Empty when the flag is off. */
+export function listaDepositChains(): string[] {
+  return listaDepositsEnabled() ? listaConfiguredChains() : [];
+}
+
+/** The curated DEFAULT ERC-4626 vault for a chain+asset (the deposit write
+ *  target), or null if unconfigured. Resolves the CURATED default ONLY
+ *  (LISTA_DEFAULT_VAULT) so it always equals the impl's immutable allowlist
+ *  (pinned by yield-bnb-lista-vault-drift.test). Flag-INDEPENDENT — a withdraw
+ *  must resolve the vault even when deposits are off; the deposit flag is checked
+ *  upstream (deposit protocol selection), not here. Both USDT and USDC resolve to
+ *  their curated default vault. */
 export function listaVaultFor(chain: string, asset: StableAsset = "USDT"): Address | null {
-  if (!listaEnabled()) return null;
   return LISTA_DEFAULT_VAULT[chain]?.[asset] ?? null;
+}
+
+/** Is `vault` a configured Lista vault for this chain+asset? Validates a
+ *  withdraw's on-chain position market before signing (defense-in-depth — a
+ *  withdraw target that isn't an allowlisted vault would revert on-chain). */
+export function isListaVaultAllowed(chain: string, asset: StableAsset, vault: string): boolean {
+  const cfg = listaConfig(chain);
+  if (!cfg) return false;
+  const v = vault.toLowerCase();
+  return cfg.vaults.some((x) => x.asset === asset && x.vault.toLowerCase() === v);
 }
 
 /**
