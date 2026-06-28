@@ -24,10 +24,13 @@ pragma solidity ^0.8.20;
  *    against the deployed BNB payment impl before shipping.
  *
  *  BEFORE DEPLOY (do NOT skip — this is a mainnet, fund-moving contract):
- *    - Reconcile transferWithAuthorization + the domain ("Q402 BNB Chain") byte-for-byte
- *      against the ACTUAL deployed BNB payment impl (0x6cF4aD62…). The deployed impl is
- *      the source of truth; match it exactly so existing payment witnesses verify
- *      identically and the shared nonce set stays consistent.
+ *    - Reconcile transferWithAuthorization + the domain ("Q402 BNB Chain") against the
+ *      deployed BNB payment impl (0x6cF4aD62…): match its transferWithAuthorization guard
+ *      set / typehash / digest / high-s bound EXACTLY so existing payment witnesses verify
+ *      identically and the shared nonce set stays consistent. NOTE the deployed impl's
+ *      Permit2 `transferFromWithAuthorization` and the `hashTransferAuthorization` view are
+ *      intentionally OMITTED here (7702-only impl, matching the v2 yield line) — confirm no
+ *      live flow calls them while a wallet is yield-delegated.
  *    - Independent adversarial audit (the vault path adds external-DeFi + approve surface).
  *    - Verify each curated vault's ERC-4626 interface + that asset() == the allowlisted
  *      stablecoin on the LIVE BNB proxy, and that LISTA_USDT_VAULT here EQUALS the
@@ -143,9 +146,12 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
         address owner, address facilitator, address token, address recipient,
         uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external {
-        // Transfer path is the DEPLOYED BNB v1 guard set, verified line-for-line
-        // against BscScan-verified 0x6cF4aD62C208b6494a55a1494D497713ba013dFa
-        // (Q402PaymentImplementationBNB). Only the ERC-4626 functions below are new.
+        // Core transfer path matches the DEPLOYED BNB v1 impl's transferWithAuthorization
+        // (BscScan-verified 0x6cF4aD62C208b6494a55a1494D497713ba013dFa): same guard set,
+        // typehash, digest and high-s bound, so existing payment witnesses verify
+        // identically and the shared usedNonces (slot 0) stays consistent. The deployed
+        // impl's Permit2 transferFromWithAuthorization + the hashTransferAuthorization view
+        // are intentionally OMITTED (7702-only, like the v2 yield line). ERC-4626 fns below are new.
         if (msg.sender != facilitator) revert UnauthorizedFacilitator();
         if (owner == address(0)) revert InvalidOwner();
         if (owner != address(this)) revert OwnerMismatch();
@@ -178,6 +184,7 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
         uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external nonReentrant returns (uint256 shares) {
         if (msg.sender != facilitator)                  revert UnauthorizedFacilitator();
+        if (owner == address(0))                        revert InvalidOwner();
         if (owner != address(this))                     revert OwnerMismatch();
         if (block.timestamp > deadline)                 revert SignatureExpired();
         if (amount == 0 || amount == type(uint256).max) revert BadAmount();
@@ -222,6 +229,7 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
         uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external nonReentrant returns (uint256 assetsOut) {
         if (msg.sender != facilitator)  revert UnauthorizedFacilitator();
+        if (owner == address(0))        revert InvalidOwner();
         if (owner != address(this))     revert OwnerMismatch();
         if (block.timestamp > deadline) revert SignatureExpired();
         if (amount == 0)                revert BadAmount();   // max IS allowed (withdraw-all)
@@ -236,6 +244,11 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
         if (_recoverSigner(digest, witnessSignature) != owner) revert InvalidSignature();
 
+        // Symmetry with supply (L198): the vault's underlying MUST be the signed
+        // asset, so the emitted `asset` + any downstream accounting can't be
+        // mislabeled (e.g. a USDT-vault withdraw signed with asset=USDC).
+        if (IERC4626(vault).asset() != asset) revert AssetVaultMismatch();
+
         usedNonces[owner][nonce] = true;
 
         bool isMax = amount == type(uint256).max;
@@ -244,8 +257,13 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
             if (shares == 0) revert NothingToWithdraw();
             assetsOut = IERC4626(vault).redeem(shares, owner, owner);
         } else {
+            // Measure the underlying actually received (balance delta) rather than
+            // trusting `amount`, so a non-compliant / fee-charging vault cannot make
+            // the Erc4626Withdrawn event over-report the payout. nonReentrant + the
+            // single external call make the delta exact.
+            uint256 balBefore = IERC20(asset).balanceOf(owner);
             IERC4626(vault).withdraw(amount, owner, owner); // reverts if assets exceed position
-            assetsOut = amount;
+            assetsOut = IERC20(asset).balanceOf(owner) - balBefore;
         }
 
         emit Erc4626Withdrawn(owner, vault, asset, assetsOut, isMax, nonce);
