@@ -50,6 +50,9 @@ interface Market {
   supplyApy: number;
   label?: string;
   chain: string;
+  /** Deposit venue (aave | morpho | lista) from the reserves feed; drives the
+   *  chain selector's venue label so it tracks the real venue at flip time. */
+  protocol?: string;
 }
 
 interface Props {
@@ -77,6 +80,20 @@ const CHAIN_LABEL: Record<string, string> = {
 };
 function chainLabel(c: string): string {
   return CHAIN_LABEL[c] ?? c.toUpperCase();
+}
+
+// Yield venue (lending protocol) brand metadata. Data-driven so the card shows
+// whatever venues the markets/positions feed reports — a NEW venue only needs a
+// row here + its logo in /public, and it surfaces in the header + per-row chip
+// automatically (no hardcoded "Aave · Morpho" to update at flip time).
+const VENUE_META: Record<string, { label: string; logo: string }> = {
+  aave: { label: "Aave V3", logo: "/aave.svg" },
+  morpho: { label: "Morpho", logo: "/logos/morpho.png" },
+  lista: { label: "Lista", logo: "/lista.svg" },
+};
+function venueMeta(p?: string): { label: string; logo: string | null } {
+  if (p && VENUE_META[p]) return VENUE_META[p];
+  return { label: p ? p.charAt(0).toUpperCase() + p.slice(1) : "Lending", logo: null };
 }
 
 function pct(fraction: number): string {
@@ -192,39 +209,75 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
   const bestApyRaw = finiteApys.length > 0 ? Math.max(...finiteApys) : NaN;
   const bestApy = Number.isFinite(bestApyRaw) ? bestApyRaw : null;
 
-  // One row per (chain, asset) market so BNB Aave and Base Morpho never merge
-  // under a single asset. Union the public markets (APY) with the wallet's
-  // positions (supplied balance), keyed by chain+asset.
-  type EarnRow = { chain: string; asset: string; apy?: number; balance: number | null };
+  // One row per (chain, asset, VENUE) so two venues on a chain (a legacy Aave and a
+  // new Lista USDC position on BNB) never merge under one row and silently hide a
+  // balance. Union the public markets (APY) with the wallet's positions (balance),
+  // keyed by chain+asset+protocol.
+  type EarnRow = { chain: string; asset: string; protocol?: string; apy?: number; balance: number | null };
   const rowMap = new Map<string, EarnRow>();
   for (const m of markets ?? []) {
-    rowMap.set(`${m.chain}:${m.asset}`, { chain: m.chain, asset: m.asset, apy: m.supplyApy, balance: null });
+    const k = `${m.chain}:${m.asset}:${m.protocol ?? ""}`;
+    rowMap.set(k, { chain: m.chain, asset: m.asset, protocol: m.protocol, apy: m.supplyApy, balance: null });
   }
   for (const p of positions?.positions ?? []) {
-    const k = `${p.chain}:${p.asset}`;
+    const k = `${p.chain}:${p.asset}:${p.protocol ?? ""}`;
     const r = rowMap.get(k);
     if (r) { r.balance = Number(p.balance); if (r.apy == null) r.apy = p.supplyApy; }
-    else rowMap.set(k, { chain: p.chain, asset: p.asset, apy: p.supplyApy, balance: Number(p.balance) });
+    else rowMap.set(k, { chain: p.chain, asset: p.asset, protocol: p.protocol, apy: p.supplyApy, balance: Number(p.balance) });
   }
   const marketRows = [...rowMap.values()].filter(
     (r): r is EarnRow & { apy: number } => typeof r.apy === "number" && Number.isFinite(r.apy),
   );
+  // Distinct venues present, first-seen order — drives the header logos/subtitle
+  // and the teaser, all data-driven (no hardcoded venue list to update at flip).
+  const venues = marketRows.reduce<string[]>((acc, r) => {
+    if (r.protocol && !acc.includes(r.protocol)) acc.push(r.protocol);
+    return acc;
+  }, []);
+  // Group rows under a chain header so venues stack per chain (scales as more
+  // venues/chains land; the chain then drops out of each row). First-seen order.
+  const chainGroups = new Map<string, typeof marketRows>();
+  for (const row of marketRows) {
+    const g = chainGroups.get(row.chain);
+    if (g) g.push(row);
+    else chainGroups.set(row.chain, [row]);
+  }
 
   return (
     <div className="relative">
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          {/* Q402 Yield spans two protocols — show both marks (Aave V3 on BNB,
-              Morpho on Base) as an overlapping pair, mirroring the subtitle. */}
+          {/* Venues are DATA-DRIVEN from the markets feed — overlapping logos +
+              a subtitle that auto-tracks whatever venues are live (Aave/Morpho
+              today; Lista appears on BNB the moment its deposit flag flips, and a
+              future venue just needs a VENUE_META row + a logo). */}
           <div className="flex items-center shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/aave.svg" alt="Aave" width={26} height={26} className="rounded-full" style={{ boxShadow: "0 0 0 2px #0c1626" }} />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logos/morpho.png" alt="Morpho" width={26} height={26} className="rounded-full" style={{ marginLeft: -9, boxShadow: "0 0 0 2px #0c1626" }} />
+            {(venues.length ? venues : ["aave", "morpho"]).slice(0, 4).map((v, i) => {
+              const meta = venueMeta(v);
+              if (!meta.logo) return null;
+              return (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={v}
+                  src={meta.logo}
+                  alt={meta.label}
+                  width={26}
+                  height={26}
+                  className="rounded-full"
+                  style={{ marginLeft: i === 0 ? 0 : -9, boxShadow: "0 0 0 2px #0c1626" }}
+                />
+              );
+            })}
           </div>
           <div className="min-w-0 leading-tight">
             <div className="text-[15px] font-semibold text-white/90">Q402 Yield</div>
-            <div className="text-[12px] text-white/55 mt-0.5">Aave V3 · Morpho</div>
+            <div className="text-[12px] text-white/55 mt-0.5 truncate">
+              {venues.length === 0
+                ? "Lending vaults"
+                : venues.length <= 3
+                  ? venues.map((v) => venueMeta(v).label).join(" · ")
+                  : `${venues.length} venues`}
+            </div>
           </div>
         </div>
         <div className="text-[19px] font-semibold font-mono shrink-0 leading-none">
@@ -244,22 +297,45 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
       ) : error ? (
         <div className="text-[11.5px] text-amber-300/80 py-1">{error}</div>
       ) : marketRows.length > 0 ? (
-        <div className="space-y-1.5">
-          {marketRows.map((row) => (
-            <div key={`${row.chain}:${row.asset}`} className="flex items-center justify-between text-[12.5px]">
-              <div className="flex items-center gap-2 min-w-0">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/${row.asset.toLowerCase()}.svg`} alt={row.asset} width={16} height={16} className="rounded-full shrink-0" />
-                <span className="text-white/85 font-medium font-mono text-[12px]">{row.asset}</span>
-                <span className="text-white/35 text-[10px]">{chainLabel(row.chain)}</span>
-                <span className="text-white/40">·</span>
-                <span className="text-emerald-300/90 text-[11px]">{pct(row.apy)} APY</span>
+        <div className="space-y-2.5">
+          {[...chainGroups.entries()].map(([chain, rows]) => (
+            <div key={chain}>
+              {/* Chain header — venues for this chain stack beneath it. */}
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[9.5px] font-semibold uppercase tracking-wider text-white/35 shrink-0">{chainLabel(chain)}</span>
+                <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
               </div>
-              {row.balance != null ? (
-                <span className="text-emerald-300 font-mono text-[13px] shrink-0">{formatUsd(row.balance)}</span>
-              ) : (
-                <span className="text-white/30 font-mono text-[13px] shrink-0">—</span>
-              )}
+              <div className="space-y-2">
+                {rows.map((row) => {
+                  const vm = venueMeta(row.protocol);
+                  return (
+                    <div key={`${row.chain}:${row.asset}:${row.protocol ?? ""}`} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`/${row.asset.toLowerCase()}.svg`} alt={row.asset} width={18} height={18} className="rounded-full shrink-0" />
+                        <div className="min-w-0 leading-tight">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-white/90 font-medium font-mono text-[12.5px]">{row.asset}</span>
+                            <span className="text-emerald-300/90 text-[11px]">{pct(row.apy)} APY</span>
+                          </div>
+                          <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                            {vm.logo && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={vm.logo} alt={vm.label} width={11} height={11} className="rounded-full shrink-0" />
+                            )}
+                            <span className="text-white/55 text-[10px] truncate">{vm.label}</span>
+                          </div>
+                        </div>
+                      </div>
+                      {row.balance != null ? (
+                        <span className="text-emerald-300 font-mono text-[13px] shrink-0">{formatUsd(row.balance)}</span>
+                      ) : (
+                        <span className="text-white/30 font-mono text-[13px] shrink-0">—</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </div>
@@ -271,7 +347,7 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           <span className="text-emerald-300 font-medium">
             {bestApy !== null ? `~${pct(bestApy)}` : "yield"}
           </span>{" "}
-          on idle USDC / USDT via Aave or Morpho.
+          on idle USDC / USDT via {venues.length ? venues.map((v) => venueMeta(v).label).join(", ") : "vetted lending vaults"}.
         </div>
       )}
 
@@ -302,6 +378,9 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           // a withdraw doesn't default to BNB-Aave (empty) and revert on-chain
           // when the only position is Base-Morpho. Falls back to bnb (deposit).
           defaultChain={positions?.positions?.[0]?.chain === "base" ? "base" : "bnb"}
+          // chain -> deposit venue from the (de-duped) public markets, so the
+          // selector shows the REAL venue (BNB shows Lista once the flag flips).
+          venueByChain={Object.fromEntries((markets ?? []).filter((m) => m.protocol).map((m) => [m.chain, m.protocol as string]))}
         />
       )}
     </div>
@@ -330,6 +409,7 @@ function AgenticWalletEarnActions({
   canDeposit,
   defaultToken,
   defaultChain,
+  venueByChain,
 }: {
   ownerAddress: string;
   walletId: string;
@@ -343,6 +423,10 @@ function AgenticWalletEarnActions({
    *  where the funds actually are (BNB-Aave vs Base-Morpho) instead of always
    *  defaulting to BNB and reverting when the position lives on Base. */
   defaultChain: "bnb" | "base";
+  /** chain -> live deposit venue (protocol) from the public markets feed, so the
+   *  selector label tracks the actual venue (BNB flips Aave->Lista at flip time)
+   *  instead of a hardcoded "Aave". */
+  venueByChain?: Record<string, string>;
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [chain, setChain] = useState<"bnb" | "base">(defaultChain);
@@ -464,7 +548,12 @@ function AgenticWalletEarnActions({
             className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
             style={chain === c ? segSel : segUnsel}
           >
-            {c === "bnb" ? "BNB · Aave" : "Base · Morpho"}
+            {(() => {
+              const chainLabel = c === "bnb" ? "BNB" : "Base";
+              const venue = venueByChain?.[c];
+              const venueLabel = venue ? venue.charAt(0).toUpperCase() + venue.slice(1) : null;
+              return venueLabel ? `${chainLabel} · ${venueLabel}` : chainLabel;
+            })()}
           </button>
         ))}
       </div>

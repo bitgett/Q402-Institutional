@@ -286,7 +286,7 @@ export const morphoAdapter: YieldAdapter = {
         continue;
       }
       const apy = await fetchMorphoApy(chain, v.vault); // best-effort (0 on fail)
-      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:${v.asset}`], apy));
+      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:morpho:${v.asset}`] ?? principals[`${chain}:${v.asset}`], apy));
     }
     return out;
   },
@@ -303,7 +303,7 @@ export const morphoAdapter: YieldAdapter = {
       if (shares === 0n) continue; // no position — omit
       const assets = await sharesToAssets(c, v.vault, shares);
       const apy = await fetchMorphoApy(chain, v.vault); // best-effort (0 on fail)
-      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:${v.asset}`], apy));
+      out.push(positionRow(chain, v, assets, shares, principals[`${chain}:morpho:${v.asset}`] ?? principals[`${chain}:${v.asset}`], apy));
     }
     return out;
   },
