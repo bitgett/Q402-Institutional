@@ -50,6 +50,9 @@ interface Market {
   supplyApy: number;
   label?: string;
   chain: string;
+  /** Deposit venue (aave | morpho | lista) from the reserves feed; drives the
+   *  chain selector's venue label so it tracks the real venue at flip time. */
+  protocol?: string;
 }
 
 interface Props {
@@ -302,6 +305,9 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           // a withdraw doesn't default to BNB-Aave (empty) and revert on-chain
           // when the only position is Base-Morpho. Falls back to bnb (deposit).
           defaultChain={positions?.positions?.[0]?.chain === "base" ? "base" : "bnb"}
+          // chain -> deposit venue from the (de-duped) public markets, so the
+          // selector shows the REAL venue (BNB shows Lista once the flag flips).
+          venueByChain={Object.fromEntries((markets ?? []).filter((m) => m.protocol).map((m) => [m.chain, m.protocol as string]))}
         />
       )}
     </div>
@@ -330,6 +336,7 @@ function AgenticWalletEarnActions({
   canDeposit,
   defaultToken,
   defaultChain,
+  venueByChain,
 }: {
   ownerAddress: string;
   walletId: string;
@@ -343,6 +350,10 @@ function AgenticWalletEarnActions({
    *  where the funds actually are (BNB-Aave vs Base-Morpho) instead of always
    *  defaulting to BNB and reverting when the position lives on Base. */
   defaultChain: "bnb" | "base";
+  /** chain -> live deposit venue (protocol) from the public markets feed, so the
+   *  selector label tracks the actual venue (BNB flips Aave->Lista at flip time)
+   *  instead of a hardcoded "Aave". */
+  venueByChain?: Record<string, string>;
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [chain, setChain] = useState<"bnb" | "base">(defaultChain);
@@ -464,7 +475,12 @@ function AgenticWalletEarnActions({
             className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
             style={chain === c ? segSel : segUnsel}
           >
-            {c === "bnb" ? "BNB · Aave" : "Base · Morpho"}
+            {(() => {
+              const chainLabel = c === "bnb" ? "BNB" : "Base";
+              const venue = venueByChain?.[c];
+              const venueLabel = venue ? venue.charAt(0).toUpperCase() + venue.slice(1) : null;
+              return venueLabel ? `${chainLabel} · ${venueLabel}` : chainLabel;
+            })()}
           </button>
         ))}
       </div>
