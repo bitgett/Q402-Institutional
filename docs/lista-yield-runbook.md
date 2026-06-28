@@ -28,12 +28,14 @@ unset/Aave), then `LISTA_YIELD_ENABLED=true`, then smoke deposit + withdraw (USD
    owner-binding + NAME "Q402 BNB Chain" + the full allowlist (Gauntlet USDT + Lista USDC
    vaults & assets, a random address denied) on the fresh address before printing it).
    `--compile-only` first to dry-verify the build.
-3. **Wire** the env: set `YIELD_IMPL_BNB=<deployed address>` in Vercel (prod). Fund the
-   relayer with BNB gas.
+3. **Wire** the env: set `YIELD_IMPL_BNB_LISTA=<deployed address>` in Vercel (prod) — the
+   NEW per-protocol env for the Lista ERC-4626 impl. ⚠️ Do NOT touch `YIELD_IMPL_BNB` (it
+   stays the Aave impl; lista resolves its own env and never falls back). Fund the relayer
+   with BNB gas.
 4. **Pre-flip guard:** `node scripts/verify-lista-wiring.mjs` — asserts the wired
-   `YIELD_IMPL_BNB` IS the Lista ERC-4626 impl (IMPL_VERSION + allowlist) so we can't
-   flip the flag against the Aave impl (would revert deposits after paying gas — spec
-   MED-2). Only when it prints OK:
+   `YIELD_IMPL_BNB_LISTA` IS the Lista ERC-4626 impl (IMPL_VERSION + allowlist) so we
+   can't flip the flag against the wrong impl (would revert deposits after paying gas —
+   spec MED-2). Only when it prints OK:
 5. **Flip:** set `LISTA_YIELD_ENABLED=true`. Re-run `vitest run yield-bnb-lista-vault-drift`,
    then a small smoke deposit + withdraw for BOTH USDT and USDC.
 

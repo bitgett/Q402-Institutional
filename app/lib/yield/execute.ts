@@ -121,6 +121,13 @@ async function resolveOwner(body: YieldBody, action: YieldAction): Promise<strin
         chain: body.chain ?? "",
         token: body.token ?? "",
         amount: body.amount ?? "",
+        // Bind the withdraw venue into the SIGNED intent so the approval is
+        // venue-specific: a tampered/buggy body.protocol can no longer pass signature
+        // verification (the rebuilt canonical message would differ from what the wallet
+        // signed). Omitted when absent (deposits + unambiguous single-venue withdraws).
+        ...(typeof body.protocol === "string" && body.protocol.trim()
+          ? { protocol: body.protocol.trim().toLowerCase() }
+          : {}),
       },
     });
     if (typeof result !== "string") {
@@ -569,7 +576,21 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       try {
         withdrawPositions = await listAllPositionsStrict(chain, walletAddr);
       } catch {
-        withdrawPositions = null; // read failed — fall through, let the chain decide
+        withdrawPositions = null; // read failed
+      }
+      // Read failed AND no explicit venue → we can't safely pick the venue. A
+      // fail-open here could sign a legacy-Aave position's withdraw for the Lista
+      // venue (revert / gas burn / wrong-venue). Block unless the caller named the
+      // protocol; WITH an explicit protocol we proceed (route by it). Fund recovery
+      // stays available — the caller just has to say which venue.
+      if (withdrawPositions === null && !wantProtocol) {
+        await refundOp();
+        await kv.del(idemKey).catch(() => {});
+        await releaseLock();
+        return NextResponse.json(
+          { error: "POSITION_READ_UNAVAILABLE", message: "Couldn't read your positions to choose the withdraw venue. Retry, or pass an explicit protocol (aave | lista | morpho)." },
+          { status: 503 },
+        );
       }
       if (withdrawPositions) {
         let matching = withdrawPositions.filter((p) => p.asset === token && Number(p.balance) > 0);

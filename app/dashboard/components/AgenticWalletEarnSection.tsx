@@ -503,14 +503,19 @@ function AgenticWalletEarnActions({
     }
     setBusy(true);
     try {
-      // Intent MUST be { walletId, chain, token, amount } as string values —
-      // the server's requireIntentAuth rebuilds this exact tuple.
+      // Intent is { walletId, chain, token, amount } (+ protocol on a multi-venue
+      // withdraw) as string values — the server's requireIntentAuth rebuilds the same
+      // tuple, so the signature binds the venue the user approved.
       const intent: Record<string, string> = {
         walletId,
         chain,
         token: effToken,
         amount: amountValue,
       };
+      // Bind the chosen venue into the SIGNED intent when a venue was chosen
+      // (multi-venue withdraw); single-venue / deposit omit it (and the server omits
+      // it too, so the canonical bytes still match).
+      if (effProtocol) intent.protocol = effProtocol;
       const auth = await getActionAuth(ownerAddress, action, intent, signMessage);
       if (!auth) {
         setErr("Sign the Earn challenge in your wallet to authorize.");
