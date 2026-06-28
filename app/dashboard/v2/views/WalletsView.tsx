@@ -1389,7 +1389,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                     </div>
 
                     {/* Yield — restored to the top row beside Stablecoins.
-                        Reuses the shipped Earn section (real Aave data +
+                        Reuses the shipped Earn section (live lending market data +
                         deposit/withdraw). Demo mode renders a static card
                         (mounting the real one would 401 / sign-prompt). */}
                     {demoMode || !activeWallet ? (
@@ -1400,14 +1400,14 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                             <div>
                               Q402 Yield
                               <div style={{ ...styles.sub, display: "inline-flex", alignItems: "center", gap: 5 }}>
-                                <TokenIcon src="/aave.svg" size={13} /> <TokenIcon src="/logos/morpho.png" size={13} /> Aave V3 · Morpho · paid plans
+                                <TokenIcon src="/aave.svg" size={13} /> <TokenIcon src="/logos/morpho.png" size={13} /> Aave, Morpho, Lista · paid plans
                               </div>
                             </div>
                           </div>
                           <div style={{ font: `600 19px ${displayFont}` }}>$0.00</div>
                         </div>
                         <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 14, lineHeight: 1.6 }}>
-                          Idle stablecoins can earn ~2.33% APY in Aave V3 (up to your 35%
+                          Idle stablecoins can earn ~2.33% APY in curated lending markets (up to your 35%
                           yield cap). Available on paid plans — connect + upgrade to enable Earn.
                         </div>
                       </div>

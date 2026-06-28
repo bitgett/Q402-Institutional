@@ -105,7 +105,7 @@ const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: stri
  * Canonical @quackai/q402-mcp tool surface — 30 tools, source of truth is
  * mcp-server/src/index.ts (ListTools order). One-line purposes condensed from
  * each tool's own `description` + app/docs/page.tsx. Grouped so the grid reads
- * as Core → Recurring → Bridge (CCIP) → Yield (Aave) → Staking.
+ * as Core → Recurring → Bridge (CCIP) → Yield → Staking.
  */
 const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }> = [
   // Core
@@ -131,11 +131,11 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Bridge", name: "q402_bridge_send", purpose: "Execute a CCIP USDC bridge via the Agent Wallet (Mode C). Sandbox by default." },
   { group: "Bridge", name: "q402_bridge_history", purpose: "Recent CCIP bridges — dashboard pointer until session-binding lands." },
   { group: "Bridge", name: "q402_bridge_gas_tank", purpose: "Bridge Gas Tank fee model + deposit address (dashboard pointer)." },
-  // Yield (Aave V3 on BNB, Morpho on Base)
-  { group: "Yield", name: "q402_yield_reserves", purpose: "List Q402 Yield markets + supply APY (Aave on BNB, Morpho on Base). Read-only, no auth." },
-  { group: "Yield", name: "q402_yield_positions", purpose: "Agent Wallet's current Aave/Morpho positions + aggregate USD value. Read-only." },
-  { group: "Yield", name: "q402_yield_deposit", purpose: "Supply stablecoins into Aave (BNB) or Morpho (Base, USDC only) to earn APY. Moves funds, needs confirm." },
-  { group: "Yield", name: "q402_yield_withdraw", purpose: `Withdraw stablecoin from Aave or Morpho (amount "max" = full). Moves funds, needs confirm.` },
+  // Yield (curated lending vaults: Aave, Morpho, Lista)
+  { group: "Yield", name: "q402_yield_reserves", purpose: "List Q402 Yield markets + supply APY across curated lending vaults. Read-only, no auth." },
+  { group: "Yield", name: "q402_yield_positions", purpose: "Agent Wallet's current lending positions + aggregate USD value. Read-only." },
+  { group: "Yield", name: "q402_yield_deposit", purpose: "Supply stablecoins into a curated lending vault to earn APY. Moves funds, needs confirm." },
+  { group: "Yield", name: "q402_yield_withdraw", purpose: `Withdraw stablecoin from a lending vault (amount "max" = full). Moves funds, needs confirm.` },
   // Staking (Q / QuackAI on BNB)
   { group: "Staking", name: "q402_stake", purpose: `Gasless Q (QuackAI) staking on BNB. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). amount "max" stakes the whole Q balance. Moves funds, needs confirm.` },
   { group: "Staking", name: "q402_unstake", purpose: "Gasless unstake of matured Q on BNB. Per-record: exit one stake by index (ith) or all matured. Moves funds, needs confirm." },
@@ -1896,7 +1896,7 @@ function McpToolGrid() {
     Core: "Quote · pay · receipts · delegation",
     Recurring: "Scheduled rules",
     Bridge: "Chainlink CCIP · eth/avax/arbitrum",
-    Yield: "Aave V3 (BNB) · Morpho (Base)",
+    Yield: "Curated lending vaults · Aave, Morpho, Lista",
     Staking: "Q / QuackAI Staking (BNB)",
     Requests: "Invoices · agent-to-agent billing",
   };

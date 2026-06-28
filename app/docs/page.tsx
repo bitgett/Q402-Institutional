@@ -314,15 +314,15 @@ export default function DocsPage() {
           </Section>
 
           {/* ── YIELD ── */}
-          <Section id="yield" title="Yield · Aave V3 + Morpho">
+          <Section id="yield" title="Yield · Curated lending vaults">
             <p className="text-white/75 text-base leading-relaxed mb-6">
-              Supply and withdraw stablecoins straight from an Agent Wallet: Aave V3 on BNB Chain
-              (USDC / USDT) and Morpho on Base (a curated USDC vault). The EIP-7702 relay sponsors
-              the gas, so idle balances compound while you pay $0 to move them.
+              Supply and withdraw stablecoins straight from an Agent Wallet across curated DeFi
+              lending vaults on BNB Chain (USDC / USDT) and Base (a curated USDC vault). The
+              EIP-7702 relay sponsors the gas, so idle balances compound while you pay $0 to move them.
             </p>
             <div className="grid sm:grid-cols-3 gap-4 mb-6">
               {[
-                { label: "Protocol", value: "Aave V3 / Morpho" },
+                { label: "Protocol", value: "Aave, Morpho, Lista" },
                 { label: "Chain",    value: "BNB Chain / Base" },
                 { label: "Actions",  value: "Gasless supply / withdraw" },
               ].map((item) => (
@@ -700,10 +700,10 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_bridge_send",         auth: "live mode",   purpose: "Execute a CCIP USDC bridge from the Agent Wallet (Mode C). Sandbox by default." },
                     { name: "q402_bridge_history",      auth: "api key",     purpose: "Recent CCIP bridge attempts for the Agent Wallet (src/dst/amount/CCIP msgId/status)." },
                     { name: "q402_bridge_gas_tank",     auth: "api key",     purpose: "Per-chain Gas Tank native balance + auto-fund window so the agent can top up before bridging." },
-                    { name: "q402_yield_reserves",      auth: "none",        purpose: "List Q402 Yield lending markets + live supply APY: Aave V3 on BNB, Morpho on Base." },
+                    { name: "q402_yield_reserves",      auth: "none",        purpose: "List Q402 Yield lending markets + live supply APY across curated lending vaults on BNB and Base." },
                     { name: "q402_yield_positions",     auth: "api key",     purpose: "The Agent Wallet's current Q402 Yield positions — value + live supply APY. Read-only." },
-                    { name: "q402_yield_deposit",       auth: "live mode",   purpose: "Supply the Agent Wallet's stablecoins into Aave (BNB, USDC/USDT) or Morpho (Base, USDC). Mode C, PAID feature — Trial cannot deposit. Confirm-gated + sandbox by default." },
-                    { name: "q402_yield_withdraw",      auth: "live mode",   purpose: "Withdraw supplied stablecoin out of Aave or Morpho (amount=\"max\" for the full position). Always allowed, even after a plan downgrade." },
+                    { name: "q402_yield_deposit",       auth: "live mode",   purpose: "Supply the Agent Wallet's stablecoins into a curated lending vault (BNB USDC/USDT, Base USDC). Mode C, PAID feature — Trial cannot deposit. Confirm-gated + sandbox by default." },
+                    { name: "q402_yield_withdraw",      auth: "live mode",   purpose: "Withdraw supplied stablecoin out of a lending vault (amount=\"max\" for the full position). Always allowed, even after a plan downgrade." },
                     { name: "q402_stake",               auth: "live mode",   purpose: "Gasless Q (QuackAI) staking on BNB Chain. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). amount \"max\" supported. Confirm-gated + sandbox by default." },
                     { name: "q402_unstake",             auth: "live mode",   purpose: "Gasless unstake of matured Q on BNB by record index (ith), or all matured (per-record exit, not a withdraw)." },
                     { name: "q402_stake_positions",     auth: "live mode",   purpose: "Read-only: the Agent Wallet's Q stakes (indices, maturity, exitable) + liquid Q balance." },
