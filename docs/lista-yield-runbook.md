@@ -29,9 +29,40 @@ by `LISTA_YIELD_ENABLED` (default off → BNB stays on the Aave path, zero behav
 5. **Flip:** set `LISTA_YIELD_ENABLED=true`. Re-run `vitest run yield-bnb-lista-vault-drift`,
    then a small smoke deposit + withdraw for BOTH USDT and USDC.
 
-Roll back instantly by unsetting `LISTA_YIELD_ENABLED` (BNB reverts to the Aave path /
-inert; funds already in Lista are still readable + withdrawable, and the GC sweep counts
-them).
+Rollback is NOT a clean flag-unset once funds are in Lista. **`LISTA_YIELD_ENABLED`
+currently gates the Lista READ adapter and the write-target resolution too** (`listaEnabled()`
+in `lista.ts`), so unsetting it makes Lista positions invisible to `listAllPositions`,
+un-withdrawable via the normal path (`listaVaultFor` returns null → withdraw can't target
+the vault), and uncounted by the GC sweep. Unsetting the flag is safe ONLY while no wallet
+holds a Lista position. **Do not treat flag-unset as a kill switch for funds already
+supplied.** The P1 fixes below decouple read+withdraw from the deposit flag so Lista funds
+stay recoverable regardless; until those land, roll back by migrating/withdrawing Lista
+positions FIRST, then unset.
+
+## P1 BLOCKERS — must close before the flip (external audit, confirmed in code)
+
+The flag flips BNB's yield protocol from Aave to Lista GLOBALLY (`yieldProtocolForChain`
+returns "lista" for BNB when enabled, `sign.ts`). Protocol identity is derived from
+(chain + flag), NOT per-position, which breaks any wallet that already has an Aave BNB
+position and makes Lista funds flag-dependent:
+
+1. **Withdraw routes to the wrong venue.** `listAllPositions` reads ALL adapters
+   (`index.ts`), so an existing Aave BNB position still shows in the UI and passes the
+   withdraw preflight (`execute.ts` asset match), but `signYieldAction` signs for Lista
+   (flag-derived) → on-chain revert, relayer gas burned. FIX: withdraw must sign for the
+   POSITION's protocol+marketAddress (both already on `YieldPosition`), not the flag.
+2. **Rollback orphans Lista funds** (see the rollback paragraph above). FIX: ungate Lista
+   read + withdraw from `LISTA_YIELD_ENABLED`; the flag should gate only NEW deposits.
+3. **maxAllocationPct undercounts.** `policy.ts` sums only the flag-selected protocol's
+   position, so an existing Aave BNB position is excluded from the cap and a wallet can
+   over-allocate into Lista beyond its yield cap. FIX: sum ALL protocols for the chain.
+4. **(P2) Consent does not bind the venue.** The yield action intent/auth carries no
+   protocol/marketAddress; the user approves a generic "deposit USDT on BNB" while the
+   UI label still says "BNB · Aave" (`AgenticWalletEarnSection.tsx`). FIX: bind
+   protocol+marketAddress into the action intent + show the real venue in consent.
+5. **(P2) Principal accounting key lacks protocol.** `execute.ts` keys principal by
+   `${chain}:${asset}` — Aave+Lista USDT on BNB collide. FIX: key by
+   `${chain}:${protocol}:${asset}` (back-compat read for legacy keys).
 
 ## Copy / branding — BATCH WITH THE FLIP (step 5)
 
