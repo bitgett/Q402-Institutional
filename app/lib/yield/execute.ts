@@ -33,8 +33,8 @@ import {
 } from "@/app/lib/db";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { isAgenticChainKey, type AgenticChainKey, type AgenticToken } from "@/app/lib/agentic-wallet-sign";
-import { signYieldAction, type YieldAction } from "./sign";
-import { listAllPositions, listAllPositionsStrict } from "./index";
+import { signYieldAction, type YieldAction, type YieldProtocol } from "./sign";
+import { listAllPositionsStrict } from "./index";
 import {
   settleYieldAction,
   yieldFacilitator,
@@ -57,6 +57,11 @@ interface YieldBody {
    *  across distinct same-amount requests. Without it, only the 30-min
    *  rapid-retry claim applies. */
   idempotencyKey?: string;
+  /** WITHDRAW only: which venue to pull from when a wallet holds the same asset in
+   *  more than one protocol on a chain (e.g. legacy Aave + new Lista on BNB). Omit
+   *  when unambiguous. Deposits ignore this — the venue is the chain's deposit
+   *  selector. */
+  protocol?: string;
 }
 
 const IDEMPOTENCY_TTL_SEC = 30 * 60;
@@ -538,14 +543,19 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       }
     }
 
-    // Withdraw preflight — confirm the wallet holds a position for this
-    // (chain, token) before signing. Without it a withdraw on a chain where the
-    // wallet has nothing (e.g. the UI defaulting to BNB-Aave while the position
-    // is Base-Morpho) sails through to an on-chain revert that burns relayer gas
-    // and surfaces only as "Transaction reverted". STRICT read so a transient
-    // RPC error fails OPEN — withdrawal availability is sacred, we never block
-    // fund recovery on a flaky read; only a clean read with no position rejects.
+    // Withdraw preflight — pick the EXACT position to pull from. A wallet can hold
+    // the same asset in more than one protocol on a chain (legacy Aave + new Lista
+    // on BNB), so we withdraw from the venue the funds are ACTUALLY in — never the
+    // chain's current deposit selector (which would sign the wrong vault and burn
+    // relayer gas on a revert). STRICT read so a transient RPC error fails OPEN
+    // (fund recovery is sacred); only a clean read decides NO_POSITION / AMBIGUOUS.
+    const wantProtocol =
+      action === "withdraw" && typeof body.protocol === "string" ? body.protocol.trim().toLowerCase() : null;
+    if (wantProtocol && !["aave", "morpho", "lista"].includes(wantProtocol)) {
+      return NextResponse.json({ error: "INVALID_PROTOCOL" }, { status: 400 });
+    }
     let withdrawPositions: Awaited<ReturnType<typeof listAllPositionsStrict>> | null = null;
+    let chosenWithdraw: Awaited<ReturnType<typeof listAllPositionsStrict>>[number] | null = null;
     if (action === "withdraw") {
       try {
         withdrawPositions = await listAllPositionsStrict(chain, walletAddr);
@@ -553,47 +563,64 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
         withdrawPositions = null; // read failed — fall through, let the chain decide
       }
       if (withdrawPositions) {
-        const pos = withdrawPositions.find((p) => p.asset === token);
-        const bal = pos ? Number(pos.balance) : 0;
-        if (!pos || !(bal > 0)) {
+        let matching = withdrawPositions.filter((p) => p.asset === token && Number(p.balance) > 0);
+        if (wantProtocol) matching = matching.filter((p) => p.protocol === wantProtocol);
+        if (matching.length === 0) {
           await refundOp();
           await kv.del(idemKey).catch(() => {});
           await releaseLock();
           return NextResponse.json(
-            { error: "NO_POSITION", message: `No ${token} position to withdraw on ${chain}. Switch to the chain holding your funds.` },
+            { error: "NO_POSITION", message: wantProtocol
+                ? `No ${token} position on ${wantProtocol} (${chain}) to withdraw.`
+                : `No ${token} position to withdraw on ${chain}. Switch to the chain holding your funds.` },
             { status: 400 },
           );
         }
+        if (matching.length > 1) {
+          // Same asset across multiple venues on this chain — caller must pick one
+          // so we don't guess the wrong vault. (Deposits never reach here.)
+          await refundOp();
+          await kv.del(idemKey).catch(() => {});
+          await releaseLock();
+          return NextResponse.json(
+            { error: "AMBIGUOUS_POSITION",
+              message: `${token} on ${chain} is held in multiple venues (${matching.map((p) => p.protocol).join(", ")}). Pass "protocol" to choose which to withdraw.`,
+              protocols: matching.map((p) => p.protocol) },
+            { status: 409 },
+          );
+        }
+        chosenWithdraw = matching[0];
+        const bal = Number(chosenWithdraw.balance);
         if (amount !== "max" && Number(amount) - bal > 1e-6) {
           await refundOp();
           await kv.del(idemKey).catch(() => {});
           await releaseLock();
           return NextResponse.json(
-            { error: "INSUFFICIENT_POSITION", message: `Position is ${bal} ${token} on ${chain}; cannot withdraw ${amount}.` },
+            { error: "INSUFFICIENT_POSITION", message: `Position is ${bal} ${token} on ${chosenWithdraw.protocol} (${chain}); cannot withdraw ${amount}.` },
             { status: 400 },
           );
         }
       }
     }
 
-    const signed = await signYieldAction({ privateKey, expectedOwner: wallet.address as Address, chain, token, action, amount, facilitator });
+    const signed = await signYieldAction({
+      privateKey, expectedOwner: wallet.address as Address, chain, token, action, amount, facilitator,
+      // Withdraw routes by the position's OWN protocol + market (coexistence-safe).
+      // wantProtocol carries the caller's choice through a fail-open read (no
+      // chosenWithdraw) so we still target the right venue. Deposit leaves these
+      // undefined → signYieldAction uses the chain's deposit selector.
+      protocol: (chosenWithdraw?.protocol ?? wantProtocol ?? undefined) as YieldProtocol | undefined,
+      marketAddress: chosenWithdraw?.marketAddress as Address | undefined,
+    });
 
-    // For a withdraw-all ("max"), the exact drawn amount isn't known at sign
-    // time, so signed.amount is the "max" sentinel. Capture the redeemable
-    // aToken balance NOW (pre-settlement; post-withdraw it would read ~0) so
-    // the activity row shows the real number instead of "max". Best-effort:
-    // on read failure we keep the sentinel, which ActivityView renders as "All".
+    // For a withdraw-all ("max"), the exact drawn amount isn't known at sign time,
+    // so signed.amount is the "max" sentinel. Use the chosen position's balance so
+    // the activity row shows the real number instead of "max". Best-effort: with no
+    // chosen position (fail-open read) we keep the sentinel, rendered as "All".
     let displayAmount = signed.amount;
-    if (action === "withdraw" && signed.amount === "max") {
-      try {
-        const positions = withdrawPositions ?? await listAllPositions(chain, walletAddr);
-        const pos = positions.find((p) => p.asset === token);
-        if (pos && Number.isFinite(Number(pos.balance)) && Number(pos.balance) > 0) {
-          displayAmount = pos.balance;
-        }
-      } catch {
-        /* keep the "max" sentinel — display falls back to "All" */
-      }
+    if (action === "withdraw" && signed.amount === "max" && chosenWithdraw) {
+      const bal = Number(chosenWithdraw.balance);
+      if (Number.isFinite(bal) && bal > 0) displayAmount = chosenWithdraw.balance;
     }
 
     const result = await settleYieldAction(signed);
@@ -627,7 +654,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     }
 
     // Position tracking (best-effort): principal in human units.
-    await updateYieldPosition(walletAddr, chain, token, action, signed.amount).catch(() => {});
+    await updateYieldPosition(walletAddr, chain, signed.protocol, token, action, signed.amount).catch(() => {});
 
     const receipt = {
       action: action === "supply" ? "yield_deposit" : "yield_withdraw",
@@ -704,6 +731,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
         relayTxHash: result.txHash,
         relayedAt: receipt.at,
         source: action === "supply" ? "yield_deposit" : "yield_withdraw",
+        protocol: signed.protocol,
       }).catch(() => {});
     }
     return NextResponse.json({ status: "ok", ...receipt });
@@ -733,22 +761,41 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   }
 }
 
-/** Track supplied principal (human units) per wallet/chain/asset in KV. */
+/** The protocol that owned a chain's pre-namespacing (unnamespaced
+ *  `{chain}:{asset}`) principal record — i.e. the sole yield venue before Lista
+ *  coexistence. bnb→aave, base→morpho. Used to migrate/clear legacy records under
+ *  the correct protocol without clobbering a sibling venue. */
+function legacyYieldOwner(chain: string): YieldProtocol {
+  return chain === "base" ? "morpho" : "aave";
+}
+
+/** Track supplied principal (human units) per wallet/chain/PROTOCOL/asset in KV.
+ *  Namespacing by protocol keeps a legacy Aave and a new Lista position on the
+ *  same (chain,asset) from clobbering each other's principal/accrued. Legacy
+ *  unnamespaced records are migrated into the owning protocol's slot on first
+ *  touch (then retired), so existing positions keep their baseline. */
 async function updateYieldPosition(
-  walletId: string, chain: string, asset: string, action: YieldAction, amount: string,
+  walletId: string, chain: string, protocol: YieldProtocol, asset: string, action: YieldAction, amount: string,
 ): Promise<void> {
+  const key = `aw:yield:${walletId}`;
+  const nsField = `${chain}:${protocol}:${asset}`;
+  const legacyField = `${chain}:${asset}`;
+  const ownsLegacy = legacyYieldOwner(chain) === protocol;
+  const cur = (await kv.get<Record<string, number>>(key)) ?? {};
   if (amount === "max" && action === "withdraw") {
-    // Full withdraw — clear the tracked principal for this market.
-    const key = `aw:yield:${walletId}`;
-    const cur = (await kv.get<Record<string, number>>(key)) ?? {};
-    delete cur[`${chain}:${asset}`];
+    // Full withdraw — clear ONLY this protocol's principal (never a sibling venue).
+    delete cur[nsField];
+    if (ownsLegacy) delete cur[legacyField];
     await kv.set(key, cur);
     return;
   }
+  // Migrate a pre-namespacing record into the namespaced slot on first touch so
+  // the principal baseline isn't lost; then retire the legacy slot.
+  if (cur[nsField] === undefined && ownsLegacy && cur[legacyField] !== undefined) {
+    cur[nsField] = cur[legacyField];
+    delete cur[legacyField];
+  }
   const delta = Number(amount) * (action === "supply" ? 1 : -1);
-  const key = `aw:yield:${walletId}`;
-  const cur = (await kv.get<Record<string, number>>(key)) ?? {};
-  const field = `${chain}:${asset}`;
-  cur[field] = Math.max(0, (cur[field] ?? 0) + delta);
+  cur[nsField] = Math.max(0, (cur[nsField] ?? 0) + delta);
   await kv.set(key, cur);
 }

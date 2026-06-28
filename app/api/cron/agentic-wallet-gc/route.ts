@@ -37,8 +37,7 @@ import {
 import { fetchAgenticBalances } from "@/app/lib/agentic-wallet-balance";
 import { aaveTotalPositionValueStrict, aaveSupportedChains } from "@/app/lib/yield/aave";
 import { morphoTotalPositionValueStrict, morphoSupportedChains } from "@/app/lib/yield/morpho";
-import { listaTotalPositionValueStrict, listaSupportedChains } from "@/app/lib/yield/lista";
-import { yieldSupportedChains } from "@/app/lib/yield";
+import { listaTotalPositionValueStrict, listaConfiguredChains } from "@/app/lib/yield/lista";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { requireCronAuth } from "@/app/lib/cron-auth";
 
@@ -205,11 +204,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     // closed: a throw (RPC down) OR a position >= dust defers the delete + pages ops.
     const morphoChains = new Set(morphoSupportedChains());
     const aaveChains = new Set(aaveSupportedChains());
-    const listaChains = new Set(listaSupportedChains());
+    // CONFIGURED (not deposit-flag-gated) Lista chains — Lista funds must be
+    // counted even when LISTA_YIELD_ENABLED is off, or a rollback could let the
+    // GC hard-delete a key with funds still in Lista.
+    const listaChains = new Set(listaConfiguredChains());
+    const allYieldChains = new Set<string>([...aaveChains, ...morphoChains, ...listaChains]);
     let yieldUsd: number | null = null;
     try {
       const perChain = await Promise.all(
-        yieldSupportedChains().map(async (c) => {
+        [...allYieldChains].map(async (c) => {
           // Sum ALL protocols on the chain — a chain can host more than one
           // venue (e.g. bnb has Aave AND Lista), so picking only one would hide
           // the other's funds and let a hard-delete strand them. Each value read

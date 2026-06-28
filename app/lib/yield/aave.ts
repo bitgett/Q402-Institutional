@@ -268,7 +268,7 @@ export const aaveAdapter: YieldAdapter = {
       try {
         apy = await readReserveApy(c, cfg, r);
       } catch { /* best-effort */ }
-      positions.push(positionRow(chain, cfg, r, balRaw, apy, principals[`${chain}:${r.asset}`]));
+      positions.push(positionRow(chain, cfg, r, balRaw, apy, principals[`${chain}:aave:${r.asset}`] ?? principals[`${chain}:${r.asset}`]));
     }
     return positions;
   },
@@ -290,7 +290,7 @@ export const aaveAdapter: YieldAdapter = {
       const balRaw = await readReserveBalance(c, r, wallet);
       if (balRaw === 0n) continue; // no position — omit
       const apy = await readReserveApy(c, cfg, r);
-      positions.push(positionRow(chain, cfg, r, balRaw, apy, principals[`${chain}:${r.asset}`]));
+      positions.push(positionRow(chain, cfg, r, balRaw, apy, principals[`${chain}:aave:${r.asset}`] ?? principals[`${chain}:${r.asset}`]));
     }
     return positions;
   },

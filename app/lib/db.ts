@@ -141,6 +141,10 @@ export interface RelayedTx {
    *                  provenance for rows we can't classify.
    */
   source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request" | "stake" | "unstake";
+  /** Yield rows only: the venue the funds moved through (aave | morpho | lista).
+   *  Lets the dashboard + reconciliation tell venues apart after a protocol switch
+   *  on a chain (BNB Aave→Lista); the toUser pool/vault address alone is opaque. */
+  protocol?: string;
   /**
    * Recurring-only metadata: which rule this fire was paying for. Lets
    * the dashboard "Recurring only" filter group by rule and the

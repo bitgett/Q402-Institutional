@@ -27,7 +27,7 @@ import { getWalletHookConfig } from "@/app/lib/hooks/config";
 import { aaveTotalPositionValueStrict } from "./aave";
 import { morphoTotalPositionValueStrict } from "./morpho";
 import { listaTotalPositionValueStrict } from "./lista";
-import { yieldProtocolForChain, type YieldAction } from "./sign";
+import { yieldDepositProtocol, type YieldAction } from "./sign";
 
 export interface YieldPolicyInput {
   owner: string;
@@ -120,9 +120,10 @@ export async function enforceYieldPolicy(input: YieldPolicyInput): Promise<Yield
     return { allow: true };
   }
 
-  // Which protocol settles this chain (aave=BNB default, morpho=Base,
-  // lista=BNB when LISTA_YIELD_ENABLED).
-  const protocol = yieldProtocolForChain(input.chain);
+  // Which protocol a NEW deposit on this chain settles into (aave=BNB default,
+  // morpho=Base, lista=BNB when LISTA_YIELD_ENABLED). Drives the protocol allowlist
+  // check below; the allocation read sums ALL venues, not just this one.
+  const protocol = yieldDepositProtocol(input.chain);
 
   // Asset allowlist.
   if (Array.isArray(yp.allowedAssets) && yp.allowedAssets.length > 0
@@ -151,16 +152,20 @@ export async function enforceYieldPolicy(input: YieldPolicyInput): Promise<Yield
       // Both reads THROW on RPC failure → caught below → FAIL CLOSED.
       // (aaveTotalPositionValueStrict, unlike listAllPositions, does not
       // swallow errors into an under-counted 0.)
-      const [liquidBal, positionVal] = await Promise.all([
+      // Sum the wallet's yield position across ALL configured protocols on this
+      // chain — not just the deposit-selected one. Otherwise a wallet with funds in
+      // a coexisting venue (e.g. legacy Aave while depositing into Lista on BNB)
+      // would have that position excluded from the cap and could over-allocate past
+      // it. Each *Strict returns 0 (no RPC) for a protocol not configured on the
+      // chain, and THROWS on a real RPC failure → caught below → FAIL CLOSED.
+      const [liquidBal, aaveVal, morphoVal, listaVal] = await Promise.all([
         readLiquidStableBalance(input.chain, input.walletId as Address),
-        protocol === "lista"
-          ? listaTotalPositionValueStrict(input.chain, input.walletId)
-          : protocol === "morpho"
-            ? morphoTotalPositionValueStrict(input.chain, input.walletId)
-            : aaveTotalPositionValueStrict(input.chain, input.walletId),
+        aaveTotalPositionValueStrict(input.chain, input.walletId),
+        morphoTotalPositionValueStrict(input.chain, input.walletId),
+        listaTotalPositionValueStrict(input.chain, input.walletId),
       ]);
       liquid = liquidBal;
-      currentPosition = positionVal;
+      currentPosition = aaveVal + morphoVal + listaVal;
       if (!Number.isFinite(liquid) || !Number.isFinite(currentPosition)) {
         throw new Error("non-finite balance");
       }
