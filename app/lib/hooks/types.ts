@@ -239,7 +239,7 @@ export interface WalletHookConfig {
   yieldPolicy?: {
     enabled?: boolean;
     allowedAssets?: ("USDC" | "USDT")[];
-    allowedProtocols?: ("aave" | "morpho")[];
+    allowedProtocols?: ("aave" | "morpho" | "lista")[];
     /** 0–100. Max % of total stablecoins allowed in yield post-deposit. */
     maxAllocationPct?: number;
   };

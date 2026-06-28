@@ -16,6 +16,7 @@
 import {
   createPublicClient,
   createWalletClient,
+  formatUnits,
   http,
   type Address,
   type Hex,
@@ -29,6 +30,7 @@ import {
   type SignedAuthorization,
 } from "@/app/lib/agentic-wallet-sign";
 import { morphoVaultFor, morphoSupportedChains } from "./morpho";
+import { listaVaultFor, listaDepositChains, listaConfiguredChains, isListaVaultAllowed } from "./lista";
 
 export type YieldAction = "supply" | "withdraw";
 
@@ -84,7 +86,7 @@ const ERC4626_WITHDRAW_AUTH_TYPES = {
   ],
 } as const;
 
-export type YieldProtocol = "aave" | "morpho";
+export type YieldProtocol = "aave" | "morpho" | "lista";
 
 /** Aave V3 Pool per chain — must equal the v2 impl's on-chain allowlist. */
 const AAVE_POOL: Partial<Record<AgenticChainKey, Address>> = {
@@ -94,24 +96,68 @@ const AAVE_POOL: Partial<Record<AgenticChainKey, Address>> = {
 const MAX_UINT256 = (1n << 256n) - 1n;
 const DEFAULT_DEADLINE_AHEAD = 600;
 
-/** v2 impl (with supplyToAave) per chain — set after the audited deploy. */
+/** Minimal ERC-4626 maxWithdraw read for the withdraw liquidity pre-check.
+ *  maxWithdraw(owner) = min(owner's redeemable assets, the vault's currently
+ *  available liquidity) — a Lista/Morpho lending vault can return less than the
+ *  owner's balance when utilization is high (Lista blocks only near ~99.99%). */
+const MAXWITHDRAW_ABI = [
+  { type: "function", name: "maxWithdraw", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
+] as const;
+
+/** Default v2 impl per chain (the chain's PRIMARY protocol — Aave on BNB, Morpho
+ *  on Base). Set after the audited deploy via YIELD_IMPL_<CHAIN>. */
 export function yieldImplAddress(chain: AgenticChainKey): Address | undefined {
   const v = process.env[`YIELD_IMPL_${chain.toUpperCase()}`];
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as Address) : undefined;
 }
 
-/** Which yield protocol settles on this chain: Aave (BNB) or Morpho/ERC-4626 (Base). */
-export function yieldProtocolForChain(chain: AgenticChainKey): YieldProtocol | null {
+/**
+ * The EIP-7702 impl to delegate to for a (chain, protocol). The delegation target
+ * is protocol-SPECIFIC: an Aave withdraw needs the impl exposing withdrawFromAave;
+ * a Lista (ERC-4626) deposit/withdraw needs withdrawFromErc4626. A single
+ * YIELD_IMPL_<CHAIN> can't serve both, so a coexisting protocol resolves its OWN
+ * env YIELD_IMPL_<CHAIN>_<PROTOCOL>.
+ *
+ * lista NEVER falls back to YIELD_IMPL_<CHAIN> (that's the Aave impl on BNB) — it
+ * returns undefined unless YIELD_IMPL_<CHAIN>_LISTA is set, so enabling the deposit
+ * flag without deploying + wiring the ERC-4626 impl fails closed
+ * (YIELD_IMPL_NOT_DEPLOYED) instead of mis-delegating to the Aave impl and burning
+ * gas on every deposit (the P0 enable-ordering trap). aave/morpho keep the
+ * chain-default env.
+ */
+export function yieldImplFor(chain: AgenticChainKey, protocol: YieldProtocol): Address | undefined {
+  const specific = process.env[`YIELD_IMPL_${chain.toUpperCase()}_${protocol.toUpperCase()}`];
+  if (specific && /^0x[0-9a-fA-F]{40}$/.test(specific)) return specific as Address;
+  if (protocol === "lista") return undefined; // fail closed — never the Aave impl
+  return yieldImplAddress(chain);
+}
+
+/**
+ * Which yield protocol a NEW DEPOSIT settles into on this chain. Lista (BNB
+ * ERC-4626) takes precedence over Aave when its deposit flag is on
+ * (listaDepositChains is gated by LISTA_YIELD_ENABLED), so flipping the flag pivots
+ * NEW BNB deposits from Aave to Lista. Default off → BNB stays Aave, Base stays
+ * Morpho. WITHDRAWALS do NOT use this — they route by the position's OWN protocol
+ * (so legacy Aave + new Lista funds are both recoverable).
+ */
+export function yieldDepositProtocol(chain: AgenticChainKey): YieldProtocol | null {
+  if (listaDepositChains().includes(chain)) return "lista"; // gated by LISTA_YIELD_ENABLED
   if (AAVE_POOL[chain]) return "aave";
   if (morphoVaultFor(chain) !== null) return "morpho";
   return null;
 }
+/** @deprecated Renamed to clarify it is the DEPOSIT selector (withdraws route by
+ *  the position's own protocol). Kept so existing imports resolve. */
+export const yieldProtocolForChain = yieldDepositProtocol;
 
-/** Chains where yield deposit/withdraw is wired (target + deployed impl). */
+/** Chains where yield deposit/withdraw is wired (a configured target + a deployed
+ *  impl for that chain's protocol). Uses CONFIGURED (not deposit-gated) Lista
+ *  chains so withdraw stays wired even with deposits off. */
 export function yieldExecChains(): AgenticChainKey[] {
-  const aave = (Object.keys(AAVE_POOL) as AgenticChainKey[]).filter((c) => yieldImplAddress(c));
-  const morpho = (morphoSupportedChains() as AgenticChainKey[]).filter((c) => yieldImplAddress(c));
-  return [...new Set([...aave, ...morpho])];
+  const aave = (Object.keys(AAVE_POOL) as AgenticChainKey[]).filter((c) => yieldImplFor(c, "aave"));
+  const morpho = (morphoSupportedChains() as AgenticChainKey[]).filter((c) => yieldImplFor(c, "morpho"));
+  const lista = (listaConfiguredChains() as AgenticChainKey[]).filter((c) => yieldImplFor(c, "lista"));
+  return [...new Set([...aave, ...morpho, ...lista])];
 }
 
 export interface SignedYieldAction {
@@ -149,6 +195,11 @@ interface SignYieldParams {
   facilitator: Address;
   deadlineSeconds?: number;
   authorizationNonce?: number;
+  /** Withdraw: the position's OWN protocol + market (from listAllPositions), so a
+   *  legacy Aave position withdraws via Aave even while Lista is the deposit venue.
+   *  Omit for deposits — protocol is then the chain's deposit selector. */
+  protocol?: YieldProtocol;
+  marketAddress?: Address;
 }
 
 /**
@@ -159,21 +210,41 @@ interface SignYieldParams {
 export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAction> {
   const cfg = AGENTIC_CHAINS[p.chain];
   if (!cfg) throw new Error(`UNSUPPORTED_CHAIN:${p.chain}`);
-  const protocol = yieldProtocolForChain(p.chain);
+  // Protocol: explicit (withdraw → the position's own protocol) else the chain's
+  // deposit selector. So a legacy Aave position withdraws via Aave even after the
+  // flag pivots NEW deposits to Lista.
+  const protocol = p.protocol ?? yieldDepositProtocol(p.chain);
   if (!protocol) throw new Error(`YIELD_NO_PROTOCOL:${p.chain}`);
-  // Settle target: Aave Pool, or the curated ERC-4626 vault (Morpho, USDC-only).
+  // Settle target: Aave Pool, the curated Morpho vault (Base, USDC-only), or a
+  // Lista MoolahVault (BNB ERC-4626). When a marketAddress is supplied (withdraw),
+  // it is VALIDATED against the protocol's allowlist, never trusted blindly.
   let target: Address;
   if (protocol === "aave") {
     const pool = AAVE_POOL[p.chain];
     if (!pool) throw new Error(`YIELD_NO_POOL:${p.chain}`);
+    if (p.marketAddress && p.marketAddress.toLowerCase() !== pool.toLowerCase()) {
+      throw new Error(`YIELD_MARKET_NOT_ALLOWED:${p.marketAddress}`);
+    }
     target = pool;
+  } else if (protocol === "lista") {
+    if (p.marketAddress) {
+      if (!isListaVaultAllowed(p.chain, p.token, p.marketAddress)) throw new Error(`YIELD_MARKET_NOT_ALLOWED:${p.marketAddress}`);
+      target = p.marketAddress;
+    } else {
+      const vault = listaVaultFor(p.chain, p.token);
+      if (!vault) throw new Error(`YIELD_NO_VAULT:${p.chain}:${p.token}`);
+      target = vault;
+    }
   } else {
     const vault = morphoVaultFor(p.chain, p.token);
     if (!vault) throw new Error(`YIELD_NO_VAULT:${p.chain}:${p.token}`);
+    if (p.marketAddress && p.marketAddress.toLowerCase() !== vault.toLowerCase()) {
+      throw new Error(`YIELD_MARKET_NOT_ALLOWED:${p.marketAddress}`);
+    }
     target = vault;
   }
-  const impl = yieldImplAddress(p.chain);
-  if (!impl) throw new Error(`YIELD_IMPL_NOT_DEPLOYED:${p.chain}`);
+  const impl = yieldImplFor(p.chain, protocol);
+  if (!impl) throw new Error(`YIELD_IMPL_NOT_DEPLOYED:${p.chain}:${protocol}`);
 
   const tokenCfg = cfg.tokens[p.token];
   if (!tokenCfg) throw new Error(`UNSUPPORTED_TOKEN:${p.token}`);
@@ -211,6 +282,24 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
     nativeCurrency: { name: cfg.name, symbol: cfg.name, decimals: 18 },
     rpcUrls: { default: { http: [cfg.rpc] } },
   } as const;
+
+  // Liquidity pre-check for ERC-4626 withdraws (Lista / Morpho): a fixed-amount
+  // withdraw whose assets exceed the vault's available liquidity reverts on-chain
+  // AFTER the relayer paid gas. Reject pre-broadcast with the available amount so
+  // the caller can size down (Lista blocks withdraws only near ~99.99% utilization,
+  // but the edge is real for pay-from-yield). A "max" withdraw uses redeem(maxRedeem),
+  // which is already liquidity-bounded, so it is exempt. RPC read failures are
+  // swallowed — the on-chain call still guards funds; we just don't block an honest
+  // withdraw on a transient blip.
+  if (p.action === "withdraw" && !isMax && (protocol === "lista" || protocol === "morpho")) {
+    try {
+      const pub = createPublicClient({ chain: viemChain, transport: http(cfg.rpc) });
+      const maxW = (await pub.readContract({ address: target, abi: MAXWITHDRAW_ABI, functionName: "maxWithdraw", args: [fromAddr] })) as bigint;
+      if (amountRaw > maxW) throw new Error(`YIELD_INSUFFICIENT_LIQUIDITY:${formatUnits(maxW, tokenCfg.decimals)}`);
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("YIELD_INSUFFICIENT_LIQUIDITY")) throw e;
+    }
+  }
 
   const walletClient = createWalletClient({ account, chain: viemChain, transport: http(cfg.rpc) });
 

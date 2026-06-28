@@ -74,6 +74,9 @@ interface RelayedTx {
   relayedAt: string;
   receiptId?: string;
   source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request" | "stake" | "unstake";
+  /** Yield rows: the venue (aave | morpho | lista) so a BNB Aave vs Lista row are
+   *  distinguishable in the feed after the chain's deposit venue switches. */
+  protocol?: string;
   ruleId?: string;
   /** Settlement rail — only set to "x402" for Coinbase x402 (Base USDC
    *  EIP-3009) rows; q402 (default) is left undefined and shows no badge. */
@@ -172,7 +175,13 @@ const SOURCE_LABEL: Record<NonNullable<RelayedTx["source"]>, string> = {
 };
 
 function settlementKind(tx: RelayedTx): string {
-  return tx.source ? SOURCE_LABEL[tx.source] : "Settlement";
+  const base = tx.source ? SOURCE_LABEL[tx.source] : "Settlement";
+  // Tag yield rows with their venue so a BNB Aave vs Lista settlement are
+  // distinguishable after the chain's deposit venue switches.
+  if ((tx.source === "yield_deposit" || tx.source === "yield_withdraw") && tx.protocol) {
+    return `${base} · ${tx.protocol.charAt(0).toUpperCase()}${tx.protocol.slice(1)}`;
+  }
+  return base;
 }
 
 // Direction is decided by whether one of the viewer's OWN wallets (owner EOA +

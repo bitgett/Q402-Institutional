@@ -46,11 +46,25 @@ const YIELD_IMPL = {
     vault: "0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61", // Gauntlet USDC Prime
     asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // native Base USDC
   },
+  // BNB yield venue = Lista Lending (Moolah curated ERC-4626 vaults). This is the
+  // pivot from the Aave-based BNBv2 (kept in-repo at
+  // contracts/yield/Q402PaymentImplementationBNBv2.sol for reference). Launch is
+  // USDT-only via the Gauntlet USDT Vault; a USDC vault is added once Lista
+  // confirms its address. After deploy: set YIELD_IMPL_BNB, then LISTA_YIELD_ENABLED=true.
   bnb: {
-    source: "contracts/yield/Q402PaymentImplementationBNBv2.sol",
-    name: "Q402PaymentImplementationBNBv2",
+    source: "contracts/yield/Q402PaymentImplementationBNBYieldErc4626.sol",
+    name: "Q402PaymentImplementationBNBYieldErc4626",
     domainName: "Q402 BNB Chain",
-    erc4626: false,
+    erc4626: true,
+    // Allowlists BOTH stable vaults (AssetVaultMismatch blocks cross-routing).
+    vaults: [
+      "0x6d6783C146F2B0B2774C1725297f1845dc502525", // Gauntlet USDT Vault
+      "0x8a06ac91265dbebe6d4606f45b10993e9a571869", // Lista USDC Vault (lisUSDC)
+    ],
+    assets: [
+      "0x55d398326f99059fF775485246999027B3197955", // BSC USDT, 18dp
+      "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", // BSC USDC, 18dp
+    ],
   },
 };
 
@@ -181,14 +195,17 @@ if (cfg.erc4626) {
     "function isAllowedVault(address) view returns (bool)",
     "function isAllowedAsset(address) view returns (bool)",
   ], provider);
-  const [vaultYes, vaultNo, assetYes, assetNo] = await Promise.all([
-    yc.isAllowedVault(cfg.vault),
+  // Accept a single vault/asset or arrays (a chain may allowlist several stables).
+  const vaults = cfg.vaults ?? [cfg.vault];
+  const assets = cfg.assets ?? [cfg.asset];
+  const [vaultsAllowed, assetsAllowed, vaultNo, assetNo] = await Promise.all([
+    Promise.all(vaults.map((v) => yc.isAllowedVault(v))),
+    Promise.all(assets.map((a) => yc.isAllowedAsset(a))),
     yc.isAllowedVault(PROBE),
-    yc.isAllowedAsset(cfg.asset),
     yc.isAllowedAsset(PROBE),
   ]);
-  allowlistDetail = { vaultAllowed: vaultYes, randomVaultDenied: !vaultNo, assetAllowed: assetYes, randomAssetDenied: !assetNo };
-  allowlistOk = vaultYes && !vaultNo && assetYes && !assetNo;
+  allowlistDetail = { vaults, vaultsAllowed, randomVaultDenied: !vaultNo, assets, assetsAllowed, randomAssetDenied: !assetNo };
+  allowlistOk = vaultsAllowed.every(Boolean) && !vaultNo && assetsAllowed.every(Boolean) && !assetNo;
 }
 
 console.log(JSON.stringify({
