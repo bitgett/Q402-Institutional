@@ -39,30 +39,34 @@ supplied.** The P1 fixes below decouple read+withdraw from the deposit flag so L
 stay recoverable regardless; until those land, roll back by migrating/withdrawing Lista
 positions FIRST, then unset.
 
-## P1 BLOCKERS — must close before the flip (external audit, confirmed in code)
+## P1 BLOCKERS — CLOSED in code (external audit + adversarial re-audit)
 
-The flag flips BNB's yield protocol from Aave to Lista GLOBALLY (`yieldProtocolForChain`
-returns "lista" for BNB when enabled, `sign.ts`). Protocol identity is derived from
-(chain + flag), NOT per-position, which breaks any wallet that already has an Aave BNB
-position and makes Lista funds flag-dependent:
+Root cause: the write path pinned protocol per-op, but reads/withdraw/accounting/
+allocation/GC were keyed by (chain,asset) and assumed one protocol per chain, so the
+flag's global Aave→Lista pivot orphaned/mis-routed existing funds. The full-coexistence
+fix (commits `f75baef`, `9d2bb87`, `0d54e51`; new env `YIELD_IMPL_BNB_LISTA`) resolves
+them. Re-audit verified all CLOSED + 1491/1491 tests / tsc / eslint green.
 
-1. **Withdraw routes to the wrong venue.** `listAllPositions` reads ALL adapters
-   (`index.ts`), so an existing Aave BNB position still shows in the UI and passes the
-   withdraw preflight (`execute.ts` asset match), but `signYieldAction` signs for Lista
-   (flag-derived) → on-chain revert, relayer gas burned. FIX: withdraw must sign for the
-   POSITION's protocol+marketAddress (both already on `YieldPosition`), not the flag.
-2. **Rollback orphans Lista funds** (see the rollback paragraph above). FIX: ungate Lista
-   read + withdraw from `LISTA_YIELD_ENABLED`; the flag should gate only NEW deposits.
-3. **maxAllocationPct undercounts.** `policy.ts` sums only the flag-selected protocol's
-   position, so an existing Aave BNB position is excluded from the cap and a wallet can
-   over-allocate into Lista beyond its yield cap. FIX: sum ALL protocols for the chain.
-4. **(P2) Consent does not bind the venue.** The yield action intent/auth carries no
-   protocol/marketAddress; the user approves a generic "deposit USDT on BNB" while the
-   UI label still says "BNB · Aave" (`AgenticWalletEarnSection.tsx`). FIX: bind
-   protocol+marketAddress into the action intent + show the real venue in consent.
-5. **(P2) Principal accounting key lacks protocol.** `execute.ts` keys principal by
-   `${chain}:${asset}` — Aave+Lista USDT on BNB collide. FIX: key by
-   `${chain}:${protocol}:${asset}` (back-compat read for legacy keys).
+1. **Withdraw routes by the POSITION's protocol+marketAddress** (validated vs the
+   curated allowlist), not the flag — legacy Aave + new Lista both withdrawable. A
+   same-asset two-venue withdraw returns `409 AMBIGUOUS_POSITION` (caller passes
+   `protocol`). ✅
+2. **Reads/withdraw/GC decoupled from the flag** — `LISTA_YIELD_ENABLED` gates ONLY new
+   deposits + market advertising; Lista positions stay visible, withdrawable and
+   GC-counted with the flag off (rollback no longer orphans). ✅
+3. **maxAllocationPct sums ALL configured protocols** on the chain. ✅
+4. **Per-protocol impl (P0):** `yieldImplFor` resolves `YIELD_IMPL_<CHAIN>_LISTA` and
+   never falls back to the Aave impl, so flipping the flag without the deployed ERC-4626
+   impl fails closed (no per-deposit gas burn). ✅
+5. **Principal key namespaced** `${chain}:${protocol}:${asset}` (legacy migrated on first
+   touch); activity rows carry `protocol`. ✅
+
+**Still required before the flip (flip-batch, needs client lockstep — see below):**
+the MCP + dashboard withdraw need an optional `protocol` selector so a two-venue wallet
+can resolve the `409` (server already accepts it; the idempotency key is already
+venue-tagged). Binding protocol into the SIGNED intent + the "BNB = Aave" MCP
+descriptions are the remaining consent-integrity items. The EIP-712 witness already
+binds the exact vault on-chain, so these are integrity/UX, not a fund path.
 
 ## Copy / branding — BATCH WITH THE FLIP (step 5)
 
