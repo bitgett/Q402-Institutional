@@ -34,6 +34,7 @@ import {
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { isAgenticChainKey, type AgenticChainKey, type AgenticToken } from "@/app/lib/agentic-wallet-sign";
 import { signYieldAction, type YieldAction, type YieldProtocol } from "./sign";
+import { morphoSupportedChains } from "./morpho";
 import { listAllPositionsStrict } from "./index";
 import {
   settleYieldAction,
@@ -391,9 +392,17 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
 
   // Request fingerprint for content-bound idempotency (FIX 4). Hoisted (with
   // idemKey + settledKey) above the try so the catch can release the claim.
-  const reqFingerprint = `${action}:${chain}:${token}:${amount}`;
+  // Withdraw venue tag — a two-venue wallet (e.g. legacy Aave + Lista USDT on BNB)
+  // disambiguates a withdraw with `protocol`, so the idempotency claim + fingerprint
+  // MUST include it or the second venue's same-amount withdraw (commonly the
+  // byte-identical "...:withdraw:bnb:USDT:max") collides with the first's claim and
+  // is wrongly rejected as a duplicate for 30 min. Empty for deposits / single-venue
+  // (one venue per chain there, so no collision).
+  const venueTag = action === "withdraw" && typeof body.protocol === "string" && body.protocol.trim()
+    ? `:${body.protocol.trim().toLowerCase()}` : "";
+  const reqFingerprint = `${action}:${chain}:${token}:${amount}${venueTag}`;
   const settledKey = body.idempotencyKey ? `aw:yield:settled:${walletAddr}:${body.idempotencyKey}` : null;
-  const idemKey = `aw:yield:idem:${walletAddr}:${action}:${chain}:${token}:${amount}`;
+  const idemKey = `aw:yield:idem:${walletAddr}:${action}:${chain}:${token}:${amount}${venueTag}`;
   // Whether THIS request successfully claimed the short-lived idem key — the
   // catch only deletes the claim if we own it (a lock-contention / pre-claim
   // bailout must not clear another in-flight action's claim).
@@ -763,10 +772,12 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
 
 /** The protocol that owned a chain's pre-namespacing (unnamespaced
  *  `{chain}:{asset}`) principal record — i.e. the sole yield venue before Lista
- *  coexistence. bnb→aave, base→morpho. Used to migrate/clear legacy records under
+ *  coexistence. Morpho chains (base, arbitrum, …) → morpho; everything else (bnb)
+ *  → aave. Derived from config so a future Morpho chain doesn't silently mis-migrate
+ *  (Lista coexists only on aave's bnb). Used to migrate/clear legacy records under
  *  the correct protocol without clobbering a sibling venue. */
 function legacyYieldOwner(chain: string): YieldProtocol {
-  return chain === "base" ? "morpho" : "aave";
+  return morphoSupportedChains().includes(chain) ? "morpho" : "aave";
 }
 
 /** Track supplied principal (human units) per wallet/chain/PROTOCOL/asset in KV.

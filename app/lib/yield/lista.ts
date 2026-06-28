@@ -334,14 +334,15 @@ export function listaVaultFor(chain: string, asset: StableAsset = "USDT"): Addre
   return LISTA_DEFAULT_VAULT[chain]?.[asset] ?? null;
 }
 
-/** Is `vault` a configured Lista vault for this chain+asset? Validates a
- *  withdraw's on-chain position market before signing (defense-in-depth — a
- *  withdraw target that isn't an allowlisted vault would revert on-chain). */
+/** Is `vault` the curated default Lista vault for this chain+asset? Validates a
+ *  withdraw's on-chain position market before signing. Checks the CURATED default
+ *  ONLY (not the ENV-flexible read list): the impl's immutable on-chain
+ *  isAllowedVault accepts only the curated default per asset, so an ENV-added read
+ *  vault would pass an ENV-flexible check here but revert on-chain (VaultNotAllowed)
+ *  AFTER the relayer paid gas. Reject it off-chain — same posture as aave/morpho. */
 export function isListaVaultAllowed(chain: string, asset: StableAsset, vault: string): boolean {
-  const cfg = listaConfig(chain);
-  if (!cfg) return false;
-  const v = vault.toLowerCase();
-  return cfg.vaults.some((x) => x.asset === asset && x.vault.toLowerCase() === v);
+  const def = LISTA_DEFAULT_VAULT[chain]?.[asset];
+  return !!def && def.toLowerCase() === vault.toLowerCase();
 }
 
 /**
