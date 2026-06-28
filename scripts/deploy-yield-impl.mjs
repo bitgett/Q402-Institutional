@@ -43,19 +43,21 @@ const YIELD_IMPL = {
     name: "Q402PaymentImplementationBASEv2",
     domainName: "Q402 Base",
     erc4626: true,
+    envVar: "YIELD_IMPL_BASE",
     vault: "0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61", // Gauntlet USDC Prime
     asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // native Base USDC
   },
   // BNB yield venue = Lista Lending (Moolah curated ERC-4626 vaults). This is the
   // pivot from the Aave-based BNBv2 (kept in-repo at
   // contracts/yield/Q402PaymentImplementationBNBv2.sol for reference). Launch is
-  // USDT-only via the Gauntlet USDT Vault; a USDC vault is added once Lista
-  // confirms its address. After deploy: set YIELD_IMPL_BNB, then LISTA_YIELD_ENABLED=true.
+  // USDT via the Gauntlet USDT Vault + USDC via the Lista USDC Vault. After deploy:
+  // set YIELD_IMPL_BNB_LISTA=<addr> (keep YIELD_IMPL_BNB = Aave), then LISTA_YIELD_ENABLED=true.
   bnb: {
     source: "contracts/yield/Q402PaymentImplementationBNBYieldErc4626.sol",
     name: "Q402PaymentImplementationBNBYieldErc4626",
     domainName: "Q402 BNB Chain",
     erc4626: true,
+    envVar: "YIELD_IMPL_BNB_LISTA",
     // Allowlists BOTH stable vaults (AssetVaultMismatch blocks cross-routing).
     vaults: [
       "0x6d6783C146F2B0B2774C1725297f1845dc502525", // Gauntlet USDT Vault
@@ -219,4 +221,4 @@ if (!nameOk || !versionOk || !ownerGuardOk || !allowlistOk) {
   process.exit(1);
 }
 console.error(`\nOK ${chain}: NAME()="${onchainName}", owner-binding + vault/asset allowlist confirmed on ${address}.`);
-console.error(`Next: set YIELD_IMPL_${chain.toUpperCase()}=${address} in Vercel env, fund the relayer with ${chain} gas, re-run the drift test, then a small smoke deposit+withdraw.`);
+console.error(`Next: set ${cfg.envVar ?? `YIELD_IMPL_${chain.toUpperCase()}`}=${address} in Vercel env, fund the relayer with ${chain} gas, re-run the drift test, then a small smoke deposit+withdraw.`);

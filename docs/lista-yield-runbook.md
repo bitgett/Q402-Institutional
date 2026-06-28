@@ -8,6 +8,14 @@ ERC-4626, asset() == BSC USDC, ~$330K TVL). Both stables are wired end to end (c
 default vault + immutable impl allowlist + drift test). The whole path is built and gated
 by `LISTA_YIELD_ENABLED` (default off → BNB stays on the Aave path, zero behavior change).
 
+**DEPLOYED 2026-06-29 (BNB mainnet):** impl `0x7EC2559a7A724ad02Ddce796710ebe04eE6064dD`
+(deployer Alice `0xFe7bA1CDc7077F71855627F9983a70188826726f`). `verify-lista-wiring.mjs`
+PASS on it — NAME "Q402 BNB Chain" / VERSION 1 / IMPL_VERSION "2-yield-bnb-erc4626-lista",
+Gauntlet USDT + Lista USDC allowlisted, random vault/asset denied. MCP republished
+(`@quackai/q402-mcp@0.8.56`). REMAINING to go live (Vercel prod env): set
+`YIELD_IMPL_BNB_LISTA=0x7EC2559a7A724ad02Ddce796710ebe04eE6064dD` (leave `YIELD_IMPL_BNB`
+unset/Aave), then `LISTA_YIELD_ENABLED=true`, then smoke deposit + withdraw (USDT + USDC).
+
 ## Go-live sequence (do in order — fail-closed until step 4)
 
 1. **External audit** of `contracts/yield/Q402PaymentImplementationBNBYieldErc4626.sol`
