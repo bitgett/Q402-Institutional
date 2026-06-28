@@ -724,7 +724,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       return NextResponse.json({ error: "yield_insufficient_liquidity", message: `The yield vault can only return about ${avail} right now (high utilization). Withdraw a smaller amount or try again shortly.` }, { status: 400 });
     }
     if (msg.includes("YIELD_NO_VAULT")) {
-      return NextResponse.json({ error: "yield_token_not_supported", message: "This token is not supported for yield on this chain (Base yield is USDC only)." }, { status: 400 });
+      return NextResponse.json({ error: "yield_token_not_supported", message: "This token is not supported for yield on this chain yet." }, { status: 400 });
     }
     if (msg.includes("YIELD_IMPL_NOT_DEPLOYED") || msg.includes("YIELD_NO_POOL") || msg.includes("YIELD_NO_PROTOCOL")) {
       return NextResponse.json({ error: "yield_not_enabled", message: "Q402 Yield is not enabled on this chain yet." }, { status: 503 });
