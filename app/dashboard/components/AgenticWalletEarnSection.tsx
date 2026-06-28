@@ -234,6 +234,14 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
     if (r.protocol && !acc.includes(r.protocol)) acc.push(r.protocol);
     return acc;
   }, []);
+  // Group rows under a chain header so venues stack per chain (scales as more
+  // venues/chains land; the chain then drops out of each row). First-seen order.
+  const chainGroups = new Map<string, typeof marketRows>();
+  for (const row of marketRows) {
+    const g = chainGroups.get(row.chain);
+    if (g) g.push(row);
+    else chainGroups.set(row.chain, [row]);
+  }
 
   return (
     <div className="relative">
@@ -289,37 +297,47 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
       ) : error ? (
         <div className="text-[11.5px] text-amber-300/80 py-1">{error}</div>
       ) : marketRows.length > 0 ? (
-        <div className="space-y-2">
-          {marketRows.map((row) => {
-            const vm = venueMeta(row.protocol);
-            return (
-              <div key={`${row.chain}:${row.asset}:${row.protocol ?? ""}`} className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`/${row.asset.toLowerCase()}.svg`} alt={row.asset} width={18} height={18} className="rounded-full shrink-0" />
-                  <div className="min-w-0 leading-tight">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-white/90 font-medium font-mono text-[12.5px]">{row.asset}</span>
-                      <span className="text-emerald-300/90 text-[11px]">{pct(row.apy)} APY</span>
-                    </div>
-                    <div className="flex items-center gap-1 mt-0.5 min-w-0">
-                      {vm.logo && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={vm.logo} alt={vm.label} width={11} height={11} className="rounded-full shrink-0" />
-                      )}
-                      <span className="text-white/55 text-[10px] truncate">{vm.label}</span>
-                      <span className="text-white/25 text-[10px] shrink-0">· {chainLabel(row.chain)}</span>
-                    </div>
-                  </div>
-                </div>
-                {row.balance != null ? (
-                  <span className="text-emerald-300 font-mono text-[13px] shrink-0">{formatUsd(row.balance)}</span>
-                ) : (
-                  <span className="text-white/30 font-mono text-[13px] shrink-0">—</span>
-                )}
+        <div className="space-y-2.5">
+          {[...chainGroups.entries()].map(([chain, rows]) => (
+            <div key={chain}>
+              {/* Chain header — venues for this chain stack beneath it. */}
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[9.5px] font-semibold uppercase tracking-wider text-white/35 shrink-0">{chainLabel(chain)}</span>
+                <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
               </div>
-            );
-          })}
+              <div className="space-y-2">
+                {rows.map((row) => {
+                  const vm = venueMeta(row.protocol);
+                  return (
+                    <div key={`${row.chain}:${row.asset}:${row.protocol ?? ""}`} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={`/${row.asset.toLowerCase()}.svg`} alt={row.asset} width={18} height={18} className="rounded-full shrink-0" />
+                        <div className="min-w-0 leading-tight">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-white/90 font-medium font-mono text-[12.5px]">{row.asset}</span>
+                            <span className="text-emerald-300/90 text-[11px]">{pct(row.apy)} APY</span>
+                          </div>
+                          <div className="flex items-center gap-1 mt-0.5 min-w-0">
+                            {vm.logo && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={vm.logo} alt={vm.label} width={11} height={11} className="rounded-full shrink-0" />
+                            )}
+                            <span className="text-white/55 text-[10px] truncate">{vm.label}</span>
+                          </div>
+                        </div>
+                      </div>
+                      {row.balance != null ? (
+                        <span className="text-emerald-300 font-mono text-[13px] shrink-0">{formatUsd(row.balance)}</span>
+                      ) : (
+                        <span className="text-white/30 font-mono text-[13px] shrink-0">—</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       ) : (
         // Teaser — subtle, no positions yet. Pulls the best live APY from
