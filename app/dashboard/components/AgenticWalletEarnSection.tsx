@@ -195,19 +195,21 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
   const bestApyRaw = finiteApys.length > 0 ? Math.max(...finiteApys) : NaN;
   const bestApy = Number.isFinite(bestApyRaw) ? bestApyRaw : null;
 
-  // One row per (chain, asset) market so BNB Aave and Base Morpho never merge
-  // under a single asset. Union the public markets (APY) with the wallet's
-  // positions (supplied balance), keyed by chain+asset.
-  type EarnRow = { chain: string; asset: string; apy?: number; balance: number | null };
+  // One row per (chain, asset, VENUE) so two venues on a chain (a legacy Aave and a
+  // new Lista USDC position on BNB) never merge under one row and silently hide a
+  // balance. Union the public markets (APY) with the wallet's positions (balance),
+  // keyed by chain+asset+protocol.
+  type EarnRow = { chain: string; asset: string; protocol?: string; apy?: number; balance: number | null };
   const rowMap = new Map<string, EarnRow>();
   for (const m of markets ?? []) {
-    rowMap.set(`${m.chain}:${m.asset}`, { chain: m.chain, asset: m.asset, apy: m.supplyApy, balance: null });
+    const k = `${m.chain}:${m.asset}:${m.protocol ?? ""}`;
+    rowMap.set(k, { chain: m.chain, asset: m.asset, protocol: m.protocol, apy: m.supplyApy, balance: null });
   }
   for (const p of positions?.positions ?? []) {
-    const k = `${p.chain}:${p.asset}`;
+    const k = `${p.chain}:${p.asset}:${p.protocol ?? ""}`;
     const r = rowMap.get(k);
     if (r) { r.balance = Number(p.balance); if (r.apy == null) r.apy = p.supplyApy; }
-    else rowMap.set(k, { chain: p.chain, asset: p.asset, apy: p.supplyApy, balance: Number(p.balance) });
+    else rowMap.set(k, { chain: p.chain, asset: p.asset, protocol: p.protocol, apy: p.supplyApy, balance: Number(p.balance) });
   }
   const marketRows = [...rowMap.values()].filter(
     (r): r is EarnRow & { apy: number } => typeof r.apy === "number" && Number.isFinite(r.apy),
