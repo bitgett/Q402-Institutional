@@ -2,10 +2,11 @@
 
 BNB yield venue = **Lista Lending** (Moolah curated ERC-4626 vaults). Launch routes
 USDT into the **Gauntlet USDT Vault** `0x6d6783C146F2B0B2774C1725297f1845dc502525`
-(verified on-chain: ERC-4626, asset() == BSC USDT, ~$8M TVL, ~24% liquid). The whole
-path is built and gated by `LISTA_YIELD_ENABLED` (default off → BNB stays on the Aave
-path, zero behavior change). USDC is ENV-only / deferred until Lista confirms its vault
-address.
+(verified on-chain: ERC-4626, asset() == BSC USDT, ~$8M TVL) and USDC into the
+**Lista USDC Vault** `0x8a06Ac91265dBEBE6D4606f45b10993E9a571869` (verified on-chain:
+ERC-4626, asset() == BSC USDC, ~$330K TVL). Both stables are wired end to end (curated
+default vault + immutable impl allowlist + drift test). The whole path is built and gated
+by `LISTA_YIELD_ENABLED` (default off → BNB stays on the Aave path, zero behavior change).
 
 ## Go-live sequence (do in order — fail-closed until step 4)
 
@@ -16,8 +17,9 @@ address.
 2. **Deploy** the impl:
    `DEPLOYER_PRIVATE_KEY=0x… node scripts/deploy-yield-impl.mjs --chain bnb`
    (compiles with the pinned solc 0.8.20/200/london/viaIR, deploys, and PROVES
-   owner-binding + NAME "Q402 BNB Chain" + the Gauntlet-USDT/USDT allowlist on the fresh
-   address before printing it). `--compile-only` first to dry-verify the build.
+   owner-binding + NAME "Q402 BNB Chain" + the full allowlist (Gauntlet USDT + Lista USDC
+   vaults & assets, a random address denied) on the fresh address before printing it).
+   `--compile-only` first to dry-verify the build.
 3. **Wire** the env: set `YIELD_IMPL_BNB=<deployed address>` in Vercel (prod). Fund the
    relayer with BNB gas.
 4. **Pre-flip guard:** `node scripts/verify-lista-wiring.mjs` — asserts the wired
@@ -25,7 +27,7 @@ address.
    flip the flag against the Aave impl (would revert deposits after paying gas — spec
    MED-2). Only when it prints OK:
 5. **Flip:** set `LISTA_YIELD_ENABLED=true`. Re-run `vitest run yield-bnb-lista-vault-drift`,
-   then a small smoke deposit + withdraw.
+   then a small smoke deposit + withdraw for BOTH USDT and USDC.
 
 Roll back instantly by unsetting `LISTA_YIELD_ENABLED` (BNB reverts to the Aave path /
 inert; funds already in Lista are still readable + withdrawable, and the GC sweep counts
@@ -70,9 +72,15 @@ descriptive copy/branding needs hands:
 
 ## Open
 
-- Lista USDC vault address (not in public docs; free BSC explorer/RPC can't enumerate —
-  the maple13 Etherscan key is Ethereum-free-only, BSC needs a paid plan). Get it from
-  Lista, then add `LISTA_USDC_VAULT` to the impl allowlist + `LISTA_DEFAULT_VAULT.bnb.USDC`
-  + redeploy. DeFiLlama confirms the vault: ~$330K TVL, 4.26% APY, curator Lista DAO.
+- **Storage-layout proof before deploy (DO THIS):** `forge inspect
+  Q402PaymentImplementationBNBYieldErc4626 storage-layout` and diff against the deployed
+  payment impl `0x6cF4aD62C208b6494a55a1494D497713ba013dFa` — confirm `usedNonces` is at
+  slot 0 (a re-delegating wallet must carry its used-nonce set forward; a field inserted
+  before it would let a used nonce replay). Typehashes/domain/NAME already match the
+  deployed bytecode on-chain; slot equality is the one fund-safety invariant left to prove.
+- Confirm the **Lista USDC Vault** `0x8a06Ac91265dBEBE6D4606f45b10993E9a571869` with Lista
+  (found via on-chain trace, NOT their public docs): it IS a real ERC-4626 USDC vault
+  (asset == BSC USDC, ~$330K TVL, ~3.5% APY live per DeFiLlama), but its curation/official
+  status is not independently confirmed — have Lista bless it before scaling deposits.
 - Lista APY API endpoint (wire `LISTA_API_URL` so the dashboard shows live APY; until
-  then markets list with APY unknown).
+  then markets list with APY unknown). Do NOT hard-code an APY number anywhere — it drifts.

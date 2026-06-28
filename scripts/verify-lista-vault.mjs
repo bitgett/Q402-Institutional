@@ -13,12 +13,12 @@ const RPC = process.env.BNB_RPC_URL || "https://bsc-dataseed.binance.org";
 const BSC_USDT = "0x55d398326f99059fF775485246999027B3197955";
 const BSC_USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
 
-// From docs.bsc.lista.org core-contracts list (BNB mainnet).
+// The two vaults hard-coded into the impl's immutable allowlist (BNB mainnet).
+// (The MEV/Re7/Pangolins USDT vaults were survey candidates only; note Re7's
+//  0x02A5ca3a… is actually a USD1 vault, NOT USDT — excluded deliberately.)
 const VAULTS = [
-  { label: "MoolahVault (USDT)", address: "0x6d6783C146F2B0B2774C1725297f1845dc502525", expectAsset: BSC_USDT },
-  { label: "MoolahVault (MEV USDT)", address: "0x6402d64F035E18F9834591d3B994dFe41a0f162D", expectAsset: BSC_USDT },
-  { label: "MoolahVault (Re7 USDT)", address: "0x02A5ca3a749855d1002A78813E679584a96646d0", expectAsset: BSC_USDT },
-  { label: "MoolahVault (Pangolins USDT)", address: "0xEB4F6FFB1038E1cCa701e7d53083B37ec5b6Ba33", expectAsset: BSC_USDT },
+  { label: "Gauntlet USDT Vault", address: "0x6d6783C146F2B0B2774C1725297f1845dc502525", expectAsset: BSC_USDT },
+  { label: "Lista USDC Vault", address: "0x8a06Ac91265dBEBE6D4606f45b10993E9a571869", expectAsset: BSC_USDC },
 ];
 
 const ABI = [
@@ -48,7 +48,7 @@ for (const v of VAULTS) {
     const assetOk = asset.toLowerCase() === v.expectAsset.toLowerCase();
     console.log(`\n${v.label}  ${v.address}`);
     console.log(`  erc4626      : asset()+convertToAssets() responded = YES`);
-    console.log(`  asset()      : ${asset} ${assetOk ? "== BSC USDT OK" : "!! UNEXPECTED"}`);
+    console.log(`  asset()      : ${asset} ${assetOk ? "== expected OK" : "!! UNEXPECTED"}`);
     console.log(`  name/symbol  : ${name} / ${symbol}`);
     console.log(`  decimals     : ${decimals}`);
     console.log(`  totalAssets  : ${totalAssets}`);

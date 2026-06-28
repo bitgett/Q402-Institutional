@@ -303,8 +303,8 @@ export function listaSupportedChains(): string[] {
  *  the impl's immutable allowlist (pinned by yield-bnb-lista-vault-drift.test).
  *  It deliberately ignores the read adapter's ENV-flexible multi-vault list: an
  *  ENV-diverged vault would pass off-chain signing but revert on-chain
- *  (VaultNotAllowed) AFTER the relayer paid gas. USDC returns null until a USDC
- *  vault is both confirmed by Lista AND hard-coded in the impl allowlist. */
+ *  (VaultNotAllowed) AFTER the relayer paid gas. Both USDT and USDC resolve to
+ *  their curated default vault (each pinned in the impl's immutable allowlist). */
 export function listaVaultFor(chain: string, asset: StableAsset = "USDT"): Address | null {
   if (!listaEnabled()) return null;
   return LISTA_DEFAULT_VAULT[chain]?.[asset] ?? null;

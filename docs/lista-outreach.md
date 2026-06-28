@@ -34,8 +34,10 @@ agents parking idle stablecoins, scaling with agent adoption. BNB native, day on
 A few questions:
 1. Is the Gauntlet USDT Vault the right launch target, or would you steer us to a
    different USDT vault? Any per-vault deposit caps we should know about?
-2. We see a Lista USDC Vault (curator Lista DAO, ~$330K, ~4.26% APY) but its address is
-   not in the public docs. Can you send the USDC vault address so we can add USDC next?
+2. We also wired USDC. We found what looks like your Lista USDC Vault
+   (0x8a06Ac91265dBEBE6D4606f45b10993E9a571869, ~$330K TVL) by on-chain trace since it is
+   not in the public docs. Can you confirm that is the right/official USDC vault to route
+   into?
 3. Is there a Lista API for live vault APY we can read for our dashboard?
 
 Co-marketing. We would love a joint launch to our agent and developer audience. Q402
