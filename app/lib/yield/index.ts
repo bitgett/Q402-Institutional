@@ -2,8 +2,8 @@
  * Q402 Yield — adapter registry + public surface.
  *
  * Routes/MCP/dashboard import from here, staying protocol-agnostic.
- * Aave ships in Phase 0; Morpho (Base/Arbitrum) is added as a second
- * adapter later with no change to callers.
+ * Aave shipped first; Morpho (Base/Arbitrum) and Lista (BNB ERC-4626) are
+ * added as further adapters with no change to callers.
  */
 
 import { aaveAdapter, aaveSupportedChains } from "./aave";
