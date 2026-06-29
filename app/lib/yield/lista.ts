@@ -126,21 +126,48 @@ function listaConfig(chain: string): { vaults: VaultCfg[] } | null {
 }
 
 /**
- * Live net supply APY for a vault, best-effort, from Lista's API when configured
- * (LISTA_API_URL — the base, e.g. https://api.lista.org). No env / any error → 0
- * ("unknown"), market still lists. 4s timeout keeps reserves responsive.
- * The exact response shape is wired once Lista shares the endpoint; until then
- * this returns 0 and the market lists with APY unknown.
+ * DeFiLlama pool id per curated Lista vault. Lista does NOT expose a public APY
+ * API — its docs (docs.bsc.lista.org) define APY as an on-chain weighted average
+ * of the vault's Moolah markets (borrowAPY x utilization x (1 - fee), weighted by
+ * the vault's withdrawal-queue allocation). DeFiLlama already runs that compute
+ * and serves it per curated vault, so we read it from there rather than
+ * re-implementing the Moolah math. The vault->pool match is VERIFIED, not guessed:
+ * each pool's tvlUsd equals the vault's on-chain totalAssets (Gauntlet USDT
+ * $7.27M == pool 8b4267ba; Lista USDC $0.236M == pool 2e2b6277). Keys lowercase.
+ */
+const LISTA_DEFILLAMA_POOL: Record<string, string> = {
+  "0x6d6783c146f2b0b2774c1725297f1845dc502525": "8b4267ba-69b2-49c9-9a82-df98e24e1f0f", // Gauntlet USDT Vault (BNB)
+  "0x8a06ac91265dbebe6d4606f45b10993e9a571869": "2e2b6277-9fc6-4466-8580-0dfb9416aad7", // Lista USDC Vault (BNB)
+};
+
+/**
+ * Live net supply APY for a vault, best-effort, as a FRACTION (0.0488 == 4.88%).
+ * Primary source = DeFiLlama's per-pool chart (the latest apy, base + LISTA
+ * rewards). `LISTA_API_URL` is an optional override (used first when set, e.g. if
+ * Lista ships a native endpoint that returns a fraction). Any miss/error → 0
+ * ("unknown"), the market still lists. 4s timeout keeps reserves responsive.
  */
 async function fetchListaApy(_chain: string, vault: Address): Promise<number> {
-  const base = (process.env.LISTA_API_URL ?? "").trim().replace(/\/+$/, "");
-  if (!base) return 0;
   try {
-    const r = await fetch(`${base}/lending/vault/${vault}`, { signal: AbortSignal.timeout(4000) });
+    // Optional Lista-native override (expected to return a fraction).
+    const base = (process.env.LISTA_API_URL ?? "").trim().replace(/\/+$/, "");
+    if (base) {
+      const r = await fetch(`${base}/lending/vault/${vault}`, { signal: AbortSignal.timeout(4000) });
+      if (r.ok) {
+        const j = (await r.json()) as { netApy?: number; apy?: number; data?: { netApy?: number; apy?: number } };
+        const a = j.netApy ?? j.apy ?? j.data?.netApy ?? j.data?.apy;
+        if (typeof a === "number" && Number.isFinite(a) && a > 0) return a;
+      }
+    }
+    // DeFiLlama — the standard public source for a curated Lista vault's APY.
+    const pool = LISTA_DEFILLAMA_POOL[vault.toLowerCase()];
+    if (!pool) return 0;
+    const r = await fetch(`https://yields.llama.fi/chart/${pool}`, { signal: AbortSignal.timeout(4000) });
     if (!r.ok) return 0;
-    const j = (await r.json()) as { netApy?: number; apy?: number; data?: { netApy?: number; apy?: number } };
-    const apy = j.netApy ?? j.apy ?? j.data?.netApy ?? j.data?.apy;
-    return typeof apy === "number" && Number.isFinite(apy) && apy > 0 ? apy : 0;
+    const j = (await r.json()) as { data?: Array<{ apy?: number }> };
+    const apyPct = j.data?.[j.data.length - 1]?.apy;
+    // DeFiLlama apy is a PERCENT; our markets carry APY as a fraction.
+    return typeof apyPct === "number" && Number.isFinite(apyPct) && apyPct > 0 ? apyPct / 100 : 0;
   } catch {
     return 0;
   }

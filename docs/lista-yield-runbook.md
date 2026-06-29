@@ -131,5 +131,10 @@ descriptive copy/branding needs hands:
   (found via on-chain trace, NOT their public docs): it IS a real ERC-4626 USDC vault
   (asset == BSC USDC, ~$330K TVL, ~3.5% APY live per DeFiLlama), but its curation/official
   status is not independently confirmed — have Lista bless it before scaling deposits.
-- Lista APY API endpoint (wire `LISTA_API_URL` so the dashboard shows live APY; until
-  then markets list with APY unknown). Do NOT hard-code an APY number anywhere — it drifts.
+- ~~Lista APY API endpoint~~ **DONE (2026-06-30):** Lista has NO public APY API (docs
+  define APY as on-chain weighted Moolah-market math). `fetchListaApy` now reads
+  **DeFiLlama**'s per-pool chart — the standard source that already runs that compute.
+  Vault->pool match is VERIFIED by tvlUsd == on-chain totalAssets (Gauntlet USDT
+  `0x6d6783…` -> pool `8b4267ba…` ~4.9%; Lista USDC `0x8a06Ac…` -> pool `2e2b6277…`
+  ~5.5%). DeFiLlama apy is a PERCENT -> `/100` to our fraction. `LISTA_API_URL` kept as
+  an optional override (used first if Lista ships a native endpoint). No hard-coded APY.
