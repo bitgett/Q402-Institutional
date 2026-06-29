@@ -530,7 +530,7 @@ function AgenticWalletEarnActions({
                       key={rowKey(r)}
                       type="button"
                       onClick={() => selectRow(r)}
-                      className="w-full flex items-center gap-2.5 px-2 py-1 rounded-lg border transition-colors text-left"
+                      className="w-full flex items-center gap-2 px-2.5 py-1 rounded-lg border transition-colors text-left"
                       style={sel
                         ? { background: "rgba(247,202,22,0.12)", borderColor: "rgba(247,202,22,0.38)" }
                         : { background: "transparent", borderColor: "transparent" }}
@@ -545,16 +545,19 @@ function AgenticWalletEarnActions({
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={`/${r.asset.toLowerCase()}.svg`} alt={r.asset} width={17} height={17} className="rounded-full shrink-0" />
                       <span className="text-white/90 font-medium font-mono text-[12.5px] w-[40px] shrink-0">{r.asset}</span>
-                      <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="flex items-center gap-1.5 min-w-0 flex-1">
                         {vm.logo && (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={vm.logo} alt={vm.label} width={14} height={14} className="rounded-full shrink-0" />
                         )}
                         <span className="text-white/65 text-[11px] truncate">{vm.label}</span>
                       </span>
-                      <span className="ml-auto text-emerald-300 font-mono text-[12.5px] font-semibold shrink-0">{pct(r.apy)}</span>
+                      {/* APY + balance are FIXED-WIDTH right-aligned columns so they line
+                          up vertically across every row (venue flex-1 absorbs the slack);
+                          otherwise a wider balance pushes that row's APY out of column. */}
+                      <span className="w-[46px] text-right text-emerald-300 font-mono text-[12.5px] font-semibold shrink-0">{pct(r.apy)}</span>
                       <span
-                        className="font-mono text-[12px] shrink-0 w-[34px] text-right"
+                        className="w-[52px] text-right whitespace-nowrap font-mono text-[12px] shrink-0"
                         style={{ color: r.balance != null ? "#6ee7b7" : "rgba(255,255,255,0.28)" }}
                       >
                         {r.balance != null ? formatUsd(r.balance) : "—"}

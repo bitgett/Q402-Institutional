@@ -1324,7 +1324,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                 <section>
                   <SectionHead title="Capital overview" meta="11 networks monitored" />
                   <div style={{ ...styles.allocation, gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr" }}>
-                    <div style={{ ...subCard(13), padding: 14 }}>
+                    <div style={{ ...subCard(13), padding: 14, height: "100%", display: "flex", flexDirection: "column" }}>
                       <div style={styles.assetTop}>
                         <div style={styles.token}>
                           <StablePair size={26} />
@@ -1351,7 +1351,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                           <i style={{ display: "block", width: "100%", background: v2.toggleOff }} />
                         )}
                       </div>
-                      <div style={styles.breakdown}>
+                      <div style={{ ...styles.breakdown, flex: 1, alignContent: "space-between" }}>
                         {vmAlloc.segs.length > 0 ? (
                           vmAlloc.segs.flatMap((s) => {
                             // One row per (chain, token) holding so the token and
@@ -1393,14 +1393,14 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                         deposit/withdraw). Demo mode renders a static card
                         (mounting the real one would 401 / sign-prompt). */}
                     {demoMode || !activeWallet ? (
-                      <div style={{ ...subCard(13), padding: 14 }}>
+                      <div style={{ ...subCard(13), padding: 14, height: "100%" }}>
                         <div style={styles.assetTop}>
                           <div style={styles.token}>
                             <Q402Mark size={27} />
                             <div>
                               Q402 Yield
                               <div style={{ ...styles.sub, display: "inline-flex", alignItems: "center", gap: 5 }}>
-                                <TokenIcon src="/aave.svg" size={13} /> <TokenIcon src="/logos/morpho.png" size={13} /> Aave, Morpho, Lista · paid plans
+                                <TokenIcon src="/aave.svg" size={13} /> <TokenIcon src="/lista.svg" size={13} /> <TokenIcon src="/logos/morpho.png" size={13} /> Aave, Lista, Morpho · paid plans
                               </div>
                             </div>
                           </div>
@@ -1412,7 +1412,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                         </div>
                       </div>
                     ) : (
-                      <div style={{ ...subCard(13), padding: 14 }}>
+                      <div style={{ ...subCard(13), padding: 14, height: "100%" }}>
                         <AgenticWalletEarnSection
                           ownerAddress={addr ?? activeWallet.ownerAddr}
                           walletId={activeWallet.walletId}

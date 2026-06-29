@@ -2,8 +2,8 @@
  * Q402 Yield — shared types.
  *
  * "Q402 Yield" lets an Agent Wallet's idle stablecoins earn yield in a
- * lending protocol — Aave V3 on BNB Chain (USDC/USDT) and Morpho on Base
- * (USDC only) — gasless and within Hooks policy, with a Trust Receipt per
+ * lending protocol — Aave V3 + Lista on BNB Chain (USDC/USDT) and Morpho on
+ * Base (USDC only) — gasless and within Hooks policy, with a Trust Receipt per
  * supply/withdraw.
  *
  * Read surface: this file's market/position types move NO funds. Write
@@ -12,7 +12,7 @@
  * optional adapter build* methods below.
  *
  * The adapter abstraction keeps the route/MCP/dashboard layer
- * protocol-agnostic: Aave and Morpho both behind YieldAdapter.
+ * protocol-agnostic: Aave, Lista and Morpho all behind YieldAdapter.
  */
 
 export type YieldProtocol = "aave" | "morpho" | "lista";

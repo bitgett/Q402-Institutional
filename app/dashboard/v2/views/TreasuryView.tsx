@@ -583,8 +583,9 @@ export function TreasuryView({ ownerAddress, signMessage, scope }: TreasuryViewP
                     meta={
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 5, color: v2.mint }}>
                         <TokenIcon src="/aave.svg" size={15} />
+                        <TokenIcon src="/lista.svg" size={15} />
                         <TokenIcon src="/logos/morpho.png" size={15} />
-                        Aave, Morpho, Lista{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
+                        Aave, Lista, Morpho{demoMode ? ` · best ${DEMO.yieldApy} APY` : ""}
                       </span>
                     }
                   />
