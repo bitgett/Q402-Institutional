@@ -378,9 +378,20 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
           // a withdraw doesn't default to BNB-Aave (empty) and revert on-chain
           // when the only position is Base-Morpho. Falls back to bnb (deposit).
           defaultChain={positions?.positions?.[0]?.chain === "base" ? "base" : "bnb"}
-          // chain -> deposit venue from the (de-duped) public markets, so the
-          // selector shows the REAL venue (BNB shows Lista once the flag flips).
-          venueByChain={Object.fromEntries((markets ?? []).filter((m) => m.protocol).map((m) => [m.chain, m.protocol as string]))}
+          // chain -> ALL deposit venues with a market on that chain (Aave/Lista on
+          // BNB, Morpho on Base), ordered so the launched/featured venue defaults
+          // first. Drives the deposit venue selector so the user CHOOSES where to deposit.
+          depositVenuesByChain={(() => {
+            const ORDER: Record<string, number> = { lista: 0, morpho: 1, aave: 2 };
+            const m: Record<string, string[]> = {};
+            for (const mk of markets ?? []) {
+              if (!mk.protocol) continue;
+              (m[mk.chain] ??= []);
+              if (!m[mk.chain].includes(mk.protocol)) m[mk.chain].push(mk.protocol);
+            }
+            for (const c of Object.keys(m)) m[c].sort((a, b) => (ORDER[a] ?? 9) - (ORDER[b] ?? 9));
+            return m;
+          })()}
           // `${chain}:${asset}` -> venues the wallet actually holds, so a withdraw
           // can disambiguate when the same token sits in two venues on one chain.
           withdrawVenues={(() => {
@@ -400,11 +411,11 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
 
 // ── AgenticWalletEarnActions ────────────────────────────────────────────────
 //
-// Deposit / Withdraw controls for one Agent Wallet's Aave V3 position.
-// Both writes are intent-bound: getActionAuth mints a single-use challenge
-// over the exact { walletId, chain, token, amount } tuple, the wallet signs
-// it, and the route rebuilds the same canonical bytes to verify. Mirrors
-// the Hooks modal's write path exactly.
+// Deposit / Withdraw controls for one Agent Wallet's yield positions across venues.
+// Both writes are intent-bound: getActionAuth mints a single-use challenge over the
+// exact { walletId, chain, token, amount, protocol? } tuple, the wallet signs it, and
+// the route rebuilds the same canonical bytes to verify. Mirrors the Hooks modal's
+// write path exactly.
 //
 // "Coming soon" state: the v2 yield contract isn't live on every chain yet.
 // The route returns 503 { error: "yield_not_enabled" }; we catch that, flip
@@ -420,7 +431,7 @@ function AgenticWalletEarnActions({
   canDeposit,
   defaultToken,
   defaultChain,
-  venueByChain,
+  depositVenuesByChain,
   withdrawVenues,
 }: {
   ownerAddress: string;
@@ -435,10 +446,10 @@ function AgenticWalletEarnActions({
    *  where the funds actually are (BNB-Aave vs Base-Morpho) instead of always
    *  defaulting to BNB and reverting when the position lives on Base. */
   defaultChain: "bnb" | "base";
-  /** chain -> live deposit venue (protocol) from the public markets feed, so the
-   *  selector label tracks the actual venue (BNB flips Aave->Lista at flip time)
-   *  instead of a hardcoded "Aave". */
-  venueByChain?: Record<string, string>;
+  /** chain -> all deposit venues (protocols) with a market on that chain, ordered
+   *  by feature priority, so the user can CHOOSE where to deposit (Aave / Lista on
+   *  BNB, Morpho on Base). */
+  depositVenuesByChain?: Record<string, string[]>;
   /** `${chain}:${asset}` -> protocols the wallet holds a position in. When a
    *  withdraw selection maps to >1 venue, the user picks which to pull from (the
    *  server otherwise replies AMBIGUOUS_POSITION). */
@@ -464,15 +475,20 @@ function AgenticWalletEarnActions({
   const effToken: "USDC" | "USDT" = baseOnly ? "USDC" : token;
   const comingSoon = comingSoonChains.has(chain);
 
-  // Withdraw venue disambiguation: if the wallet holds this (chain, token) in more
-  // than one venue (e.g. legacy Aave + Lista on BNB), the user must choose which to
-  // pull from; otherwise the server replies AMBIGUOUS_POSITION. Deposits never need
-  // this (one deposit venue per chain).
-  const venuesForSel = withdrawVenues?.[`${chain}:${effToken}`] ?? [];
-  const ambiguousVenue = mode === "withdraw" && venuesForSel.length > 1;
-  const effProtocol = ambiguousVenue
-    ? (venue && venuesForSel.includes(venue) ? venue : venuesForSel[0])
-    : undefined;
+  // Venue choice. DEPOSIT: every venue with a market on this chain (Aave/Lista on
+  // BNB, Morpho on Base) so the user CHOOSES where to deposit. WITHDRAW: the venues
+  // the wallet actually holds, to disambiguate a multi-venue position (else the
+  // server replies AMBIGUOUS_POSITION).
+  const venuesForSel = mode === "deposit"
+    ? (depositVenuesByChain?.[chain] ?? [])
+    : (withdrawVenues?.[`${chain}:${effToken}`] ?? []);
+  const multiVenue = venuesForSel.length > 1;
+  // The bound venue: the user's pick if still valid, else the first available.
+  // Undefined only when there is no venue (withdraw with no position). Set for every
+  // deposit once markets load, so each deposit explicitly targets + consent-binds its venue.
+  const effProtocol = venuesForSel.length === 0
+    ? undefined
+    : (venue && venuesForSel.includes(venue) ? venue : venuesForSel[0]);
 
   const action = mode === "deposit" ? "agentic.yield_deposit" : "agentic.yield_withdraw";
   const endpoint =
@@ -503,18 +519,19 @@ function AgenticWalletEarnActions({
     }
     setBusy(true);
     try {
-      // Intent is { walletId, chain, token, amount } (+ protocol on a multi-venue
-      // withdraw) as string values — the server's requireIntentAuth rebuilds the same
-      // tuple, so the signature binds the venue the user approved.
+      // Intent is { walletId, chain, token, amount } (+ protocol when a venue is
+      // resolved) as string values — the server's requireIntentAuth rebuilds the same
+      // tuple, so the signature binds the EXACT venue the user approved.
       const intent: Record<string, string> = {
         walletId,
         chain,
         token: effToken,
         amount: amountValue,
       };
-      // Bind the chosen venue into the SIGNED intent when a venue was chosen
-      // (multi-venue withdraw); single-venue / deposit omit it (and the server omits
-      // it too, so the canonical bytes still match).
+      // Bind the chosen venue into the SIGNED intent (server rebuilds the same, so a
+      // swapped venue fails verification). Set for deposits (the chosen venue) and
+      // multi-venue withdraws; omitted only when no venue is resolvable, and the
+      // server omits it then too so the canonical bytes still match.
       if (effProtocol) intent.protocol = effProtocol;
       const auth = await getActionAuth(ownerAddress, action, intent, signMessage);
       if (!auth) {
@@ -532,8 +549,8 @@ function AgenticWalletEarnActions({
           chain,
           token: effToken,
           amount: amountValue,
-          // Venue choice for a multi-venue withdraw. NOT part of the signed intent
-          // (server reads it only to route), so it needs no re-sign.
+          // Venue choice (deposit venue / withdraw disambiguation). Also bound into
+          // the SIGNED intent above, so the server verifies the venue you approved.
           ...(effProtocol ? { protocol: effProtocol } : {}),
         }),
       });
@@ -573,7 +590,8 @@ function AgenticWalletEarnActions({
 
   return (
     <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-      {/* Chain selector: BNB (Aave V3) / Base (Morpho). Base is USDC-only. */}
+      {/* Chain selector. The VENUE is chosen separately below (a chain can offer
+          more than one: Aave + Lista on BNB). Base is USDC-only. */}
       <div className="flex items-center gap-1.5">
         {(["bnb", "base"] as const).map((c) => (
           <button
@@ -583,12 +601,7 @@ function AgenticWalletEarnActions({
             className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
             style={chain === c ? segSel : segUnsel}
           >
-            {(() => {
-              const chainLabel = c === "bnb" ? "BNB" : "Base";
-              const venue = venueByChain?.[c];
-              const venueLabel = venue ? venue.charAt(0).toUpperCase() + venue.slice(1) : null;
-              return venueLabel ? `${chainLabel} · ${venueLabel}` : chainLabel;
-            })()}
+            {c === "bnb" ? "BNB Chain" : "Base"}
           </button>
         ))}
       </div>
@@ -608,11 +621,12 @@ function AgenticWalletEarnActions({
         ))}
       </div>
 
-      {/* Venue selector — only when a withdraw is ambiguous (same token in >1 venue
-          on this chain, e.g. legacy Aave + Lista on BNB). */}
-      {ambiguousVenue && (
+      {/* Venue selector. DEPOSIT: pick where to put funds (Aave / Lista on BNB,
+          Morpho on Base). WITHDRAW: disambiguate a position held in >1 venue. Shown
+          only when more than one venue is available for the current chain/mode. */}
+      {multiVenue && (
         <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-white/40 mr-0.5 uppercase tracking-widest">From</span>
+          <span className="text-[10px] text-white/40 mr-0.5 uppercase tracking-widest">{mode === "deposit" ? "Into" : "From"}</span>
           {venuesForSel.map((v) => (
             <button
               key={v}

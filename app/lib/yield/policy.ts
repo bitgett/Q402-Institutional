@@ -27,7 +27,7 @@ import { getWalletHookConfig } from "@/app/lib/hooks/config";
 import { aaveTotalPositionValueStrict } from "./aave";
 import { morphoTotalPositionValueStrict } from "./morpho";
 import { listaTotalPositionValueStrict } from "./lista";
-import { yieldDepositProtocol, type YieldAction } from "./sign";
+import { yieldDepositProtocol, type YieldAction, type YieldProtocol } from "./sign";
 
 export interface YieldPolicyInput {
   owner: string;
@@ -36,6 +36,10 @@ export interface YieldPolicyInput {
   asset: AgenticToken;
   action: YieldAction;
   amount: string;
+  /** The CHOSEN deposit venue (user-selectable now), so the `allowedProtocols`
+   *  guardrail gates the actual destination, not the chain's default selector.
+   *  Omit (or undefined) to fall back to the chain's default deposit protocol. */
+  protocol?: string;
 }
 
 export interface YieldPolicyResult {
@@ -120,10 +124,11 @@ export async function enforceYieldPolicy(input: YieldPolicyInput): Promise<Yield
     return { allow: true };
   }
 
-  // Which protocol a NEW deposit on this chain settles into (aave=BNB default,
-  // morpho=Base, lista=BNB when LISTA_YIELD_ENABLED). Drives the protocol allowlist
-  // check below; the allocation read sums ALL venues, not just this one.
-  const protocol = yieldDepositProtocol(input.chain);
+  // The venue this deposit actually settles into: the user's CHOSEN venue when
+  // given (deposit is venue-selectable), else the chain's default selector. This
+  // drives the `allowedProtocols` allowlist so it gates the real destination, not
+  // a default the user may have overridden. The allocation read sums ALL venues.
+  const protocol = (input.protocol as YieldProtocol | undefined) ?? yieldDepositProtocol(input.chain);
 
   // Asset allowlist.
   if (Array.isArray(yp.allowedAssets) && yp.allowedAssets.length > 0
