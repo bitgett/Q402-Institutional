@@ -21,8 +21,9 @@ import { MCP_CLIENTS as AI_CLIENTS } from '@/app/lib/mcp-clients';
 // built-in DeFi integrations the agent can route to, shown as logos (not text)
 const INTEGRATIONS = [
   { name: 'Aave V3',        src: '/aave.svg' },
-  { name: 'Chainlink CCIP', src: '/link.jpg' },
+  { name: 'Lista',          src: '/lista.svg' },
   { name: 'Morpho',         src: '/logos/morpho.png' },
+  { name: 'Chainlink CCIP', src: '/link.jpg' },
 ];
 
 const CHAINS = [
@@ -92,7 +93,7 @@ const SECURITY = [
 // laid out as an asymmetric bento (areas map to .c1-bento grid-template-areas)
 const CAPABILITIES = [
   { t: 'Multichain Gas Tank', s: 'One pre-funded tank sponsors gas on all 11 chains. Top up once, your agents spend anywhere.', tag: 'Live', area: 'tank', icon: 'tank', feature: true },
-  { t: 'Stablecoin yield routing', s: 'Park idle balances into curated lending vaults from an agent prompt.', tag: 'Live', logo: '/aave.svg', area: 'aave', icon: 'aave' },
+  { t: 'Stablecoin yield routing', s: 'Park idle USDC / USDT into curated Aave, Lista, and Morpho vaults from an agent prompt.', tag: 'Live', logo: '/aave.svg', area: 'aave', icon: 'aave' },
   { t: 'CCIP cross-chain bridge', s: 'Move value across ETH / AVAX / ARB via Chainlink CCIP.', tag: 'Live', logo: '/link.jpg', area: 'ccip', icon: 'ccip' },
   { t: 'Agentic Wallets', s: 'Multi-wallet pipelines with per-wallet daily-spend caps.', tag: 'Live', area: 'wallet', icon: 'wallet' },
   { t: 'Recurring payments', s: 'Scheduled fires with a cancel window before each run.', tag: 'Live', area: 'recur', icon: 'recur' },

@@ -200,15 +200,6 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
   const unreadableChains = positions?.unavailableChains ?? [];
   const partialRead = (positions?.unavailable ?? false) && unreadableChains.length > 0;
 
-  // Best available supply APY across markets, for the teaser line.
-  // Guard the empty/all-non-finite case: Math.max() of [] is -Infinity,
-  // which would render "~—"; treat a non-finite max as "unknown" (null).
-  const finiteApys = (markets ?? [])
-    .map((m) => m.supplyApy)
-    .filter((n) => Number.isFinite(n));
-  const bestApyRaw = finiteApys.length > 0 ? Math.max(...finiteApys) : NaN;
-  const bestApy = Number.isFinite(bestApyRaw) ? bestApyRaw : null;
-
   // One row per (chain, asset, VENUE) so two venues on a chain (a legacy Aave and a
   // new Lista USDC position on BNB) never merge under one row and silently hide a
   // balance. Union the public markets (APY) with the wallet's positions (balance),
@@ -234,25 +225,16 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
     if (r.protocol && !acc.includes(r.protocol)) acc.push(r.protocol);
     return acc;
   }, []);
-  // Group rows under a chain header so venues stack per chain (scales as more
-  // venues/chains land; the chain then drops out of each row). First-seen order.
-  const chainGroups = new Map<string, typeof marketRows>();
-  for (const row of marketRows) {
-    const g = chainGroups.get(row.chain);
-    if (g) g.push(row);
-    else chainGroups.set(row.chain, [row]);
-  }
 
   return (
     <div className="relative">
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          {/* Venues are DATA-DRIVEN from the markets feed — overlapping logos +
-              a subtitle that auto-tracks whatever venues are live (Aave/Morpho
-              today; Lista appears on BNB the moment its deposit flag flips, and a
-              future venue just needs a VENUE_META row + a logo). */}
-          <div className="flex items-center shrink-0">
-            {(venues.length ? venues : ["aave", "morpho"]).slice(0, 4).map((v, i) => {
+          {/* Venues are DATA-DRIVEN from the markets feed. Logos are NOT overlapped —
+              three small distinct badges so Aave / Lista / Morpho stay individually
+              identifiable; the subtitle names them and auto-tracks live venues. */}
+          <div className="flex items-center gap-1 shrink-0">
+            {(venues.length ? venues : ["aave", "lista", "morpho"]).slice(0, 4).map((v) => {
               const meta = venueMeta(v);
               if (!meta.logo) return null;
               return (
@@ -261,10 +243,10 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
                   key={v}
                   src={meta.logo}
                   alt={meta.label}
-                  width={26}
-                  height={26}
+                  width={22}
+                  height={22}
                   className="rounded-full"
-                  style={{ marginLeft: i === 0 ? 0 : -9, boxShadow: "0 0 0 2px #0c1626" }}
+                  style={{ boxShadow: "0 0 0 1.5px #0c1626" }}
                 />
               );
             })}
@@ -296,114 +278,31 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
         <div className="text-white/50 text-[12px] py-3 text-center">Loading Earn positions…</div>
       ) : error ? (
         <div className="text-[11.5px] text-amber-300/80 py-1">{error}</div>
-      ) : marketRows.length > 0 ? (
-        <div className="space-y-2.5">
-          {[...chainGroups.entries()].map(([chain, rows]) => (
-            <div key={chain}>
-              {/* Chain header — venues for this chain stack beneath it. */}
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[9.5px] font-semibold uppercase tracking-wider text-white/35 shrink-0">{chainLabel(chain)}</span>
-                <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
-              </div>
-              <div className="space-y-2">
-                {rows.map((row) => {
-                  const vm = venueMeta(row.protocol);
-                  return (
-                    <div key={`${row.chain}:${row.asset}:${row.protocol ?? ""}`} className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={`/${row.asset.toLowerCase()}.svg`} alt={row.asset} width={18} height={18} className="rounded-full shrink-0" />
-                        <div className="min-w-0 leading-tight">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-white/90 font-medium font-mono text-[12.5px]">{row.asset}</span>
-                            <span className="text-emerald-300/90 text-[11px]">{pct(row.apy)} APY</span>
-                          </div>
-                          <div className="flex items-center gap-1 mt-0.5 min-w-0">
-                            {vm.logo && (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={vm.logo} alt={vm.label} width={11} height={11} className="rounded-full shrink-0" />
-                            )}
-                            <span className="text-white/55 text-[10px] truncate">{vm.label}</span>
-                          </div>
-                        </div>
-                      </div>
-                      {row.balance != null ? (
-                        <span className="text-emerald-300 font-mono text-[13px] shrink-0">{formatUsd(row.balance)}</span>
-                      ) : (
-                        <span className="text-white/30 font-mono text-[13px] shrink-0">—</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
       ) : (
-        // Teaser — subtle, no positions yet. Pulls the best live APY from
-        // the public markets feed when available.
-        <div className="text-[12.5px] text-white/80 leading-relaxed py-1">
-          Earn{" "}
-          <span className="text-emerald-300 font-medium">
-            {bestApy !== null ? `~${pct(bestApy)}` : "yield"}
-          </span>{" "}
-          on idle USDC / USDT via {venues.length ? venues.map((v) => venueMeta(v).label).join(", ") : "vetted lending vaults"}.
-        </div>
-      )}
-
-      {/* Partial read — some chains' on-chain balances couldn't be read this
-          cycle, so the list + total above are incomplete. Surface it instead
-          of passing a partial sum off as the full total. */}
-      {!loading && !error && partialRead && (
-        <div className="text-[11px] text-amber-300/80 mt-2 pt-2 border-t" style={{ borderColor: "rgba(247,202,22,0.12)" }}>
-          Couldn&apos;t read {unreadableChains.length} chain
-          {unreadableChains.length === 1 ? "" : "s"} ({unreadableChains.map(chainLabel).join(", ")}) —
-          total may be incomplete. Refresh to retry.
-        </div>
-      )}
-
-      {/* Deposit / Withdraw — gasless, owner session-sig auth. Hidden
-          loudly: if the v2 contract isn't deployed the first action gets a
-          503 yield_not_enabled and the controls collapse to "Coming soon"
-          instead of throwing at the user. */}
-      {!loading && (
-        <AgenticWalletEarnActions
-          ownerAddress={ownerAddress}
-          walletId={walletId}
-          signMessage={signMessage}
-          onChanged={() => { void loadPositions(); }}
-          canDeposit={canDeposit}
-          defaultToken={positions?.positions?.[0]?.asset === "USDT" ? "USDT" : "USDC"}
-          // Seed the chain tab to where the wallet actually holds a position so
-          // a withdraw doesn't default to BNB-Aave (empty) and revert on-chain
-          // when the only position is Base-Morpho. Falls back to bnb (deposit).
-          defaultChain={positions?.positions?.[0]?.chain === "base" ? "base" : "bnb"}
-          // chain -> ALL deposit venues with a market on that chain (Aave/Lista on
-          // BNB, Morpho on Base), ordered so the launched/featured venue defaults
-          // first. Drives the deposit venue selector so the user CHOOSES where to deposit.
-          depositVenuesByChain={(() => {
-            const ORDER: Record<string, number> = { lista: 0, morpho: 1, aave: 2 };
-            const m: Record<string, string[]> = {};
-            for (const mk of markets ?? []) {
-              if (!mk.protocol) continue;
-              (m[mk.chain] ??= []);
-              if (!m[mk.chain].includes(mk.protocol)) m[mk.chain].push(mk.protocol);
-            }
-            for (const c of Object.keys(m)) m[c].sort((a, b) => (ORDER[a] ?? 9) - (ORDER[b] ?? 9));
-            return m;
-          })()}
-          // `${chain}:${asset}` -> venues the wallet actually holds, so a withdraw
-          // can disambiguate when the same token sits in two venues on one chain.
-          withdrawVenues={(() => {
-            const m: Record<string, string[]> = {};
-            for (const p of positions?.positions ?? []) {
-              if (!(Number(p.balance) > 0) || !p.protocol) continue;
-              const k = `${p.chain}:${p.asset}`;
-              (m[k] ??= []).push(p.protocol);
-            }
-            return m;
-          })()}
-        />
+        <>
+          {/* Partial read — some chains' on-chain balances couldn't be read this
+              cycle, so the position balances + total are incomplete. Surface it
+              instead of passing a partial sum off as the full total. */}
+          {partialRead && (
+            <div className="text-[11px] text-amber-300/80 mb-2 pb-2 border-b" style={{ borderColor: "rgba(247,202,22,0.12)" }}>
+              Couldn&apos;t read {unreadableChains.length} chain
+              {unreadableChains.length === 1 ? "" : "s"} ({unreadableChains.map(chainLabel).join(", ")}) —
+              total may be incomplete. Refresh to retry.
+            </div>
+          )}
+          {/* The market list IS the selector: tap a row to set chain + venue + token
+              with the APY in view, then enter an amount — no separate chain/venue/token
+              control. Deposit lists every venue (choose where); withdraw lists only
+              what the wallet holds. Hidden loudly via 503 -> per-chain "coming soon". */}
+          <AgenticWalletEarnActions
+            ownerAddress={ownerAddress}
+            walletId={walletId}
+            signMessage={signMessage}
+            onChanged={() => { void loadPositions(); }}
+            canDeposit={canDeposit}
+            rows={marketRows}
+          />
+        </>
       )}
     </div>
   );
@@ -423,72 +322,58 @@ export function AgenticWalletEarnSection({ ownerAddress, walletId, signMessage, 
 // rest of the session so the controls don't keep prompting wallet popups
 // against a feature that can't settle.
 
+type EarnMarketRow = { chain: string; asset: string; protocol?: string; apy: number; balance: number | null };
+
 function AgenticWalletEarnActions({
   ownerAddress,
   walletId,
   signMessage,
   onChanged,
   canDeposit,
-  defaultToken,
-  defaultChain,
-  depositVenuesByChain,
-  withdrawVenues,
+  rows,
 }: {
   ownerAddress: string;
   walletId: string;
   signMessage: (message: string) => Promise<string | null>;
   onChanged: () => void;
   canDeposit: boolean;
-  /** Seeds the deposit/withdraw token to the wallet's supplied asset so the
-   *  control doesn't default to USDC while the position is USDT (and vice versa). */
-  defaultToken: "USDC" | "USDT";
-  /** Seeds the chain tab to the wallet's position chain so a withdraw targets
-   *  where the funds actually are (BNB-Aave vs Base-Morpho) instead of always
-   *  defaulting to BNB and reverting when the position lives on Base. */
-  defaultChain: "bnb" | "base";
-  /** chain -> all deposit venues (protocols) with a market on that chain, ordered
-   *  by feature priority, so the user can CHOOSE where to deposit (Aave / Lista on
-   *  BNB, Morpho on Base). */
-  depositVenuesByChain?: Record<string, string[]>;
-  /** `${chain}:${asset}` -> protocols the wallet holds a position in. When a
-   *  withdraw selection maps to >1 venue, the user picks which to pull from (the
-   *  server otherwise replies AMBIGUOUS_POSITION). */
-  withdrawVenues?: Record<string, string[]>;
+  /** Unified market+position rows (chain, asset, venue, APY, balance). The list
+   *  below IS the selector: tapping a row sets the chain + token + venue for the
+   *  action, so there's no separate chain/venue/token control and the rate you're
+   *  choosing is in view. */
+  rows: EarnMarketRow[];
 }) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
-  const [chain, setChain] = useState<"bnb" | "base">(defaultChain);
-  const [token, setToken] = useState<"USDC" | "USDT">(defaultToken);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [maxWithdraw, setMaxWithdraw] = useState(false);
-  const [venue, setVenue] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<{ action: string; txHash: string; chain: "bnb" | "base" } | null>(null);
+  const [okMsg, setOkMsg] = useState<{ action: string; txHash: string; chain: string } | null>(null);
   // Chains whose route returned 503 yield_not_enabled (the v2 impl isn't
   // deployed there yet). Tracked per chain: BNB can be live while Base is not,
-  // so a coming-soon chain disables only its own controls.
+  // so a coming-soon chain disables only its own row's action.
   const [comingSoonChains, setComingSoonChains] = useState<Set<string>>(new Set());
 
-  // Base settles into Morpho and the curated vault is USDC-only, so force USDC
-  // there: the user can't pick an unsupported token.
-  const baseOnly = chain === "base";
-  const effToken: "USDC" | "USDT" = baseOnly ? "USDC" : token;
-  const comingSoon = comingSoonChains.has(chain);
+  const rowKey = (r: { chain: string; asset: string; protocol?: string }) => `${r.chain}:${r.asset}:${r.protocol ?? ""}`;
+  const CHAIN_ORDER: Record<string, number> = { bnb: 0, base: 1 };
 
-  // Venue choice. DEPOSIT: every venue with a market on this chain (Aave/Lista on
-  // BNB, Morpho on Base) so the user CHOOSES where to deposit. WITHDRAW: the venues
-  // the wallet actually holds, to disambiguate a multi-venue position (else the
-  // server replies AMBIGUOUS_POSITION).
-  const venuesForSel = mode === "deposit"
-    ? (depositVenuesByChain?.[chain] ?? [])
-    : (withdrawVenues?.[`${chain}:${effToken}`] ?? []);
-  const multiVenue = venuesForSel.length > 1;
-  // The bound venue: the user's pick if still valid, else the first available.
-  // Undefined only when there is no venue (withdraw with no position). Set for every
-  // deposit once markets load, so each deposit explicitly targets + consent-binds its venue.
-  const effProtocol = venuesForSel.length === 0
-    ? undefined
-    : (venue && venuesForSel.includes(venue) ? venue : venuesForSel[0]);
+  // DEPOSIT lists every market (choose where to put funds); WITHDRAW lists only the
+  // venues the wallet actually holds a balance in (you can't pull from an empty
+  // market). Both grouped by chain, best-rate-first within a chain.
+  const listRows = (mode === "deposit" ? rows : rows.filter((r) => (r.balance ?? 0) > 0))
+    .slice()
+    .sort((a, b) => (CHAIN_ORDER[a.chain] ?? 9) - (CHAIN_ORDER[b.chain] ?? 9) || b.apy - a.apy);
+
+  // The chosen row: the user's pick if still in the current list, else the default
+  // (highest APY for deposit / first held position for withdraw — list is sorted).
+  const selectedRow: EarnMarketRow | null = listRows.find((r) => rowKey(r) === selectedKey) ?? listRows[0] ?? null;
+
+  // chain / token / venue are DERIVED from the selected row — no separate controls.
+  const chain = selectedRow?.chain ?? "bnb";
+  const effToken: "USDC" | "USDT" = selectedRow?.asset === "USDT" ? "USDT" : "USDC";
+  const effProtocol = selectedRow?.protocol;
+  const comingSoon = comingSoonChains.has(chain);
 
   const action = mode === "deposit" ? "agentic.yield_deposit" : "agentic.yield_withdraw";
   const endpoint =
@@ -497,15 +382,25 @@ function AgenticWalletEarnActions({
       : "/api/wallet/agentic/yield/withdraw";
 
   const isMax = mode === "withdraw" && maxWithdraw;
-  // amount string sent to BOTH the intent (signed) and the body — must match
-  // the server's canonical rebuild. "max" is only valid for withdraw.
+  // amount string sent to BOTH the intent (signed) and the body — must match the
+  // server's canonical rebuild. "max" is only valid for withdraw.
   const amountValue = isMax ? "max" : amount.trim();
   const amountValid = isMax || (/^\d+(\.\d+)?$/.test(amountValue) && Number(amountValue) > 0);
+
+  function selectRow(r: EarnMarketRow) {
+    setSelectedKey(rowKey(r));
+    setErr(null);
+    setOkMsg(null);
+  }
 
   async function submit() {
     if (busy || comingSoon) return;
     setErr(null);
     setOkMsg(null);
+    if (!selectedRow) {
+      setErr(mode === "withdraw" ? "No position to withdraw." : "Pick a market to deposit into.");
+      return;
+    }
     if (!amountValid) {
       setErr("Enter a positive amount.");
       return;
@@ -519,9 +414,9 @@ function AgenticWalletEarnActions({
     }
     setBusy(true);
     try {
-      // Intent is { walletId, chain, token, amount } (+ protocol when a venue is
-      // resolved) as string values — the server's requireIntentAuth rebuilds the same
-      // tuple, so the signature binds the EXACT venue the user approved.
+      // Intent is { walletId, chain, token, amount } (+ protocol) as string values —
+      // the server's requireIntentAuth rebuilds the same tuple, so the signature
+      // binds the EXACT chain/token/venue of the row the user tapped.
       const intent: Record<string, string> = {
         walletId,
         chain,
@@ -529,9 +424,8 @@ function AgenticWalletEarnActions({
         amount: amountValue,
       };
       // Bind the chosen venue into the SIGNED intent (server rebuilds the same, so a
-      // swapped venue fails verification). Set for deposits (the chosen venue) and
-      // multi-venue withdraws; omitted only when no venue is resolvable, and the
-      // server omits it then too so the canonical bytes still match.
+      // swapped venue fails verification). Every row carries a venue, so deposit and
+      // withdraw both bind it; omitted only if somehow unresolved (server omits then too).
       if (effProtocol) intent.protocol = effProtocol;
       const auth = await getActionAuth(ownerAddress, action, intent, signMessage);
       if (!auth) {
@@ -549,8 +443,8 @@ function AgenticWalletEarnActions({
           chain,
           token: effToken,
           amount: amountValue,
-          // Venue choice (deposit venue / withdraw disambiguation). Also bound into
-          // the SIGNED intent above, so the server verifies the venue you approved.
+          // Venue (deposit target / withdraw source). Also bound into the SIGNED
+          // intent above, so the server verifies the venue you approved.
           ...(effProtocol ? { protocol: effProtocol } : {}),
         }),
       });
@@ -581,32 +475,22 @@ function AgenticWalletEarnActions({
     }
   }
 
-  const labelCls = "text-[10px] text-white/80 uppercase tracking-widest font-medium";
   const inputStyle = { background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" } as const;
-
-  // Segmented-button styles shared by the chain + mode toggles.
   const segSel = { background: "rgba(247,202,22,0.14)", color: "#f9d64a", border: "1px solid rgba(247,202,22,0.35)" } as const;
   const segUnsel = { background: "rgba(255,255,255,0.02)", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.07)" } as const;
 
-  return (
-    <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
-      {/* Chain selector. The VENUE is chosen separately below (a chain can offer
-          more than one: Aave + Lista on BNB). Base is USDC-only. */}
-      <div className="flex items-center gap-1.5">
-        {(["bnb", "base"] as const).map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => { setChain(c); setErr(null); setOkMsg(null); }}
-            className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
-            style={chain === c ? segSel : segUnsel}
-          >
-            {c === "bnb" ? "BNB Chain" : "Base"}
-          </button>
-        ))}
-      </div>
+  // Chain groups for the selectable list (one compact row per market).
+  const groups: [string, EarnMarketRow[]][] = [];
+  for (const r of listRows) {
+    const g = groups.find(([c]) => c === r.chain);
+    if (g) g[1].push(r);
+    else groups.push([r.chain, [r]]);
+  }
 
-      {/* Deposit / Withdraw tab toggle */}
+  return (
+    <div className="mt-3 pt-3 border-t space-y-2.5" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+      {/* Mode toggle — governs the list (deposit = all markets to choose from;
+          withdraw = only the venues this wallet holds). */}
       <div className="flex items-center gap-1.5">
         {(["deposit", "withdraw"] as const).map((m) => (
           <button
@@ -621,36 +505,80 @@ function AgenticWalletEarnActions({
         ))}
       </div>
 
-      {/* Venue selector. DEPOSIT: pick where to put funds (Aave / Lista on BNB,
-          Morpho on Base). WITHDRAW: disambiguate a position held in >1 venue. Shown
-          only when more than one venue is available for the current chain/mode. */}
-      {multiVenue && (
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-white/40 mr-0.5 uppercase tracking-widest">{mode === "deposit" ? "Into" : "From"}</span>
-          {venuesForSel.map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => { setVenue(v); setErr(null); setOkMsg(null); }}
-              className="px-2.5 py-1 rounded-md text-[11px] font-medium capitalize transition-colors"
-              style={effProtocol === v ? segSel : segUnsel}
-            >
-              {v}
-            </button>
+      {/* Selectable market list. Tap a row to set chain + venue + token; the APY is
+          right there so the choice is made by rate, not by a blind selector. */}
+      {listRows.length === 0 ? (
+        <div className="text-[11.5px] text-white/45 py-1">
+          {mode === "withdraw"
+            ? "No positions to withdraw yet. Deposit to start earning."
+            : "No markets available right now. Refresh to retry."}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {groups.map(([c, rs], gi) => (
+            <div key={c} className={gi === 0 ? "" : "pt-0.5"}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[9.5px] font-semibold uppercase tracking-wider text-white/35 shrink-0">{chainLabel(c)}</span>
+                <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
+              </div>
+              <div className="space-y-1">
+                {rs.map((r) => {
+                  const vm = venueMeta(r.protocol);
+                  const sel = selectedRow != null && rowKey(r) === rowKey(selectedRow);
+                  return (
+                    <button
+                      key={rowKey(r)}
+                      type="button"
+                      onClick={() => selectRow(r)}
+                      className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg border transition-colors text-left"
+                      style={sel
+                        ? { background: "rgba(247,202,22,0.12)", borderColor: "rgba(247,202,22,0.38)" }
+                        : { background: "transparent", borderColor: "transparent" }}
+                    >
+                      {/* radio */}
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0 grid place-items-center"
+                        style={{ border: sel ? "1.5px solid #f9d64a" : "1.5px solid rgba(255,255,255,0.25)" }}
+                      >
+                        {sel && <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#f9d64a" }} />}
+                      </span>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/${r.asset.toLowerCase()}.svg`} alt={r.asset} width={17} height={17} className="rounded-full shrink-0" />
+                      <span className="text-white/90 font-medium font-mono text-[12.5px] w-[40px] shrink-0">{r.asset}</span>
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        {vm.logo && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={vm.logo} alt={vm.label} width={14} height={14} className="rounded-full shrink-0" />
+                        )}
+                        <span className="text-white/65 text-[11px] truncate">{vm.label}</span>
+                      </span>
+                      <span className="ml-auto text-emerald-300 font-mono text-[12.5px] font-semibold shrink-0">{pct(r.apy)}</span>
+                      <span
+                        className="font-mono text-[12px] shrink-0 w-[34px] text-right"
+                        style={{ color: r.balance != null ? "#6ee7b7" : "rgba(255,255,255,0.28)" }}
+                      >
+                        {r.balance != null ? formatUsd(r.balance) : "—"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         </div>
       )}
 
-      {comingSoon ? (
+      {/* Action row — amount + the selected token (read-only chip) + submit. The
+          "where" is the row tapped above, so no chain/venue/token control here. */}
+      {selectedRow && (comingSoon ? (
         <div className="text-[11.5px] text-white/45">
-          Deposit / Withdraw on {chain === "base" ? "Base" : "BNB Chain"}:{" "}
+          Deposit / Withdraw on {chainLabel(chain)}:{" "}
           <span className="text-emerald-300/70 font-medium">coming soon</span>. Q402 Yield isn&apos;t
           enabled on this chain yet.
         </div>
       ) : (
         <>
           <div className="flex items-stretch gap-1.5">
-            {/* Amount */}
             <div className="flex-1">
               <input
                 value={isMax ? "" : amount}
@@ -663,22 +591,12 @@ function AgenticWalletEarnActions({
                 style={inputStyle}
               />
             </div>
-            {/* Token select. Base routes to the Morpho USDC vault, so USDT is
-                hidden + the control is locked to USDC there. */}
-            <select
-              value={effToken}
-              onChange={(e) => setToken(e.target.value === "USDT" ? "USDT" : "USDC")}
-              disabled={busy || baseOnly}
-              aria-label="Token"
-              className="rounded-md border px-2 py-1.5 text-[12px] font-mono text-white disabled:opacity-50"
-              style={inputStyle}
-            >
-              <option value="USDC" style={{ background: "#0F1929", color: "#EAF2EC" }}>USDC</option>
-              {!baseOnly && (
-                <option value="USDT" style={{ background: "#0F1929", color: "#EAF2EC" }}>USDT</option>
-              )}
-            </select>
-            {/* Submit */}
+            {/* Token is fixed by the tapped market (read-only chip) */}
+            <div className="flex items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-mono text-white shrink-0" style={inputStyle}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/${effToken.toLowerCase()}.svg`} alt={effToken} width={15} height={15} className="rounded-full" />
+              {effToken}
+            </div>
             <button
               type="button"
               onClick={submit}
@@ -691,7 +609,7 @@ function AgenticWalletEarnActions({
 
           {/* Max toggle: withdraw only */}
           {mode === "withdraw" && (
-            <label className={`flex items-center gap-1.5 cursor-pointer ${labelCls} normal-case`}>
+            <label className="flex items-center gap-1.5 cursor-pointer">
               <input
                 type="checkbox"
                 checked={maxWithdraw}
@@ -699,11 +617,11 @@ function AgenticWalletEarnActions({
                 disabled={busy}
                 className="accent-emerald-400 w-3.5 h-3.5"
               />
-              <span className="text-[11px] text-white/55 tracking-normal normal-case">Withdraw full position (max)</span>
+              <span className="text-[11px] text-white/55">Withdraw full position (max)</span>
             </label>
           )}
         </>
-      )}
+      ))}
 
       {err && <div className="text-[11px] text-red-300/85">{err}</div>}
       {okMsg && (
