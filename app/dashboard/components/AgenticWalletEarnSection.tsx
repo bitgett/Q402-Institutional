@@ -488,7 +488,7 @@ function AgenticWalletEarnActions({
   }
 
   return (
-    <div className="mt-3 pt-3 border-t space-y-2.5" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+    <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
       {/* Mode toggle — governs the list (deposit = all markets to choose from;
           withdraw = only the venues this wallet holds). */}
       <div className="flex items-center gap-1.5">
@@ -514,14 +514,14 @@ function AgenticWalletEarnActions({
             : "No markets available right now. Refresh to retry."}
         </div>
       ) : (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           {groups.map(([c, rs], gi) => (
             <div key={c} className={gi === 0 ? "" : "pt-0.5"}>
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-2 mb-0.5">
                 <span className="text-[9.5px] font-semibold uppercase tracking-wider text-white/35 shrink-0">{chainLabel(c)}</span>
                 <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.06)" }} />
               </div>
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {rs.map((r) => {
                   const vm = venueMeta(r.protocol);
                   const sel = selectedRow != null && rowKey(r) === rowKey(selectedRow);
@@ -530,7 +530,7 @@ function AgenticWalletEarnActions({
                       key={rowKey(r)}
                       type="button"
                       onClick={() => selectRow(r)}
-                      className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg border transition-colors text-left"
+                      className="w-full flex items-center gap-2.5 px-2 py-1 rounded-lg border transition-colors text-left"
                       style={sel
                         ? { background: "rgba(247,202,22,0.12)", borderColor: "rgba(247,202,22,0.38)" }
                         : { background: "transparent", borderColor: "transparent" }}
