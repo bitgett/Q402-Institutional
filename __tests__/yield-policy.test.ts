@@ -160,7 +160,7 @@ describe("enforceYieldPolicy — asset allowlist", () => {
   });
 });
 
-describe("enforceYieldPolicy — protocol allowlist (Aave-only build)", () => {
+describe("enforceYieldPolicy — protocol allowlist (Aave/Lista/Morpho venues)", () => {
   it("denies when allowedProtocols excludes aave", async () => {
     mockConfig.getWalletHookConfig.mockResolvedValue({
       yieldPolicy: { enabled: true, allowedProtocols: ["morpho"] },

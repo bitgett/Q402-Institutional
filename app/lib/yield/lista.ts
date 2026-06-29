@@ -107,7 +107,11 @@ function envVaults(varName: string): Address[] {
 
 /** READ-side vault list for a chain: ENV (per asset, comma list) overrides the
  *  curated default; a malformed ENV falls through to the default so a typo can't
- *  blank the panel. Empty when the chain has neither. */
+ *  blank the panel. Empty when the chain has neither. Every candidate is filtered
+ *  through `isListaVaultAllowed` (the SAME allowlist the signer + the impl enforce)
+ *  so reads can NEVER advertise a vault that Q402 withdraw would reject — an ENV
+ *  override pointing at a non-allowlisted vault is dropped, not shown as a
+ *  read-only / un-withdrawable position (audit: read<->withdraw must agree). */
 function listaConfig(chain: string): { vaults: VaultCfg[] } | null {
   // Flag-INDEPENDENT: a configured vault is readable + withdrawable regardless of
   // the deposit flag (funds stay recoverable after a rollback). Deposit
@@ -120,7 +124,12 @@ function listaConfig(chain: string): { vaults: VaultCfg[] } | null {
     const fromEnv = envName ? envVaults(envName) : [];
     const def = LISTA_DEFAULT_VAULT[chain]?.[asset];
     const list = fromEnv.length > 0 ? fromEnv : def ? [def] : [];
-    for (const vault of list) vaults.push({ asset, vault });
+    // Only advertise withdrawable (allowlisted) vaults — an ENV override that
+    // isn't in the immutable contract/signer allowlist would otherwise strand
+    // funds: visible position, withdraw rejected.
+    for (const vault of list) {
+      if (isListaVaultAllowed(chain, asset, vault)) vaults.push({ asset, vault });
+    }
   }
   return vaults.length > 0 ? { vaults } : null;
 }

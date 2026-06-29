@@ -104,8 +104,9 @@ const MAXWITHDRAW_ABI = [
   { type: "function", name: "maxWithdraw", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "uint256" }] },
 ] as const;
 
-/** Default v2 impl per chain (the chain's PRIMARY protocol — Aave on BNB, Morpho
- *  on Base). Set after the audited deploy via YIELD_IMPL_<CHAIN>. */
+/** Default v2 impl per chain (the chain's DEFAULT protocol — Aave on BNB, Morpho
+ *  on Base). Set after the audited deploy via YIELD_IMPL_<CHAIN>. Lista does NOT
+ *  use this — it resolves its own YIELD_IMPL_<CHAIN>_LISTA via yieldImplFor. */
 export function yieldImplAddress(chain: AgenticChainKey): Address | undefined {
   const v = process.env[`YIELD_IMPL_${chain.toUpperCase()}`];
   return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as Address) : undefined;
