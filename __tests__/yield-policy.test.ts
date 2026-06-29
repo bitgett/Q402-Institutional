@@ -344,3 +344,26 @@ describe("acquireWalletChainLock — serialises one wallet+chain (safe-lease)", 
     expect(await acquireWalletChainLock(WALLET_B, "bnb")).not.toBeNull();
   });
 });
+
+// Audit P1: the deposit venue is user-selectable, so the `allowedProtocols`
+// guardrail MUST gate the CHOSEN venue, not the chain's default selector. In this
+// test env LISTA_YIELD_ENABLED is off, so the default deposit venue on bnb is
+// "aave" — these cases only pass if the gate honors the explicit `protocol`.
+describe("enforceYieldPolicy — chosen deposit venue gates allowedProtocols", () => {
+  it("denies when the user-chosen venue is NOT in allowedProtocols (even if the default IS)", async () => {
+    mockConfig.getWalletHookConfig.mockResolvedValue({
+      yieldPolicy: { enabled: true, allowedProtocols: ["aave"] }, // default (aave) would pass
+    });
+    const r = await enforceYieldPolicy(input({ protocol: "lista" })); // but the user chose lista
+    expect(r.allow).toBe(false);
+    expect(r.code).toBe("PROTOCOL_NOT_ALLOWED");
+  });
+
+  it("allows when the user-chosen venue IS in allowedProtocols (even if the default is NOT)", async () => {
+    mockConfig.getWalletHookConfig.mockResolvedValue({
+      yieldPolicy: { enabled: true, allowedProtocols: ["lista"] }, // default (aave) would be denied
+    });
+    const r = await enforceYieldPolicy(input({ protocol: "lista" })); // user chose lista → permitted
+    expect(r.allow).toBe(true); // no maxAllocationPct → passes the protocol gate
+  });
+});

@@ -190,6 +190,14 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
   // Guaranteed USDC/USDT by the validation above — yield never handles Q.
   const token = body.token as "USDC" | "USDT";
   const amount = body.amount as string;
+  // The chosen venue, validated once here so it is available to the policy gate, the
+  // idempotency key, AND the sign step. DEPOSIT: the user's selected venue; WITHDRAW:
+  // disambiguates a multi-venue position. Bound into the signed intent (resolveOwner).
+  const bodyProtocol =
+    typeof body.protocol === "string" && body.protocol.trim() ? body.protocol.trim().toLowerCase() : null;
+  if (bodyProtocol && !["aave", "morpho", "lista"].includes(bodyProtocol)) {
+    return NextResponse.json({ error: "INVALID_PROTOCOL" }, { status: 400 });
+  }
 
   const owner = await resolveOwner(body, action);
   if (owner instanceof NextResponse) return owner;
@@ -399,14 +407,12 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
 
   // Request fingerprint for content-bound idempotency (FIX 4). Hoisted (with
   // idemKey + settledKey) above the try so the catch can release the claim.
-  // Withdraw venue tag — a two-venue wallet (e.g. legacy Aave + Lista USDT on BNB)
-  // disambiguates a withdraw with `protocol`, so the idempotency claim + fingerprint
-  // MUST include it or the second venue's same-amount withdraw (commonly the
-  // byte-identical "...:withdraw:bnb:USDT:max") collides with the first's claim and
-  // is wrongly rejected as a duplicate for 30 min. Empty for deposits / single-venue
-  // (one venue per chain there, so no collision).
-  const venueTag = action === "withdraw" && typeof body.protocol === "string" && body.protocol.trim()
-    ? `:${body.protocol.trim().toLowerCase()}` : "";
+  // Venue tag on the idempotency claim + fingerprint — for BOTH actions, since a
+  // chain can host more than one venue (Aave + Lista on BNB). Without it, two
+  // same-amount ops to DIFFERENT venues (e.g. deposit 5 USDT into Lista then 5 into
+  // Aave, or two "withdraw bnb USDT max") share a key and the second is wrongly
+  // rejected as a duplicate. Empty when no venue is specified (MCP default-venue path).
+  const venueTag = bodyProtocol ? `:${bodyProtocol}` : "";
   const reqFingerprint = `${action}:${chain}:${token}:${amount}${venueTag}`;
   const settledKey = body.idempotencyKey ? `aw:yield:settled:${walletAddr}:${body.idempotencyKey}` : null;
   const idemKey = `aw:yield:idem:${walletAddr}:${action}:${chain}:${token}:${amount}${venueTag}`;
@@ -423,7 +429,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     // YieldPolicy gate (Hooks) — max allocation, asset/protocol allowlist,
     // etc. Fails closed on policy denial. Now read-checked UNDER the lock so
     // the cap can't be raced.
-    const policy = await enforceYieldPolicy({ owner, walletId: walletAddr, chain, asset: token, action, amount });
+    const policy = await enforceYieldPolicy({ owner, walletId: walletAddr, chain, asset: token, action, amount, protocol: bodyProtocol ?? undefined });
     if (!policy.allow) {
       await releaseLock();
       return NextResponse.json({ error: "YIELD_POLICY_DENIED", code: policy.code, message: policy.reason }, { status: 403 });
@@ -565,11 +571,10 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
     // chain's current deposit selector (which would sign the wrong vault and burn
     // relayer gas on a revert). STRICT read so a transient RPC error fails OPEN
     // (fund recovery is sacred); only a clean read decides NO_POSITION / AMBIGUOUS.
-    const wantProtocol =
-      action === "withdraw" && typeof body.protocol === "string" ? body.protocol.trim().toLowerCase() : null;
-    if (wantProtocol && !["aave", "morpho", "lista"].includes(wantProtocol)) {
-      return NextResponse.json({ error: "INVALID_PROTOCOL" }, { status: 400 });
-    }
+    // `bodyProtocol` was parsed + validated up top (chosen venue, bound into the
+    // signed intent + the policy gate + the idem key). On WITHDRAW it also filters
+    // the preflight to the venue the user named.
+    const wantProtocol = action === "withdraw" ? bodyProtocol : null; // withdraw preflight filter
     let withdrawPositions: Awaited<ReturnType<typeof listAllPositionsStrict>> | null = null;
     let chosenWithdraw: Awaited<ReturnType<typeof listAllPositionsStrict>>[number] | null = null;
     if (action === "withdraw") {
@@ -635,11 +640,12 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
 
     const signed = await signYieldAction({
       privateKey, expectedOwner: wallet.address as Address, chain, token, action, amount, facilitator,
-      // Withdraw routes by the position's OWN protocol + market (coexistence-safe).
-      // wantProtocol carries the caller's choice through a fail-open read (no
-      // chosenWithdraw) so we still target the right venue. Deposit leaves these
-      // undefined → signYieldAction uses the chain's deposit selector.
-      protocol: (chosenWithdraw?.protocol ?? wantProtocol ?? undefined) as YieldProtocol | undefined,
+      // Venue routing. DEPOSIT: the user's chosen venue (bodyProtocol); if omitted,
+      // signYieldAction falls back to the chain's deposit selector. WITHDRAW: the
+      // position's OWN protocol+market (coexistence-safe), with bodyProtocol carrying
+      // the caller's choice through a fail-open read. signYieldAction fails closed if
+      // the protocol has no market for this chain/asset.
+      protocol: (chosenWithdraw?.protocol ?? bodyProtocol ?? undefined) as YieldProtocol | undefined,
       marketAddress: chosenWithdraw?.marketAddress as Address | undefined,
     });
 

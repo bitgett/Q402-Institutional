@@ -11,14 +11,11 @@ import { morphoAdapter, morphoSupportedChains } from "./morpho";
 import { listaAdapter, listaDepositChains } from "./lista";
 import type { YieldAdapter, YieldMarket, YieldPosition } from "./types";
 
-/** One deposit venue per chain: Lista supersedes Aave on a chain where Lista
- *  deposits are enabled, so a stale Aave market row can't route a NEW deposit to
- *  the wrong venue. Withdraw/positions are intentionally NOT de-duped — every
- *  venue a wallet holds must stay visible + withdrawable. */
-function dedupeDepositMarkets(markets: YieldMarket[], chain: string): YieldMarket[] {
-  if (listaDepositChains().includes(chain)) return markets.filter((m) => m.protocol !== "aave");
-  return markets;
-}
+// ALL venues are surfaced per chain (Aave + Lista on BNB, Morpho on Base) so the
+// user CHOOSES where to deposit. Safe because the deposit now carries an explicit,
+// consent-bound `protocol` (the chosen venue is in the owner-signed intent), so a
+// market row can no longer mis-route a deposit. (Earlier we de-duped to one venue
+// per chain; that's removed in favor of user choice.)
 
 export type {
   YieldProtocol,
@@ -43,7 +40,7 @@ export async function listAllMarkets(chain: string): Promise<YieldMarket[]> {
   const lists = await Promise.all(
     YIELD_ADAPTERS.map((a) => a.listMarkets(chain).catch(() => [] as YieldMarket[])),
   );
-  return dedupeDepositMarkets(lists.flat(), chain);
+  return lists.flat();
 }
 
 /**
@@ -54,7 +51,7 @@ export async function listAllMarkets(chain: string): Promise<YieldMarket[]> {
  */
 export async function listAllMarketsStrict(chain: string): Promise<YieldMarket[]> {
   const lists = await Promise.all(YIELD_ADAPTERS.map((a) => a.listMarketsStrict(chain)));
-  return dedupeDepositMarkets(lists.flat(), chain);
+  return lists.flat();
 }
 
 /** A wallet's positions across all adapters for a chain (read, best-effort). */

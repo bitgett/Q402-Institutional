@@ -8,13 +8,15 @@ ERC-4626, asset() == BSC USDC, ~$330K TVL). Both stables are wired end to end (c
 default vault + immutable impl allowlist + drift test). The whole path is built and gated
 by `LISTA_YIELD_ENABLED` (default off → BNB stays on the Aave path, zero behavior change).
 
-**DEPLOYED 2026-06-29 (BNB mainnet):** impl `0x7EC2559a7A724ad02Ddce796710ebe04eE6064dD`
+**LIVE 2026-06-29 (BNB mainnet):** impl `0x7EC2559a7A724ad02Ddce796710ebe04eE6064dD`
 (deployer Alice `0xFe7bA1CDc7077F71855627F9983a70188826726f`). `verify-lista-wiring.mjs`
-PASS on it — NAME "Q402 BNB Chain" / VERSION 1 / IMPL_VERSION "2-yield-bnb-erc4626-lista",
-Gauntlet USDT + Lista USDC allowlisted, random vault/asset denied. MCP republished
-(`@quackai/q402-mcp@0.8.56`). REMAINING to go live (Vercel prod env): set
-`YIELD_IMPL_BNB_LISTA=0x7EC2559a7A724ad02Ddce796710ebe04eE6064dD` (leave `YIELD_IMPL_BNB`
-unset/Aave), then `LISTA_YIELD_ENABLED=true`, then smoke deposit + withdraw (USDT + USDC).
+PASS — NAME "Q402 BNB Chain" / VERSION 1 / IMPL_VERSION "2-yield-bnb-erc4626-lista",
+Gauntlet USDT + Lista USDC allowlisted, random vault/asset denied. Vercel prod has
+`YIELD_IMPL_BNB_LISTA=0x7EC2559a…` + `LISTA_YIELD_ENABLED=true` (YIELD_IMPL_BNB stays Aave),
+redeployed; reserves return Lista USDT+USDC. Smoke PASS on mainnet (0.1 USDT deposit→withdraw,
+both routed to Lista, gasless, recovered). MCP `@quackai/q402-mcp@0.8.58`. **Lista BNB yield is
+LIVE; nothing remaining.** Deposit venue is now USER-SELECTABLE across Aave/Lista/Morpho (the
+chosen venue is consent-bound into the signed intent + the Hooks `allowedProtocols` gate).
 
 ## Go-live sequence (do in order — fail-closed until step 4)
 
@@ -71,12 +73,14 @@ them. Re-audit verified all CLOSED + 1491/1491 tests / tsc / eslint green.
 5. **Principal key namespaced** `${chain}:${protocol}:${asset}` (legacy migrated on first
    touch); activity rows carry `protocol`. ✅
 
-**Still required before the flip (flip-batch, needs client lockstep — see below):**
-the MCP + dashboard withdraw need an optional `protocol` selector so a two-venue wallet
-can resolve the `409` (server already accepts it; the idempotency key is already
-venue-tagged). Binding protocol into the SIGNED intent + the "BNB = Aave" MCP
-descriptions are the remaining consent-integrity items. The EIP-712 witness already
-binds the exact vault on-chain, so these are integrity/UX, not a fund path.
+**DONE + LIVE (2026-06-29/30):** the withdraw `protocol` selector (MCP + dashboard),
+the protocol binding into the SIGNED intent (server resolveOwner + dashboard sign + MCP
+consentIntent), the read-fail fail-closed (`503 POSITION_READ_UNAVAILABLE`), and the
+venue-neutral copy all SHIPPED (`497bb22`, MCP `0.8.58`). The flag IS flipped:
+`LISTA_YIELD_ENABLED=true` + `YIELD_IMPL_BNB_LISTA=0x7EC2559a…` in Vercel prod, redeployed,
+and smoke-tested on BNB mainnet (0.1 USDT deposit→withdraw, both routed to Lista, gasless,
+funds recovered). Lista BNB yield is LIVE. Nothing here is "still required" — this section
+is historical.
 
 ## Copy / branding — BATCH WITH THE FLIP (step 5)
 
