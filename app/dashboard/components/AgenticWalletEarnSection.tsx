@@ -3,13 +3,13 @@
 /**
  * AgenticWalletEarnSection — the "Earn" surface for an Agent Wallet.
  *
- * Q402 Yield (Aave V3 on BNB, Morpho on Base). Renders, for one wallet:
+ * Q402 Yield (Aave V3 + Lista on BNB, Morpho on Base). Renders, for one wallet:
  *   - Each current supply position per (chain, asset): redeemable balance,
  *     supply APY, accrued yield (when the principal is tracked).
  *   - Total supplied USD across positions.
- *   - When the wallet has no positions, a subtle teaser pulled from the
- *     public markets feed ("Earn ~X% on idle USDC/USDT via Aave or Morpho").
- *   - Deposit/withdraw controls (AgenticWalletEarnActions), per chain.
+ *   - A selectable market list that IS the deposit/withdraw selector: tap a
+ *     market to set chain + venue + token with its live APY in view.
+ *   - Deposit/withdraw controls (AgenticWalletEarnActions) bound to the tapped row.
  *
  * The position/market reads use the cached SESSION sig (getAuthCreds);
  * markets are public (no auth). Deposit/withdraw are intent-bound writes.
@@ -67,7 +67,7 @@ interface Props {
   canDeposit?: boolean;
 }
 
-// Human chain label for the partial-read notice. Yield spans BNB (Aave) and
+// Human chain label for the partial-read notice. Yield spans BNB (Aave + Lista) and
 // Base (Morpho); the map mirrors the dashboard's CHAIN_LABEL convention so
 // added chains read cleanly (uppercased key as the fallback for anything unmapped).
 const CHAIN_LABEL: Record<string, string> = {
@@ -85,7 +85,7 @@ function chainLabel(c: string): string {
 // Yield venue (lending protocol) brand metadata. Data-driven so the card shows
 // whatever venues the markets/positions feed reports — a NEW venue only needs a
 // row here + its logo in /public, and it surfaces in the header + per-row chip
-// automatically (no hardcoded "Aave · Morpho" to update at flip time).
+// automatically (no hardcoded "Aave · Lista · Morpho" to update at flip time).
 const VENUE_META: Record<string, { label: string; logo: string }> = {
   aave: { label: "Aave V3", logo: "/aave.svg" },
   morpho: { label: "Morpho", logo: "/logos/morpho.png" },

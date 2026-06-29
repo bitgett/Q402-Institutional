@@ -8,7 +8,7 @@
  * Deposit guardrails come from the wallet owner's stored hook config
  * (getWalletHookConfig → yieldPolicy):
  *   - allowedAssets     — supply only these stablecoins.
- *   - allowedProtocols  — Aave-only build, so a list without "aave" denies.
+ *   - allowedProtocols  — venue allowlist (Aave/Lista/Morpho); a list that omits the chosen venue denies.
  *   - maxAllocationPct  — cap the share of the wallet's total stablecoins
  *                         (liquid USDC+USDT + already-supplied position)
  *                         that may sit in yield after this deposit.

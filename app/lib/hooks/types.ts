@@ -230,7 +230,7 @@ export interface WalletHookConfig {
    *   allowedAssets     — which stablecoins may be supplied. Absent/empty
    *                       = the hard USDC/USDT floor only.
    *   allowedProtocols  — which yield protocols may be used. This build is
-   *                       Aave-only; a list that excludes "aave" denies.
+   *                       venue allowlist (Aave/Lista/Morpho); a list that omits the chosen venue denies.
    *   maxAllocationPct  — ceiling (0–100) on the share of the wallet's
    *                       stablecoin holdings (liquid + already supplied)
    *                       that may sit in yield after the deposit. Guards
