@@ -50,6 +50,8 @@ import type { Scope, V2ViewId } from "../theme";
 import { ChainIcon, TokenIcon, StablePair, Q402Mark, SparkIcon, AgentBadgeIcon, GasTankIcon, GearIcon } from "../logos";
 import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
+import { getStoredRefCode } from "@/app/components/ReferralCapture";
+import { ReferralCard } from "@/app/dashboard/components/ReferralCard";
 import { useIsMobile } from "@/app/lib/use-is-mobile";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -455,10 +457,18 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
         setError("Sign the auth challenge to create a wallet.");
         return;
       }
+      // Forward a captured referral code (first-touch ?ref=). The server credits
+      // it only when this is the owner's FIRST wallet, so it's safe to always send.
+      const refCode = getStoredRefCode();
       const res = await fetch("/api/wallet/agentic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: addr, nonce: auth.nonce, signature: auth.signature }),
+        body: JSON.stringify({
+          address: addr,
+          nonce: auth.nonce,
+          signature: auth.signature,
+          ...(refCode ? { refCode } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1460,6 +1470,16 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       )}
                     </div>
                   </div>
+
+                  {/* Referral invite — your link + how many new users joined
+                      through it (a referee counts on their first Agent Wallet).
+                      Gated on activeWallet: you must have created an Agent Wallet
+                      yourself before you can generate a referral link. */}
+                  {!demoMode && addr && activeWallet && (
+                    <div style={{ marginTop: 11 }}>
+                      <ReferralCard ownerAddress={addr} signMessage={signMessage} />
+                    </div>
+                  )}
                 </section>
 
                 {/* Recent activity — real settlements scoped to this wallet

@@ -37,6 +37,7 @@ import {
   type AgenticWalletRecord,
 } from "@/app/lib/agentic-wallet";
 import { readReputationSummary } from "@/app/lib/erc8004-reputation";
+import { claimReferral } from "@/app/lib/referral";
 import { RELAYER_ADDRESS } from "@/app/lib/wallets";
 
 export const runtime = "nodejs";
@@ -198,6 +199,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 interface PostBody extends AuthBody {
   /** Optional human label, e.g. "Trading bot", "Subscriptions". ≤40 chars. */
   label?: string;
+  /** Optional referral code captured from a ?ref= link at signup. Credited to
+   *  the referrer only when this is the owner's FIRST wallet (a new user). */
+  refCode?: string;
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -229,6 +233,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const record = await createAgenticWallet(auth, { cap, label });
+
+    // Referral attribution — BEST-EFFORT, never blocks the create. Credit the
+    // referrer only when this is the owner's FIRST wallet (i.e. a genuinely new
+    // user arriving via a ?ref= link), not when an existing owner adds another
+    // wallet. claimReferral is idempotent (SET NX → one count per referee ever),
+    // so the small re-list race is harmless. A failure here must NOT fail the
+    // wallet creation the user just succeeded at.
+    if (typeof body?.refCode === "string" && body.refCode.trim()) {
+      try {
+        const wallets = await listAgenticWallets(auth);
+        if (wallets.length === 1) await claimReferral(auth, body.refCode.trim());
+      } catch (err) {
+        console.error("[agentic-wallet POST] referral claim failed (non-fatal):", err);
+      }
+    }
+
     return NextResponse.json({ wallet: projectPublic(record) }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
