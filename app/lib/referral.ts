@@ -43,6 +43,11 @@ export interface RefereeEntry {
   ts: number;
 }
 
+export interface LeaderboardEntry {
+  address: string;
+  count: number;
+}
+
 export interface ReferralStats {
   code: string;
   count: number;
@@ -52,6 +57,8 @@ export interface ReferralStats {
   rank: number | null;
   /** Total number of owners who have referred at least one user (ZSET size). */
   totalInviters: number;
+  /** Top inviters (highest count first) for the leaderboard panel. */
+  leaderboard: LeaderboardEntry[];
 }
 
 export interface ClaimResult {
@@ -89,13 +96,25 @@ export async function resolveReferrer(code: string): Promise<string | null> {
   return owner ?? null;
 }
 
+/** Top inviters (highest count first), for the public leaderboard panel. */
+export async function getReferralLeaderboard(topN = 10): Promise<LeaderboardEntry[]> {
+  // ZREVRANGE 0..topN-1 WITHSCORES — flat [member, score, member, score, …].
+  const flat = (await kv.zrange(LEADERBOARD_KEY, 0, topN - 1, { rev: true, withScores: true })) as (string | number)[];
+  const out: LeaderboardEntry[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) {
+    out.push({ address: String(flat[i]), count: Number(flat[i + 1]) });
+  }
+  return out;
+}
+
 export async function getReferralStats(owner: string): Promise<ReferralStats> {
   const code = await getOrCreateReferralCode(owner);
-  const [count, referees, rank0, totalInviters] = await Promise.all([
+  const [count, referees, rank0, totalInviters, leaderboard] = await Promise.all([
     kv.get<number>(countKey(owner)),
     kv.lrange<RefereeEntry>(refereesKey(owner), 0, -1),
     kv.zrevrank(LEADERBOARD_KEY, lower(owner)), // 0-based, or null if not ranked
     kv.zcard(LEADERBOARD_KEY),
+    getReferralLeaderboard(10),
   ]);
   return {
     code,
@@ -103,6 +122,7 @@ export async function getReferralStats(owner: string): Promise<ReferralStats> {
     referees: referees ?? [],
     rank: typeof rank0 === "number" ? rank0 + 1 : null,
     totalInviters: totalInviters ?? 0,
+    leaderboard,
   };
 }
 
