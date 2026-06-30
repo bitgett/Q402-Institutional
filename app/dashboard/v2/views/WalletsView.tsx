@@ -51,7 +51,6 @@ import { ChainIcon, TokenIcon, StablePair, Q402Mark, SparkIcon, AgentBadgeIcon, 
 import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
 import { getStoredRefCode } from "@/app/components/ReferralCapture";
-import { ReferralCard } from "@/app/dashboard/components/ReferralCard";
 import { useIsMobile } from "@/app/lib/use-is-mobile";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -1471,15 +1470,6 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                     </div>
                   </div>
 
-                  {/* Referral invite — your link + how many new users joined
-                      through it (a referee counts on their first Agent Wallet).
-                      Gated on activeWallet: you must have created an Agent Wallet
-                      yourself before you can generate a referral link. */}
-                  {!demoMode && addr && activeWallet && (
-                    <div style={{ marginTop: 11 }}>
-                      <ReferralCard ownerAddress={addr} signMessage={signMessage} />
-                    </div>
-                  )}
                 </section>
 
                 {/* Recent activity — real settlements scoped to this wallet

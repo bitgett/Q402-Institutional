@@ -139,6 +139,7 @@ const NAV_ITEMS: { id: V2ViewId; label: string }[] = [
   { id: "activity", label: "Activity" },
   { id: "treasury", label: "Treasury" },
   { id: "developer", label: "Developer" },
+  { id: "referral", label: "Referral" },
 ];
 
 export function TopNav({
