@@ -168,6 +168,11 @@ export function TopNav({
     >
       {NAV_ITEMS.map((item) => {
         const isActive = item.id === active;
+        // Referral is the growth surface — give it a pastel-pink accent so it
+        // stands out from the navy/yellow tabs (pink text always, pink-tinted
+        // highlight when active).
+        const isReferral = item.id === "referral";
+        const PINK = "#f79ac5";
         return (
           <button
             key={item.id}
@@ -175,8 +180,12 @@ export function TopNav({
             onClick={() => onChange(item.id)}
             style={{
               border: 0,
-              background: isActive ? "rgba(255,255,255,.065)" : "transparent",
-              color: isActive ? v2.text : v2.muted,
+              background: isActive
+                ? isReferral
+                  ? "rgba(247,154,197,.14)"
+                  : "rgba(255,255,255,.065)"
+                : "transparent",
+              color: isReferral ? PINK : isActive ? v2.text : v2.muted,
               padding: "8px 13px",
               borderRadius: 8,
               fontSize: fs.body,
