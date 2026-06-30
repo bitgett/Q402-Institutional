@@ -270,7 +270,8 @@ export function ReferralView({
   } as const;
 
   return (
-    <div style={{ maxWidth: 1100, marginTop: 14 }}>
+    // No width cap — fill the dashboard container (same width as the nav above).
+    <div style={{ marginTop: 14 }}>
       <SectionHead title="Referral" meta="Invite builders to Q402" />
 
       {!ownerAddress ? (
