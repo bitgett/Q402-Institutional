@@ -36,7 +36,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // guarantee behind it.)
   const wallets = await listAgenticWallets(result);
   if (wallets.length === 0) {
-    return NextResponse.json({ code: "", count: 0, referees: [], needsWallet: true });
+    return NextResponse.json({ code: "", count: 0, referees: [], rank: null, totalInviters: 0, needsWallet: true });
   }
 
   const stats = await getReferralStats(result);
