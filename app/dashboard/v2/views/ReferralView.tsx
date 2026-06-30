@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getAuthCreds } from "@/app/lib/auth-client";
+import { useIsMobile } from "@/app/lib/use-is-mobile";
 import { v2, subCard, fs, type V2ViewId, type Scope } from "../theme";
 import { SectionHead, shortAddr } from "../primitives";
 
@@ -15,6 +16,7 @@ interface ReferralStats {
   referees: RefereeEntry[];
   rank: number | null;
   totalInviters: number;
+  leaderboard: { address: string; count: number }[];
   needsWallet?: boolean;
 }
 
@@ -41,12 +43,12 @@ function relTime(ts: number, now: number): string {
 }
 
 /** Deterministic gradient + block avatar from an address (no library). */
-function Avatar({ address }: { address: string }) {
+function Avatar({ address, size = 30 }: { address: string; size?: number }) {
   const a = address.toLowerCase().replace(/^0x/, "").padEnd(16, "0");
   const h1 = parseInt(a.slice(0, 6), 16) % 360;
   const h2 = (parseInt(a.slice(6, 12), 16) % 360);
   const bits = parseInt(a.slice(12, 16), 16);
-  const id = `av-${a.slice(0, 12)}`;
+  const id = `av-${a.slice(0, 12)}-${size}`;
   const blocks = [];
   for (let i = 0; i < 4; i++) {
     if ((bits >> i) & 1) {
@@ -56,7 +58,7 @@ function Avatar({ address }: { address: string }) {
     }
   }
   return (
-    <svg width="30" height="30" viewBox="0 0 30 30" style={{ flex: "none" }} aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 30 30" style={{ flex: "none" }} aria-hidden>
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor={`hsl(${h1} 70% 58%)`} />
@@ -66,6 +68,63 @@ function Avatar({ address }: { address: string }) {
       <rect width="30" height="30" rx="15" fill={`url(#${id})`} />
       {blocks}
     </svg>
+  );
+}
+
+const MEDAL = ["#f9d64a", "#c0c8d4", "#cd7f4e"]; // gold / silver / bronze for ranks 1-3
+
+/** One leaderboard row: rank (medal-colored for top 3) + avatar + addr + count.
+ *  The current user's row is highlighted. */
+function LbRow({ rank, address, count, isYou }: { rank: number; address: string; count: number; isYou: boolean }) {
+  const medal = rank <= 3 ? MEDAL[rank - 1] : null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 9,
+        padding: "7px 9px",
+        borderRadius: 9,
+        background: isYou ? "var(--v2-accent-fill)" : "transparent",
+        border: isYou ? "1px solid var(--v2-accent-line)" : "1px solid transparent",
+      }}
+    >
+      <span style={{ width: 18, textAlign: "center", fontFamily: "var(--font-grotesk)", fontWeight: 700, fontSize: 12.5, color: medal ?? v2.muted2, flex: "none" }}>{rank}</span>
+      <Avatar address={address} size={22} />
+      <span style={{ fontFamily: "var(--font-grotesk)", fontSize: 12.5, color: v2.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{shortAddr(address)}</span>
+      {isYou && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".06em", color: v2.yellow }}>YOU</span>}
+      <span style={{ marginLeft: "auto", fontFamily: "var(--font-grotesk)", fontWeight: 600, fontSize: 13, color: v2.text, flex: "none" }}>{count}</span>
+    </div>
+  );
+}
+
+/** Top-inviters leaderboard panel. Appends the viewer's own row when they're
+ *  ranked but outside the visible top N, so they always see where they stand. */
+function Leaderboard({ entries, you, yourRank, yourCount }: { entries: { address: string; count: number }[]; you: string | null; yourRank: number | null; yourCount: number }) {
+  const youL = (you ?? "").toLowerCase();
+  const inTop = entries.some((e) => e.address.toLowerCase() === youL);
+  return (
+    <div style={{ ...subCard(13), padding: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 11 }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f9d64a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z" /><path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" /></svg>
+        <span style={{ fontSize: fs.cardTitle, fontWeight: 600, color: v2.text }}>Top inviters</span>
+      </div>
+      {entries.length === 0 ? (
+        <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5 }}>No inviters yet. Be the first to bring someone in.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {entries.map((e, i) => (
+            <LbRow key={e.address} rank={i + 1} address={e.address} count={e.count} isYou={e.address.toLowerCase() === youL} />
+          ))}
+          {!inTop && yourRank && youL && (
+            <>
+              <div style={{ textAlign: "center", color: v2.muted2, fontSize: 12, lineHeight: 1, padding: "2px 0" }}>···</div>
+              <LbRow rank={yourRank} address={youL} count={yourCount} isYou />
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -105,6 +164,7 @@ export function ReferralView({
   // "now" captured once at mount (lazy init) so the relative times stay pure for
   // render — react-hooks/purity forbids Date.now() in the render body.
   const [now] = useState(() => Date.now());
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +229,7 @@ export function ReferralView({
   }
 
   const card = { ...subCard(13), padding: 18 } as const;
+  const stateCard = { ...card, maxWidth: 560 } as const;
   const accentBtn = {
     border: `1px solid var(--v2-accent-line)`,
     background: "var(--v2-accent-fill)",
@@ -195,17 +256,17 @@ export function ReferralView({
   ];
 
   return (
-    <div style={{ maxWidth: 720, marginTop: 14 }}>
+    <div style={{ maxWidth: 1080, marginTop: 14 }}>
       <SectionHead title="Referral" meta="Invite builders to Q402" />
 
       {!ownerAddress ? (
-        <div style={{ ...card, color: v2.muted, fontSize: fs.body }}>Connect your wallet to see your referrals.</div>
+        <div style={{ ...stateCard, color: v2.muted, fontSize: fs.body }}>Connect your wallet to see your referrals.</div>
       ) : loading ? (
-        <div style={{ ...card, color: v2.muted, fontSize: fs.body }}>Loading your referrals…</div>
+        <div style={{ ...stateCard, color: v2.muted, fontSize: fs.body }}>Loading your referrals…</div>
       ) : err ? (
-        <div style={{ ...card, color: v2.muted2, fontSize: fs.label }}>{err}</div>
+        <div style={{ ...stateCard, color: v2.muted2, fontSize: fs.label }}>{err}</div>
       ) : needsWallet ? (
-        <div style={card}>
+        <div style={stateCard}>
           <div style={{ fontSize: fs.cardTitle, fontWeight: 600, color: v2.text }}>Create an Agent Wallet to unlock your link</div>
           <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 6, lineHeight: 1.55, maxWidth: 480 }}>
             Your referral link is tied to your account. Create your first Agent Wallet, then your invite link appears here.
@@ -215,7 +276,8 @@ export function ReferralView({
           </button>
         </div>
       ) : (
-        <>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) 330px", gap: 14, alignItems: "start" }}>
+          <div>
           {/* HERO — link + share + stats. */}
           <div style={card}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
@@ -305,7 +367,9 @@ export function ReferralView({
               </div>
             )}
           </div>
-        </>
+          </div>
+          <Leaderboard entries={stats?.leaderboard ?? []} you={ownerAddress} yourRank={stats?.rank ?? null} yourCount={stats?.count ?? 0} />
+        </div>
       )}
     </div>
   );

@@ -54,6 +54,12 @@ vi.mock("@vercel/kv", () => ({
       return sorted.indexOf(member);
     },
     zcard: async (key: string) => Object.keys((store.get(key) as Record<string, number>) ?? {}).length,
+    zrange: async (key: string, start: number, stop: number, opts?: { rev?: boolean; withScores?: boolean }) => {
+      const z = (store.get(key) as Record<string, number>) ?? {};
+      let e = Object.entries(z).sort((a, b) => (opts?.rev ? b[1] - a[1] : a[1] - b[1]));
+      e = e.slice(start, stop + 1);
+      return opts?.withScores ? e.flatMap(([m, s]) => [m, s]) : e.map(([m]) => m);
+    },
   },
 }));
 
@@ -136,6 +142,9 @@ describe("claimReferral", () => {
     expect(a.rank).toBe(1);
     expect(d.rank).toBe(2);
     expect(a.totalInviters).toBe(2);
+    // Leaderboard: highest count first (A:2, D:1).
+    expect(a.leaderboard.map((l) => l.address)).toEqual([A.toLowerCase(), D.toLowerCase()]);
+    expect(a.leaderboard[0].count).toBe(2);
   });
 
   it("rank is null with no referrals", async () => {
