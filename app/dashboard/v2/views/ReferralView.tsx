@@ -43,10 +43,10 @@ function relTime(ts: number, now: number): string {
 }
 
 /** Deterministic gradient + block avatar from an address (no library). */
-function Avatar({ address, size = 30 }: { address: string; size?: number }) {
+function Avatar({ address, size = 28 }: { address: string; size?: number }) {
   const a = address.toLowerCase().replace(/^0x/, "").padEnd(16, "0");
   const h1 = parseInt(a.slice(0, 6), 16) % 360;
-  const h2 = (parseInt(a.slice(6, 12), 16) % 360);
+  const h2 = parseInt(a.slice(6, 12), 16) % 360;
   const bits = parseInt(a.slice(12, 16), 16);
   const id = `av-${a.slice(0, 12)}-${size}`;
   const blocks = [];
@@ -71,10 +71,20 @@ function Avatar({ address, size = 30 }: { address: string; size?: number }) {
   );
 }
 
+/** A labeled stat block (Invited / Rank). Module-level (react-hooks/static-components). */
+function Stat({ n, label, color, sub }: { n: string; label: string; color: string; sub?: string }) {
+  return (
+    <div style={{ background: "rgba(255,255,255,.025)", border: `1px solid ${v2.line}`, borderRadius: 12, padding: "12px 18px", textAlign: "center", minWidth: 88 }}>
+      <div style={{ fontFamily: "var(--font-grotesk)", fontSize: 30, fontWeight: 600, color, lineHeight: 1, letterSpacing: "-.02em" }}>{n}</div>
+      <div style={{ fontSize: 9.5, letterSpacing: ".13em", textTransform: "uppercase", color: v2.muted2, marginTop: 6 }}>{label}</div>
+      {sub && <div style={{ fontSize: 9.5, color: v2.muted2, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
 const MEDAL = ["#f9d64a", "#c0c8d4", "#cd7f4e"]; // gold / silver / bronze for ranks 1-3
 
-/** One leaderboard row: rank (medal-colored for top 3) + avatar + addr + count.
- *  The current user's row is highlighted. */
+/** One leaderboard row: rank (medal-colored for top 3) + avatar + addr + count. */
 function LbRow({ rank, address, count, isYou }: { rank: number; address: string; count: number; isYou: boolean }) {
   const medal = rank <= 3 ? MEDAL[rank - 1] : null;
   return (
@@ -82,30 +92,29 @@ function LbRow({ rank, address, count, isYou }: { rank: number; address: string;
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 9,
-        padding: "7px 9px",
+        gap: 10,
+        padding: "8px 9px",
         borderRadius: 9,
         background: isYou ? "var(--v2-accent-fill)" : "transparent",
         border: isYou ? "1px solid var(--v2-accent-line)" : "1px solid transparent",
       }}
     >
-      <span style={{ width: 18, textAlign: "center", fontFamily: "var(--font-grotesk)", fontWeight: 700, fontSize: 12.5, color: medal ?? v2.muted2, flex: "none" }}>{rank}</span>
-      <Avatar address={address} size={22} />
-      <span style={{ fontFamily: "var(--font-grotesk)", fontSize: 12.5, color: v2.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{shortAddr(address)}</span>
+      <span style={{ width: 18, textAlign: "center", fontFamily: "var(--font-grotesk)", fontWeight: 700, fontSize: 13, color: medal ?? v2.muted2, flex: "none" }}>{rank}</span>
+      <Avatar address={address} size={24} />
+      <span style={{ fontFamily: "var(--font-grotesk)", fontSize: 13, color: v2.text, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{shortAddr(address)}</span>
       {isYou && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".06em", color: v2.yellow }}>YOU</span>}
       <span style={{ marginLeft: "auto", fontFamily: "var(--font-grotesk)", fontWeight: 600, fontSize: 13, color: v2.text, flex: "none" }}>{count}</span>
     </div>
   );
 }
 
-/** Top-inviters leaderboard panel. Appends the viewer's own row when they're
- *  ranked but outside the visible top N, so they always see where they stand. */
+/** Top-inviters leaderboard panel (right column). */
 function Leaderboard({ entries, you, yourRank, yourCount }: { entries: { address: string; count: number }[]; you: string | null; yourRank: number | null; yourCount: number }) {
   const youL = (you ?? "").toLowerCase();
   const inTop = entries.some((e) => e.address.toLowerCase() === youL);
   return (
-    <div style={{ ...subCard(13), padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 11 }}>
+    <div style={{ ...subCard(13), padding: 17 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f9d64a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z" /><path d="M17 5h2.5a1.5 1.5 0 0 1 0 5H17M7 5H4.5a1.5 1.5 0 0 0 0 5H7" /></svg>
         <span style={{ fontSize: fs.cardTitle, fontWeight: 600, color: v2.text }}>Top inviters</span>
       </div>
@@ -128,23 +137,24 @@ function Leaderboard({ entries, you, yourRank, yourCount }: { entries: { address
   );
 }
 
-/** A labeled stat chip (Invited / Rank). Module-level so it isn't recreated per
- *  render (react-hooks/static-components). */
-function Stat({ n, label, color }: { n: string; label: string; color: string }) {
-  return (
-    <div style={{ background: "rgba(255,255,255,.025)", border: `1px solid ${v2.line}`, borderRadius: 11, padding: "9px 15px", textAlign: "center", minWidth: 76 }}>
-      <div style={{ fontFamily: "var(--font-grotesk)", fontSize: 24, fontWeight: 600, color, lineHeight: 1, letterSpacing: "-.02em" }}>{n}</div>
-      <div style={{ fontSize: 9.5, letterSpacing: ".13em", textTransform: "uppercase", color: v2.muted2, marginTop: 5 }}>{label}</div>
-    </div>
-  );
-}
+// How-it-works steps with icons (upload / wallet / check).
+const STEP_ICONS = [
+  <svg key="1" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f9d64a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /><polyline points="16 6 12 2 8 6" /><line x1="12" y1="2" x2="12" y2="15" /></svg>,
+  <svg key="2" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f9d64a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /></svg>,
+  <svg key="3" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f9d64a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>,
+];
+const STEPS = [
+  { t: "Share your link", d: "X, Telegram, DM — anywhere builders are." },
+  { t: "They create a wallet", d: "Their first Agent Wallet via your link." },
+  { t: "You climb the board", d: "Counts toward your rank, one per new user." },
+];
 
 /**
- * Referral view (top-level dashboard tab). Invite link with one-tap share (X /
- * Telegram / copy), the owner's running count + leaderboard rank, a short how-it
- * works strip, and the list of users who joined through the link. A referral link
- * requires the owner to have created an Agent Wallet (the server returns an empty
- * code otherwise) → that case shows a create-a-wallet prompt.
+ * Referral view (top-level dashboard tab). Full-width hero (headline + invite
+ * link + one-tap share + Invited/Rank stats), a how-it-works strip, then two
+ * equal columns — who joined through the link, and the top-inviters leaderboard.
+ * A referral link requires an Agent Wallet (server returns an empty code
+ * otherwise) → that case shows a create-a-wallet prompt.
  */
 export function ReferralView({
   ownerAddress,
@@ -161,7 +171,7 @@ export function ReferralView({
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  // "now" captured once at mount (lazy init) so the relative times stay pure for
+  // "now" captured once at mount (lazy init) so relative times stay pure for
   // render — react-hooks/purity forbids Date.now() in the render body.
   const [now] = useState(() => Date.now());
   const isMobile = useIsMobile();
@@ -249,12 +259,6 @@ export function ReferralView({
     cursor: "pointer",
   } as const;
 
-  const STEPS = [
-    { n: "1", t: "Share your link", d: "X, Telegram, DM — anywhere." },
-    { n: "2", t: "They create a wallet", d: "Their first Agent Wallet via your link." },
-    { n: "3", t: "It counts", d: "Shows up below, one per new user." },
-  ];
-
   return (
     <div style={{ maxWidth: 1080, marginTop: 14 }}>
       <SectionHead title="Referral" meta="Invite builders to Q402" />
@@ -276,42 +280,32 @@ export function ReferralView({
           </button>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) 330px", gap: 14, alignItems: "start" }}>
-          <div>
-          {/* HERO — link + share + stats. */}
-          <div style={card}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start" }}>
+        <>
+          {/* HERO — headline + stats + invite link + share, full width. */}
+          <div style={{ ...subCard(13), padding: "22px 24px", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", right: -60, top: -90, width: 320, height: 320, borderRadius: "50%", background: "radial-gradient(circle, rgba(247,202,22,.10), transparent 62%)", pointerEvents: "none" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 24, alignItems: "flex-start", position: "relative", flexWrap: "wrap" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: fs.cardTitle, fontWeight: 600, color: v2.text }}>Your invite link</div>
-                <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 5, lineHeight: 1.55, maxWidth: 340 }}>
-                  Share it anywhere. When someone creates their first Agent Wallet through your link, it counts here.
+                <div style={{ fontSize: 10, letterSpacing: ".18em", textTransform: "uppercase", color: v2.yellow, fontWeight: 600 }}>Referral program</div>
+                <div style={{ fontFamily: "var(--font-grotesk)", fontSize: 25, fontWeight: 600, letterSpacing: "-.01em", marginTop: 8, color: v2.text }}>Invite builders to Q402</div>
+                <div style={{ color: v2.muted, fontSize: 13, marginTop: 7, lineHeight: 1.6, maxWidth: 430 }}>
+                  Share your link. Every builder who creates their first Agent Wallet through it counts toward your rank on the board.
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 9, flex: "none" }}>
+              <div style={{ display: "flex", gap: 10, flex: "none" }}>
                 <Stat n={String(stats?.count ?? 0)} label="Invited" color={v2.yellow} />
-                <Stat n={stats?.rank ? `#${stats.rank}` : "—"} label="Rank" color="#58c7f4" />
+                <Stat n={stats?.rank ? `#${stats.rank}` : "—"} label="Rank" color="#58c7f4" sub={stats?.rank ? `of ${stats.totalInviters}` : undefined} />
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 15 }}>
+            <div style={{ display: "flex", gap: 8, marginTop: 18, position: "relative", maxWidth: 640 }}>
               <input
                 readOnly
                 value={link}
                 onFocus={(e) => e.currentTarget.select()}
                 aria-label="Your referral link"
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  background: "rgba(255,255,255,.02)",
-                  border: `1px solid ${v2.line}`,
-                  borderRadius: 10,
-                  padding: "11px 13px",
-                  color: v2.text,
-                  fontSize: fs.body,
-                  fontFamily: "var(--font-grotesk)",
-                  textOverflow: "ellipsis",
-                }}
+                style={{ flex: 1, minWidth: 0, background: "rgba(255,255,255,.02)", border: `1px solid ${v2.line}`, borderRadius: 10, padding: "11px 13px", color: v2.text, fontSize: fs.body, fontFamily: "var(--font-grotesk)", textOverflow: "ellipsis" }}
               />
-              <button type="button" onClick={copy} style={{ ...accentBtn, padding: "11px 16px", fontSize: fs.body, display: "inline-flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
+              <button type="button" onClick={copy} style={{ ...accentBtn, padding: "11px 18px", fontSize: fs.body, display: "inline-flex", alignItems: "center", gap: 7, whiteSpace: "nowrap" }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
                 {copied ? "Copied" : "Copy"}
               </button>
@@ -324,52 +318,56 @@ export function ReferralView({
             </div>
           </div>
 
-          {/* HOW IT WORKS */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 12 }}>
-            {STEPS.map((s) => (
-              <div key={s.n} style={{ ...subCard(13), padding: 14 }}>
-                <div style={{ width: 22, height: 22, borderRadius: 7, background: "var(--v2-accent-fill)", border: `1px solid var(--v2-accent-line)`, color: v2.yellow, fontFamily: "var(--font-grotesk)", fontWeight: 600, fontSize: 12, display: "grid", placeItems: "center" }}>{s.n}</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: "rgba(255,255,255,.9)", marginTop: 9 }}>{s.t}</div>
-                <div style={{ fontSize: 11, color: v2.muted, marginTop: 3, lineHeight: 1.5 }}>{s.d}</div>
+          {/* HOW IT WORKS — full-width 3-step strip with icons. */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
+            {STEPS.map((s, i) => (
+              <div key={i} style={{ ...subCard(13), padding: "15px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  <span style={{ width: 30, height: 30, borderRadius: 9, background: "var(--v2-accent-fill)", border: `1px solid var(--v2-accent-line)`, display: "grid", placeItems: "center" }}>{STEP_ICONS[i]}</span>
+                  <span style={{ fontFamily: "var(--font-grotesk)", fontSize: 11, color: v2.muted2, fontWeight: 600 }}>Step {i + 1}</span>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: v2.text, marginTop: 11 }}>{s.t}</div>
+                <div style={{ fontSize: 11.5, color: v2.muted, marginTop: 3, lineHeight: 1.5 }}>{s.d}</div>
               </div>
             ))}
           </div>
 
-          {/* JOINED LIST */}
-          <div style={{ ...card, marginTop: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <div style={{ fontSize: fs.cardTitle, fontWeight: 600, color: v2.text }}>Joined through your link</div>
-              <div style={{ fontSize: fs.micro, color: v2.muted2 }}>{stats?.count ?? 0} total</div>
-            </div>
-            {!stats || stats.referees.length === 0 ? (
-              <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 10 }}>No one yet. Share your link to get started.</div>
-            ) : (
-              <div style={{ marginTop: 4 }}>
-                {stats.referees
-                  .slice()
-                  .reverse()
-                  .map((r, i) => {
-                    const isNew = now - r.ts < NEW_WINDOW_MS;
-                    return (
-                      <div key={`${r.address}-${i}`} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 0", borderTop: i === 0 ? "none" : `1px solid ${v2.line}` }}>
-                        <Avatar address={r.address} />
-                        <span style={{ fontFamily: "var(--font-grotesk)", fontSize: 13.5, color: v2.text }}>{shortAddr(r.address)}</span>
-                        {isNew && (
-                          <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: ".08em", color: "#55e6a5", background: "rgba(85,230,165,.12)", borderRadius: 5, padding: "2px 7px" }}>NEW</span>
-                        )}
-                        <span style={{ marginLeft: "auto", textAlign: "right" }}>
-                          <span style={{ display: "block", fontSize: 12, color: "rgba(255,255,255,.8)" }}>{fmtDate(r.ts)}</span>
-                          <span style={{ fontSize: 10.5, color: v2.muted2 }}>{relTime(r.ts, now)}</span>
-                        </span>
-                      </div>
-                    );
-                  })}
+          {/* BOTTOM — two equal columns: who joined, and the leaderboard. */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginTop: 12, alignItems: "start" }}>
+            <div style={{ ...subCard(13), padding: 17 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                <div style={{ fontSize: fs.cardTitle, fontWeight: 600, color: v2.text }}>Joined through your link</div>
+                <div style={{ fontSize: fs.micro, color: v2.muted2 }}>{stats?.count ?? 0} total</div>
               </div>
-            )}
+              {!stats || stats.referees.length === 0 ? (
+                <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 10 }}>No one yet. Share your link to get started.</div>
+              ) : (
+                <div>
+                  {stats.referees
+                    .slice()
+                    .reverse()
+                    .map((r, i) => {
+                      const isNew = now - r.ts < NEW_WINDOW_MS;
+                      return (
+                        <div key={`${r.address}-${i}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: i === 0 ? "none" : `1px solid ${v2.line}` }}>
+                          <Avatar address={r.address} size={28} />
+                          <span style={{ fontFamily: "var(--font-grotesk)", fontSize: 13, color: v2.text }}>{shortAddr(r.address)}</span>
+                          {isNew && (
+                            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".07em", color: "#55e6a5", background: "rgba(85,230,165,.12)", borderRadius: 5, padding: "2px 6px" }}>NEW</span>
+                          )}
+                          <span style={{ marginLeft: "auto", textAlign: "right" }}>
+                            <span style={{ display: "block", fontSize: 11.5, color: "rgba(255,255,255,.8)" }}>{fmtDate(r.ts)}</span>
+                            <span style={{ fontSize: 10, color: v2.muted2 }}>{relTime(r.ts, now)}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+            <Leaderboard entries={stats?.leaderboard ?? []} you={ownerAddress} yourRank={stats?.rank ?? null} yourCount={stats?.count ?? 0} />
           </div>
-          </div>
-          <Leaderboard entries={stats?.leaderboard ?? []} you={ownerAddress} yourRank={stats?.rank ?? null} yourCount={stats?.count ?? 0} />
-        </div>
+        </>
       )}
     </div>
   );
