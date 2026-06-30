@@ -17,5 +17,9 @@ export async function GET() {
   if (!key.ok) {
     return NextResponse.json({ error: "Relay not configured" }, { status: 503 });
   }
-  return NextResponse.json({ facilitator: key.address });
+  // The facilitator address is effectively constant; edge-cache it so the SDK /
+  // dashboard reads hit the CDN. Success only (the 503 above stays uncached).
+  const res = NextResponse.json({ facilitator: key.address });
+  res.headers.set("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+  return res;
 }

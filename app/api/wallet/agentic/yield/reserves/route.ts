@@ -56,5 +56,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // If EVERY requested chain failed there are zero markets to show, which
   // would read as "no markets" — surface a 503 instead.
   const allFailed = unavailableChains.length === chains.length && chains.length > 0;
-  return NextResponse.json(body, { status: allFailed ? 503 : 200 });
+  const res = NextResponse.json(body, { status: allFailed ? 503 : 200 });
+  // Edge-cache the PUBLIC, user-invariant market list so repeated dashboard /
+  // landing / MCP loads hit the CDN instead of re-running the multi-chain RPC +
+  // APY fan-out (the top Vercel Observability-event source). Cache ONLY a FULLY
+  // clean read (zero unavailable chains): a 503 (all failed) or a PARTIAL read
+  // (some chain's RPC blipped) must not be cached, or a recovered chain's markets
+  // would stay missing for the whole TTL. APY is display-only; deposits read live
+  // on-chain, so 60s staleness is harmless. The list is identical for every user,
+  // so a shared cache is safe.
+  if (unavailableChains.length === 0) {
+    res.headers.set("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+  }
+  return res;
 }
