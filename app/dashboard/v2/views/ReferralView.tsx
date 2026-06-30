@@ -107,7 +107,10 @@ export function ReferralView({
   } as const;
 
   return (
-    <div>
+    // Cap the width (the referral surface is light — a link + a list — so the
+    // shell's 1500px would stretch it) and add top breathing room since this view
+    // starts with a bare SectionHead right under the nav.
+    <div style={{ maxWidth: 720, marginTop: 14 }}>
       <SectionHead title="Referral" meta="Invite builders to Q402" />
 
       {!ownerAddress ? (
