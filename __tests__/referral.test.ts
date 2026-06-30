@@ -47,6 +47,13 @@ vi.mock("@vercel/kv", () => ({
       store.set(key, z);
       return z[member];
     },
+    zrevrank: async (key: string, member: string) => {
+      const z = (store.get(key) as Record<string, number>) ?? {};
+      if (!(member in z)) return null;
+      const sorted = Object.entries(z).sort((a, b) => b[1] - a[1]).map(([m]) => m);
+      return sorted.indexOf(member);
+    },
+    zcard: async (key: string) => Object.keys((store.get(key) as Record<string, number>) ?? {}).length,
   },
 }));
 
@@ -112,5 +119,28 @@ describe("claimReferral", () => {
     await claimReferral(B, code);
     await claimReferral(C, code);
     expect((await getReferralStats(A)).count).toBe(2);
+  });
+
+  it("ranks inviters on the leaderboard by count", async () => {
+    const D = "0xDddD0000000000000000000000000000000000d4"; // second referrer
+    const F = "0xEeeE0000000000000000000000000000000000e5"; // D's referee
+    const codeA = await getOrCreateReferralCode(A);
+    const codeD = await getOrCreateReferralCode(D);
+    // A refers two (B, C); D refers one (F) → A is #1, D is #2, 2 inviters total.
+    await claimReferral(B, codeA);
+    await claimReferral(C, codeA);
+    await claimReferral(F, codeD);
+
+    const a = await getReferralStats(A);
+    const d = await getReferralStats(D);
+    expect(a.rank).toBe(1);
+    expect(d.rank).toBe(2);
+    expect(a.totalInviters).toBe(2);
+  });
+
+  it("rank is null with no referrals", async () => {
+    const stats = await getReferralStats(A);
+    expect(stats.rank).toBeNull();
+    expect(stats.totalInviters).toBe(0);
   });
 });

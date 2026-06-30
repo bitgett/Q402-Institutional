@@ -47,6 +47,11 @@ export interface ReferralStats {
   code: string;
   count: number;
   referees: RefereeEntry[];
+  /** 1-based position on the all-inviters leaderboard, or null when count is 0
+   *  (not yet on the board). Derived from the ref:leaderboard ZSET. */
+  rank: number | null;
+  /** Total number of owners who have referred at least one user (ZSET size). */
+  totalInviters: number;
 }
 
 export interface ClaimResult {
@@ -86,11 +91,19 @@ export async function resolveReferrer(code: string): Promise<string | null> {
 
 export async function getReferralStats(owner: string): Promise<ReferralStats> {
   const code = await getOrCreateReferralCode(owner);
-  const [count, referees] = await Promise.all([
+  const [count, referees, rank0, totalInviters] = await Promise.all([
     kv.get<number>(countKey(owner)),
     kv.lrange<RefereeEntry>(refereesKey(owner), 0, -1),
+    kv.zrevrank(LEADERBOARD_KEY, lower(owner)), // 0-based, or null if not ranked
+    kv.zcard(LEADERBOARD_KEY),
   ]);
-  return { code, count: count ?? 0, referees: referees ?? [] };
+  return {
+    code,
+    count: count ?? 0,
+    referees: referees ?? [],
+    rank: typeof rank0 === "number" ? rank0 + 1 : null,
+    totalInviters: totalInviters ?? 0,
+  };
 }
 
 /**
