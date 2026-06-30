@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Poppins, JetBrains_Mono, Bricolage_Grotesque, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import Providers from "./components/Providers";
+import { ReferralCapture } from "./components/ReferralCapture";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -74,6 +75,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${poppins.variable} ${jetbrainsMono.variable} ${bricolage.variable} ${spaceGrotesk.variable}`}>
       <body className="font-poppins antialiased bg-navy text-white">
+        <ReferralCapture />
         <Providers>
           {children}
         </Providers>
