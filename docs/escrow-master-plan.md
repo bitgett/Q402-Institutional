@@ -1,9 +1,20 @@
 # Q402 Gasless Escrow — Master Plan (single source)
 
-Status: P0 contracts written + hardened after internal review (compile clean,
-14/14 tests incl. the EIP-7702 attacker-mismatch regression). NOT yet external-
-audited; NOT deployed. Canonical source = `Downloads/q402-avalanche/contracts/`
-(see "Source of truth" below). This doc covers the whole feature.
+> ⚠️ CURRENT STATUS (2026-07-02) — supersedes the planning text below.
+> - Contracts: v6-final (H-1/M-1/M-2 all fixed), 26 tests pass. **LIVE on BNB
+>   mainnet**: vault `0x56c2A0B14341bd3FEF3174714EF664D8bb6F1256`, lockImpl
+>   `0x1da993Ac47bf492A72FA8e5DCBcFb5C0AFDD8a56` (BscScan + Sourcify verified,
+>   real-USDT lock/release proven). External-audit package = `q402-escrow-audit`
+>   tag `escrow-audit-2026-07-02-v6-final`.
+> - Backend: **LIVE** (`ESCROW_ENABLED=1`) at `/api/escrow/*`. Record/marker TTL
+>   covers the 14d resolve window; a lost lock-write reconciles from on-chain state.
+> - H-1 CLOSED: a dispute can no longer strand funds — refund is buyer-available
+>   after `releaseDeadline + RESOLVE_WINDOW` (14d), and `resolve()` closes after
+>   that window so it can't front-run the timeout refund.
+> - MCP escrow tools built (unpublished) + dashboard UI pending.
+
+Status (historical): P0 contracts written + hardened after internal review.
+Canonical source = `Downloads/q402-avalanche/contracts/`.
 
 ⚠️ Internal review (2026-07-01) found and we closed: LockImpl `buyer==address(this)`
 binding (was a delegated-EOA theft vector), Vault `buyer==msg.sender` (now
@@ -143,9 +154,11 @@ Closed in P0 hardening (internal review 2026-07-01), each with a regression test
 7. **Facilitator binding** (`msg.sender == p.facilitator`) — parity with the
    deployed payment impl; the buyer's signature names the relayer. CLOSED.
 
-Remaining for external audit (P1):
-- Arbiter liveness: a Disputed escrow with an unresponsive arbiter sticks (no v1
-  fallback). Decide v2 reputation-weighted / fallback timeout.
+External-audit notes:
+- Arbiter liveness: **CLOSED (H-1)** — a Disputed escrow is no longer stuck: the
+  buyer's `refund` becomes available after `releaseDeadline + RESOLVE_WINDOW`
+  (14d), and `resolve()` is closed after that window so the arbiter can't
+  front-run the timeout. (v2 could add reputation-weighted arbitration.)
 - Backend token allowlist (USDC/USDT) + manifest drift test as defense-in-depth.
 - LockImpl happy-path needs a real EIP-7702 network (testnet, P2) — the london
   EVM unit tests cover it only via the negative (BuyerMismatch/UnauthorizedFacilitator).

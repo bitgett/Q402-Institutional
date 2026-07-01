@@ -86,7 +86,12 @@ export interface PublicEscrow {
   sandbox: boolean;
 }
 
-const GRACE_DAYS = 7;
+// MUST exceed the on-chain RESOLVE_WINDOW (14 days): a disputed escrow's
+// buyer-refund only becomes available at releaseDeadline + 14d, so the KV
+// record + markers have to survive past that (else the buyer loses the API
+// path to their gasless refund while the on-chain funds still sit locked).
+// 21 = 14d resolve window + 7d margin.
+const GRACE_DAYS = 21;
 const OWNER_INDEX_CAP = 500;
 const DEFAULT_RELEASE_DAYS = 7;
 const MAX_RELEASE_DAYS = 90;
