@@ -63,3 +63,7 @@ scripts/audit-balances.mjs
 scripts/subscribe-daemon.mjs
 scripts/enrich-row.mjs
 scripts/check-master.mjs
+
+# A2MCP relay key (secret — never commit)
+.a2mcp-relay-key.txt
+.a2mcp-owner.txt
