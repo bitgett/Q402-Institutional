@@ -11,7 +11,8 @@ import {
 import { ESCROW_ENABLED, getEscrowChain } from "@/app/lib/escrow-contracts";
 import {
   escrowFacilitator, settleEscrowLock, settleEscrowRelease, settleEscrowRefund,
-  settleEscrowDispute, settleEscrowResolve, type LockParams, type Authorization,
+  settleEscrowDispute, settleEscrowResolve, readEscrowOnchainState,
+  type LockParams, type Authorization,
 } from "@/app/lib/escrow-relayer";
 
 /**
@@ -95,6 +96,19 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         await markEscrowLocked(id, priorLock.txHash);
         return NextResponse.json({ status: "open", txHash: priorLock.txHash, reconciled: true, escrow: toPublicEscrow((await getEscrow(id))!) });
       }
+      // F4 hardening: no marker, but if the escrow already exists ON-CHAIN a prior
+      // lock landed while BOTH the marker + status writes were lost (KV outage).
+      // Reconcile from chain truth instead of re-broadcasting (which would revert
+      // EscrowExists) — this is what heals the "funds locked, record stuck" case.
+      const onchain = await readEscrowOnchainState(rec.chain, eid);
+      if (onchain === 1) {
+        await writeEscrowLockedMarker(id, { txHash: rec.lockTxHash ?? "reconciled", lockedAt: new Date().toISOString() }, rec.expiresAt);
+        await markEscrowLocked(id, rec.lockTxHash ?? "reconciled");
+        return NextResponse.json({ status: "open", reconciled: "onchain", escrow: toPublicEscrow((await getEscrow(id))!) });
+      }
+      if (onchain !== null && onchain !== 0) {
+        return NextResponse.json({ error: `Escrow already exists on-chain (state ${onchain}); cannot re-lock`, onchainState: onchain }, { status: 409 });
+      }
       if (!body.witnessSig || !body.authorization || !body.nonce || !deadline) {
         return NextResponse.json({ error: "lock needs { witnessSig, authorization, nonce, deadline }" }, { status: 400 });
       }
@@ -111,10 +125,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       const r = await settleEscrowLock(rec.chain, p, body.witnessSig, body.authorization);
       if (!r.ok) return NextResponse.json({ error: r.error }, { status: 502 });
       // Durable locked marker BEFORE the status flip: funds are now in the vault,
-      // so even if markEscrowLocked's write is lost the escrow can never be
-      // stranded as pending/expired (getEscrow reconciles from this marker).
-      await writeEscrowLockedMarker(id, { txHash: r.txHash, lockedAt: new Date().toISOString() }, rec.expiresAt);
-      await markEscrowLocked(id, r.txHash);
+      // so even if markEscrowLocked's write is lost the escrow is reconciled from
+      // this marker. CHECK both writes: if BOTH fail (KV outage) the funds are
+      // locked on-chain but the record is stuck — hold the action lock so a retry
+      // reconciles from on-chain state (above), and do NOT report a clean success.
+      const lockedOk = await writeEscrowLockedMarker(id, { txHash: r.txHash, lockedAt: new Date().toISOString() }, rec.expiresAt);
+      let flippedOk = false;
+      try { flippedOk = !!(await markEscrowLocked(id, r.txHash)); } catch { flippedOk = false; }
+      if (!lockedOk && !flippedOk) {
+        releaseOnExit = false; // keep the lock; retry heals from chain truth
+        return NextResponse.json({ status: "open", txHash: r.txHash, explorer: cfg.explorerTx + r.txHash, warning: "locked on-chain but the record write failed; retry to reconcile (funds are safe)" });
+      }
       return NextResponse.json({ status: "open", txHash: r.txHash, explorer: cfg.explorerTx + r.txHash, escrow: toPublicEscrow((await getEscrow(id))!) });
     }
 

@@ -144,3 +144,22 @@ export async function settleEscrowResolve(chain: string, escrowId: string, toSel
   const vault = new ethers.Contract(cfg.vault, VAULT_ABI, relayer);
   return broadcast(() => vault.resolve(escrowId, toSeller, nonce, deadline, arbiterSig));
 }
+
+/**
+ * Read the on-chain escrow state (0 None, 1 Open, 2 Released, 3 Refunded,
+ * 4 Disputed) — the authoritative truth. Used to reconcile a record whose KV
+ * write was lost after the lock tx landed, so a stuck `pending` record can be
+ * healed from the chain instead of stranding the buyer's locked funds.
+ */
+export async function readEscrowOnchainState(chain: string, escrowId: string): Promise<number | null> {
+  const cfg = getEscrowChain(chain);
+  if (!cfg) return null;
+  try {
+    const provider = new ethers.JsonRpcProvider(cfg.rpc, cfg.chainId);
+    const vault = new ethers.Contract(cfg.vault, VAULT_ABI, provider);
+    const e = await vault.getEscrow(escrowId);
+    return Number(e.state);
+  } catch {
+    return null;
+  }
+}
