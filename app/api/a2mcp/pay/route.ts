@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { kv } from "@vercel/kv";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import {
-  A2MCP_ENABLED, A2MCP_RELAY_KEY, A2MCP_RELAY_URL, A2MCP_PAY_DAILY_CAP, ETH_ADDR,
+  A2MCP_ENABLED, A2MCP_RELAY_URL, A2MCP_PAY_DAILY_CAP, ETH_ADDR,
   isA2mcpChain, isStableToken, payDescriptor,
 } from "@/app/lib/a2mcp";
+import { getActiveRelayKey } from "@/app/lib/a2mcp-key";
 
 /**
  * POST /api/a2mcp/pay  (OKX.AI ASP #2831, free A2MCP service)
@@ -35,7 +36,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   if (!A2MCP_ENABLED) return NextResponse.json({ error: "A2MCP service is not enabled" }, { status: 503 });
-  if (!A2MCP_RELAY_KEY) return NextResponse.json({ error: "A2MCP relay is not configured" }, { status: 503 });
+  const relayKey = await getActiveRelayKey(); // KV-stored auto-refreshed key, env fallback
+  if (!relayKey) return NextResponse.json({ error: "A2MCP relay is not configured" }, { status: 503 });
 
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "a2mcp-pay-ip", 20, 60))) {
@@ -92,7 +94,7 @@ export async function POST(req: NextRequest) {
 
   // Forward to the audited relay with the Q402-owned bounded key injected.
   const relayBody = {
-    apiKey: A2MCP_RELAY_KEY,
+    apiKey: relayKey,
     chain, token, from, to, amount, nonce, deadline, witnessSig, authorization,
     ...(eip3009Nonce ? { eip3009Nonce } : {}),
   };

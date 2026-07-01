@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/ofac-refresh",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/a2mcp-key-refresh",
+      "schedule": "11 4 * * *"
     }
   ]
 }
