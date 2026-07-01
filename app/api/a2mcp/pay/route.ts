@@ -70,15 +70,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Too many payments from this address, try again shortly" }, { status: 429 });
   }
 
-  // Hard daily cap on forwarded (gas-costing) calls — a code-level bound that
-  // makes an unbounded gas drain impossible regardless of how the key is set up.
-  // Increment BEFORE forwarding so the count reflects every call that can settle.
-  if (A2MCP_PAY_DAILY_CAP > 0) {
-    const dayKey = `a2mcp:paycount:${new Date().toISOString().slice(0, 10)}`;
+  // Hard daily cap on gas-sponsoring settlements — a code-level bound so an
+  // unbounded gas drain is impossible regardless of how the key is provisioned.
+  // Reserve a slot BEFORE forwarding (fail CLOSED on KV outage), then REFUND it
+  // if the relay did not settle — so rejected/malformed calls can't exhaust the
+  // day's free capacity (they cost no gas), only real settlements consume it.
+  const dayKey = A2MCP_PAY_DAILY_CAP > 0 ? `a2mcp:paycount:${new Date().toISOString().slice(0, 10)}` : null;
+  if (dayKey) {
     try {
       const n = await kv.incr(dayKey);
       if (n === 1) await kv.expire(dayKey, 172800); // ~2 days, self-evicting
       if (n > A2MCP_PAY_DAILY_CAP) {
+        await kv.decr(dayKey).catch(() => {}); // over-cap: don't hold the slot
         return NextResponse.json({ error: "Daily free-relay capacity reached, please try again tomorrow" }, { status: 429 });
       }
     } catch {
@@ -103,8 +106,11 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify(relayBody),
     });
   } catch {
+    if (dayKey) await kv.decr(dayKey).catch(() => {}); // no settlement — refund the slot
     return NextResponse.json({ error: "relay unreachable" }, { status: 502 });
   }
+  // Refund the reserved slot unless the relay actually settled (HTTP 2xx).
+  if (dayKey && !relayRes.ok) await kv.decr(dayKey).catch(() => {});
   const data = await relayRes.json().catch(() => ({ error: "relay returned a non-JSON response" }));
   return NextResponse.json(data, { status: relayRes.status });
 }
