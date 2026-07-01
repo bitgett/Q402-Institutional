@@ -102,8 +102,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       // EscrowExists) — this is what heals the "funds locked, record stuck" case.
       const onchain = await readEscrowOnchainState(rec.chain, eid);
       if (onchain === 1) {
-        await writeEscrowLockedMarker(id, { txHash: rec.lockTxHash ?? "reconciled", lockedAt: new Date().toISOString() }, rec.expiresAt);
-        await markEscrowLocked(id, rec.lockTxHash ?? "reconciled");
+        // Reconcile from chain truth. We DON'T have the original lock tx hash
+        // here (its record write was lost), so leave lockTxHash empty rather than
+        // stamping a fake "reconciled" string that would surface as a broken
+        // explorer link / corrupt the receipt.
+        const recoveredHash = rec.lockTxHash ?? "";
+        await writeEscrowLockedMarker(id, { txHash: recoveredHash, lockedAt: new Date().toISOString() }, rec.expiresAt);
+        await markEscrowLocked(id, recoveredHash);
         return NextResponse.json({ status: "open", reconciled: "onchain", escrow: toPublicEscrow((await getEscrow(id))!) });
       }
       if (onchain !== null && onchain !== 0) {
