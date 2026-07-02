@@ -299,6 +299,7 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate, fi
         <tbody>
           {displayed.map((e, i) => {
             const settleUrl = e.settleTxHash ? explorerTx(e.chain, e.settleTxHash) : "";
+            const lockUrl = e.lockTxHash ? explorerTx(e.chain, e.lockTxHash) : "";
             const now = Date.now();
             const deadlineMs = new Date(e.releaseDeadline).getTime();
             const refundReady =
@@ -322,11 +323,19 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate, fi
                         </span>
                       </>
                     )}
+                    {lockUrl && (
+                      <>
+                        <Dot />
+                        <a href={lockUrl} target="_blank" rel="noopener noreferrer" title="Funding (lock) transaction" style={{ color: v2.mint, fontFamily: displayFont, textDecoration: "none" }}>
+                          lock {shortHash(e.lockTxHash!)} ↗
+                        </a>
+                      </>
+                    )}
                     {settleUrl && (
                       <>
                         <Dot />
-                        <a href={settleUrl} target="_blank" rel="noopener noreferrer" style={{ color: v2.yellow, fontFamily: displayFont, textDecoration: "none" }}>
-                          {shortHash(e.settleTxHash!)} ↗
+                        <a href={settleUrl} target="_blank" rel="noopener noreferrer" title="Settlement (release/refund) transaction" style={{ color: v2.yellow, fontFamily: displayFont, textDecoration: "none" }}>
+                          settle {shortHash(e.settleTxHash!)} ↗
                         </a>
                       </>
                     )}
