@@ -71,8 +71,20 @@ const STATUS: Record<PublicEscrow["status"], { color: string; label: string }> =
   expired: { color: v2.muted, label: "Expired" },
 };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 const RESOLVE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // matches on-chain RESOLVE_WINDOW
+
+/** Actionable vs settled buckets, for the left-rail filter + counts. */
+const ACTIVE_STATUSES = new Set<PublicEscrow["status"]>(["pending", "open", "disputed"]);
+function bucketOf(s: PublicEscrow["status"]): "active" | "history" {
+  return ACTIVE_STATUSES.has(s) ? "active" : "history";
+}
+export type EscrowFilter = "active" | "history" | "all";
+export interface EscrowCounts {
+  active: number;
+  history: number;
+  total: number;
+}
 
 function fmtDate(iso: string) {
   const d = new Date(iso);
@@ -89,9 +101,13 @@ export interface EscrowListProps {
   refreshKey?: number;
   /** Opens the "New escrow" composer (empty-state CTA). */
   onCreate?: () => void;
+  /** Show only actionable ("active") or settled ("history") escrows; default all. */
+  filter?: EscrowFilter;
+  /** Reports {active, history, total} after each fetch (for the rail badges). */
+  onCounts?: (c: EscrowCounts) => void;
 }
 
-export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: EscrowListProps) {
+export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate, filter = "all", onCounts }: EscrowListProps) {
   const { signTypedData } = useWallet();
   const [escrows, setEscrows] = useState<PublicEscrow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,6 +165,15 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: 
   useEffect(() => {
     void fetchPage(0, false);
   }, [fetchPage, refreshKey]);
+
+  // Report status counts to the parent (left-rail badges). Counts cover the
+  // whole loaded set regardless of the display filter.
+  useEffect(() => {
+    if (!onCounts) return;
+    let active = 0;
+    for (const e of escrows) if (bucketOf(e.status) === "active") active++;
+    onCounts({ active, history: escrows.length - active, total: escrows.length });
+  }, [escrows, onCounts]);
 
   const runAction = useCallback(
     async (esc: PublicEscrow, action: EscrowAction) => {
@@ -228,7 +253,10 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: 
   if (!ownerAddress) return <Empty text="Connect your wallet to see your escrows." />;
   if (loadError) return <Empty text={loadError} tone="red" />;
   if (loading && escrows.length === 0) return <Empty text="Loading escrows…" />;
-  if (escrows.length === 0) {
+
+  const displayed = filter === "all" ? escrows : escrows.filter((e) => bucketOf(e.status) === filter);
+  if (displayed.length === 0) {
+    const isHistory = filter === "history";
     return (
       <div style={{ padding: "44px 20px", textAlign: "center" }}>
         <div
@@ -241,13 +269,15 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: 
           <VaultGlyph size={26} />
         </div>
         <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.title, fontWeight: 600, marginTop: 16 }}>
-          No escrows yet
+          {isHistory ? "Nothing settled yet" : filter === "active" ? "No active escrows" : "No escrows yet"}
         </div>
         <div style={{ color: v2.muted, fontSize: fs.base, lineHeight: 1.55, maxWidth: 380, margin: "6px auto 0" }}>
-          Create one to hold funds safely until the work is delivered, then release to the seller or get refunded.
+          {isHistory
+            ? "Released, refunded, and disputed escrows will show up here once they settle."
+            : "Create one to hold funds safely until the work is delivered, then release to the seller or get refunded."}
         </div>
-        {onCreate && (
-          <button onClick={onCreate} style={emptyCta}>Create your first escrow</button>
+        {!isHistory && onCreate && (
+          <button onClick={onCreate} style={emptyCta}>Create {filter === "active" ? "an" : "your first"} escrow</button>
         )}
       </div>
     );
@@ -267,7 +297,7 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: 
           </tr>
         </thead>
         <tbody>
-          {escrows.map((e, i) => {
+          {displayed.map((e, i) => {
             const settleUrl = e.settleTxHash ? explorerTx(e.chain, e.settleTxHash) : "";
             const now = Date.now();
             const deadlineMs = new Date(e.releaseDeadline).getTime();
@@ -275,7 +305,7 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: 
               (e.status === "open" && now >= deadlineMs) ||
               (e.status === "disputed" && now >= deadlineMs + RESOLVE_WINDOW_MS);
             return (
-              <tr key={e.id} style={{ borderBottom: i === escrows.length - 1 ? "none" : `1px solid rgba(255,255,255,.05)` }}>
+              <tr key={e.id} style={{ borderBottom: i === displayed.length - 1 ? "none" : `1px solid rgba(255,255,255,.05)` }}>
                 <Td>
                   <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500 }}>{e.memo || "Escrow"}</div>
                   <div style={{ fontSize: fs.body, color: v2.muted2, marginTop: 3, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
