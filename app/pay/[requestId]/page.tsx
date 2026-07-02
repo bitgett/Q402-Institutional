@@ -15,7 +15,7 @@ import { use, useEffect, useState } from "react";
 
 const CHAIN_META: Record<
   string,
-  { name: string; logo: string; explorer?: string; explorerName?: string }
+  { name: string; logo: string; explorer?: string; explorerName?: string; bg?: string }
 > = {
   bnb: { name: "BNB Chain", logo: "/bnb.png", explorer: "https://bscscan.com/tx/", explorerName: "BscScan" },
   eth: { name: "Ethereum", logo: "/eth.png", explorer: "https://etherscan.io/tx/", explorerName: "Etherscan" },
@@ -28,6 +28,7 @@ const CHAIN_META: Record<
   scroll: { name: "Scroll", logo: "/scroll.png", explorer: "https://scrollscan.com/tx/", explorerName: "Scrollscan" },
   arbitrum: { name: "Arbitrum", logo: "/arbitrum.png", explorer: "https://arbiscan.io/tx/", explorerName: "Arbiscan" },
   base: { name: "Base", logo: "/base.png", explorer: "https://basescan.org/tx/", explorerName: "Basescan" },
+  robinhood: { name: "Robinhood Chain", logo: "/robinhood.svg", explorer: "https://robinhoodchain.blockscout.com/tx/", explorerName: "Blockscout", bg: "#00C805" },
 };
 
 interface PublicRequest {
@@ -185,7 +186,7 @@ export default function PayRequestPage({ params }: { params: Promise<{ requestId
                   <Row label="Network">
                     <span className="inline-flex items-center gap-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      {chain?.logo && <img src={chain.logo} alt="" width={16} height={16} className="rounded-full" />}
+                      {chain?.logo && <img src={chain.logo} alt="" width={16} height={16} className="rounded-full" style={chain.bg ? { background: chain.bg, objectFit: "contain", padding: 2, boxSizing: "border-box" } : undefined} />}
                       <span className="text-white/85">{chain?.name ?? req.chain}</span>
                     </span>
                   </Row>

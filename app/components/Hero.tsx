@@ -122,7 +122,7 @@ export default function Hero() {
                 </span>
               </span>
               <div className="flex flex-wrap items-center gap-2">
-                {[
+                {([
                   { img: "/bnb.png",       label: "BNB"  },
                   { img: "/eth.png",       label: "ETH"  },
                   { img: "/mantle.png",    label: "MNT"  },
@@ -134,14 +134,15 @@ export default function Hero() {
                   { img: "/scroll.png",    label: "SCR"  },
                   { img: "/arbitrum.png",  label: "ARB"  },
                   { img: "/base.png",      label: "BASE" },
-                ].map((c, i) => (
+                  { img: "/robinhood.svg", label: "RH", bg: "#00C805", contain: true },
+                ] as { img: string; label: string; bg?: string; contain?: boolean }[]).map((c, i) => (
                   <span
                     key={c.label}
                     className="hero-rise w-6 h-6 rounded-full overflow-hidden border border-white/10 flex-shrink-0"
-                    style={{ animationDelay: `${0.15 + i * 0.06}s` }}
+                    style={{ animationDelay: `${0.15 + i * 0.06}s`, ...(c.bg ? { background: c.bg } : {}) }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={c.img} alt={c.label} className="w-full h-full object-cover" />
+                    <img src={c.img} alt={c.label} className={c.contain ? "w-full h-full object-contain p-[3px]" : "w-full h-full object-cover"} />
                   </span>
                 ))}
               </div>
@@ -221,7 +222,7 @@ export default function Hero() {
                   { value: "17K+",    label: "MCP installs",      sub: "and growing",      live: true,  accent: "yellow" },
                   { value: "100K+",   label: "Settlements",       sub: "gasless, onchain", live: true,  accent: "cyan" },
                   { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "white" },
-                  { value: "11",      label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
+                  { value: "12",      label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
                 ].map((s, i) => {
                   const stripeColor =
                     s.accent === "yellow" ? "rgba(245,197,24,0.55)"
