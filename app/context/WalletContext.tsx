@@ -16,6 +16,8 @@ interface WalletCtx {
   disconnect: () => void;
   /** Sign an arbitrary message with the connected wallet (personal_sign). */
   signMessage: (message: string) => Promise<string | null>;
+  /** Sign EIP-712 typed data with the connected wallet (eth_signTypedData_v4). */
+  signTypedData: (typedData: unknown) => Promise<string | null>;
 }
 
 const WalletContext = createContext<WalletCtx>({
@@ -25,6 +27,7 @@ const WalletContext = createContext<WalletCtx>({
   connectWith: async () => null,
   disconnect: () => {},
   signMessage: async () => null,
+  signTypedData: async () => null,
 });
 
 type EvProvider = {
@@ -128,6 +131,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
   }, [address]);
 
+  /**
+   * Sign EIP-712 typed data with eth_signTypedData_v4. Same getActiveProvider()
+   * routing as signMessage so the signature comes from the vendor the user
+   * picked. Used for escrow release/dispute (a vault-domain typed-data sig);
+   * returns null if no wallet or the user rejects.
+   */
+  const signTypedData = useCallback(async (typedData: unknown): Promise<string | null> => {
+    if (!address) return null;
+    const provider = getActiveProvider() as
+      | { request: (a: { method: string; params: unknown[] }) => Promise<string> }
+      | null;
+    if (!provider) return null;
+    try {
+      return await provider.request({
+        method: "eth_signTypedData_v4",
+        params: [address, typeof typedData === "string" ? typedData : JSON.stringify(typedData)],
+      });
+    } catch {
+      return null;
+    }
+  }, [address]);
+
   // Restore on mount
   useEffect(() => {
     const init = async () => {
@@ -189,6 +214,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       connectWith,
       disconnect,
       signMessage,
+      signTypedData,
     }}>
       {children}
     </WalletContext.Provider>
