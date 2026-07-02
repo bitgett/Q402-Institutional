@@ -4,9 +4,9 @@
  * Browser-side escrow action signing (release / dispute).
  *
  * The buyer releases and a party disputes by signing an EIP-712 message against
- * the VAULT's domain (verifyingContract = vault). Unlike a lock — which needs an
+ * the VAULT's domain (verifyingContract = vault). Unlike a lock - which needs an
  * EIP-7702 authorization that injected wallets can't produce (funding stays on
- * the agent/MCP path) — release/dispute are ordinary typed-data signatures that
+ * the agent/MCP path) - release/dispute are ordinary typed-data signatures that
  * MetaMask / OKX sign via eth_signTypedData_v4. The relayer then broadcasts +
  * sponsors gas; the signature is the sole fund authority.
  *
@@ -25,7 +25,7 @@ export interface EscrowInfo {
   explorerTx: string;
 }
 
-// EIP-712 type sets — identical to Q402EscrowVault RELEASE_TYPEHASH /
+// EIP-712 type sets - identical to Q402EscrowVault RELEASE_TYPEHASH /
 // DISPUTE_TYPEHASH (bytes32 escrowId, uint256 nonce, uint256 deadline).
 const ACTION_FIELDS = [
   { name: "escrowId", type: "bytes32" },
@@ -58,7 +58,7 @@ export async function getEscrowInfo(chain: string): Promise<EscrowInfo> {
   return info;
 }
 
-/** A random 64-bit nonce as a decimal string — unique per (signer, escrowId). */
+/** A random 64-bit nonce as a decimal string - unique per (signer, escrowId). */
 export function randomEscrowNonce(): string {
   const b = new Uint8Array(8);
   crypto.getRandomValues(b);

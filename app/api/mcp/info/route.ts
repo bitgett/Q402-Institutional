@@ -83,6 +83,12 @@ export async function GET(): Promise<NextResponse> {
         { name: "q402_request_create", description: "Create a payment request (invoice); the creator sponsors the gas." },
         { name: "q402_request_status", description: "Read a payment request's status by id." },
         { name: "q402_request_pay", description: "Pay an open payment request from the Agent Wallet (Mode C)." },
+        { name: "q402_escrow_create", description: "Create a gasless non-custodial escrow (pending record, moves no funds); optional walletId funds it from an Agent Wallet." },
+        { name: "q402_escrow_status", description: "Read an escrow's state, parties, amount, and tx hashes." },
+        { name: "q402_escrow_lock", description: "Fund a pending escrow gaslessly (EIP-7702); the server signs for an Agent-Wallet buyer." },
+        { name: "q402_escrow_release", description: "Buyer releases a locked escrow to the seller (gasless)." },
+        { name: "q402_escrow_refund", description: "Permissionless refund to the buyer after the timeout / resolve window." },
+        { name: "q402_escrow_dispute", description: "A party disputes an open escrow (requires a named arbiter)." },
       ],
       // Hint for indexers + humans — the canonical hosts.
       docs: "https://q402.quackai.ai/docs",

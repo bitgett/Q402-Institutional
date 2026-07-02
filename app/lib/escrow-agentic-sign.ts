@@ -6,14 +6,14 @@ import type { LockParams, Authorization } from "./escrow-relayer";
  * Server-side escrow signing for an AGENT-WALLET buyer.
  *
  * When the escrow buyer is a server-managed Agent Wallet the owner controls, the
- * SERVER signs the lock/release/dispute with the wallet's decrypted key — the
+ * SERVER signs the lock/release/dispute with the wallet's decrypted key - the
  * same model agentic send uses (see agentic-wallet-sign.ts). This is the ONLY
  * new place a lock witness is produced (browsers can't sign the 7702 auth a lock
  * needs), so the type sets + domains here are pinned by
  * __tests__/escrow-witness-drift.test.ts against the deployed contracts.
  *
  * CRITICAL (validation G3): every field comes from the ESCROW chain cfg
- * (escrow-contracts.ts), NEVER the payment AGENTIC_CHAINS — the impl addresses,
+ * (escrow-contracts.ts), NEVER the payment AGENTIC_CHAINS - the impl addresses,
  * chain set, and decimals diverge. Callers pass an `EscrowChainCfg`.
  *
  * The relayer stays the sole gas sponsor + named facilitator; these signatures
@@ -46,7 +46,7 @@ function signerFor(cfg: EscrowChainCfg, privateKey: string): Wallet {
 /**
  * Sign an EscrowLock witness + a fresh EIP-7702 authorization (delegating the
  * agent-wallet EOA to the escrow lockImpl) for the server-derived `p`. `p.buyer`
- * MUST be the agent wallet — we assert the decrypted key's address matches it, so
+ * MUST be the agent wallet - we assert the decrypted key's address matches it, so
  * a config/record mismatch fails loud instead of signing for the wrong account.
  * The 7702 auth nonce is fetched FRESH from the chain at sign time (ethers
  * `authorize`), per validation G1/G5.

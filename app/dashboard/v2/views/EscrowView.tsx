@@ -1,15 +1,17 @@
 "use client";
 
 /**
- * EscrowView — the Escrow top-nav view.
+ * EscrowView - the Escrow top-nav view.
  *
- * Q402 Gasless Escrow, surfaced as a real product page: a hero (headline +
- * benefit copy + an at-a-glance "vault" visual), a three-step flow (Create ->
- * Fund -> Settle) with iconography + connectors, and the owner's escrow table
+ * Q402 Gasless Escrow surfaced as a real product page: a hero (headline +
+ * benefit copy + a clean "how your funds stay safe" flow panel), a three-step
+ * flow (Create -> Fund -> Settle) with iconography, and the owner's escrow table
  * with a premium empty state. Non-custodial, gasless, live on BNB Chain.
  *
  * Design: Space Grotesk display / DM Sans body, navy glass + yellow/cyan/mint
- * accents (theme.ts). No emoji, no em-dash, always "Q402".
+ * accents (theme.ts). No emoji, no em-dash, always "Q402". The flow panel is a
+ * concept diagram (no fake balances/addresses) -- it explains the trust model,
+ * it is not a mock account.
  */
 
 import { useState } from "react";
@@ -59,14 +61,14 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
 
   return (
     <div style={{ paddingTop: isMobile ? 22 : 40 }}>
-      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      {/* Hero */}
       <div
         style={{
           display: "grid",
           gridTemplateColumns: isMobile ? "1fr" : "1.05fr 0.95fr",
-          gap: isMobile ? 26 : 40,
+          gap: isMobile ? 26 : 44,
           alignItems: "center",
-          marginBottom: isMobile ? 32 : 52,
+          marginBottom: isMobile ? 32 : 54,
         }}
       >
         <div>
@@ -117,11 +119,11 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
           </div>
         </div>
 
-        {/* Vault visual — an escrow at a glance */}
-        {!isMobile && <VaultVisual />}
+        {/* Flow panel - explains the trust model (concept, not a mock account) */}
+        {!isMobile && <FlowPanel />}
       </div>
 
-      {/* ── How it works ─────────────────────────────────────────────── */}
+      {/* How it works */}
       <div style={{ marginBottom: isMobile ? 30 : 44 }}>
         <SectionLabel>How it works</SectionLabel>
         <div
@@ -139,7 +141,7 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
         </div>
       </div>
 
-      {/* ── Your escrows ─────────────────────────────────────────────── */}
+      {/* Your escrows */}
       <div style={{ ...glass(19), padding: isMobile ? 16 : 22 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, gap: 12, flexWrap: "wrap" }}>
           <div>
@@ -165,82 +167,110 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
   );
 }
 
-/* ── Vault visual ──────────────────────────────────────────────────────── */
-function VaultVisual() {
+/* Flow panel - a clean concept diagram of the trust model (no fake data). */
+function FlowPanel() {
   return (
-    <div style={{ position: "relative", justifySelf: "center", width: "100%", maxWidth: 380 }}>
-      {/* soft glow behind the card */}
+    <div style={{ position: "relative", justifySelf: "center", width: "100%", maxWidth: 372 }}>
       <div
         aria-hidden
         style={{
           position: "absolute",
-          inset: "-12% -6% -6%",
-          background: `radial-gradient(60% 55% at 70% 20%, ${v2.yellow}22, transparent 70%), radial-gradient(55% 50% at 20% 90%, ${v2.cyan}1c, transparent 70%)`,
-          filter: "blur(6px)",
+          inset: "-14% -8% -8%",
+          background: `radial-gradient(58% 50% at 72% 12%, ${v2.yellow}1f, transparent 70%), radial-gradient(52% 48% at 18% 92%, ${v2.cyan}18, transparent 70%)`,
+          filter: "blur(8px)",
           pointerEvents: "none",
         }}
       />
-      <div
-        style={{
-          position: "relative",
-          ...glass(18),
-          borderTop: `2px solid ${v2.yellow}`,
-          padding: 20,
-          background: "linear-gradient(180deg, rgba(17,30,50,.92), rgba(10,18,32,.92))",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", fontWeight: 700, color: v2.yellow }}>
-            Q402 Escrow
-          </span>
-          <span style={statusPill(v2.mint)}>
-            <span style={{ width: 5, height: 5, borderRadius: 999, background: v2.mint }} />
-            Funded
-          </span>
+      <div style={{ position: "relative", ...glass(18), padding: 22, background: "linear-gradient(180deg, rgba(16,30,50,.9), rgba(10,18,32,.92))" }}>
+        <div style={{ fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", fontWeight: 700, color: v2.muted, marginBottom: 16 }}>
+          How your funds stay safe
         </div>
 
-        <div style={{ marginTop: 18, display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ fontFamily: displayFont, fontSize: 38, fontWeight: 600, letterSpacing: "-0.02em", color: v2.text }}>250.00</span>
-          <span style={{ color: v2.muted, fontSize: fs.cardTitle, fontWeight: 500 }}>USDT</span>
-        </div>
-        <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 2 }}>held in the vault</div>
+        {/* Buyer */}
+        <FlowNode label="You (the buyer)" dot={v2.cyan} />
+        <Connector label="lock funds, gasless" />
 
-        <div style={{ height: 1, background: v2.line, margin: "18px 0" }} />
-
-        {/* buyer -> lock -> seller */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <PartyNode label="Buyer" addr="0x4ca4…f39a" color={v2.cyan} />
-          <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-            <div style={{ position: "absolute", left: 4, right: 4, top: "50%", height: 1, background: `linear-gradient(90deg, ${v2.cyan}55, ${v2.mint}55)` }} />
-            <span style={{ position: "relative", width: 30, height: 30, borderRadius: 9, background: "rgba(245,197,24,.12)", border: `1px solid ${v2.yellow}44`, display: "grid", placeItems: "center", color: v2.yellow }}>
-              <IconLock size={15} />
-            </span>
+        {/* Vault (highlight) */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 13,
+            padding: "14px 15px",
+            borderRadius: 14,
+            background: "rgba(245,197,24,.06)",
+            border: `1px solid ${v2.yellow}33`,
+          }}
+        >
+          <span style={{ width: 40, height: 40, borderRadius: 11, background: "rgba(245,197,24,.12)", border: `1px solid ${v2.yellow}44`, display: "grid", placeItems: "center", color: v2.yellow, flexShrink: 0 }}>
+            <IconLock size={20} color={v2.yellow} />
+          </span>
+          <div>
+            <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.cardTitle, fontWeight: 600 }}>Non-custodial vault</div>
+            <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.45, marginTop: 2 }}>Funds sit here until it settles. Q402 cannot move them.</div>
           </div>
-          <PartyNode label="Seller" addr="0x8a06…1869" color={v2.mint} align="right" />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 18, color: v2.muted, fontSize: fs.label }}>
-          <IconShield size={14} color={v2.muted} />
-          Releases on delivery, refunds on timeout.
+        <Connector label="only your signature" split />
+
+        {/* Two outcomes */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <OutcomeTile accent={v2.mint} title="Release" sub="to the seller" foot="you sign" Icon={IconCheck} />
+          <OutcomeTile accent={v2.cyan} title="Refund" sub="back to you" foot="on timeout" Icon={IconBack} />
         </div>
       </div>
     </div>
   );
 }
 
-function PartyNode({ label, addr, color, align = "left" }: { label: string; addr: string; color: string; align?: "left" | "right" }) {
+function FlowNode({ label, dot }: { label: string; dot: string }) {
   return (
-    <div style={{ textAlign: align, minWidth: 74 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: align === "right" ? "flex-end" : "flex-start" }}>
-        <span style={{ width: 7, height: 7, borderRadius: 999, background: color }} />
-        <span style={{ color: v2.muted, fontSize: fs.label, fontWeight: 600 }}>{label}</span>
-      </div>
-      <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.body, marginTop: 3 }}>{addr}</div>
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "9px 13px",
+        borderRadius: 11,
+        background: "rgba(255,255,255,.03)",
+        border: `1px solid ${v2.line}`,
+        width: "100%",
+      }}
+    >
+      <span style={{ width: 8, height: 8, borderRadius: 999, background: dot, boxShadow: `0 0 7px ${dot}88` }} />
+      <span style={{ color: v2.text, fontSize: fs.base, fontWeight: 600 }}>{label}</span>
     </div>
   );
 }
 
-/* ── Step card ─────────────────────────────────────────────────────────── */
+function Connector({ label, split }: { label: string; split?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0 7px 16px" }}>
+      <span style={{ width: 1, height: 22, background: `linear-gradient(${v2.line}, ${v2.muted2})` }} />
+      <span style={{ color: v2.muted2, fontSize: fs.micro, fontStyle: "italic" }}>{label}</span>
+      {split && <span style={{ flex: 1, height: 1, background: v2.line, marginRight: 2 }} />}
+    </div>
+  );
+}
+
+function OutcomeTile({
+  accent, title, sub, foot, Icon,
+}: {
+  accent: string; title: string; sub: string; foot: string; Icon: (p: { size?: number; color?: string }) => React.ReactNode;
+}) {
+  return (
+    <div style={{ padding: "12px 13px", borderRadius: 12, background: "rgba(255,255,255,.02)", border: `1px solid ${v2.line}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, color: accent }}>
+        <Icon size={15} color={accent} />
+        <span style={{ fontFamily: displayFont, fontSize: fs.base, fontWeight: 700 }}>{title}</span>
+      </div>
+      <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 5 }}>{sub}</div>
+      <div style={{ color: v2.muted2, fontSize: fs.micro, marginTop: 2 }}>{foot}</div>
+    </div>
+  );
+}
+
+/* Step card */
 function StepCard({
   step,
   last,
@@ -276,7 +306,6 @@ function StepCard({
       <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.cardTitle, fontWeight: 600, marginTop: 14 }}>{step.title}</div>
       <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.55, marginTop: 5 }}>{step.body}</div>
 
-      {/* connector arrow to the next card (desktop only) */}
       {!last && !isMobile && (
         <span
           aria-hidden
@@ -303,7 +332,7 @@ function StepCard({
   );
 }
 
-/* ── Small building blocks ─────────────────────────────────────────────── */
+/* Small building blocks */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -350,21 +379,6 @@ const eyebrowChip: React.CSSProperties = {
   padding: "6px 12px",
 };
 
-function statusPill(color: string): React.CSSProperties {
-  return {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 5,
-    fontSize: fs.micro,
-    fontWeight: 700,
-    color,
-    background: `${color}14`,
-    border: `1px solid ${color}33`,
-    borderRadius: 999,
-    padding: "3px 9px",
-  };
-}
-
 function ctaPrimary(disabled: boolean): React.CSSProperties {
   return {
     background: v2.yellow,
@@ -395,7 +409,7 @@ function ctaSecondary(disabled: boolean): React.CSSProperties {
   };
 }
 
-/* ── Glyphs (24-viewBox, currentColor, round caps — matches action-icons) ── */
+/* Glyphs (24-viewBox, currentColor, round caps - matches action-icons) */
 function base(size: number, color: string | undefined, children: React.ReactNode) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -429,11 +443,11 @@ function IconCheck({ size = 20, color }: { size?: number; color?: string }) {
     </>
   ));
 }
-function IconShield({ size = 20, color }: { size?: number; color?: string }) {
+function IconBack({ size = 20, color }: { size?: number; color?: string }) {
   return base(size, color, (
     <>
-      <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" />
-      <path d="M9 12l2 2 4-4" />
+      <path d="M9 7 4 12l5 5" />
+      <path d="M4 12h11a5 5 0 0 1 5 5v1" />
     </>
   ));
 }

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * EscrowComposerModal — the "New escrow" popup (the create half of the Escrow
+ * EscrowComposerModal - the "New escrow" popup (the create half of the Escrow
  * view). Publishes a `pending` escrow record (buyer = the authed owner; MOVES NO
  * FUNDS) and returns an escrowId. Funding is a separate gasless step: the buyer
  * locks via an EIP-7702 authorization that injected browser wallets can't
@@ -66,14 +66,14 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
   // "Fund from": the owner EOA (client-funded, needs an agent to lock) or one of
-  // the owner's Agent Wallets (server-funded — dashboard can lock it directly).
+  // the owner's Agent Wallets (server-funded - dashboard can lock it directly).
   const [agentWallets, setAgentWallets] = useState<AgentWallet[]>([]);
   const [fundFrom, setFundFrom] = useState<string>("owner");
 
   useEffect(() => setMounted(true), []);
 
   // Load the owner's Agent Wallets so they can fund an escrow from one (default).
-  // getAuthCreds is cached — the Escrow list already authed on view mount, so
+  // getAuthCreds is cached - the Escrow list already authed on view mount, so
   // this usually adds no extra wallet prompt.
   useEffect(() => {
     if (!ownerAddress) return;
@@ -88,7 +88,7 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
         const ws = (data.wallets ?? []).map((w) => ({ address: w.address, walletId: w.walletId ?? w.address.toLowerCase(), label: w.label }));
         if (cancelled) return;
         setAgentWallets(ws);
-        // Default to funding from the first Agent Wallet — it's the self-service
+        // Default to funding from the first Agent Wallet - it's the self-service
         // path (the dashboard can lock it; an owner-EOA escrow needs an agent).
         if (ws.length > 0) setFundFrom(ws[0].address);
       } catch { /* leave as owner */ }
@@ -202,7 +202,7 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
                     Fund it right here
                   </div>
                   <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5 }}>
-                    Your Agent Wallet funds this escrow. Hit <b style={{ color: v2.yellow }}>Fund</b> on it in the list below —
+                    Your Agent Wallet funds this escrow. Hit <b style={{ color: v2.yellow }}>Fund</b> on it in the list below -
                     Q402 signs the gasless lock for the wallet (within its spend limits). Then you can{" "}
                     <b style={{ color: v2.mint }}>release</b> to the seller or dispute it, all from here.
                   </div>
@@ -280,7 +280,7 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
                 <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 4, lineHeight: 1.5 }}>
                   {fundFrom === "owner"
                     ? "You are the buyer; fund it later with a Q402 agent (a browser wallet can't sign the lock)."
-                    : "This Agent Wallet funds it — Q402 signs the gasless lock, so you can fund it right here."}
+                    : "This Agent Wallet funds it - Q402 signs the gasless lock, so you can fund it right here."}
                 </div>
               </Field>
               <Field label="Seller (paid on release)">

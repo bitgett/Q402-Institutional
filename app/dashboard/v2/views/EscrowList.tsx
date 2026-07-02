@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * EscrowList — the track + act half of the Escrow view. A settlement-grade
+ * EscrowList - the track + act half of the Escrow view. A settlement-grade
  * table (Escrow · Seller · Network · Status · Amount · Action) over the owner's
  * escrows (GET /api/escrow, owner-sig).
  *
@@ -76,10 +76,10 @@ const RESOLVE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // matches on-chain RESOLVE_
 
 function fmtDate(iso: string) {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return Number.isNaN(d.getTime()) ? "-" : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 function shortHash(h: string) {
-  return h ? `${h.slice(0, 8)}…${h.slice(-6)}` : "—";
+  return h ? `${h.slice(0, 8)}…${h.slice(-6)}` : "-";
 }
 
 export interface EscrowListProps {
@@ -158,7 +158,7 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: 
       try {
         let body: string;
         if (action === "refund") {
-          // Permissionless after the timeout / resolve window — no signature.
+          // Permissionless after the timeout / resolve window - no signature.
           body = "{}";
         } else if (esc.fundedBy === "agent") {
           // Agent-Wallet-funded: the SERVER signs (lock/release/dispute) for the
@@ -183,7 +183,7 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: 
           body = JSON.stringify({ address: ownerAddress, challenge: auth.challenge, signature: auth.signature });
         } else {
           // Owner-EOA escrow: the buyer signs an EIP-712 vault message directly.
-          // (lock is never offered here — the browser can't sign the 7702 auth.)
+          // (lock is never offered here - the browser can't sign the 7702 auth.)
           const info = await getEscrowInfo(esc.chain);
           const nonce = randomEscrowNonce();
           const deadline = String(Math.floor(Date.now() / 1000) + 900);
@@ -405,7 +405,7 @@ function ActionCell({
     );
   }
 
-  // pending — an agent-funded escrow funds right here (server signs the lock);
+  // pending - an agent-funded escrow funds right here (server signs the lock);
   // an owner-EOA escrow needs an agent (the browser can't sign the 7702 lock).
   if (esc.status === "pending") {
     return esc.fundedBy === "agent" ? (
@@ -447,7 +447,7 @@ function ActionCell({
     );
   }
 
-  return <span style={{ color: v2.muted2 }}>—</span>;
+  return <span style={{ color: v2.muted2 }}>-</span>;
 }
 
 function Dot() {

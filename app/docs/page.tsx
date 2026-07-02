@@ -667,7 +667,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 30 total</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 36 total</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] text-sm">
@@ -710,6 +710,12 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_request_create",      auth: "api key",     purpose: "Publish a payment request (invoice). No funds move; returns a /pay link + req_ id. Recipient defaults to the Agent Wallet." },
                     { name: "q402_request_status",      auth: "none",        purpose: "Look up a request by req_ id (amount, token, chain, recipient, status). Read-only; notFound instead of throwing." },
                     { name: "q402_request_pay",         auth: "live mode",   purpose: "Pay a request gaslessly from your own Agent Wallet (Mode C). Two-phase consent, same as q402_pay." },
+                    { name: "q402_escrow_create",       auth: "api key",     purpose: "Create a gasless non-custodial escrow (pending record, moves no funds); optional walletId funds it from an Agent Wallet." },
+                    { name: "q402_escrow_status",       auth: "none",        purpose: "Read an escrow's state, parties, amount, and tx hashes." },
+                    { name: "q402_escrow_lock",         auth: "live mode",   purpose: "Fund a pending escrow gaslessly (EIP-7702); the server signs for an Agent-Wallet buyer." },
+                    { name: "q402_escrow_release",      auth: "live mode",   purpose: "Buyer releases a locked escrow to the seller (gasless)." },
+                    { name: "q402_escrow_refund",       auth: "live mode",   purpose: "Permissionless refund to the buyer after the timeout / resolve window." },
+                    { name: "q402_escrow_dispute",      auth: "live mode",   purpose: "A party disputes an open escrow (requires a named arbiter)." },
                   ]).map((t, i, arr) => (
                     <tr key={t.name} style={{ borderBottom: i === arr.length - 1 ? undefined : "1px solid rgba(255,255,255,0.04)" }}>
                       <td className="px-4 py-3"><code className="text-yellow text-xs">{t.name}</code></td>

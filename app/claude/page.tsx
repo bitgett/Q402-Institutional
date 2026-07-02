@@ -12,7 +12,7 @@
  * only) so the two product pages read as one family. But the composition is its
  * own: this is the hands-on page, so it leads with an interactive multi-client
  * install (Claude, Codex, Cursor, Cline, Copilot, Hermes), a wallet-mode
- * picker, a live q402_quote ranking, and the 30-tool
+ * picker, a live q402_quote ranking, and the 36-tool
  * surface. No marketing-landing motifs (corner glows, gradient sheen titles).
  */
 
@@ -87,7 +87,7 @@ const MODES: { tag: string; title: string; desc: React.ReactNode; env: string[];
   },
 ];
 
-// ── the 30-tool surface (grouped, with auth + one-line note) ────────────────
+// ── the 36-tool surface (grouped, with auth + one-line note) ────────────────
 const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: string }[] }[] = [
   {
     label: "Setup and read",
@@ -164,8 +164,19 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
       { name: "q402_request_pay", auth: "live mode", note: "Pay a request gaslessly from your own Agent Wallet. Terms locked to the request." },
     ],
   },
+  {
+    label: "Escrow",
+    tools: [
+      { name: "q402_escrow_create", auth: "api key", note: "Create a gasless non-custodial escrow (pending record, moves no funds); optional walletId funds it from an Agent Wallet." },
+      { name: "q402_escrow_status", auth: "no auth", note: "Read an escrow's state, parties, amount, and tx hashes. Read-only." },
+      { name: "q402_escrow_lock", auth: "live mode", note: "Fund a pending escrow gaslessly (EIP-7702); the server signs for an Agent-Wallet buyer." },
+      { name: "q402_escrow_release", auth: "live mode", note: "Buyer releases a locked escrow to the seller (gasless)." },
+      { name: "q402_escrow_refund", auth: "live mode", note: "Permissionless refund to the buyer after the timeout / resolve window." },
+      { name: "q402_escrow_dispute", auth: "live mode", note: "A party disputes an open escrow (requires a named arbiter)." },
+    ],
+  },
 ];
-const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 30
+const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 36
 
 const rise = {
   initial: { opacity: 0, y: 10 },

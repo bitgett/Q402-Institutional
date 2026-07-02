@@ -11,7 +11,12 @@
 > - H-1 CLOSED: a dispute can no longer strand funds — refund is buyer-available
 >   after `releaseDeadline + RESOLVE_WINDOW` (14d), and `resolve()` closes after
 >   that window so it can't front-run the timeout refund.
-> - MCP escrow tools built (unpublished) + dashboard UI pending.
+> - Dashboard Escrow view is LIVE (create / fund / release / dispute, with an
+>   Agent-Wallet "Fund from" path). MCP escrow tools (create / status / lock /
+>   release / refund / dispute) + walletId agent-funding shipped in
+>   `@quackai/q402-mcp` v0.10.0 (npm + MCP registry, 36 tools).
+> - Agent-Wallet buyer: the server signs lock/release/dispute on a wallet the
+>   owner controls (spend-capped, intent-consented). See escrow-agent-wallet-plan.md.
 
 Status (historical): P0 contracts written + hardened after internal review.
 Canonical source = `Downloads/q402-avalanche/contracts/`.
