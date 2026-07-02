@@ -44,6 +44,11 @@ export interface EscrowRecord {
   onchainEscrowId: string;    // bytes32 hex = keccak256(abi.encode(buyer, salt)); used by the vault
   creatorOwner: string;       // lowercased owner that created the record
   buyer: string;              // lowercased buyer EOA (locks + releases)
+  // Lowercased Agent Wallet id (== its address) when the buyer is a
+  // server-managed Agent Wallet. Presence is the SOLE discriminator that the
+  // server signs lock/release/dispute on the wallet's behalf (never a client
+  // field). Absent => buyer is the owner EOA (client-signed path).
+  fundingWalletId?: string;
   seller: string;             // lowercased seller address (paid on release)
   chain: string;              // AgenticChainKey
   token: "USDC" | "USDT";
@@ -68,6 +73,9 @@ export interface PublicEscrow {
   salt: string;
   onchainEscrowId: string;
   buyer: string;
+  /** "agent" if funded by a server-managed Agent Wallet, else "owner". The
+   *  internal fundingWalletId is NOT exposed. */
+  fundedBy: "owner" | "agent";
   seller: string;
   chain: string;
   token: "USDC" | "USDT";
@@ -123,6 +131,9 @@ function ttlSecondsFor(expiresAtIso: string): number {
 export interface CreateEscrowInput {
   creatorOwner: string;
   buyer: string;
+  /** Set ONLY when the buyer is a server-managed Agent Wallet the creator owns
+   *  (verified at the route). Enables the server-signed lock/release path. */
+  fundingWalletId?: string;
   seller: string;
   chain: string;
   token: "USDC" | "USDT";
@@ -149,6 +160,7 @@ export async function createEscrow(input: CreateEscrowInput): Promise<EscrowReco
     onchainEscrowId: deriveEscrowId(buyer, salt),
     creatorOwner: input.creatorOwner.toLowerCase(),
     buyer,
+    ...(input.fundingWalletId ? { fundingWalletId: input.fundingWalletId.toLowerCase() } : {}),
     seller: input.seller.toLowerCase(),
     chain: input.chain,
     token: input.token,
@@ -371,12 +383,43 @@ export async function writeEscrowLockedMarker(
   return false;
 }
 
+/**
+ * True if the owner has a NON-terminal (pending/open/disputed) escrow funded by
+ * the given Agent Wallet. Used to block deleting/GC-ing a wallet whose key the
+ * server would still need to release/refund an open escrow — a hard-delete
+ * (key erasure) mid-escrow would strand the locked funds. Bounded by the
+ * owner-index cap; delete/GC are rare so the per-id scan is fine.
+ */
+export async function hasActiveEscrowFundedBy(owner: string, walletAddr: string): Promise<boolean> {
+  const wallet = walletAddr.toLowerCase();
+  let ids: string[];
+  try {
+    ids = (await kv.lrange<string>(escrowOwnerKey(owner), 0, -1)) ?? [];
+  } catch {
+    // Fail SAFE: if we can't confirm there are no active escrows, assume there
+    // might be (block the delete) rather than risk stranding funds.
+    return true;
+  }
+  for (const id of ids) {
+    const rec = await getEscrow(id);
+    if (
+      rec &&
+      rec.fundingWalletId === wallet &&
+      (rec.status === "pending" || rec.status === "open" || rec.status === "disputed")
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function toPublicEscrow(r: EscrowRecord): PublicEscrow {
   return {
     id: r.id,
     salt: r.salt,
     onchainEscrowId: r.onchainEscrowId,
     buyer: r.buyer,
+    fundedBy: r.fundingWalletId ? "agent" : "owner",
     seller: r.seller,
     chain: r.chain,
     token: r.token,

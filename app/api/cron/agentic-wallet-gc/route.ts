@@ -35,6 +35,7 @@ import {
   type AgenticWalletRecord,
 } from "@/app/lib/agentic-wallet";
 import { fetchAgenticBalances } from "@/app/lib/agentic-wallet-balance";
+import { hasActiveEscrowFundedBy } from "@/app/lib/escrow";
 import { aaveTotalPositionValueStrict, aaveSupportedChains } from "@/app/lib/yield/aave";
 import { morphoTotalPositionValueStrict, morphoSupportedChains } from "@/app/lib/yield/morpho";
 import { listaTotalPositionValueStrict, listaConfiguredChains } from "@/app/lib/yield/lista";
@@ -257,6 +258,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         "critical",
       );
       skipped.push({ key, reason: "balance_above_dust", balanceUsd });
+      continue;
+    }
+
+    // ── Q402 Escrow open-position check (G7) ──────────────────────────
+    // A wallet that funded an escrow still needs its key to release/refund it.
+    // Its USDC/USDT balance is $0 (funds sit in the vault) so the checks above
+    // pass — but hard-erasing the key would strand the locked funds. Fail closed:
+    // hasActiveEscrowFundedBy returns true on a read error, deferring the delete.
+    if (!cls.isLegacy && (await hasActiveEscrowFundedBy(record.ownerAddr, record.address))) {
+      void sendOpsAlert(
+        `agentic-wallet-gc: HOLDING WALLET — refusing to hard-delete ${record.address} ` +
+          `(owner ${record.ownerAddr}). It funds a non-terminal Q402 Escrow whose release/refund ` +
+          `still needs this key. Destroying it would strand the locked funds. Settle the escrow first.`,
+        "critical",
+      );
+      skipped.push({ key, reason: "escrow_active", balanceUsd });
       continue;
     }
 

@@ -4,6 +4,7 @@ import { getApiKeyRecord } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { ESCROW_ENABLED, getEscrowChain, isEscrowChain } from "@/app/lib/escrow-contracts";
 import { createEscrow, listEscrowsPage, toPublicEscrow } from "@/app/lib/escrow";
+import { getActiveAgenticWallet } from "@/app/lib/agentic-wallet";
 
 /**
  * /api/escrow - Gasless Escrow collection.
@@ -69,11 +70,25 @@ export async function POST(req: NextRequest) {
   // ── Validate ───────────────────────────────────────────────────────────
   const { chain, token } = body;
   const seller = typeof body.seller === "string" ? body.seller : "";
-  // The buyer is ALWAYS the authenticated creator — they fund + release the
-  // escrow with their own signature. A client-supplied `body.buyer` is ignored:
-  // otherwise an attacker could mint a record naming a victim as buyer and
-  // themselves as seller (a phishing-grade fund-redirect primitive).
-  const buyer = creatorOwner;
+  // Buyer resolution. Default: the authenticated creator (owner EOA) — they fund
+  // + release with their own signature. A client-supplied `body.buyer` is ignored
+  // (else an attacker could name a victim as buyer). OPTION: an Agent Wallet the
+  // creator OWNS can be the buyer/funder — the server signs the lock/release on
+  // its behalf (like agentic send). We resolve `walletId` against the creator's
+  // OWN active wallets, so buyer is still always {creator | a wallet the creator
+  // provably owns}, never an arbitrary address. `getActiveAgenticWallet` enforces
+  // owner-list membership + rejects soft-deleted wallets.
+  let buyer = creatorOwner;
+  let fundingWalletId: string | undefined;
+  const walletId = typeof body.walletId === "string" && body.walletId ? body.walletId : null;
+  if (walletId) {
+    const wallet = await getActiveAgenticWallet(creatorOwner, walletId);
+    if (!wallet) {
+      return NextResponse.json({ error: "walletId is not one of your active Agent Wallets" }, { status: 400 });
+    }
+    buyer = wallet.address.toLowerCase();
+    fundingWalletId = wallet.address.toLowerCase();
+  }
   const arbiter = typeof body.arbiter === "string" && body.arbiter ? body.arbiter : undefined;
   const amount = typeof body.amount === "string" ? body.amount : "";
   const memo = typeof body.memo === "string" && body.memo.trim().length > 0
@@ -131,7 +146,7 @@ export async function POST(req: NextRequest) {
       : undefined;
 
   const record = await createEscrow({
-    creatorOwner, buyer, seller, chain, token, amount, arbiter, memo, releaseDays, sandbox,
+    creatorOwner, buyer, fundingWalletId, seller, chain, token, amount, arbiter, memo, releaseDays, sandbox,
   });
 
   return NextResponse.json(
