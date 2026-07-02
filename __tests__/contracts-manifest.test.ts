@@ -74,10 +74,14 @@ describe("contracts.manifest.json ↔ server CHAIN_CONFIG", () => {
       expect(su!.decimals).toBe(m.tokens.USDG.decimals);
       return;
     }
-    expect(s.usdc.address.toLowerCase()).toBe(m.tokens.USDC.address.toLowerCase());
-    expect(s.usdc.decimals).toBe(m.tokens.USDC.decimals);
-    expect(s.usdt.address.toLowerCase()).toBe(m.tokens.USDT.address.toLowerCase());
-    expect(s.usdt.decimals).toBe(m.tokens.USDT.decimals);
+    // Non-USDG chains always carry usdc/usdt slots; the USDG_ONLY early-return
+    // above already handled the union member (Robinhood) that lacks them, so a
+    // cast is safe here — `.has()` narrows the runtime value but not the type.
+    const st = s as { usdc: { address: string; decimals: number }; usdt: { address: string; decimals: number } };
+    expect(st.usdc.address.toLowerCase()).toBe(m.tokens.USDC.address.toLowerCase());
+    expect(st.usdc.decimals).toBe(m.tokens.USDC.decimals);
+    expect(st.usdt.address.toLowerCase()).toBe(m.tokens.USDT.address.toLowerCase());
+    expect(st.usdt.decimals).toBe(m.tokens.USDT.decimals);
   });
 });
 

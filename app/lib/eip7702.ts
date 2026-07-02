@@ -178,10 +178,7 @@ export const Q402_IMPL_CODEHASHES: ReadonlySet<string> = new Set<string>([
   "0x3f1cafbe691713c9df9c6ca3908698b7941d0252181cec6872905e415e5bf828", // scroll retired (0x2fb2b2)
   "0x463e2cb224f4dcaf599bb52734dc148af4849c4802057a03af9a2fce25bd4e81", // arbitrum retired (0xe5b90d)
   "0x9acb7b7f2f29371e56d4f3de584c35c8c522b87e09a5a2e043b169143fd12692", // arbitrum retired (0x2fb2b2)
-  // robinhood current (0x2fb2b2) — codehash NOT yet collected. The impl is
-  // enumerated in Q402_IMPL_PER_CHAIN, so isClearableQ402Impl handles it
-  // synchronously (RPC-free) and the codehash fallback never fires for it.
-  // Add the hash here when refreshing per docs/IMPL_REFRESH_RUNBOOK.md.
+  "0xa9104ce3dd511f78a24d5c12bedd7021a8730716964fb070accbb4e3abfc18f6", // robinhood current (0x2fb2b2), keccak256(eth_getCode) verified 2026-07-02
 ]);
 
 /**

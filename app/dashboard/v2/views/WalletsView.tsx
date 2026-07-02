@@ -91,6 +91,8 @@ interface ChainBucket {
   chain: string;
   usdc: { usd: number } | null;
   usdt: { usd: number } | null;
+  /** Robinhood Chain USDG (Paxos); null on other chains. In totalUsd. */
+  usdg?: { usd: number } | null;
   totalUsd: number | null;
   error?: string;
 }
@@ -619,10 +621,10 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
   // Capital allocation: per-chain stablecoin share of the active wallet's
   // total, biggest first, top 3 → bar segments (prototype shows 3).
   const allocation = useMemo(() => {
-    if (!activeBalance) return { total: 0, segs: [] as { chain: string; usd: number; usdc: number; usdt: number; pct: number }[] };
+    if (!activeBalance) return { total: 0, segs: [] as { chain: string; usd: number; usdc: number; usdt: number; usdg: number; pct: number }[] };
     const total = activeBalance.totalUsd;
     const segs = activeBalance.perChain
-      .map((c) => ({ chain: c.chain, usd: c.totalUsd ?? 0, usdc: c.usdc?.usd ?? 0, usdt: c.usdt?.usd ?? 0 }))
+      .map((c) => ({ chain: c.chain, usd: c.totalUsd ?? 0, usdc: c.usdc?.usd ?? 0, usdt: c.usdt?.usd ?? 0, usdg: c.usdg?.usd ?? 0 }))
       .filter((s) => s.usd > 0)
       .sort((a, b) => b.usd - a.usd)
       .slice(0, 6)
@@ -828,7 +830,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
   const vmAlloc = demoMode
     ? {
         total: DEMO.wallets[0].balanceUsd,
-        segs: DEMO.allocation.map((a) => ({ chain: a.chain, usd: 0, usdc: 0, usdt: 0, pct: a.pct })),
+        segs: DEMO.allocation.map((a) => ({ chain: a.chain, usd: 0, usdc: 0, usdt: 0, usdg: 0, pct: a.pct })),
       }
     : allocation;
 
@@ -1369,6 +1371,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                             const toks = [
                               s.usdc > 0 ? { sym: "USDC", usd: s.usdc } : null,
                               s.usdt > 0 ? { sym: "USDT", usd: s.usdt } : null,
+                              s.usdg > 0 ? { sym: "USDG", usd: s.usdg } : null,
                             ].filter(Boolean) as { sym: string; usd: number }[];
                             const rows = toks.length > 0 ? toks : [{ sym: "", usd: 0 }];
                             return rows.map((t, ti) => (

@@ -34,7 +34,7 @@ interface Props {
 
 export interface WithdrawBucket {
   chain: ChainKey;
-  token: "USDC" | "USDT";
+  token: "USDC" | "USDT" | "USDG";
   amount: string;          // human-readable decimal string for SendModal
   /** Raw atomic units, useful for amount-cap math without floating drift. */
   raw: string;
@@ -47,6 +47,8 @@ type ChainBalance = {
   chain: ChainKey;
   usdc: TokenBalance | null;
   usdt: TokenBalance | null;
+  /** Robinhood Chain USDG (Paxos); null on other chains. */
+  usdg?: TokenBalance | null;
   totalUsd: number | null;
   error?: string;
 };
@@ -156,8 +158,8 @@ export function AgenticWalletWithdrawModal({
   // Flatten per-chain into per-bucket rows, positive balances only, biggest first.
   const rows: Array<{ bucket: WithdrawBucket; capped: boolean }> = [];
   for (const c of balances?.perChain ?? []) {
-    for (const tok of ["USDT", "USDC"] as const) {
-      const tb = tok === "USDC" ? c.usdc : c.usdt;
+    for (const tok of ["USDT", "USDC", "USDG"] as const) {
+      const tb = tok === "USDC" ? c.usdc : tok === "USDG" ? c.usdg : c.usdt;
       if (!tb || tb.usd <= 0) continue;
       const { amount, capped } = deriveSweepAmount(tb, perTxMaxUsd);
       rows.push({ bucket: { chain: c.chain, token: tok, amount, raw: tb.raw, decimals: tb.decimals, usd: tb.usd }, capped });

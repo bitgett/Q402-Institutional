@@ -43,6 +43,11 @@ export interface ChainBalance {
   chain: AgenticChainKey;
   usdc: TokenBalance | null;
   usdt: TokenBalance | null;
+  /** Robinhood Chain's only stablecoin (Paxos Global Dollar). Absent/null on
+   *  every other chain. Folded into totalUsd (1:1 USD) like usdc/usdt, but
+   *  kept in its own slot so the UI labels it USDG (not USDT) and withdraw
+   *  buckets carry the right token. */
+  usdg?: TokenBalance | null;
   /** QuackAI Q token (BNB-only). Tracked in TOKEN UNITS (`amount`), NOT USD —
    *  Q is not 1:1 pegged, so it is deliberately excluded from `totalUsd`.
    *  null on chains without Q configured or when the read failed. */
@@ -124,7 +129,7 @@ async function readChainBalances(
         args: [walletAddr],
       }) as bigint;
       const tb = tokenBalanceFromRaw(raw, usdg.decimals);
-      return { chain, usdc: null, usdt: tb, quack: null, totalUsd: tb.usd };
+      return { chain, usdc: null, usdt: null, usdg: tb, quack: null, totalUsd: tb.usd };
     } catch (e) {
       return {
         chain,

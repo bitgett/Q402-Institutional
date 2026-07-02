@@ -48,6 +48,8 @@ interface ChainBucket {
   chain: ChainKey;
   usdc: TokenSlice | null;
   usdt: TokenSlice | null;
+  /** Robinhood Chain USDG (Paxos); null on other chains. In totalUsd. */
+  usdg?: TokenSlice | null;
   totalUsd: number | null;
   error?: string;
 }
@@ -694,7 +696,7 @@ function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: Balan
         </div>
         {balance && (
           <div className="text-[10px] text-white/55">
-            USDC + USDT
+            USDC · USDT · USDG
           </div>
         )}
       </div>
@@ -762,7 +764,7 @@ function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: Balan
 // compact when the wallet only holds value on 1–2 chains.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function HoldingsBreakdown({ wallet, balance }: { wallet: string; balance: BalancePayload }) {
-  type Row = { chain: ChainKey; token: "USDT" | "USDC"; usd: number };
+  type Row = { chain: ChainKey; token: "USDT" | "USDC" | "USDG"; usd: number };
   const rows: Row[] = [];
   const emptyChains: ChainKey[] = [];
   const failedChains: ChainKey[] = [];
@@ -770,9 +772,11 @@ function HoldingsBreakdown({ wallet, balance }: { wallet: string; balance: Balan
     if (c.error) { failedChains.push(c.chain); continue; }
     const usdt = c.usdt?.usd ?? 0;
     const usdc = c.usdc?.usd ?? 0;
+    const usdg = c.usdg?.usd ?? 0;
     if (usdt > 0) rows.push({ chain: c.chain, token: "USDT", usd: usdt });
     if (usdc > 0) rows.push({ chain: c.chain, token: "USDC", usd: usdc });
-    if (usdt === 0 && usdc === 0) emptyChains.push(c.chain);
+    if (usdg > 0) rows.push({ chain: c.chain, token: "USDG", usd: usdg });
+    if (usdt === 0 && usdc === 0 && usdg === 0) emptyChains.push(c.chain);
   }
   rows.sort((a, b) => b.usd - a.usd);
   if (rows.length === 0) return null;
