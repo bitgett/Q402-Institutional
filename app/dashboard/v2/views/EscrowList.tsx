@@ -87,9 +87,11 @@ export interface EscrowListProps {
   signMessage: (message: string) => Promise<string | null>;
   /** Bumped by the parent after a create so the list refetches. */
   refreshKey?: number;
+  /** Opens the "New escrow" composer (empty-state CTA). */
+  onCreate?: () => void;
 }
 
-export function EscrowList({ ownerAddress, signMessage, refreshKey }: EscrowListProps) {
+export function EscrowList({ ownerAddress, signMessage, refreshKey, onCreate }: EscrowListProps) {
   const { signTypedData } = useWallet();
   const [escrows, setEscrows] = useState<PublicEscrow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -227,7 +229,28 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey }: EscrowList
   if (loadError) return <Empty text={loadError} tone="red" />;
   if (loading && escrows.length === 0) return <Empty text="Loading escrows…" />;
   if (escrows.length === 0) {
-    return <Empty text="No escrows yet. Create one to hold funds until a deliverable is met, then release or dispute." />;
+    return (
+      <div style={{ padding: "44px 20px", textAlign: "center" }}>
+        <div
+          style={{
+            width: 56, height: 56, borderRadius: 16, margin: "0 auto",
+            background: "rgba(245,197,24,.08)", border: `1px solid ${v2.yellow}2e`,
+            display: "grid", placeItems: "center", color: v2.yellow,
+          }}
+        >
+          <VaultGlyph size={26} />
+        </div>
+        <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.title, fontWeight: 600, marginTop: 16 }}>
+          No escrows yet
+        </div>
+        <div style={{ color: v2.muted, fontSize: fs.base, lineHeight: 1.55, maxWidth: 380, margin: "6px auto 0" }}>
+          Create one to hold funds safely until the work is delivered, then release to the seller or get refunded.
+        </div>
+        {onCreate && (
+          <button onClick={onCreate} style={emptyCta}>Create your first escrow</button>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -454,11 +477,36 @@ function StatusPill({ status }: { status: PublicEscrow["status"] }) {
 
 function Empty({ text, tone }: { text: string; tone?: "red" }) {
   return (
-    <div style={{ padding: "40px 16px", textAlign: "center", fontSize: fs.body, color: tone === "red" ? v2.red : v2.muted, border: `1px dashed ${v2.line}`, borderRadius: 12, marginTop: 6, lineHeight: 1.5 }}>
+    <div style={{ padding: "40px 16px", textAlign: "center", fontSize: fs.base, color: tone === "red" ? v2.red : v2.muted, lineHeight: 1.5 }}>
       {text}
     </div>
   );
 }
+
+/** Vault / lock-in-shield glyph for the empty state (24-viewBox, round caps). */
+function VaultGlyph({ size = 24, color }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="9" width="16" height="11" rx="2" />
+      <path d="M8 9V6.5a4 4 0 0 1 8 0V9" />
+      <circle cx="12" cy="14" r="1.6" />
+      <path d="M12 15.6V17.5" />
+    </svg>
+  );
+}
+
+const emptyCta: React.CSSProperties = {
+  marginTop: 18,
+  background: v2.yellow,
+  color: v2.actionText,
+  border: "none",
+  borderRadius: 10,
+  padding: "10px 18px",
+  fontSize: fs.base,
+  fontWeight: 700,
+  cursor: "pointer",
+  boxShadow: `0 8px 24px ${v2.yellow}2e`,
+};
 
 const linkBtn: React.CSSProperties = {
   background: "transparent",
