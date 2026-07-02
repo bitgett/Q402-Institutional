@@ -86,3 +86,37 @@ describe("escrow MCP witness <-> deployed contract typehash drift guard", () => 
     expect(c).toContain(`lockDomainName: "${GOLDEN_DOMAINS.lock}"`);
   });
 });
+
+/**
+ * The server-side signer (escrow-agentic-sign.ts) is the ONLY place a lock
+ * witness is produced (Agent-Wallet-funded escrows; browsers can't 7702). It is
+ * in-repo, so this always runs — pin its EscrowLock + vault-action types to the
+ * same deployed typehashes as the MCP witness.
+ */
+const SERVER_SIGN = resolve(__dirname, "../app/lib/escrow-agentic-sign.ts");
+
+describe("escrow server-signer witness <-> deployed typehash drift guard", () => {
+  const src = readIfPresent(SERVER_SIGN);
+
+  it("escrow-agentic-sign.ts is present (in-repo)", () => {
+    expect(src, "escrow-agentic-sign.ts must exist").not.toBeNull();
+  });
+
+  it("server EscrowLock type string == deployed typehash", () => {
+    if (!src) return;
+    expect(typeStringFrom(src, "EscrowLock")).toBe(GOLDEN_TYPES.EscrowLock);
+  });
+
+  it("server vault-action fields are (escrowId,nonce,deadline) == Release/Dispute typehash", () => {
+    if (!src) return;
+    const block = src.match(/VAULT_ACTION_FIELDS\s*=\s*\[([\s\S]*?)\]/)?.[1];
+    expect(block, "VAULT_ACTION_FIELDS not found in escrow-agentic-sign.ts").toBeTruthy();
+    const fields = [...(block ?? "").matchAll(/\{\s*name:\s*"(\w+)",\s*type:\s*"(\w+)"\s*\}/g)]
+      .map(m => `${m[2]} ${m[1]}`)
+      .join(",");
+    // both EscrowRelease and EscrowDispute share this field list
+    expect(fields).toBe("bytes32 escrowId,uint256 nonce,uint256 deadline");
+    expect(GOLDEN_TYPES.EscrowRelease).toBe(`EscrowRelease(${fields})`);
+    expect(GOLDEN_TYPES.EscrowDispute).toBe(`EscrowDispute(${fields})`);
+  });
+});

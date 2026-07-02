@@ -22,6 +22,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, requireIntentAuth } from "@/app/lib/auth";
+import { hasActiveEscrowFundedBy } from "@/app/lib/escrow";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { getSubscription, hasMultichainScope } from "@/app/lib/db";
 import {
@@ -429,6 +430,17 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   });
   if (typeof auth !== "string") {
     return NextResponse.json({ error: auth.error, code: auth.code }, { status: auth.status });
+  }
+
+  // G7: never orphan an open escrow. A wallet with a non-terminal escrow it
+  // funds still needs its key to release/refund; deleting it (and, after grace,
+  // GC hard-erasing the key) would strand the locked funds. Block until the
+  // escrow settles.
+  if (await hasActiveEscrowFundedBy(auth, body.walletId)) {
+    return NextResponse.json(
+      { error: "This wallet has an active escrow. Release, refund, or resolve it before deleting the wallet.", code: "ESCROW_ACTIVE" },
+      { status: 409 },
+    );
   }
 
   await softDeleteAgenticWallet(auth, body.walletId);
