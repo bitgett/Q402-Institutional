@@ -30,7 +30,7 @@
 
 import { createPublicClient, http, formatUnits, isAddress, type Address } from "viem";
 import { kv } from "@vercel/kv";
-import { getPrimaryRpc, CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
+import { getPrimaryRpc, getTokenConfig, type ChainKey } from "@/app/lib/relayer";
 import type { YieldAdapter, YieldMarket, YieldPosition } from "./types";
 
 type StableAsset = "USDC" | "USDT";
@@ -195,9 +195,13 @@ function client(chain: string) {
 }
 
 function tokenDecimals(chain: string, asset: StableAsset): number {
-  const cfg = CHAIN_CONFIG[chain as ChainKey];
-  const t = asset === "USDT" ? cfg?.usdt : cfg?.usdc;
-  return t?.decimals ?? 18; // BNB stables are 18-dec
+  // Lista venues are USDC/USDT chains (never Robinhood/USDG); resolve decimals
+  // from the manifest-backed config, falling back to 18 (BNB stables).
+  try {
+    return getTokenConfig(chain as ChainKey, asset)?.decimals ?? 18;
+  } catch {
+    return 18;
+  }
 }
 
 async function readAsset(c: ReturnType<typeof client>, vault: Address): Promise<Address> {

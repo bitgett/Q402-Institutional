@@ -81,8 +81,8 @@ export async function POST(req: NextRequest) {
   if (!isAgenticChain(chain)) {
     return NextResponse.json({ error: "Unsupported chain" }, { status: 400 });
   }
-  if (token !== "USDC" && token !== "USDT") {
-    return NextResponse.json({ error: "token must be USDC or USDT" }, { status: 400 });
+  if (token !== "USDC" && token !== "USDT" && token !== "USDG") {
+    return NextResponse.json({ error: "token must be USDC, USDT, or USDG" }, { status: 400 });
   }
   if (!ETH_ADDR.test(recipient)) {
     return NextResponse.json({ error: "Invalid recipient address" }, { status: 400 });
@@ -94,7 +94,14 @@ export async function POST(req: NextRequest) {
   // this, an over-precision amount stores fine but the pay route's
   // ethers.parseUnits() throws at settle time, leaving the request permanently
   // unpayable. Validate here so the creator gets a clean 400 instead.
-  const maxDecimals = AGENTIC_CHAINS[chain].tokens[token].decimals;
+  const reqTokenCfg = AGENTIC_CHAINS[chain].tokens[token];
+  if (!reqTokenCfg) {
+    return NextResponse.json(
+      { error: `${token} is not supported on ${chain}` },
+      { status: 400 },
+    );
+  }
+  const maxDecimals = reqTokenCfg.decimals;
   const dot = amount.indexOf(".");
   if (dot !== -1 && amount.length - dot - 1 > maxDecimals) {
     return NextResponse.json(

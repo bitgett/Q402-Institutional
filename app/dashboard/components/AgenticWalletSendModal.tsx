@@ -59,7 +59,7 @@ interface Props {
   dailyLimitUsd?: number | null;
 }
 
-type Token = "USDC" | "USDT" | "Q";
+type Token = "USDC" | "USDT" | "Q" | "USDG";
 
 type ChainKey =
   | "bnb"
@@ -72,7 +72,8 @@ type ChainKey =
   | "monad"
   | "scroll"
   | "arbitrum"
-  | "base";
+  | "base"
+  | "robinhood";
 
 interface ChainMeta {
   key: ChainKey;
@@ -97,6 +98,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "scroll",    label: "Scroll",     multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://scrollscan.com/tx/",                 explorerLabel: "ScrollScan" },
   { key: "arbitrum",  label: "Arbitrum",   multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://arbiscan.io/tx/",                    explorerLabel: "Arbiscan" },
   { key: "base",      label: "Base",       multichainOnly: true, tokens: ["USDT", "USDC"], explorerTxBase: "https://basescan.org/tx/",                   explorerLabel: "Basescan" },
+  { key: "robinhood", label: "Robinhood Chain", multichainOnly: true, tokens: ["USDG"], explorerTxBase: "https://robinhoodchain.blockscout.com/tx/",  explorerLabel: "Blockscout" },
 ];
 
 function chainMetaFor(key: ChainKey): ChainMeta {

@@ -35,13 +35,18 @@
 import { parseUnits, formatUnits } from "viem";
 import type { Hook, HookContext, HookOutcome, SplitSpec } from "./types";
 import { getWalletHookConfig, assertSplitsSumTo10000 } from "./config";
-import { CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
+import { getTokenConfig, type ChainKey } from "@/app/lib/relayer";
 
 function tokenDecimals(chain: string, token: string): number {
-  const cfg = CHAIN_CONFIG[chain as ChainKey];
-  if (!cfg) return 6;
-  const t = token.toUpperCase() === "USDT" ? cfg.usdt : cfg.usdc;
-  return t?.decimals ?? 6;
+  // Best-effort: resolve the (chain, token) decimals from the manifest-backed
+  // config. getTokenConfig throws on an unsupported combo (e.g. USDG off
+  // Robinhood, RLUSD off Ethereum) — fall back to 6 in that case.
+  try {
+    const sym = token.toUpperCase() as "USDC" | "USDT" | "RLUSD" | "Q" | "USDG";
+    return getTokenConfig(chain as ChainKey, sym)?.decimals ?? 6;
+  } catch {
+    return 6;
+  }
 }
 
 export const multiPayeeSplit: Hook = {

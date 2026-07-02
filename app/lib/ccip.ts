@@ -14,7 +14,7 @@
 
 import { JsonRpcProvider, Wallet, Contract, type ContractRunner, ZeroAddress, AbiCoder } from "ethers";
 import manifest from "../../contracts.manifest.json";
-import { CHAIN_CONFIG, getPrimaryRpc, type ChainKey } from "./relayer";
+import { getPrimaryRpc, getTokenConfig, type ChainKey } from "./relayer";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -171,7 +171,7 @@ export async function quoteBridgeFee(
     throw new Error(`CCIP: ${src} → ${dst} is not a supported lane`);
   }
   const router = getRouter(src);
-  const usdc = CHAIN_CONFIG[src as ChainKey].usdc.address;
+  const usdc = getTokenConfig(src as ChainKey, "USDC").address;
   const linkAddr = CCIP_CONFIG[src].linkToken;
 
   const linkMsg = buildEvm2AnyMessage({
@@ -248,7 +248,7 @@ export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResu
   // current allowance and approve(MAX_UINT) if insufficient. Idempotent: a
   // single MAX approval covers every future bridge from this wallet on this
   // chain, so this only ever runs on the very first attempt.
-  const usdcAddr = CHAIN_CONFIG[p.src as ChainKey].usdc.address;
+  const usdcAddr = getTokenConfig(p.src as ChainKey, "USDC").address;
   const usdc = new Contract(usdcAddr, ERC20_ABI, wallet);
   const allowance = (await usdc.allowance(wallet.address, senderAddr)) as bigint;
   let approveTxHash: string | undefined;

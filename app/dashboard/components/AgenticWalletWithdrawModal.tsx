@@ -4,7 +4,7 @@
  * AgenticWalletWithdrawModal — per-chain / per-token sweep picker, Command-deck
  * system.
  *
- * Balance is spread across up to 11 chains × 2 tokens = 22 buckets, but a
+ * Balance is spread across up to 12 chains × 2 tokens = 22 buckets, but a
  * single Send call moves ONE (chain, token) bucket. This modal fetches
  * `/api/wallet/agentic/balance` fresh on open, lists every bucket with
  * balance > 0, and exposes a one-click "Sweep" per row that hands off to the
@@ -177,7 +177,7 @@ export function AgenticWalletWithdrawModal({
         Each row is one on-chain transfer. Pick the bucket to sweep — Send opens with chain, token, and amount already filled in.
       </div>
 
-      {loading && <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", padding: "20px 0", textAlign: "center" }}>Reading balances across 11 chains…</div>}
+      {loading && <div style={{ fontSize: 13, color: "rgba(255,255,255,.55)", padding: "20px 0", textAlign: "center" }}>Reading balances across 12 chains…</div>}
 
       {error && (
         <AlertBox variant="error" action={<button type="button" onClick={load} style={{ color: "#fecaca", textDecoration: "underline", textUnderlineOffset: 2 }}>retry</button>}>

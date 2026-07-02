@@ -50,7 +50,7 @@ A2MCP pay-per-call billing is **x402**, which Q402 already speaks.
 We do NOT rebuild their marketplace / arbitration / identity. The one thing OKX
 structurally lacks is what we own:
 
-> **Gasless EIP-7702 settlement across 11 chains** (OKX escrow is X Layer-centric).
+> **Gasless EIP-7702 settlement across 12 chains** (OKX escrow is X Layer-centric).
 
 So Q402 builds a **gasless, non-custodial, multichain escrow primitive** that
 plugs into OKX (and any x402/MPP agent) and stands alone. Two parallel tracks:
@@ -142,7 +142,7 @@ None --lockFrom--> Open --release(buyerSig)--------> Released  (-> seller)
   (a funded `/escrow/[id]` link), NOT a marketplace.
 - Optional ERC-8004 `giveFeedback` on release (positive) / dispute-loss (negative).
 
-## Rollout (11 chains, NOT X-Layer-first)
+## Rollout (12 chains, NOT X-Layer-first)
 Same bytecode all chains -> **audit once**, deploy 11 (proven `deploy-*.ts` per-chain
 scripts), smoke 11, **launch together**. Add per-chain `Vault` + `LockImpl` addresses
 to `contracts.manifest.json`. USDT/USDC first.
@@ -178,11 +178,11 @@ External-audit notes:
 - **P2** testnet deploy (BNB + X Layer testnet) + e2e gasless lock -> release.
 - **P3** backend (lib + routes + KV) + relayer settle paths.
 - **P4** MCP tools + version bump + drift.
-- **P5** mainnet 11-chain deploy + manifest + per-chain smoke.
+- **P5** mainnet 12-chain deploy + manifest + per-chain smoke.
 - **P6** MPP/a2a-pay interop adapter + ERC-8004 hook.
 
 ## Files
 - `Downloads/q402-avalanche/contracts/Q402EscrowVault.sol`
 - `Downloads/q402-avalanche/contracts/Q402EscrowLockImpl.sol`
 - (tests) `Downloads/q402-avalanche/test/Q402Escrow.test.ts`
-- Hardhat: solc 0.8.20, optimizer 200, evmVersion london; 11 networks already configured.
+- Hardhat: solc 0.8.20, optimizer 200, evmVersion london; 12 networks already configured.

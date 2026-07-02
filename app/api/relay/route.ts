@@ -84,6 +84,9 @@ const MIN_GAS_BALANCE: Record<ChainKey, number> = {
   // Base OP Stack L2: data-availability cost dominates per-tx gas like Scroll /
   // Arbitrum. Same conservative ETH floor; revisit after mainnet relay history.
   base:    0.00005,  // ~$0.20 at $4000/ETH; tune once on-chain history accrues
+  // Robinhood Chain L2 (ETH gas). Same conservative ETH floor as the other L2s;
+  // revisit once on-chain relay history accrues.
+  robinhood: 0.00005, // ~$0.20 at $4000/ETH; tune once on-chain history accrues
 };
 
 
@@ -127,7 +130,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   let body: {
     apiKey:       string;
     chain:        ChainKey;
-    token:        "USDC" | "USDT" | "RLUSD" | "Q";
+    token:        "USDC" | "USDT" | "RLUSD" | "Q" | "USDG";
     from:         string;
     to:           string;
     amount:       string;
@@ -235,7 +238,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   // The full multi-chain matrix below is what the protocol shipped on v1.27.
   // The emergency feature flag BNB_FOCUS_MODE (see app/lib/feature-flags.ts)
   // can collapse the matrix to BNB+USDC/USDT for emergency narrowing; the
-  // 11-chain entries stay in this file so flipping the flag back to false
+  // 12-chain entries stay in this file so flipping the flag back to false
   // (current default) restores the full surface with zero code churn.
   //
   //   - Injective: USDC + USDT (native Circle USDC via CCTP, live since 2026-06).
@@ -244,7 +247,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   //     the XRPL EVM Sidechain yet, and Q402 is EVM-only so XRPL native is
   //     out of scope. Non-Ethereum chains reject RLUSD via the absence of the
   //     token from their allowlist entry.
-  const FULL_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD" | "Q">>> = {
+  const FULL_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD" | "Q" | "USDG">>> = {
     injective: ["USDT", "USDC"],
     eth:       ["USDC", "USDT", "RLUSD"],
     bnb:       ["USDC", "USDT", "Q"],
@@ -256,8 +259,11 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
     scroll:    ["USDC", "USDT"],
     arbitrum:  ["USDC", "USDT"],
     base:      ["USDC", "USDT"],
+    // Robinhood Chain is USDG-only (Paxos Global Dollar). No Circle USDC / Tether
+    // USDT here — the on-chain tokens with those symbols are mock/scam.
+    robinhood: ["USDG"],
   };
-  const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD" | "Q">>> = {
+  const SPRINT_CHAIN_TOKEN_ALLOWLIST: Partial<Record<ChainKey, ReadonlyArray<"USDC" | "USDT" | "RLUSD" | "Q" | "USDG">>> = {
     bnb: ["USDC", "USDT", "Q"],
   };
   const CHAIN_TOKEN_ALLOWLIST = BNB_FOCUS_MODE
@@ -563,7 +569,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
   const chainCfg = CHAIN_CONFIG[chain];
   if (!chainCfg) {
     return NextResponse.json({
-      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll, arbitrum, base.`,
+      error: `Chain "${chain}" is not supported. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll, arbitrum, base, robinhood.`,
     }, { status: 400 });
   }
 

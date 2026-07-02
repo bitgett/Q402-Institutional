@@ -49,7 +49,7 @@ import {
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
 import { loadRelayerKey } from "@/app/lib/relayer-key";
 import { rateLimit } from "@/app/lib/ratelimit";
-import { CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
+import { getTokenConfig, type ChainKey } from "@/app/lib/relayer";
 import { isChainDisabled, CHAIN_DISABLED_MESSAGE } from "@/app/lib/chain-status";
 
 export interface BridgeHistoryRecord {
@@ -532,7 +532,7 @@ export async function runCCIPBridge(args: RunCCIPBridgeArgs): Promise<NextRespon
       ]);
 
       // ── Approve detection ─────────────────────────────────────────
-      const usdcAddr = CHAIN_CONFIG[src as ChainKey].usdc.address;
+      const usdcAddr = getTokenConfig(src as ChainKey, "USDC").address;
       const senderAddr = CCIP_CONFIG[src].sender;
       const ALLOWANCE_SELECTOR = "0xdd62ed3e";
       const allowanceCall =

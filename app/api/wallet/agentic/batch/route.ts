@@ -166,13 +166,26 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (isChainDisabled(body.chain)) {
     return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
-  if (body.token !== "USDC" && body.token !== "USDT" && body.token !== "Q") {
+  if (body.token !== "USDC" && body.token !== "USDT" && body.token !== "Q" && body.token !== "USDG") {
     return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
   }
   // Q (QuackAI token) is BNB-only.
   if (body.token === "Q" && body.chain !== "bnb") {
     return NextResponse.json(
       { error: "TOKEN_NOT_ON_CHAIN", message: "Q is only available on BNB Chain." },
+      { status: 400 },
+    );
+  }
+  // USDG is Robinhood-Chain-only; Robinhood Chain is USDG-only.
+  if (body.token === "USDG" && body.chain !== "robinhood") {
+    return NextResponse.json(
+      { error: "TOKEN_NOT_ON_CHAIN", message: "USDG is only available on Robinhood Chain." },
+      { status: 400 },
+    );
+  }
+  if (body.chain === "robinhood" && body.token !== "USDG") {
+    return NextResponse.json(
+      { error: "TOKEN_NOT_ON_CHAIN", message: "Robinhood Chain supports USDG only." },
       { status: 400 },
     );
   }

@@ -46,7 +46,7 @@ async function sendWithNonceRetry(send: () => Promise<Hex>, maxAttempts = 6): Pr
 }
 
 // ── Per-chain relay dispatch (v1.3) ──────────────────────────────────────────
-// All 11 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad / scroll / arbitrum / base) default to EIP-7702 Type 4 TXs.
+// All 12 chains (avax / bnb / eth / xlayer / stable / mantle / injective / monad / scroll / arbitrum / base / robinhood) default to EIP-7702 Type 4 TXs.
 // X Layer additionally supports EIP-3009 as a USDC-only fallback.
 //
 // Chain → relay method:
@@ -115,6 +115,9 @@ const CHAIN_RPC_FALLBACKS: Record<string, string[]> = {
     "https://base.publicnode.com",
     "https://base.drpc.org",
     "https://rpc.ankr.com/base",
+  ],
+  robinhood: [
+    "https://rpc.mainnet.chain.robinhood.com",
   ],
 };
 
@@ -284,6 +287,21 @@ export const CHAIN_CONFIG = {
     usdc: { address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC" },
     usdt: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6, symbol: "USDT" },
   },
+  robinhood: {
+    name: "Robinhood Chain",
+    rpc: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com",
+    chainId: 4663,
+    token: "ETH",
+    // Q402PaymentImplementation ("Q402 Robinhood Chain") deployed on Robinhood
+    // Chain (chainId 4663). On-chain NAME() = "Q402 Robinhood Chain". Distinguished
+    // at signing time by chainId 4663 + domainName "Q402 Robinhood Chain".
+    implContract: process.env.ROBINHOOD_IMPLEMENTATION_CONTRACT?.trim() || "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // USDG (Paxos Global Dollar) is the ONLY supported token on Robinhood Chain,
+    // 6 decimals. There is NO Circle USDC and NO Tether USDT here — the on-chain
+    // tokens carrying those symbols are mock/scam and are intentionally not wired.
+    // The relay route's CHAIN_TOKEN_ALLOWLIST enforces USDG-only server-side.
+    usdg: { address: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", decimals: 6, symbol: "USDG" },
+  },
 } as const;
 
 export type ChainKey = keyof typeof CHAIN_CONFIG;
@@ -397,7 +415,7 @@ export async function settlePaymentEIP3009(params: EIP3009PayParams): Promise<Se
 
 // ── X Layer EIP-7702: Q402PaymentImplementationXLayer ABI ────────────────────
 // Contract: 0x8D854436ab0426F5BC6Cc70865C90576AD523E73 (X Layer mainnet)
-// Witness type: TransferAuthorization (identical scheme across all 11 chains)
+// Witness type: TransferAuthorization (identical scheme across all 12 chains)
 // Key detail: verifyingContract = user's EOA (address(this) under EIP-7702)
 //             msg.sender must equal facilitator param
 const XLAYER_EIP7702_ABI = [
@@ -541,8 +559,17 @@ export function getRelayerWallet(chainKey: ChainKey): ethers.Wallet {
   return new ethers.Wallet(key.privateKey, provider);
 }
 
-export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT" | "RLUSD" | "Q") {
+export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT" | "RLUSD" | "Q" | "USDG") {
   const cfg = CHAIN_CONFIG[chainKey];
+  if (tokenSymbol === "USDG") {
+    // USDG (Paxos Global Dollar) is Robinhood-Chain-only — mirror the eth-only
+    // RLUSD / bnb-only Q narrowing. The relay route's CHAIN_TOKEN_ALLOWLIST
+    // rejects chain≠robinhood + token=USDG before we reach here.
+    if (chainKey !== "robinhood") {
+      throw new Error(`USDG is only supported on Robinhood Chain (got chain=${chainKey})`);
+    }
+    return (cfg as typeof CHAIN_CONFIG.robinhood).usdg;
+  }
   if (tokenSymbol === "Q") {
     // Q (QuackAI) is BNB-only — mirror RLUSD's eth-only narrowing. The relay
     // route's CHAIN_TOKEN_ALLOWLIST rejects chain≠bnb + token=Q before here.
@@ -561,7 +588,17 @@ export function getTokenConfig(chainKey: ChainKey, tokenSymbol: "USDC" | "USDT" 
     }
     return (cfg as typeof CHAIN_CONFIG.eth).rlusd;
   }
-  return tokenSymbol === "USDC" ? cfg.usdc : cfg.usdt;
+  // USDC / USDT: every chain EXCEPT Robinhood (which is USDG-only) carries
+  // these slots. Robinhood + USDC/USDT is rejected upstream by the relay's
+  // CHAIN_TOKEN_ALLOWLIST, so this throw is defence-in-depth; it also lets TS
+  // narrow `cfg` to a member that actually has usdc/usdt.
+  if (chainKey === "robinhood") {
+    throw new Error(`${tokenSymbol} is not supported on Robinhood Chain (USDG only)`);
+  }
+  // Every non-Robinhood member has the usdc + usdt slots; cast to one such
+  // member (avax) so TS resolves the property access.
+  const c = cfg as typeof CHAIN_CONFIG.avax;
+  return tokenSymbol === "USDC" ? c.usdc : c.usdt;
 }
 
 // ── EIP-7702 pay() via viem ───────────────────────────────────────────────────

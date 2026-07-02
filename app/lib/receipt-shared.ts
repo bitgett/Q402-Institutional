@@ -41,7 +41,7 @@ export interface Receipt {
   chain:            ChainKey;
   payer:            string;
   recipient:        string;
-  token:            "USDC" | "USDT" | "RLUSD" | "Q";
+  token:            "USDC" | "USDT" | "RLUSD" | "Q" | "USDG";
   tokenAmount:      string;
   tokenAmountRaw:   string;
   method:           ReceiptMethod;

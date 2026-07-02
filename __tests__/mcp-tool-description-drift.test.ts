@@ -85,8 +85,8 @@ describe.skipIf(!available)("MCP tool descriptions match actual server policy", 
       expect(quoteSrc).not.toMatch(/results are currently restricted to BNB Chain/);
     });
 
-    it("documents the 11-chain quote surface", () => {
-      expect(quoteSrc).toMatch(/11 chains/);
+    it("documents the 12-chain quote surface", () => {
+      expect(quoteSrc).toMatch(/12 chains/);
       expect(quoteSrc).toMatch(/avax.+bnb.+eth.+xlayer.+stable.+mantle.+injective.+monad.+scroll.+arbitrum/i);
     });
 

@@ -228,16 +228,19 @@ describe.skipIf(!mcpAvailable)("RLUSD: Ethereum-only invariant — MCP server lo
   });
 
   it("MCP q402_pay tool accepts RLUSD in its token enum", () => {
-    // RLUSD must be present; the optional trailing "Q" (QuackAI, BNB-only) is
-    // allowed since q402_pay gained Q support without dropping RLUSD.
+    // RLUSD must be present; trailing "Q" (QuackAI, BNB-only) and "USDG" (Paxos
+    // Global Dollar, Robinhood-Chain-only) are allowed since q402_pay gained
+    // those without dropping RLUSD.
     expect(mcpPayToolSource).toMatch(
-      /token:\s*z\.enum\(\[\s*["']USDC["']\s*,\s*["']USDT["']\s*,\s*["']RLUSD["']\s*(?:,\s*["']Q["']\s*)?\]\)/,
+      /token:\s*z\.enum\(\[\s*["']USDC["']\s*,\s*["']USDT["']\s*,\s*["']RLUSD["']\s*(?:,\s*["']Q["']\s*)?(?:,\s*["']USDG["']\s*)?\]\)/,
     );
   });
 
   it("MCP q402_quote tool accepts RLUSD in its optional token filter", () => {
+    // Trailing "USDG" (Robinhood-Chain-only) is allowed since the quote filter
+    // gained it without dropping RLUSD.
     expect(mcpQuoteToolSource).toMatch(
-      /token:\s*z\s*\.enum\(\[\s*["']USDC["']\s*,\s*["']USDT["']\s*,\s*["']RLUSD["']\s*\]\)/,
+      /token:\s*z\s*\.enum\(\[\s*["']USDC["']\s*,\s*["']USDT["']\s*,\s*["']RLUSD["']\s*(?:,\s*["']USDG["']\s*)?\]\)/,
     );
   });
 });

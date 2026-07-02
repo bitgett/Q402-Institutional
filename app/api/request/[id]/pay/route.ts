@@ -222,7 +222,16 @@ export async function POST(
 
       // Server-derived raw amount (atomic units) - never trust the client.
       const chainCfg = AGENTIC_CHAINS[record.chain as AgenticChainKey];
-      const decimals = chainCfg.tokens[record.token].decimals;
+      // tokens.USDC/USDT are optional (USDG-only chains like Robinhood carry
+      // neither), so guard the lookup rather than blindly deref .decimals.
+      const reqTokenCfg = chainCfg.tokens[record.token as keyof typeof chainCfg.tokens];
+      if (!reqTokenCfg) {
+        return NextResponse.json(
+          { error: `Token ${record.token} is not supported on ${record.chain}` },
+          { status: 400 },
+        );
+      }
+      const decimals = reqTokenCfg.decimals;
       let amountRaw: string;
       try {
         amountRaw = ethers.parseUnits(record.amount, decimals).toString();

@@ -237,6 +237,26 @@
       "supportedApiTokens": ["USDC", "USDT"],
       "explorer": "https://basescan.org",
       "verifyUrl": "https://basescan.org/address/0x2fb2B2D110b6c5664e701666B3741240242bf350#code"
+    },
+    "robinhood": {
+      "name": "Robinhood Chain",
+      "chainId": 4663,
+      "relayMode": "eip7702",
+      "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+      "witness": {
+        "type": "TransferAuthorization",
+        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "domainName": "Q402 Robinhood Chain",
+        "domainVersion": "1",
+        "verifyingContractRule": "userEOA",
+        "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). On-chain NAME() = 'Q402 Robinhood Chain'. Distinguished at signing time by chainId 4663 + domainName 'Q402 Robinhood Chain'. USDG-only chain (Paxos Global Dollar): there is NO Circle USDC and NO Tether USDT on Robinhood Chain — the on-chain tokens carrying those symbols are mock/scam and are intentionally NOT supported. Allowlist is USDG only."
+      },
+      "tokens": {
+        "USDG": { "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", "decimals": 6, "notes": "Paxos Global Dollar (USDG) — the only supported token on Robinhood Chain, 6 decimals. Verified on-chain: symbol='USDG'." }
+      },
+      "supportedApiTokens": ["USDG"],
+      "explorer": "https://robinhoodchain.blockscout.com",
+      "verifyUrl": "https://robinhoodchain.blockscout.com/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
     }
   },
   "authorizationGuard": {

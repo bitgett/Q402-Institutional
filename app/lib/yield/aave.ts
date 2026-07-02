@@ -22,7 +22,7 @@
 
 import { createPublicClient, http, formatUnits, type Address } from "viem";
 import { kv } from "@vercel/kv";
-import { getPrimaryRpc, CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
+import { getPrimaryRpc, getTokenConfig, type ChainKey } from "@/app/lib/relayer";
 import type { YieldAdapter, YieldMarket, YieldPosition } from "./types";
 
 const RAY = 10n ** 27n;
@@ -104,9 +104,13 @@ function client(chain: string) {
 }
 
 function tokenDecimals(chain: string, asset: "USDC" | "USDT"): number {
-  const cfg = CHAIN_CONFIG[chain as ChainKey];
-  const t = asset === "USDT" ? cfg?.usdt : cfg?.usdc;
-  return t?.decimals ?? 18; // BNB stables are 18-dec
+  // Aave yield venues are USDC/USDT chains (never Robinhood/USDG); resolve the
+  // decimals from the manifest-backed config, falling back to 18 (BNB stables).
+  try {
+    return getTokenConfig(chain as ChainKey, asset)?.decimals ?? 18;
+  } catch {
+    return 18;
+  }
 }
 
 /** ray APR → compounded APY fraction. Best-effort; 0 on bad input. */

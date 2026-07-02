@@ -32,7 +32,7 @@ const HAIR = "rgba(255,255,255,0.07)";
 const YELLOW = "#F5C518";
 const CYAN = "#5BC8FA";
 
-// ── chains for the live q402_quote ranking (all 11 EVM chains) ──────────────
+// ── chains for the live q402_quote ranking (all 12 EVM chains) ──────────────
 interface ChainRow {
   key: string;
   name: string;
@@ -93,7 +93,7 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
     label: "Setup and read",
     tools: [
       { name: "q402_doctor", auth: "no auth", note: "Install + ongoing health check. Call on \"set up Q402\"." },
-      { name: "q402_quote", auth: "no auth", note: "Compare gas across all 11 chains. Read-only." },
+      { name: "q402_quote", auth: "no auth", note: "Compare gas across all 12 chains. Read-only." },
       { name: "q402_balance", auth: "api key", note: "Verify key + remaining quota." },
       { name: "q402_agentic_info", auth: "api key", note: "Agent Wallet info: addresses, caps, ERC-8004 id. Read-only." },
       { name: "q402_wallet_status", auth: "private key", note: "Per-chain EIP-7702 delegation state. Read-only." },
@@ -302,7 +302,7 @@ export default function ClaudePage() {
                 <span style={{ color: YELLOW }}>checking account.</span>
               </h1>
               <p className="text-lg leading-relaxed mt-6 max-w-[40rem]" style={{ color: MUT }}>
-                Gasless stablecoin payments across 11 EVM chains, from any MCP client. One install,
+                Gasless stablecoin payments across 12 EVM chains, from any MCP client. One install,
                 then ask your AI to set it up. {TOOL_COUNT} tools, one package.
               </p>
               <div className="flex flex-wrap gap-3 mt-7">
@@ -510,7 +510,7 @@ export default function ClaudePage() {
             label="Live demo"
             title="The exact tool your agent calls."
             accent={CYAN}
-            sub="Change the amount or token. The table re-ranks all 11 chains by gas, the same q402_quote the MCP server returns to the agent."
+            sub="Change the amount or token. The table re-ranks all 12 chains by gas, the same q402_quote the MCP server returns to the agent."
           >
             {/* controls */}
             <div className="flex flex-wrap items-center gap-3 mb-5">

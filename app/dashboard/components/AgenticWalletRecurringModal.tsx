@@ -529,7 +529,7 @@ export function AgenticWalletRecurringModal({
 
         {chainGated && (
           <div className="mt-2 mb-3 rounded-md border border-amber-400/30 bg-amber-400/[0.05] p-3 text-[12px] text-amber-200/85">
-            {chainMeta.label} requires the paid Multichain subscription. Stay on BNB Chain or upgrade to use the full 11-chain range.
+            {chainMeta.label} requires the paid Multichain subscription. Stay on BNB Chain or upgrade to use the full 12-chain range.
           </div>
         )}
 

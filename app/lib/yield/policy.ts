@@ -64,9 +64,12 @@ async function readLiquidStableBalance(chain: AgenticChainKey, wallet: Address):
   const client = createPublicClient({ transport: http(getPrimaryRpc(chain)) });
 
   // On some chains usdc/usdt point at the SAME token (e.g. Stable's
-  // USDT0) — dedupe by address so we don't double-count it.
+  // USDT0) — dedupe by address so we don't double-count it. Yield venues are
+  // USDC/USDT chains only (never Robinhood/USDG), so cast to a member that
+  // carries both stablecoin slots.
+  const stableCfg = cfg as typeof CHAIN_CONFIG.avax;
   const tokens = new Map<string, { address: Address; decimals: number }>();
-  for (const t of [cfg.usdc, cfg.usdt]) {
+  for (const t of [stableCfg.usdc, stableCfg.usdt]) {
     if (t?.address) tokens.set(t.address.toLowerCase(), { address: t.address as Address, decimals: t.decimals });
   }
 
@@ -91,7 +94,9 @@ async function readLiquidStableBalance(chain: AgenticChainKey, wallet: Address):
  */
 export async function readTokenBalanceStrict(chain: AgenticChainKey, wallet: Address, token: AgenticToken): Promise<number> {
   const cfg = CHAIN_CONFIG[chain as ChainKey];
-  const t = token === "USDC" ? cfg?.usdc : cfg?.usdt;
+  // Yield deposit preflight — USDC/USDT venues only (never Robinhood/USDG).
+  const stableCfg = cfg as typeof CHAIN_CONFIG.avax | undefined;
+  const t = token === "USDC" ? stableCfg?.usdc : stableCfg?.usdt;
   if (!cfg || !t?.address) throw new Error(`no ${token} config for ${chain}`);
   const client = createPublicClient({ transport: http(getPrimaryRpc(chain)) });
   const raw = (await client.readContract({

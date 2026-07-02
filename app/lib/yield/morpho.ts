@@ -29,7 +29,7 @@
 
 import { createPublicClient, http, formatUnits, isAddress, type Address } from "viem";
 import { kv } from "@vercel/kv";
-import { getPrimaryRpc, CHAIN_CONFIG, type ChainKey } from "@/app/lib/relayer";
+import { getPrimaryRpc, getTokenConfig, type ChainKey } from "@/app/lib/relayer";
 import type { YieldAdapter, YieldMarket, YieldPosition } from "./types";
 
 interface VaultCfg {
@@ -153,9 +153,13 @@ function client(chain: string) {
 }
 
 function tokenDecimals(chain: string, asset: "USDC" | "USDT"): number {
-  const cfg = CHAIN_CONFIG[chain as ChainKey];
-  const t = asset === "USDT" ? cfg?.usdt : cfg?.usdc;
-  return t?.decimals ?? 6; // Base/Arbitrum USDC are 6-dec
+  // Morpho venues are USDC/USDT chains (never Robinhood/USDG); resolve decimals
+  // from the manifest-backed config, falling back to 6 (Base/Arbitrum USDC).
+  try {
+    return getTokenConfig(chain as ChainKey, asset)?.decimals ?? 6;
+  } catch {
+    return 6;
+  }
 }
 
 /** Read a vault's underlying asset address. Throws on RPC error. */

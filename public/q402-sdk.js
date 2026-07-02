@@ -45,8 +45,10 @@
  *  monad      TransferAuthorization  "Q402 Monad"        user's EOA          6
  *  scroll     TransferAuthorization  "Q402 Scroll"       user's EOA          6
  *  arbitrum   TransferAuthorization  "Q402 Arbitrum"     user's EOA          6
+ *  base       TransferAuthorization  "Q402 Base"         user's EOA          6
+ *  robinhood  TransferAuthorization  "Q402 Robinhood Chain"  user's EOA      6  ← USDG only
  *
- *  All 11 deployed contracts compute _domainSeparator() with `address(this)`, which
+ *  All 12 deployed contracts compute _domainSeparator() with `address(this)`, which
  *  under EIP-7702 delegation equals the user's EOA — NOT the impl contract.
  *
  *  TransferAuthorization fields: owner, facilitator, token, recipient, amount, nonce, deadline
@@ -224,6 +226,18 @@ const Q402_CHAIN_CONFIG = {
     usdt: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
     supportedTokens: ["USDC", "USDT"],
   },
+  robinhood: {
+    name:         "Robinhood Chain",
+    chainId:      4663,
+    mode:         "eip7702",
+    domainName:   "Q402 Robinhood Chain",
+    implContract: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // USDG (Paxos Global Dollar) is the ONLY token on Robinhood Chain, 6 dec.
+    // There is NO Circle USDC and NO Tether USDT here — the on-chain tokens with
+    // those symbols are mock/scam and intentionally unsupported.
+    usdg: { address: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", decimals: 6 },
+    supportedTokens: ["USDG"],
+  },
 };
 
 // ─── Apply BNB-only narrowing when the flag is set ───────────────────────────
@@ -239,7 +253,7 @@ if (Q402_BNB_FOCUS_MODE) {
   }
 }
 
-// EIP-7702 witness type — shared by all 11 chains (avax/bnb/eth/xlayer/stable/mantle/injective/monad/scroll/arbitrum/base).
+// EIP-7702 witness type — shared by all 12 chains (avax/bnb/eth/xlayer/stable/mantle/injective/monad/scroll/arbitrum/base/robinhood).
 // All Q402PaymentImplementation* contracts use the identical TransferAuthorization
 // typehash. verifyingContract = address(this), which under EIP-7702 delegation = user EOA.
 const Q402_TRANSFER_AUTH_TYPES = {
@@ -297,7 +311,7 @@ class Q402Client {
   /**
    * @param {object} opts
    * @param {string} opts.apiKey     - Your Q402 API key (q402_live_xxx)
-   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"|"injective"|"monad"|"scroll"|"arbitrum"|"base"} opts.chain - Target chain
+   * @param {"avax"|"bnb"|"eth"|"xlayer"|"stable"|"mantle"|"injective"|"monad"|"scroll"|"arbitrum"|"base"|"robinhood"} opts.chain - Target chain
    * @param {string} [opts.relayUrl] - Override relay endpoint (default: https://q402.quackai.ai/api/relay)
    */
   constructor({ apiKey, chain = "avax", relayUrl = "https://q402.quackai.ai/api/relay" }) {
@@ -305,7 +319,7 @@ class Q402Client {
     this.chain    = chain;
     this.relayUrl = relayUrl;
     this.chainCfg = Q402_CHAIN_CONFIG[chain];
-    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll, arbitrum, base`);
+    if (!this.chainCfg) throw new Error(`Unsupported chain: ${chain}. Supported: avax, bnb, eth, xlayer, stable, mantle, injective, monad, scroll, arbitrum, base, robinhood`);
   }
 
   /**
@@ -318,10 +332,11 @@ class Q402Client {
    *                               and scientific notation are rejected — never pass a
    *                               JS Number, since IEEE-754 loses precision for
    *                               18-decimal tokens.
-   * @param {"USDC"|"USDT"|"RLUSD"} opts.token
+   * @param {"USDC"|"USDT"|"RLUSD"|"USDG"} opts.token
    *   - USDC / USDT: supported on all chains except where the per-chain
    *     supportedTokens list excludes them.
    *   - RLUSD: Ripple USD, NY DFS regulated, decimals 18 — Ethereum mainnet only.
+   *   - USDG: Paxos Global Dollar, decimals 6 — Robinhood Chain only (its only token).
    * @returns {Promise<{success, txHash, blockNumber, tokenAmount, token, chain, method}>}
    * @throws  When amount is empty, malformed, negative, zero, or has more
    *          decimal places than the target token supports.
