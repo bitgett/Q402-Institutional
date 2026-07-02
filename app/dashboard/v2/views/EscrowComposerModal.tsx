@@ -247,8 +247,14 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
           </div>
         ) : (
           <div style={{ marginTop: 14 }}>
+            <div style={howBox}>
+              <div style={{ color: v2.text, fontWeight: 600, fontSize: fs.body, marginBottom: 8 }}>How escrow works</div>
+              <HowStep n="1" text="Your funds are locked into a non-custodial vault. Q402 covers the gas; nobody can take them out but you." />
+              <HowStep n="2" text="When the seller delivers, you release the funds to them." />
+              <HowStep n="3" text="If they do not deliver, reclaim your funds after the timeout - or let an arbiter settle a dispute." />
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 120px", gap: 12, marginBottom: 12 }}>
-              <Field label="Amount">
+              <Field label="Amount to lock">
                 <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="50.00" inputMode="decimal" style={inputStyle} />
               </Field>
               <Field label="Token">
@@ -277,36 +283,38 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
                   ))}
                   <option value="owner" style={optionStyle}>Owner wallet (fund via agent later)</option>
                 </select>
-                <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 4, lineHeight: 1.5 }}>
+                <div style={helpText}>
                   {fundFrom === "owner"
-                    ? "You are the buyer; fund it later with a Q402 agent (a browser wallet can't sign the lock)."
-                    : "This Agent Wallet funds it - Q402 signs the gasless lock, so you can fund it right here."}
+                    ? "You are the buyer. You will fund it later from a Q402 agent (a browser wallet can't lock the funds)."
+                    : "This Agent Wallet pays into the escrow. Q402 covers the gas, so you can fund it right here after creating."}
                 </div>
               </Field>
-              <Field label="Seller (paid on release)">
+              <Field label="Pay to (seller)">
                 <input
                   value={seller}
                   onChange={(e) => setSeller(e.target.value)}
-                  placeholder="0x... (the counterparty)"
+                  placeholder="0x... the address that gets paid"
                   spellCheck={false}
                   style={{ ...inputStyle, fontFamily: "var(--font-jetbrains), monospace", fontSize: fs.body }}
                 />
+                <div style={helpText}>Who receives the funds when you release the escrow.</div>
               </Field>
-              <Field label="Timeout refund">
+              <Field label="Auto-refund after">
                 <select value={String(releaseDays)} onChange={(e) => setReleaseDays(Number(e.target.value))} style={inputStyle}>
                   <option value="7" style={optionStyle}>7 days</option>
                   <option value="14" style={optionStyle}>14 days</option>
                   <option value="30" style={optionStyle}>30 days</option>
                   <option value="90" style={optionStyle}>90 days</option>
                 </select>
+                <div style={helpText}>If nothing is released, you can reclaim your funds after this window.</div>
               </Field>
               <div>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none" }}>
                   <input type="checkbox" checked={useArbiter} onChange={(e) => setUseArbiter(e.target.checked)} style={{ accentColor: v2.yellow }} />
-                  <span style={{ color: v2.text, fontSize: fs.base }}>Enable disputes (named arbiter)</span>
+                  <span style={{ color: v2.text, fontSize: fs.base }}>Add a dispute arbiter (optional)</span>
                 </label>
-                <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 4, lineHeight: 1.5 }}>
-                  Without one it is release-or-timeout-refund only. An arbiter can resolve a dispute either way.
+                <div style={helpText}>
+                  A neutral third party who can settle the outcome if you and the seller disagree. Leave it off for release-or-refund only.
                 </div>
                 {useArbiter && (
                   <input
@@ -347,6 +355,46 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </label>
   );
 }
+
+function HowStep({ n, text }: { n: string; text: string }) {
+  return (
+    <div style={{ display: "flex", gap: 9, alignItems: "flex-start", marginTop: 6 }}>
+      <span
+        style={{
+          flexShrink: 0,
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          background: "rgba(245,197,24,.14)",
+          color: v2.yellow,
+          fontSize: 11,
+          fontWeight: 700,
+          display: "grid",
+          placeItems: "center",
+          fontFamily: displayFont,
+        }}
+      >
+        {n}
+      </span>
+      <span style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5 }}>{text}</span>
+    </div>
+  );
+}
+
+const howBox: React.CSSProperties = {
+  background: "rgba(255,255,255,.025)",
+  border: `1px solid ${v2.line}`,
+  borderRadius: 12,
+  padding: "12px 14px",
+  marginBottom: 16,
+};
+
+const helpText: React.CSSProperties = {
+  color: v2.muted2,
+  fontSize: fs.label,
+  marginTop: 5,
+  lineHeight: 1.5,
+};
 
 const overlay: React.CSSProperties = {
   position: "fixed",
