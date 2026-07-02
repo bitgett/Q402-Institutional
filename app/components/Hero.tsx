@@ -118,7 +118,7 @@ export default function Hero() {
               <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-yellow/30 bg-yellow/[0.06]">
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow animate-pulse" />
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-yellow/95">
-                  Mainnet · 11 chains live
+                  Mainnet · 12 chains live
                 </span>
               </span>
               <div className="flex flex-wrap items-center gap-2">
@@ -161,7 +161,7 @@ export default function Hero() {
                 className="hero-rise mt-7 text-base sm:text-lg lg:text-lg xl:text-xl text-white/65 font-light leading-relaxed lg:whitespace-nowrap"
                 style={{ animationDelay: "0.3s" }}
               >
-                <span className="text-yellow font-semibold">Zero gas.</span> Eleven EVM chains.{" "}
+                <span className="text-yellow font-semibold">Zero gas.</span> Twelve EVM chains.{" "}
                 <span className="text-yellow font-semibold">Pure stablecoin flow.</span> Users pay in USDC, USDT, or RLUSD, and we cover the rest.
               </p>
             </div>

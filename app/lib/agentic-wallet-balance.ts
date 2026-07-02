@@ -1,5 +1,6 @@
 /**
- * agentic-wallet-balance.ts — 11-chain USDC + USDT balance reader.
+ * agentic-wallet-balance.ts — 12-chain USDC + USDT balance reader
+ * (Robinhood Chain contributes USDG, its only stablecoin).
  *
  * Reads the Agent Wallet's stablecoin balances across every supported
  * EVM chain in parallel. Each chain uses viem's multicall so the two
@@ -107,15 +108,46 @@ async function readChainBalances(
   } as const;
   const client = createPublicClient({ chain: viemChain, transport: http(cfg.rpc) });
 
+  // USDG-only chains (Robinhood Chain) carry neither Circle USDC nor Tether
+  // USDT — only Paxos Global Dollar. Read USDG and report it under the `usdt`
+  // slot (canonical stablecoin surface for the UI's totalUsd math), leaving
+  // usdc null so the dashboard doesn't double-count. USDG is 1:1 USD like the
+  // other stablecoins, so folding it into totalUsd is correct.
+  const usdgOnly = !cfg.tokens.USDC && !cfg.tokens.USDT && !!cfg.tokens.USDG;
+  if (usdgOnly) {
+    const usdg = cfg.tokens.USDG!;
+    try {
+      const raw = await client.readContract({
+        address: usdg.address,
+        abi: ERC20_BALANCE_OF_ABI,
+        functionName: "balanceOf",
+        args: [walletAddr],
+      }) as bigint;
+      const tb = tokenBalanceFromRaw(raw, usdg.decimals);
+      return { chain, usdc: null, usdt: tb, quack: null, totalUsd: tb.usd };
+    } catch (e) {
+      return {
+        chain,
+        usdc: null,
+        usdt: null,
+        quack: null,
+        totalUsd: null,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+
   // Some chains use the same address for both USDC and USDT (e.g. Stable's
   // USDT0). Reading them twice would waste an RPC; collapse to a single
   // read in that case and split the result.
-  const sameToken = cfg.tokens.USDC.address.toLowerCase() === cfg.tokens.USDT.address.toLowerCase();
+  const usdcCfg = cfg.tokens.USDC!;
+  const usdtCfg = cfg.tokens.USDT!;
+  const sameToken = usdcCfg.address.toLowerCase() === usdtCfg.address.toLowerCase();
 
   try {
     if (sameToken) {
       const raw = await client.readContract({
-        address: cfg.tokens.USDT.address,
+        address: usdtCfg.address,
         abi: ERC20_BALANCE_OF_ABI,
         functionName: "balanceOf",
         args: [walletAddr],
@@ -124,19 +156,19 @@ async function readChainBalances(
       // maps under both keys but USDT is the canonical surface. We report
       // under USDT and leave USDC null so
       // the UI doesn't double-count.
-      const tb = tokenBalanceFromRaw(raw, cfg.tokens.USDT.decimals);
+      const tb = tokenBalanceFromRaw(raw, usdtCfg.decimals);
       return { chain, usdc: null, usdt: tb, quack: null, totalUsd: tb.usd };
     }
 
     const reads = [
       {
-        address: cfg.tokens.USDC.address,
+        address: usdcCfg.address,
         abi: ERC20_BALANCE_OF_ABI,
         functionName: "balanceOf" as const,
         args: [walletAddr] as const,
       },
       {
-        address: cfg.tokens.USDT.address,
+        address: usdtCfg.address,
         abi: ERC20_BALANCE_OF_ABI,
         functionName: "balanceOf" as const,
         args: [walletAddr] as const,
@@ -167,11 +199,11 @@ async function readChainBalances(
 
     const usdc =
       usdcResult.status === "success"
-        ? tokenBalanceFromRaw(usdcResult.result as bigint, cfg.tokens.USDC.decimals)
+        ? tokenBalanceFromRaw(usdcResult.result as bigint, usdcCfg.decimals)
         : null;
     const usdt =
       usdtResult.status === "success"
-        ? tokenBalanceFromRaw(usdtResult.result as bigint, cfg.tokens.USDT.decimals)
+        ? tokenBalanceFromRaw(usdtResult.result as bigint, usdtCfg.decimals)
         : null;
     // Reuse tokenBalanceFromRaw's raw->amount math (its `usd` field IS the
     // token amount); relabel as `amount` so nothing reads Q as USD.

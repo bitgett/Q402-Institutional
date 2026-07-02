@@ -32,7 +32,7 @@
  * SCOPE: `scope` ("trial" | "multichain") is threaded into the modals'
  * gating via `hasMultichainScope` (resolved server-side from the wallet
  * list response) AND surfaced as a badge. Trial = BNB-only / trial key;
- * multichain = 11 chains / live key. It does not change layout structure.
+ * multichain = 12 chains / live key. It does not change layout structure.
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -995,7 +995,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                   {
                     icon: <GasTankIcon size={16} />,
                     title: "Gas sponsored",
-                    body: "Our relayer covers gas on 11 EVM chains — only the stablecoin moves from your Agent Wallet balance.",
+                    body: "Our relayer covers gas on 12 EVM chains — only the stablecoin moves from your Agent Wallet balance.",
                   },
                 ].map((b) => (
                   <div key={b.title} style={{ ...subCard(13), padding: 13 }}>
@@ -1100,7 +1100,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                       </span>
                       <span style={styles.badge}>
                         {(demoMode ? scope === "multichain" : multichainActive)
-                          ? "Multichain · 11 chains"
+                          ? "Multichain · 12 chains"
                           : "Trial · BNB"}
                       </span>
                       {agentNum && <span style={styles.badge}>ERC-8004 #{agentNum}</span>}
@@ -1331,7 +1331,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
 
                 {/* Capital overview — Stablecoins + Gas Tank on one row, Yield below */}
                 <section>
-                  <SectionHead title="Capital overview" meta="11 networks monitored" />
+                  <SectionHead title="Capital overview" meta="12 networks monitored" />
                   <div style={{ ...styles.allocation, gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr" }}>
                     <div style={{ ...subCard(13), padding: 14, height: "100%", display: "flex", flexDirection: "column" }}>
                       <div style={styles.assetTop}>

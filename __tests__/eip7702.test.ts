@@ -129,7 +129,7 @@ describe("isOfficialQ402Impl", () => {
     expect(isOfficialQ402Impl("bnb", "0x0000000000000000000000000000000000000000")).toBe(false);
   });
 
-  it("CHAIN_IDS and Q402_IMPL_PER_CHAIN cover the same 11 chains", () => {
+  it("CHAIN_IDS and Q402_IMPL_PER_CHAIN cover the same 12 chains", () => {
     expect(Object.keys(CHAIN_IDS).sort()).toEqual(Object.keys(Q402_IMPL_PER_CHAIN).sort());
   });
 });

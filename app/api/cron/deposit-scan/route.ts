@@ -37,7 +37,7 @@
  *
  * Per-CHAIN sweep (NOT per-owner): the gas tank is a single address, so one
  * block-walk per chain reveals EVERY owner's native deposit to it in the
- * recent window. Each tick enumerates the paid-owner set, scans all 11 chains
+ * recent window. Each tick enumerates the paid-owner set, scans all 12 chains
  * in parallel (recent `PER_CHAIN_BLOCK_CAP` window, bounded by
  * `SCAN_DEADLINE_MS`), and credits the senders that are in the owner set.
  * Because every chain is swept every ~10-min heartbeat, the recent window is

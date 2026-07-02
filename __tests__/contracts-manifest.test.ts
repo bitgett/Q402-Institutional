@@ -46,7 +46,12 @@ const sdkSource = readFileSync(
   "utf8"
 );
 
-const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum", "base"] as const;
+const CHAINS = ["avax", "bnb", "eth", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum", "base", "robinhood"] as const;
+
+// USDG-only chains (Robinhood Chain) carry neither Circle USDC nor Tether USDT —
+// only Paxos Global Dollar (USDG). The USDC/USDT-specific assertions below skip
+// these; a dedicated block asserts their USDG entry instead.
+const USDG_ONLY_CHAINS = new Set<string>(["robinhood"]);
 
 describe("contracts.manifest.json ↔ server CHAIN_CONFIG", () => {
   it.each(CHAINS)("%s: chainId + implContract match manifest", (chain) => {
@@ -60,6 +65,15 @@ describe("contracts.manifest.json ↔ server CHAIN_CONFIG", () => {
   it.each(CHAINS)("%s: token addresses match manifest", (chain) => {
     const m = manifest.chains[chain];
     const s = CHAIN_CONFIG[chain as ChainKey];
+    if (USDG_ONLY_CHAINS.has(chain)) {
+      // USDG-only chain: no USDC/USDT slot on either side. Assert the USDG
+      // entry matches instead.
+      const su = (s as { usdg?: { address: string; decimals: number } }).usdg;
+      expect(su, `server CHAIN_CONFIG.${chain}.usdg missing`).toBeDefined();
+      expect(su!.address.toLowerCase()).toBe(m.tokens.USDG.address.toLowerCase());
+      expect(su!.decimals).toBe(m.tokens.USDG.decimals);
+      return;
+    }
     expect(s.usdc.address.toLowerCase()).toBe(m.tokens.USDC.address.toLowerCase());
     expect(s.usdc.decimals).toBe(m.tokens.USDC.decimals);
     expect(s.usdt.address.toLowerCase()).toBe(m.tokens.USDT.address.toLowerCase());

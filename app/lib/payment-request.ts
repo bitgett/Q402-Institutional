@@ -38,7 +38,7 @@ export interface PaymentRequest {
   creatorOwner: string;       // lowercased owner EOA that published the request
   recipient: string;          // address that receives the funds
   chain: string;              // AgenticChainKey (bnb|eth|avax|xlayer|stable|mantle|injective|monad|scroll|arbitrum)
-  token: "USDC" | "USDT";
+  token: "USDC" | "USDT" | "USDG";
   amount: string;             // human-readable decimal STRING (never a JS Number - 18-dec precision)
   memo?: string;
   status: PaymentRequestStatus;
@@ -56,7 +56,7 @@ export interface PublicPaymentRequest {
   id: string;
   recipient: string;
   chain: string;
-  token: "USDC" | "USDT";
+  token: "USDC" | "USDT" | "USDG";
   amount: string;
   memo?: string;
   status: PaymentRequestStatus;
@@ -111,7 +111,7 @@ export interface CreatePaymentRequestInput {
   creatorOwner: string;
   recipient: string;
   chain: string;
-  token: "USDC" | "USDT";
+  token: "USDC" | "USDT" | "USDG";
   amount: string;
   memo?: string;
   sandbox: boolean;

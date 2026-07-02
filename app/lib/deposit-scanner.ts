@@ -14,7 +14,7 @@ import { ethers } from "ethers";
 import { GASTANK_ADDRESS_LC } from "./wallets";
 
 /**
- * 11-chain table for native-coin deposits to the Gas Tank.
+ * 12-chain table for native-coin deposits to the Gas Tank.
  *
  * `blockWindow` is sized so each chain covers ~10 minutes of recent
  * history, matching the realistic gap between a user submitting a
@@ -40,6 +40,8 @@ export const DEPOSIT_CHAINS = [
   { key: "arbitrum", name: "Arbitrum", token: "ETH",   rpc: "https://arb1.arbitrum.io/rpc",             blockWindow: 5000, explorer: "https://arbiscan.io/tx/" },
   // Base — OP Stack L2, ~2s block, so 900 blocks ≈ 30 min for the 15-min cron.
   { key: "base",   name: "Base",      token: "ETH",   rpc: "https://mainnet.base.org",                 blockWindow: 900, explorer: "https://basescan.org/tx/" },
+  // Robinhood Chain — Arbitrum Nitro L2, ~0.25s block like Arbitrum One.
+  { key: "robinhood", name: "Robinhood Chain", token: "ETH", rpc: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com", blockWindow: 5000, explorer: "https://robinhoodchain.blockscout.com/tx/" },
 ] as const;
 
 export type DepositChain = typeof DEPOSIT_CHAINS[number];

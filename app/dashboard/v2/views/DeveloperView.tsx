@@ -12,7 +12,7 @@
  *          Documentation  (scroll-spy sub-nav; clicking scrolls to section)
  *   Col 2  .view-main: title "Developer access", desc, then
  *          .developer-grid — but the KEY trial/multichain IA FIX is that BOTH
- *          API keys render SIDE BY SIDE (Multichain · 11 chains · paid Gas
+ *          API keys render SIDE BY SIDE (Multichain · 12 chains · paid Gas
  *          Tank scope  AND  Trial · 2,000 sponsored TX · 30-day · BNB-only)
  *          so the user never has to switch "mode" to find a key. The card
  *          matching the active `scope` prop is highlighted (yellow ring).
@@ -110,7 +110,7 @@ const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: stri
 const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }> = [
   // Core
   { group: "Core", name: "q402_doctor", purpose: "First-install onboarding + ongoing health check (quota, EIP-7702 state, relay reachability)." },
-  { group: "Core", name: "q402_quote", purpose: "Compare gas + supported tokens across 11 chains. No auth." },
+  { group: "Core", name: "q402_quote", purpose: "Compare gas + supported tokens across 12 chains. No auth." },
   { group: "Core", name: "q402_balance", purpose: "Verify key + remaining quota. Returns Trial + Multichain in one read." },
   { group: "Core", name: "q402_pay", purpose: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
   { group: "Core", name: "q402_batch_pay", purpose: "Up to 20 recipients per call (trial: 5 with your own key; server-managed Agent Wallet batch is paid Multichain-only) in one settlement." },
@@ -168,7 +168,7 @@ const DEMO = {
   multichainKey: "q402_live_804685527••••",
   /** Trial live key — masked sample, never a real secret. */
   trialKey: "q402_live_4479df8••••",
-  multichainSub: "11 EVM chains · paid Gas Tank scope",
+  multichainSub: "12 EVM chains · paid Gas Tank scope",
   trialSub: "2,000 sponsored TX · 30-day trial · 1,847 left · 14d left",
   webhookSub: "Signed POST after each settlement",
   /** Sandbox key shown inside the MCP config JSON (safe-to-paste tier). */
@@ -2240,7 +2240,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                 apiKey={demoMode ? DEMO.multichainKey : multichainKey}
                 tag="LIVE"
                 tagColor={v2.mint}
-                sub={demoMode ? DEMO.multichainSub : "11 EVM chains · paid Gas Tank scope"}
+                sub={demoMode ? DEMO.multichainSub : "12 EVM chains · paid Gas Tank scope"}
                 active={scope === "multichain"}
                 demo={demoMode}
                 locked={!hasPaid || !multichainKey}

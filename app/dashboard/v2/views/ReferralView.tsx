@@ -24,7 +24,7 @@ interface ReferralStats {
   needsWallet?: boolean;
 }
 
-const SHARE_TEXT = "Give your AI agents a gasless wallet that pays on 11 chains. Create yours on Q402:";
+const SHARE_TEXT = "Give your AI agents a gasless wallet that pays on 12 chains. Create yours on Q402:";
 const NEW_WINDOW_MS = 48 * 3600 * 1000;
 
 function fmtDate(ts: number): string {

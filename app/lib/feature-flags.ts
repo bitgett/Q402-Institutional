@@ -12,7 +12,7 @@
 /**
  * EVENT_MODE — toggles the dedicated `/event` page that hosts the free-
  * trial signup + event narrative. The main landing, relay route, SDK,
- * MCP server, and UI all stay on the full 11-chain + RLUSD matrix
+ * MCP server, and UI all stay on the full 12-chain + RLUSD matrix
  * regardless of this flag.
  *
  * When EVENT_MODE is true:

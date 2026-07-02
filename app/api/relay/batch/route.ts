@@ -72,7 +72,7 @@ import { getApiKeyRecord } from "@/app/lib/db";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 
 const ETH_ADDR = /^0x[0-9a-fA-F]{40}$/;
-const ALLOWED_TOKENS = new Set(["USDC", "USDT", "RLUSD"]);
+const ALLOWED_TOKENS = new Set(["USDC", "USDT", "RLUSD", "USDG"]);
 
 const MAX_RECIPIENTS_TRIAL = 5;
 const MAX_RECIPIENTS_PAID  = 20;
@@ -144,11 +144,11 @@ export async function POST(req: NextRequest) {
   // shapes (xlayerNonce / stableNonce) and the X Layer USDC EIP-3009
   // fallback don't compose cleanly with sequential first-fail-abort
   // semantics. Per-recipient pay() loop remains the path for those.
-  const BATCHABLE_CHAINS = new Set(["avax", "bnb", "eth", "mantle", "injective", "monad", "scroll", "arbitrum", "base"]);
+  const BATCHABLE_CHAINS = new Set(["avax", "bnb", "eth", "mantle", "injective", "monad", "scroll", "arbitrum", "base", "robinhood"]);
   if (!BATCHABLE_CHAINS.has(chain)) {
     return NextResponse.json(
       {
-        error: `chain "${chain}" is not batchable. Batch-supported chains: avax, bnb, eth, mantle, injective, monad, scroll, arbitrum, base. For xlayer / stable use /api/relay in a client-side loop.`,
+        error: `chain "${chain}" is not batchable. Batch-supported chains: avax, bnb, eth, mantle, injective, monad, scroll, arbitrum, base, robinhood. For xlayer / stable use /api/relay in a client-side loop.`,
         code: "CHAIN_NOT_BATCHABLE",
       },
       { status: 400 },

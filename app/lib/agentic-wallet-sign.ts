@@ -37,7 +37,8 @@ export type AgenticChainKey =
   | "monad"
   | "scroll"
   | "arbitrum"
-  | "base";
+  | "base"
+  | "robinhood";
 
 interface TokenCfg {
   address: Address;
@@ -53,8 +54,11 @@ interface ChainCfg {
   domainName: string;
   domainVersion: "1";
   /** Q (QuackAI token) is optional and BNB-only; it is NOT a stablecoin so
-   *  callers must value it via the Q/USDT TWAP, never as 1:1 USD. */
-  tokens: { USDC: TokenCfg; USDT: TokenCfg; Q?: TokenCfg };
+   *  callers must value it via the Q/USDT TWAP, never as 1:1 USD.
+   *  USDG (Paxos Global Dollar) is optional and Robinhood-Chain-only; on the
+   *  USDG-only chain USDC/USDT are absent (no Circle/Tether issuance), so the
+   *  standard USDC/USDT slots are themselves optional. */
+  tokens: { USDC?: TokenCfg; USDT?: TokenCfg; Q?: TokenCfg; USDG?: TokenCfg };
 }
 
 /** Mirrors contracts.manifest.json `chains.*` for the fields needed by
@@ -214,13 +218,27 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
       USDT: { address: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", decimals: 6 },
     },
   },
+  robinhood: {
+    key: "robinhood",
+    id: 4663,
+    name: "Robinhood Chain",
+    rpc: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    domainName: "Q402 Robinhood Chain",
+    domainVersion: "1",
+    tokens: {
+      // USDG (Paxos Global Dollar) is the ONLY token on Robinhood Chain, 6 dec.
+      // No Circle USDC / Tether USDT here (the on-chain USDC/USDT are mock/scam).
+      USDG: { address: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", decimals: 6 },
+    },
+  },
 };
 
 export function isAgenticChainKey(s: unknown): s is AgenticChainKey {
   return typeof s === "string" && s in AGENTIC_CHAINS;
 }
 
-export type AgenticToken = "USDC" | "USDT" | "Q";
+export type AgenticToken = "USDC" | "USDT" | "Q" | "USDG";
 
 /** Cryptographically-random uint256 nonce for the EIP-712 witness. */
 export function randomUint256Nonce(): bigint {

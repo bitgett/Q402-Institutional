@@ -115,7 +115,7 @@ const CAPS = [
   },
   {
     title: "Gas Tank",
-    body: "Fund gas once. Q402 sponsors settlement across all 11 chains and auto-funds bridge fees per chain. The server never receives your deposit.",
+    body: "Fund gas once. Q402 sponsors settlement across all 12 chains and auto-funds bridge fees per chain. The server never receives your deposit.",
     tools: ["q402_bridge_gas_tank"],
   },
   {
@@ -287,7 +287,7 @@ function Hero() {
           <span style={{ color: YELLOW }}>not your keys.</span>
         </h1>
         <p className="text-lg leading-relaxed mt-7 max-w-[40rem]" style={{ color: MUT }}>
-          Q402 Agent Wallets sign and settle on their own across 11 EVM chains, gasless, inside the
+          Q402 Agent Wallets sign and settle on their own across 12 EVM chains, gasless, inside the
           per-transaction and daily caps you set. Export the keys or delete the wallet anytime.
         </p>
         <div className="flex flex-wrap gap-3 mt-9">
@@ -535,7 +535,7 @@ function ChainStrip() {
   return (
     <motion.div {...rise} className="mt-12 pt-8 border-t" style={{ borderColor: HAIR }}>
       <div className="font-mono text-[11px] uppercase tracking-[0.24em] mb-4" style={{ color: MUT2 }}>
-        11 chains . USDC and USDT everywhere . RLUSD on Ethereum
+        12 chains . USDC and USDT everywhere . RLUSD on Ethereum
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-2">
         {CHAINS.map((c) => (

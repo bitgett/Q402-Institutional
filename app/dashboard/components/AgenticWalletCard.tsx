@@ -70,6 +70,7 @@ const CHAIN_LABEL: Partial<Record<ChainKey, string>> = {
   scroll: "Scroll",
   arbitrum: "Arbitrum",
   base: "Base",
+  robinhood: "Robinhood Chain",
 };
 
 function formatBalance(n: number): string {
@@ -303,7 +304,7 @@ export function AgenticWalletCard({
           <StatTile
             label="Balance"
             value={balance ? formatBalance(balance.totalUsd) : balanceLoading ? "…" : "$—"}
-            sub="USDC + USDT across 11 chains"
+            sub="USDC + USDT across 12 chains"
             tone="hero"
             action={
               <button
@@ -338,7 +339,7 @@ export function AgenticWalletCard({
           />
         </div>
 
-        {/* 11-chain coverage grid — always visible. Surfaces both the
+        {/* 12-chain coverage grid — always visible. Surfaces both the
             full chain support footprint AND where the balance sits, so
             the user sees at a glance "I have $4 on BNB, $0 elsewhere"
             instead of "$4 total somewhere". */}
@@ -645,10 +646,10 @@ export function AgenticWalletCard({
 
 // ── ChainCoverageGrid ──────────────────────────────────────────────────────
 //
-// Always-visible 11-chain grid. Each cell = one chain, showing the chain
+// Always-visible 12-chain grid. Each cell = one chain, showing the chain
 // logo + label + (USDC + USDT) sub-totals in USD. Cells with $0 render
 // dimmed so the eye still walks past them; cells with balance get a
-// subtle accent ring. Surfaces both "Q402 supports these 11 chains" AND
+// subtle accent ring. Surfaces both "Q402 supports these 12 chains" AND
 // "here's where my money actually sits" in one row, replacing the old
 // conditional HoldingsBreakdown that only appeared when the wallet was
 // non-empty.
@@ -665,8 +666,9 @@ const CHAIN_ICON: Partial<Record<ChainKey, { src: string; alt: string }>> = {
   scroll:    { src: "/scroll.png",    alt: "Scroll" },
   arbitrum:  { src: "/arbitrum.png",  alt: "Arbitrum" },
   base:      { src: "/base.png",      alt: "Base" },
+  robinhood: { src: "/robinhood.svg", alt: "Robinhood Chain" },
 };
-const CHAIN_ORDER: ChainKey[] = ["bnb", "eth", "avax", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum", "base"];
+const CHAIN_ORDER: ChainKey[] = ["bnb", "eth", "avax", "xlayer", "stable", "mantle", "injective", "monad", "scroll", "arbitrum", "base", "robinhood"];
 
 function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: BalancePayload | null }) {
   const byChain = new Map<ChainKey, { usdc: number; usdt: number; total: number; error?: string }>();
@@ -688,7 +690,7 @@ function ChainCoverageGrid({ wallet, balance }: { wallet: string; balance: Balan
     >
       <div className="flex items-center justify-between mb-2">
         <div className="text-[10px] uppercase tracking-widest text-white/65 font-medium">
-          Balance by chain · 11 chains
+          Balance by chain · 12 chains
         </div>
         {balance && (
           <div className="text-[10px] text-white/55">
