@@ -135,6 +135,14 @@ const CHAINS = {
     token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", decimals: 6, symbol: "USDC",
     explorer: "https://basescan.org/tx/",
   },
+  robinhood: {
+    id: 4663, name: "Robinhood Chain", domainName: "Q402 Robinhood Chain",
+    rpc: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com",
+    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // USDG (Paxos Global Dollar) is the ONLY canonical stablecoin on Robinhood Chain.
+    token: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", decimals: 6, symbol: "USDG",
+    explorer: "https://robinhoodchain.blockscout.com/tx/",
+  },
 };
 
 if (!chainKey || !CHAINS[chainKey]) {
