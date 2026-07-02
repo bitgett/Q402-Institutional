@@ -101,7 +101,8 @@ None --lockFrom--> Open --release(buyerSig)--------> Released  (-> seller)
 
 ### EIP-712 types
 - LockImpl domain `Q402 Escrow Lock` (verifyingContract = buyer EOA under 7702):
-  `EscrowLock(address buyer,address seller,address vault,address token,uint256 amount,bytes32 escrowId,uint256 releaseDeadline,address arbiter,uint256 nonce,uint256 deadline)`
+  `EscrowLock(address buyer,address seller,address vault,address token,uint256 amount,bytes32 salt,uint256 releaseDeadline,address arbiter,address facilitator,uint256 nonce,uint256 deadline)`
+  (the witness signs `salt`; the vault derives `escrowId = keccak256(abi.encode(buyer, salt))`. `facilitator` binds the relayer, matching the payment impl.)
 - Vault domain `Q402 Escrow` (verifyingContract = vault):
   `EscrowRelease(bytes32 escrowId,uint256 nonce,uint256 deadline)`
   `EscrowDispute(bytes32 escrowId,uint256 nonce,uint256 deadline)`
