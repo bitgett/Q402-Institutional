@@ -273,8 +273,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
 
     const tokenStr = (body.token ?? "USDT").toUpperCase();
-    if (tokenStr !== "USDC" && tokenStr !== "USDT") {
-      return NextResponse.json({ error: "INVALID_TOKEN", message: "token must be USDC or USDT." }, { status: 400 });
+    if (tokenStr !== "USDC" && tokenStr !== "USDT" && tokenStr !== "USDG") {
+      return NextResponse.json({ error: "INVALID_TOKEN", message: "token must be USDC, USDT, or USDG." }, { status: 400 });
+    }
+    // USDG (Paxos Global Dollar) is the Robinhood-Chain-only stablecoin; USDC/USDT
+    // never legitimately exist there. Enforce the pairing both ways so a recurring
+    // rule can't be created with a token the chain will reject at fire time.
+    if (tokenStr === "USDG" && chain !== "robinhood") {
+      return NextResponse.json({ error: "INVALID_TOKEN", message: "USDG is only available on Robinhood Chain." }, { status: 400 });
+    }
+    if (chain === "robinhood" && tokenStr !== "USDG") {
+      return NextResponse.json({ error: "INVALID_TOKEN", message: "Robinhood Chain supports USDG only." }, { status: 400 });
     }
     const token = tokenStr;
 

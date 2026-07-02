@@ -159,8 +159,17 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
   if (!isAgenticChainKey(body.chain)) {
     return NextResponse.json({ error: "INVALID_CHAIN" }, { status: 400 });
   }
-  if (body.token !== "USDC" && body.token !== "USDT") {
+  if (body.token !== "USDC" && body.token !== "USDT" && body.token !== "USDG") {
     return NextResponse.json({ error: "INVALID_TOKEN" }, { status: 400 });
+  }
+  // USDG (Paxos Global Dollar) is Robinhood-Chain-only; USDC/USDT never
+  // legitimately exist there. Enforce the pairing both ways so a rule can't be
+  // created with a token its chain will reject at fire time.
+  if (body.token === "USDG" && body.chain !== "robinhood") {
+    return NextResponse.json({ error: "INVALID_TOKEN", message: "USDG is only available on Robinhood Chain." }, { status: 400 });
+  }
+  if (body.chain === "robinhood" && body.token !== "USDG") {
+    return NextResponse.json({ error: "INVALID_TOKEN", message: "Robinhood Chain supports USDG only." }, { status: 400 });
   }
   if (!Array.isArray(body.recipients) || body.recipients.length === 0) {
     return NextResponse.json({ error: "RECIPIENTS_REQUIRED" }, { status: 400 });

@@ -535,7 +535,7 @@ function ChainStrip() {
   return (
     <motion.div {...rise} className="mt-12 pt-8 border-t" style={{ borderColor: HAIR }}>
       <div className="font-mono text-[11px] uppercase tracking-[0.24em] mb-4" style={{ color: MUT2 }}>
-        12 chains . USDC and USDT everywhere . RLUSD on Ethereum
+        12 chains . USDC / USDT . USDG on Robinhood . RLUSD on Ethereum
       </div>
       <div className="flex flex-wrap gap-x-3 gap-y-2">
         {CHAINS.map((c) => (

@@ -61,7 +61,7 @@ describe("signAgenticPayment — x402 (Base USDC EIP-3009) rail", () => {
 
   it("signs an EIP-3009 authorization the USDC domain recovers to the wallet", async () => {
     const signed = await signAgenticPayment(baseX402Params());
-    const tokenCfg = AGENTIC_CHAINS.base.tokens.USDC;
+    const tokenCfg = AGENTIC_CHAINS.base.tokens.USDC!; // base always carries USDC (usdc/usdt optional only for USDG-only chains)
     const recovered = ethers.verifyTypedData(
       {
         name: "USD Coin",
