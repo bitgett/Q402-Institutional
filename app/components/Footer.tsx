@@ -7,7 +7,7 @@ import RegisterModal from "./RegisterModal";
 // and a thin metadata bar at the bottom. Replaces the prior single-row
 // sprawl where chain pills, status, and legal links were jammed together.
 
-const CHAINS = [
+const CHAINS: { name: string; img: string; bg?: string; contain?: boolean }[] = [
   { name: "BNB Chain",  img: "/bnb.png"       },
   { name: "Ethereum",   img: "/eth.png"       },
   { name: "Avalanche",  img: "/avax.png"      },
@@ -19,6 +19,7 @@ const CHAINS = [
   { name: "Scroll",     img: "/scroll.png"    },
   { name: "Arbitrum",   img: "/arbitrum.png"  },
   { name: "Base",       img: "/base.png"      },
+  { name: "Robinhood",  img: "/robinhood.svg", bg: "#00C805", contain: true },
 ];
 
 // `action: "openContactModal"` triggers the same RegisterModal the Contact
@@ -138,9 +139,9 @@ export default function Footer() {
           <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
             {CHAINS.map((c) => (
               <div key={c.name} className="flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full overflow-hidden border border-white/10 flex-shrink-0">
+                <span className="w-5 h-5 rounded-full overflow-hidden border border-white/10 flex-shrink-0" style={c.bg ? { background: c.bg } : undefined}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={c.img} alt={c.name} className="w-full h-full object-cover" />
+                  <img src={c.img} alt={c.name} className={c.contain ? "w-full h-full object-contain p-[3px]" : "w-full h-full object-cover"} />
                 </span>
                 <span className="text-white/50 text-xs">{c.name}</span>
               </div>

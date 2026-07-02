@@ -146,7 +146,7 @@ export default function HowItWorks() {
               className="flex items-center gap-4"
             >
               <div className="flex gap-2">
-                {[
+                {([
                   { label: "BNB",    img: "/bnb.png",       bg: "#F0B90B" },
                   { label: "ETH",    img: "/eth.png",       bg: "#1A1F36" },
                   { label: "MANTLE", img: "/mantle.png",    bg: "#000000" },
@@ -158,10 +158,11 @@ export default function HowItWorks() {
                   { label: "SCROLL", img: "/scroll.png",    bg: "#FFEEDA" },
                   { label: "ARB",    img: "/arbitrum.png",  bg: "#28A0F0" },
                   { label: "BASE",   img: "/base.png",      bg: "#0052FF" },
-                ].map((c) => (
+                  { label: "RH",     img: "/robinhood.svg", bg: "#00C805", contain: true },
+                ] as { label: string; img: string; bg: string; contain?: boolean }[]).map((c) => (
                   <div key={c.label} className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0" style={{ backgroundColor: c.bg }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={c.img} alt={c.label} className="w-7 h-7 object-cover rounded-full" />
+                    <img src={c.img} alt={c.label} className={c.contain ? "w-full h-full object-contain p-[3px]" : "w-7 h-7 object-cover rounded-full"} />
                   </div>
                 ))}
               </div>

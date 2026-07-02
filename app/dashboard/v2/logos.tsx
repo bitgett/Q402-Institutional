@@ -23,7 +23,12 @@ export const CHAIN_LOGO: Record<string, string> = {
   injective: "/injective.png",
   monad: "/monad.png",
   stable: "/stable.jpg",
+  robinhood: "/robinhood.svg",
 };
+
+// Chains whose mark is a transparent SVG that needs a branded fill + contain
+// (padded) instead of a cover-cropped PNG.
+const CHAIN_LOGO_BG: Record<string, string> = { robinhood: "#00C805" };
 
 /** Round chain logo with a colored-dot fallback for unmapped chains. */
 export function ChainIcon({ chain, size = 16, color }: { chain: string; size?: number; color?: string }) {
@@ -33,9 +38,10 @@ export function ChainIcon({ chain, size = 16, color }: { chain: string; size?: n
       <span style={{ width: size, height: size, borderRadius: "50%", background: color ?? v2.muted2, flexShrink: 0, display: "inline-block" }} />
     );
   }
+  const brandBg = CHAIN_LOGO_BG[chain];
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt="" width={size} height={size} style={{ borderRadius: "50%", flexShrink: 0, objectFit: "cover", display: "block", background: "#0c1626" }} />
+    <img src={src} alt="" width={size} height={size} style={{ borderRadius: "50%", flexShrink: 0, boxSizing: "border-box", objectFit: brandBg ? "contain" : "cover", padding: brandBg ? Math.max(2, Math.round(size * 0.15)) : 0, display: "block", background: brandBg ?? "#0c1626" }} />
   );
 }
 

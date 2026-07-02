@@ -39,7 +39,7 @@ interface ChainRow {
   chainId: number;
   gas: string;
   approxGasCostUsd: number;
-  tokens: ReadonlyArray<"USDC" | "USDT" | "RLUSD">;
+  tokens: ReadonlyArray<"USDC" | "USDT" | "RLUSD" | "USDG">;
   note?: string;
 }
 
@@ -55,6 +55,7 @@ const CHAINS: ChainRow[] = [
   { key: "avax", name: "Avalanche C-Chain", chainId: 43114, gas: "AVAX", approxGasCostUsd: 0.003, tokens: ["USDC", "USDT"] },
   { key: "injective", name: "Injective EVM", chainId: 1776, gas: "INJ", approxGasCostUsd: 0.004, tokens: ["USDC", "USDT"] },
   { key: "eth", name: "Ethereum Mainnet", chainId: 1, gas: "ETH", approxGasCostUsd: 1.2, tokens: ["USDC", "USDT", "RLUSD"], note: "L1, volatile gas. RLUSD (Ripple USD) Ethereum-only" },
+  { key: "robinhood", name: "Robinhood Chain", chainId: 4663, gas: "ETH", approxGasCostUsd: 0.0008, tokens: ["USDG"], note: "Arbitrum Nitro L2. USDG only (Paxos Global Dollar)" },
 ];
 
 // ── install matrix + works-with strip live in app/lib/mcp-clients.ts ─────────
