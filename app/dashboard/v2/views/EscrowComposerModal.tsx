@@ -299,14 +299,14 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
                 />
                 <div style={helpText}>Who receives the funds when you release the escrow.</div>
               </Field>
-              <Field label="Auto-refund after">
+              <Field label="You can reclaim after">
                 <select value={String(releaseDays)} onChange={(e) => setReleaseDays(Number(e.target.value))} style={inputStyle}>
                   <option value="7" style={optionStyle}>7 days</option>
                   <option value="14" style={optionStyle}>14 days</option>
                   <option value="30" style={optionStyle}>30 days</option>
                   <option value="90" style={optionStyle}>90 days</option>
                 </select>
-                <div style={helpText}>If nothing is released, you can reclaim your funds after this window.</div>
+                <div style={helpText}>If you never release, you (the buyer) can refund the full amount back to yourself after this. It never auto-pays the seller.</div>
               </Field>
               <div>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none" }}>
