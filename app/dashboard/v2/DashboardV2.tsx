@@ -31,6 +31,7 @@ import { WalletsView } from "./views/WalletsView";
 import { ActivityView } from "./views/ActivityView";
 import { TreasuryView } from "./views/TreasuryView";
 import { DeveloperView } from "./views/DeveloperView";
+import { EscrowView } from "./views/EscrowView";
 import { ReferralView } from "./views/ReferralView";
 import DashboardBanners from "./DashboardBanners";
 import { useDashboardIdentity } from "./identity-context";
@@ -53,7 +54,7 @@ export default function DashboardV2({
   const [view, setView] = useState<V2ViewId>(() => {
     if (typeof window === "undefined") return "wallets";
     const v = new URLSearchParams(window.location.search).get("view");
-    return (["wallets", "activity", "treasury", "developer", "referral"] as const).includes(v as V2ViewId)
+    return (["wallets", "activity", "treasury", "developer", "escrow", "referral"] as const).includes(v as V2ViewId)
       ? (v as V2ViewId)
       : "wallets";
   });
@@ -255,6 +256,7 @@ export default function DashboardV2({
           {view === "activity" && <ActivityView {...viewProps} />}
           {view === "treasury" && <TreasuryView {...viewProps} />}
           {view === "developer" && <DeveloperView {...viewProps} />}
+          {view === "escrow" && <EscrowView {...viewProps} />}
           {view === "referral" && <ReferralView {...viewProps} onNavigate={selectView} />}
         </div>
       </div>
