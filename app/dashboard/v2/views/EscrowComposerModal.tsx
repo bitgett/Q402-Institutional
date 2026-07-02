@@ -19,12 +19,23 @@ interface PublicEscrow {
   id: string;
   onchainEscrowId: string;
   buyer: string;
+  fundedBy: "owner" | "agent";
   seller: string;
   chain: string;
   token: "USDC" | "USDT";
   amount: string;
   arbiter?: string;
   status: string;
+}
+
+interface AgentWallet {
+  address: string;
+  walletId: string;
+  label?: string | null;
+}
+
+function shortAddr(a: string): string {
+  return a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "";
 }
 
 // Escrow is live on BNB mainnet; kept as a map so more chains drop in as their
@@ -54,8 +65,36 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
   const [created, setCreated] = useState<PublicEscrow | null>(null);
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // "Fund from": the owner EOA (client-funded, needs an agent to lock) or one of
+  // the owner's Agent Wallets (server-funded — dashboard can lock it directly).
+  const [agentWallets, setAgentWallets] = useState<AgentWallet[]>([]);
+  const [fundFrom, setFundFrom] = useState<string>("owner");
 
   useEffect(() => setMounted(true), []);
+
+  // Load the owner's Agent Wallets so they can fund an escrow from one (default).
+  // getAuthCreds is cached — the Escrow list already authed on view mount, so
+  // this usually adds no extra wallet prompt.
+  useEffect(() => {
+    if (!ownerAddress) return;
+    let cancelled = false;
+    (async () => {
+      const auth = await getAuthCreds(ownerAddress, signMessage);
+      if (!auth || cancelled) return;
+      try {
+        const res = await fetch(`/api/wallet/agentic?address=${ownerAddress}&nonce=${encodeURIComponent(auth.nonce)}&sig=${encodeURIComponent(auth.signature)}`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { wallets?: { address: string; walletId?: string; label?: string | null }[] };
+        const ws = (data.wallets ?? []).map((w) => ({ address: w.address, walletId: w.walletId ?? w.address.toLowerCase(), label: w.label }));
+        if (cancelled) return;
+        setAgentWallets(ws);
+        // Default to funding from the first Agent Wallet — it's the self-service
+        // path (the dashboard can lock it; an owner-EOA escrow needs an agent).
+        if (ws.length > 0) setFundFrom(ws[0].address);
+      } catch { /* leave as owner */ }
+    })();
+    return () => { cancelled = true; };
+  }, [ownerAddress, signMessage]);
 
   async function create() {
     if (!ownerAddress) return;
@@ -106,6 +145,7 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
           seller,
           amount,
           releaseDays,
+          ...(fundFrom !== "owner" ? { walletId: fundFrom } : {}),
           ...(useArbiter && arbiter ? { arbiter } : {}),
           ...(memo.trim() ? { memo: memo.trim() } : {}),
         }),
@@ -156,14 +196,29 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
               <b style={{ color: v2.yellow }}>pending</b>. No funds have moved yet.
             </div>
             <div style={{ ...noteBox, marginBottom: 12 }}>
-              <div style={{ color: v2.text, fontWeight: 600, fontSize: fs.body, marginBottom: 4 }}>
-                Fund it gaslessly with a Q402 agent
-              </div>
-              <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5 }}>
-                Locking funds needs an EIP-7702 signature browser wallets can&apos;t produce. Have your Q402 agent run{" "}
-                <span style={codeSpan}>q402_escrow_lock</span> with this id, or fund from the MCP. Once locked it shows as{" "}
-                <b style={{ color: v2.mint }}>open</b> here and you can release or dispute it.
-              </div>
+              {created.fundedBy === "agent" ? (
+                <>
+                  <div style={{ color: v2.text, fontWeight: 600, fontSize: fs.body, marginBottom: 4 }}>
+                    Fund it right here
+                  </div>
+                  <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5 }}>
+                    Your Agent Wallet funds this escrow. Hit <b style={{ color: v2.yellow }}>Fund</b> on it in the list below —
+                    Q402 signs the gasless lock for the wallet (within its spend limits). Then you can{" "}
+                    <b style={{ color: v2.mint }}>release</b> to the seller or dispute it, all from here.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ color: v2.text, fontWeight: 600, fontSize: fs.body, marginBottom: 4 }}>
+                    Fund it gaslessly with a Q402 agent
+                  </div>
+                  <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5 }}>
+                    Locking funds needs an EIP-7702 signature browser wallets can&apos;t produce. Have your Q402 agent run{" "}
+                    <span style={codeSpan}>q402_escrow_lock</span> with this id, or fund from the MCP. Once locked it shows as{" "}
+                    <b style={{ color: v2.mint }}>open</b> here and you can release or dispute it.
+                  </div>
+                </>
+              )}
             </div>
             <div style={idRow}>
               <span style={idText}>{created.id}</span>
@@ -212,6 +267,21 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field label="Fund from">
+                <select value={fundFrom} onChange={(e) => setFundFrom(e.target.value)} style={inputStyle}>
+                  {agentWallets.map((w) => (
+                    <option key={w.address} value={w.address} style={optionStyle}>
+                      {(w.label?.trim() || "Agent Wallet")} · {shortAddr(w.address)}
+                    </option>
+                  ))}
+                  <option value="owner" style={optionStyle}>Owner wallet (fund via agent later)</option>
+                </select>
+                <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 4, lineHeight: 1.5 }}>
+                  {fundFrom === "owner"
+                    ? "You are the buyer; fund it later with a Q402 agent (a browser wallet can't sign the lock)."
+                    : "This Agent Wallet funds it — Q402 signs the gasless lock, so you can fund it right here."}
+                </div>
               </Field>
               <Field label="Seller (paid on release)">
                 <input

@@ -19,13 +19,18 @@ import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "@/app/context/WalletContext";
 import { v2, fs } from "../theme";
 import { displayFont, shortAddr } from "../primitives";
-import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
-import { getEscrowInfo, buildEscrowActionTypedData, randomEscrowNonce, type EscrowActionKind } from "@/app/lib/escrow-sign";
+import { getAuthCreds, clearAuthCache, getActionAuth } from "@/app/lib/auth-client";
+import { getEscrowInfo, buildEscrowActionTypedData, randomEscrowNonce } from "@/app/lib/escrow-sign";
+
+/** Escrow actions a row can trigger. `lock` is only offered on agent-funded
+ *  escrows (server-signed); owner-EOA escrows fund via an agent. */
+type EscrowAction = "lock" | "release" | "dispute" | "refund";
 
 interface PublicEscrow {
   id: string;
   onchainEscrowId: string;
   buyer: string;
+  fundedBy: "owner" | "agent";
   seller: string;
   chain: string;
   token: "USDC" | "USDT";
@@ -93,7 +98,7 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey }: EscrowList
   const [hasMore, setHasMore] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   // Fund-moving actions take a two-tap confirm keyed by (id, action).
-  const [confirming, setConfirming] = useState<{ id: string; action: EscrowActionKind | "refund" } | null>(null);
+  const [confirming, setConfirming] = useState<{ id: string; action: EscrowAction } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<{ id: string; msg: string } | null>(null);
 
@@ -144,20 +149,43 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey }: EscrowList
   }, [fetchPage, refreshKey]);
 
   const runAction = useCallback(
-    async (esc: PublicEscrow, action: EscrowActionKind | "refund") => {
+    async (esc: PublicEscrow, action: EscrowAction) => {
       setActionErr(null);
       setConfirming(null);
       setBusy(esc.id);
       try {
         let body: string;
         if (action === "refund") {
+          // Permissionless after the timeout / resolve window — no signature.
           body = "{}";
+        } else if (esc.fundedBy === "agent") {
+          // Agent-Wallet-funded: the SERVER signs (lock/release/dispute) for the
+          // wallet. The owner authorizes with a fresh intent signature (a plain
+          // personal_sign, so no chain switch + no browser 7702 needed). walletId
+          // == the buyer address for an agent-funded escrow.
+          if (!ownerAddress) {
+            setActionErr({ id: esc.id, msg: "Connect your wallet." });
+            setBusy(null);
+            return;
+          }
+          const intent = {
+            escrowId: esc.id, onchainEscrowId: esc.onchainEscrowId, chain: esc.chain,
+            seller: esc.seller, amount: esc.amount, walletId: esc.buyer,
+          };
+          const auth = await getActionAuth(ownerAddress, `escrow_${action}`, intent, signMessage);
+          if (!auth) {
+            setActionErr({ id: esc.id, msg: "Approve the action in your wallet (or it was rejected)." });
+            setBusy(null);
+            return;
+          }
+          body = JSON.stringify({ address: ownerAddress, challenge: auth.challenge, signature: auth.signature });
         } else {
-          // release | dispute — sign an EIP-712 vault message with the owner wallet.
+          // Owner-EOA escrow: the buyer signs an EIP-712 vault message directly.
+          // (lock is never offered here — the browser can't sign the 7702 auth.)
           const info = await getEscrowInfo(esc.chain);
           const nonce = randomEscrowNonce();
           const deadline = String(Math.floor(Date.now() / 1000) + 900);
-          const typedData = buildEscrowActionTypedData(action, info, esc.onchainEscrowId, nonce, deadline);
+          const typedData = buildEscrowActionTypedData(action as "release" | "dispute", info, esc.onchainEscrowId, nonce, deadline);
           const sig = await signTypedData(typedData);
           if (!sig) {
             setActionErr({ id: esc.id, msg: "Wallet signature needed (or was rejected)." });
@@ -185,7 +213,7 @@ export function EscrowList({ ownerAddress, signMessage, refreshKey }: EscrowList
         setBusy(null);
       }
     },
-    [signTypedData, fetchPage],
+    [signTypedData, ownerAddress, signMessage, fetchPage],
   );
 
   function copyId(id: string) {
@@ -327,19 +355,24 @@ function ActionCell({
   esc: PublicEscrow;
   refundReady: boolean;
   busy: boolean;
-  confirming: EscrowActionKind | "refund" | null;
-  onArm: (a: EscrowActionKind | "refund") => void;
+  confirming: EscrowAction | null;
+  onArm: (a: EscrowAction) => void;
   onCancel: () => void;
-  onConfirm: (a: EscrowActionKind | "refund") => void;
+  onConfirm: (a: EscrowAction) => void;
 }) {
   if (busy) return <span style={{ fontSize: fs.body, color: v2.muted2 }}>Working…</span>;
 
   if (confirming) {
-    const label = confirming === "release" ? "Release funds?" : confirming === "refund" ? "Refund to you?" : "Open dispute?";
+    const label =
+      confirming === "release" ? "Release funds?"
+      : confirming === "refund" ? "Refund to you?"
+      : confirming === "lock" ? "Fund the escrow?"
+      : "Open dispute?";
+    const tone = confirming === "release" || confirming === "lock" ? v2.mint : confirming === "refund" ? v2.yellow : v2.red;
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
         <span style={{ color: v2.muted2, fontSize: fs.body }}>{label}</span>
-        <button onClick={() => onConfirm(confirming)} style={{ ...linkBtn, color: confirming === "release" ? v2.mint : confirming === "refund" ? v2.yellow : v2.red }}>
+        <button onClick={() => onConfirm(confirming)} style={{ ...linkBtn, color: tone }}>
           yes
         </button>
         <button onClick={onCancel} style={{ ...linkBtn, color: v2.muted }}>
@@ -349,9 +382,16 @@ function ActionCell({
     );
   }
 
-  // pending — funding is an agent step (browser can't sign the 7702 lock).
+  // pending — an agent-funded escrow funds right here (server signs the lock);
+  // an owner-EOA escrow needs an agent (the browser can't sign the 7702 lock).
   if (esc.status === "pending") {
-    return <span title="Fund with a Q402 agent (q402_escrow_lock)" style={{ fontSize: fs.body, color: v2.muted2 }}>Fund via agent</span>;
+    return esc.fundedBy === "agent" ? (
+      <button onClick={() => onArm("lock")} style={primaryPill}>
+        Fund
+      </button>
+    ) : (
+      <span title="Fund with a Q402 agent (q402_escrow_lock)" style={{ fontSize: fs.body, color: v2.muted2 }}>Fund via agent</span>
+    );
   }
 
   if (esc.status === "open") {

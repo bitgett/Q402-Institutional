@@ -87,6 +87,14 @@ const ALLOWED_ACTIONS = new Set([
   // never sees the type-4 tx details; this challenge just authorises the
   // server to act on their behalf.
   "agentic.clear_delegation",
+  // Agent-Wallet-funded escrow: the server signs the lock/release/dispute on the
+  // wallet's behalf, so the owner authorises each with a fresh intent signature
+  // over the exact escrow (escrowId/onchainEscrowId/chain/seller/amount/walletId).
+  // Without these entries the dashboard's Fund/Release/Dispute never open a wallet
+  // prompt (getActionAuth -> 400 -> null). See /api/escrow/[id]/[action].
+  "escrow_lock",
+  "escrow_release",
+  "escrow_dispute",
 ]);
 
 function isAddress(s: unknown): s is string {

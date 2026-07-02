@@ -18,6 +18,7 @@ import { requireIntentAuth } from "@/app/lib/auth";
 import { getApiKeyRecord } from "@/app/lib/db";
 import {
   getActiveAgenticWallet, decryptPrivateKey, chargeAgainstDailyLimit, refundDailySpend,
+  acquireWalletChainLock, releaseWalletChainLock,
   type AgenticWalletRecord,
 } from "@/app/lib/agentic-wallet";
 import { signEscrowLockWithKey, signEscrowVaultActionWithKey } from "@/app/lib/escrow-agentic-sign";
@@ -235,8 +236,11 @@ async function handleAgentFundedAction(
   // intent signature — even in Mode C — so a bare apiKey can't drain an escrow.
   // Lock is a capped spend, so an apiKey (Mode C) is accepted like agentic send;
   // an owner intent-sig also works (dashboard).
+  // Intent = the action's server-trusted params (the `action` itself is the
+  // separate buildIntentMessage arg, so it's not duplicated here). The dashboard
+  // rebuilds the SAME object via getActionAuth so the signed message matches.
   const intent: Record<string, string | number> = {
-    action: `escrow_${action}`, escrowId: rec.id, onchainEscrowId: eid,
+    escrowId: rec.id, onchainEscrowId: eid,
     chain: rec.chain, seller: rec.seller, amount: rec.amount, walletId,
   };
   const apiKey = typeof body.apiKey === "string" ? body.apiKey : null;
@@ -314,11 +318,24 @@ async function agentEscrowLock(
   if (typeof wallet.perTxMaxUsd === "number" && amountUsd > wallet.perTxMaxUsd) {
     return NextResponse.json({ error: "PER_TX_LIMIT_EXCEEDED", limit: wallet.perTxMaxUsd, requested: amountUsd }, { status: 403 });
   }
+
+  // ── G5 serialize per (wallet, chain): the lock signs a fresh EIP-7702 auth
+  // whose nonce is the wallet's tx count. Without this lease a concurrent send /
+  // lock on the SAME wallet+chain reads the same nonce and one tx silently
+  // no-ops (the escrow action lock is per-escrow-id, so it does NOT cover this).
+  // Same lease every other agent-wallet fund path holds.
+  const wcToken = await acquireWalletChainLock(wallet.address, rec.chain);
+  if (!wcToken) {
+    return NextResponse.json({ error: "WALLET_BUSY", message: "Another action on this wallet is in flight. Retry in a moment." }, { status: 409 });
+  }
+
   const reservation = await chargeAgainstDailyLimit(owner, walletId, amountUsd, wallet.dailyLimitUsd);
   if (!reservation.allowed) {
+    await releaseWalletChainLock(wallet.address, rec.chain, wcToken).catch(() => {});
     return NextResponse.json({ error: "DAILY_LIMIT_EXCEEDED", spent: reservation.spent, limit: reservation.limit, requested: reservation.requested }, { status: 403 });
   }
 
+  let committed = false; // set once funds are confirmed on-chain — never refund after
   try {
     const nonce = randEscrowNonce();
     const lockDeadline = String(Math.floor(Date.now() / 1000) + 900);
@@ -342,6 +359,7 @@ async function agentEscrowLock(
       await refundDailySpend(owner, walletId, amountUsd);
       return NextResponse.json({ error: "lock did not take effect on-chain; please retry", txHash: r.txHash }, { status: 502 });
     }
+    committed = true; // funds are in the vault — the reservation is now real spend
     const lockedOk = await writeEscrowLockedMarker(rec.id, { txHash: r.txHash, lockedAt: new Date().toISOString() }, rec.expiresAt);
     let flippedOk = false;
     try { flippedOk = !!(await markEscrowLocked(rec.id, r.txHash)); } catch { flippedOk = false; }
@@ -349,10 +367,17 @@ async function agentEscrowLock(
       hold(); // funds locked on-chain but record write lost — hold lock, retry reconciles
       return NextResponse.json({ status: "open", txHash: r.txHash, explorer: cfg.explorerTx + r.txHash, warning: "locked on-chain but the record write failed; retry to reconcile (funds are safe)" });
     }
-    return NextResponse.json({ status: "open", txHash: r.txHash, explorer: cfg.explorerTx + r.txHash, escrow: toPublicEscrow((await getEscrow(rec.id))!) });
+    // Defensive: don't `!`-assert getEscrow — a KV blip here must not throw into
+    // the catch (funds already moved; committed=true blocks a wrongful refund).
+    const pub = await getEscrow(rec.id);
+    return NextResponse.json({ status: "open", txHash: r.txHash, explorer: cfg.explorerTx + r.txHash, ...(pub ? { escrow: toPublicEscrow(pub) } : {}) });
   } catch (e) {
-    await refundDailySpend(owner, walletId, amountUsd);
+    // F-2: only refund if the funds did NOT move. A post-commit throw (e.g. a KV
+    // blip building the response) must NOT credit the cap back — the spend is real.
+    if (!committed) await refundDailySpend(owner, walletId, amountUsd);
     return NextResponse.json({ error: e instanceof Error ? e.message : "lock failed" }, { status: 502 });
+  } finally {
+    await releaseWalletChainLock(wallet.address, rec.chain, wcToken).catch(() => {});
   }
 }
 
