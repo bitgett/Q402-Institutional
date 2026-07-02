@@ -37,7 +37,7 @@ const INSTALL_CMD = "npx -y @quackai/q402-mcp";
 
 // Hero key facts - the one place these headline numbers live.
 const HERO_FACTS = [
-  { v: "30", label: "MCP tools" },
+  { v: "36", label: "MCP tools" },
   { v: "11", label: "EVM chains" },
   { v: "$0", label: "gas per send" },
   { v: "10", label: "wallets / owner" },
@@ -125,7 +125,7 @@ const CAPS = [
   },
 ];
 
-// 04 - the full 30-tool surface, grouped like an API reference (5+2+1+7+4+2+4+1+3).
+// 04 - the full 36-tool surface, grouped like an API reference (5+2+1+7+4+2+4+1+3+6).
 const TOOL_GROUPS = [
   { label: "Setup and read", tools: ["q402_doctor", "q402_quote", "q402_balance", "q402_agentic_info", "q402_wallet_status"] },
   { label: "Pay", tools: ["q402_pay", "q402_batch_pay"] },
@@ -136,6 +136,7 @@ const TOOL_GROUPS = [
   { label: "Bridge", tools: ["q402_bridge_quote", "q402_bridge_send", "q402_bridge_history", "q402_bridge_gas_tank"] },
   { label: "Delegation", tools: ["q402_clear_delegation"] },
   { label: "Requests", tools: ["q402_request_create", "q402_request_status", "q402_request_pay"] },
+  { label: "Escrow", tools: ["q402_escrow_create", "q402_escrow_status", "q402_escrow_lock", "q402_escrow_release", "q402_escrow_refund", "q402_escrow_dispute"] },
 ];
 
 const CHAINS = ["BNB", "Ethereum", "Arbitrum", "Avalanche", "Mantle", "X Layer", "Monad", "Scroll", "Injective", "Stable", "Base"];
@@ -165,7 +166,7 @@ export default function AgentsPage() {
           <Section index="03" label="Capabilities" title="Well past a single payment.">
             <CapabilityGrid />
           </Section>
-          <Section index="04" label="30 tools" title="The whole surface, one package.">
+          <Section index="04" label="36 tools" title="The whole surface, one package.">
             <InstallBlock />
             <ToolIndex />
             <ChainStrip />

@@ -108,7 +108,7 @@ Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
 Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything else → Multichain.
 6+ BNB batches return `status="ambiguous"` so the agent asks the user how to split.
 
-**30 tools** (all sandbox by default; live needs an API key + a signing path):
+**36 tools** (all sandbox by default; live needs an API key + a signing path):
 
 | Tool | Auth | What it does |
 |---|---|---|
@@ -141,6 +141,12 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_request_create` | api key | Publish a payment request (invoice). No funds move; returns a /pay link + req_ id. Recipient defaults to the Agent Wallet. |
 | `q402_request_status` | none | Look up a request by req_ id (amount, recipient, status). Read-only. |
 | `q402_request_pay` | live key | Pay a request gaslessly from your own Agent Wallet (Mode C). Terms locked to the request. Two-phase consent (same as `q402_pay`). |
+| `q402_escrow_create` | api key | Create a gasless non-custodial escrow (pending record, moves no funds); optional `walletId` funds it from an Agent Wallet. |
+| `q402_escrow_status` | none | Read an escrow's state, parties, amount, and tx hashes. |
+| `q402_escrow_lock` | live mode | Fund a pending escrow gaslessly (EIP-7702); the server signs for an Agent-Wallet buyer. |
+| `q402_escrow_release` | live mode | Buyer releases a locked escrow to the seller (gasless). |
+| `q402_escrow_refund` | live mode | Permissionless refund to the buyer after the timeout / resolve window. |
+| `q402_escrow_dispute` | live mode | A party disputes an open escrow (requires a named arbiter). |
 
 The eight fund-moving tools (`q402_pay`, `q402_batch_pay`, `q402_bridge_send`, `q402_yield_deposit`, `q402_yield_withdraw`, `q402_stake`, `q402_unstake`, `q402_request_pay`) use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one. `confirm: true` alone no longer fires a payment. `q402_clear_delegation` uses the same two-phase consent — it broadcasts a real tx and, on Ethereum, bills your Gas Tank.
 

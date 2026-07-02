@@ -102,10 +102,10 @@ const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: stri
 ];
 
 /**
- * Canonical @quackai/q402-mcp tool surface — 30 tools, source of truth is
+ * Canonical @quackai/q402-mcp tool surface — 36 tools, source of truth is
  * mcp-server/src/index.ts (ListTools order). One-line purposes condensed from
  * each tool's own `description` + app/docs/page.tsx. Grouped so the grid reads
- * as Core → Recurring → Bridge (CCIP) → Yield → Staking.
+ * as Core → Recurring → Bridge (CCIP) → Yield → Staking → Requests → Escrow.
  */
 const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }> = [
   // Core
@@ -144,6 +144,13 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Requests", name: "q402_request_create", purpose: "Publish a payment request (invoice). No funds move — returns a /pay link + req_ id." },
   { group: "Requests", name: "q402_request_status", purpose: "Look up a request by req_ id (amount, recipient, status). Read-only, no auth." },
   { group: "Requests", name: "q402_request_pay", purpose: "Pay a request gaslessly from your own Agent Wallet. Moves funds — two-phase consent, like q402_pay." },
+  // Escrow (gasless non-custodial EIP-7702 escrow)
+  { group: "Escrow", name: "q402_escrow_create", purpose: "Create a gasless non-custodial escrow (pending record, moves no funds); optional walletId funds it from an Agent Wallet." },
+  { group: "Escrow", name: "q402_escrow_status", purpose: "Read an escrow's state, parties, amount, and tx hashes. Read-only." },
+  { group: "Escrow", name: "q402_escrow_lock", purpose: "Fund a pending escrow gaslessly (EIP-7702); the server signs for an Agent-Wallet buyer. Moves funds, needs confirm." },
+  { group: "Escrow", name: "q402_escrow_release", purpose: "Buyer releases a locked escrow to the seller (gasless). Moves funds, needs confirm." },
+  { group: "Escrow", name: "q402_escrow_refund", purpose: "Permissionless refund to the buyer after the timeout / resolve window." },
+  { group: "Escrow", name: "q402_escrow_dispute", purpose: "A party disputes an open escrow (requires a named arbiter)." },
 ];
 
 /**
@@ -473,7 +480,7 @@ const SECTIONS = [
   { id: "credentials", label: "Credentials", hint: "API keys · scopes" },
   { id: "integration", label: "Integration guide", hint: "SDK in 4 steps" },
   { id: "mcp", label: "MCP setup", hint: "Claude · Cursor · Cline" },
-  { id: "tools", label: "MCP tool reference", hint: "30 tools" },
+  { id: "tools", label: "MCP tool reference", hint: "36 tools" },
   { id: "webhook", label: "Webhook", hint: "Signed settlement POSTs" },
   { id: "playground", label: "API playground", hint: "Simulate a quote" },
   { id: "docs", label: "Documentation", hint: "Full reference" },
@@ -1880,12 +1887,12 @@ function IntegrationGuide() {
   );
 }
 
-// ── MCP tool reference grid (30 tools) ───────────────────────────────────────
+// ── MCP tool reference grid (36 tools) ───────────────────────────────────────
 // The full @quackai/q402-mcp tool surface with one-line purposes + npm/GitHub
-// source links. Grouped Core → Recurring → Bridge → Yield → Staking.
+// source links. Grouped Core → Recurring → Bridge → Yield → Staking → Requests → Escrow.
 function McpToolGrid() {
   const groups = useMemo(() => {
-    const order = ["Core", "Recurring", "Bridge", "Yield", "Staking", "Requests"] as const;
+    const order = ["Core", "Recurring", "Bridge", "Yield", "Staking", "Requests", "Escrow"] as const;
     return order.map((g) => ({
       group: g,
       tools: MCP_TOOLS.filter((t) => t.group === g),
@@ -1899,6 +1906,7 @@ function McpToolGrid() {
     Yield: "Curated lending vaults · Aave, Morpho, Lista",
     Staking: "Q / QuackAI Staking (BNB)",
     Requests: "Invoices · agent-to-agent billing",
+    Escrow: "Gasless non-custodial EIP-7702 escrow",
   };
 
   const sourceLink: React.CSSProperties = {
@@ -2297,7 +2305,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
             <McpSetupCard sandboxKey={mcpSandboxKey} demo={demoMode} />
           </div>
 
-          {/* ── MCP tool reference grid (30 tools) ──────────────────── */}
+          {/* ── MCP tool reference grid (36 tools) ──────────────────── */}
           <div ref={refs.tools} style={section(3)}>
             <McpToolGrid />
           </div>
