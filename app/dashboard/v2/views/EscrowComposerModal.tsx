@@ -196,6 +196,9 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
               <b style={{ color: v2.yellow }}>pending</b>. No funds have moved yet.
             </div>
             <div style={{ ...noteBox, marginBottom: 12 }}>
+              <div style={{ fontSize: 10, letterSpacing: ".18em", textTransform: "uppercase", fontWeight: 700, color: v2.yellow, marginBottom: 7 }}>
+                Next step
+              </div>
               {created.fundedBy === "agent" ? (
                 <>
                   <div style={{ color: v2.text, fontWeight: 600, fontSize: fs.body, marginBottom: 4 }}>
@@ -281,7 +284,7 @@ export function EscrowComposerModal({ ownerAddress, signMessage, onClose, onCrea
                       {(w.label?.trim() || "Agent Wallet")} · {shortAddr(w.address)}
                     </option>
                   ))}
-                  <option value="owner" style={optionStyle}>Owner wallet (fund via agent later)</option>
+                  <option value="owner" style={optionStyle}>Owner wallet (advanced, fund later via agent)</option>
                 </select>
                 <div style={helpText}>
                   {fundFrom === "owner"

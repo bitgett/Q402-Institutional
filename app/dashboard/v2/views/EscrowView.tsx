@@ -13,7 +13,7 @@
  * diagram (no mock balances/addresses).
  */
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { v2, fs, glass } from "../theme";
 import { displayFont } from "../primitives";
 import { useIsMobile } from "../../../lib/use-is-mobile";
@@ -35,6 +35,21 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
   const [section, setSection] = useState<Section>("active");
   const [counts, setCounts] = useState<EscrowCounts>({ active: 0, history: 0, total: 0 });
   const isMobile = useIsMobile(860);
+
+  const didAutoRoute = useRef(false);
+  const userNav = useRef(false);
+
+  // First-time users (no escrows yet) land on "How it works" so the guide comes
+  // before an empty table. Fires once on first counts load; never overrides a
+  // manual nav click.
+  const handleCounts = (c: EscrowCounts) => {
+    setCounts(c);
+    if (!didAutoRoute.current) {
+      didAutoRoute.current = true;
+      if (c.total === 0 && !userNav.current) setSection("learn");
+    }
+  };
+  const goSection = (id: Section) => { userNav.current = true; setSection(id); };
 
   const openComposer = () => setComposerOpen(true);
 
@@ -59,7 +74,7 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
         }}
       >
         {NAV.map((item) => (
-          <NavButton key={item.id} item={item} active={section === item.id} onClick={() => setSection(item.id)} isMobile={isMobile} />
+          <NavButton key={item.id} item={item} active={section === item.id} onClick={() => goSection(item.id)} isMobile={isMobile} />
         ))}
       </nav>
       {!isMobile && (
@@ -74,11 +89,7 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
     <div style={{ paddingTop: isMobile ? 20 : 30 }}>
       {/* Compact header */}
       <div style={{ marginBottom: isMobile ? 18 : 22 }}>
-        <span style={eyebrowChip}>
-          <span style={{ width: 6, height: 6, borderRadius: 999, background: v2.mint, boxShadow: `0 0 8px ${v2.mint}` }} />
-          Gasless escrow
-        </span>
-        <h1 style={{ fontFamily: displayFont, fontSize: isMobile ? 24 : 30, letterSpacing: "-0.02em", fontWeight: 600, color: v2.text, margin: "12px 0 0" }}>
+        <h1 style={{ fontFamily: displayFont, fontSize: isMobile ? 24 : 30, letterSpacing: "-0.02em", fontWeight: 600, color: v2.text, margin: 0 }}>
           Escrow
         </h1>
         <p style={{ color: v2.muted, fontSize: fs.base, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 640 }}>
@@ -119,7 +130,7 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
                 signMessage={signMessage}
                 refreshKey={refreshKey}
                 filter={section}
-                onCounts={setCounts}
+                onCounts={handleCounts}
                 onCreate={openComposer}
               />
             </div>
@@ -216,6 +227,45 @@ function LearnPane({ isMobile, onCreate, ownerAddress }: { isMobile: boolean; on
         </div>
         {!isMobile && <FlowPanel />}
       </div>
+
+      <div style={{ marginTop: 30 }}>
+        <SectionLabel>Where people use it</SectionLabel>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12, marginTop: 16 }}>
+          <UseCaseCard title="Freelance milestone" body="Lock a milestone up front. The freelancer delivers, you release. If they ghost, you reclaim the full amount after the timeout." />
+          <UseCaseCard title="OTC / P2P trade" body="Deal with someone you do not fully trust. Funds sit in the vault until you release, or a named arbiter settles a dispute." />
+          <UseCaseCard title="Agent-to-agent deal" body="One AI agent hires another. The buyer agent locks payment gaslessly; it releases on delivery, always inside the policy you set." />
+        </div>
+      </div>
+
+      <div style={{ marginTop: 30 }}>
+        <SectionLabel>Good to know</SectionLabel>
+        <div style={{ marginTop: 8 }}>
+          <FaqRow q="What if the seller never delivers?" a="You reclaim the full amount yourself after the timeout you chose. An escrow never auto-pays the seller." />
+          <FaqRow q="Can Q402 touch my funds?" a="No. The vault is non-custodial. Only your signature moves the funds; Q402 only sponsors the gas and never holds them." />
+          <FaqRow q="What does it cost to fund or settle?" a="Gas is on us. Q402 sponsors every escrow action, so you never need to hold a native gas token." />
+          <FaqRow q="Who can settle a dispute?" a="Only an arbiter you name at creation, and only if you add one. Without an arbiter it is release-or-refund only." />
+          <FaqRow q="Which tokens and chains?" a="USDC and USDT on BNB Chain today. More chains open up as their vaults deploy." />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Use-case card + FAQ row for the learn pane. */
+function UseCaseCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div style={{ ...glass(14), padding: 14 }}>
+      <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.cardTitle, fontWeight: 600 }}>{title}</div>
+      <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5, marginTop: 6 }}>{body}</div>
+    </div>
+  );
+}
+
+function FaqRow({ q, a }: { q: string; a: string }) {
+  return (
+    <div style={{ padding: "11px 0", borderBottom: `1px solid ${v2.line}` }}>
+      <div style={{ color: v2.text, fontSize: fs.base, fontWeight: 600 }}>{q}</div>
+      <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5, marginTop: 4 }}>{a}</div>
     </div>
   );
 }
@@ -341,21 +391,6 @@ function TrustLine({ label }: { label: string }) {
     </div>
   );
 }
-
-const eyebrowChip: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  fontSize: 11,
-  letterSpacing: ".18em",
-  textTransform: "uppercase",
-  fontWeight: 700,
-  color: v2.yellow,
-  background: "rgba(245,197,24,.07)",
-  border: `1px solid rgba(245,197,24,.22)`,
-  borderRadius: 999,
-  padding: "6px 12px",
-};
 
 function newBtn(disabled: boolean): React.CSSProperties {
   return {
