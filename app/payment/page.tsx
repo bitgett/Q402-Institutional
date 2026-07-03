@@ -587,27 +587,27 @@ export default function PaymentPage() {
                       <p className="text-xs text-white/30 uppercase tracking-widest font-semibold">Payment rail</p>
                       <p className="text-[10px] text-white/25">Different from your service chain above</p>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                       {PAY_TOKENS.map(t => (
                         <button
                           key={t.id}
                           onClick={() => setSelectedPayToken(t.id)}
-                          className={`relative overflow-hidden flex flex-col items-center justify-center gap-1.5 aspect-square p-2 rounded-xl border text-[11px] font-semibold text-center leading-tight transition-all ${
+                          className={`relative overflow-hidden flex flex-col items-center justify-center gap-2 aspect-square p-2 rounded-xl border text-[13px] font-semibold text-center leading-tight transition-all ${
                             selectedPayToken === t.id
                               ? "border-yellow/50 bg-yellow/8 text-yellow"
                               : "border-white/8 text-white/50 hover:border-white/20"
                           } ${t.token === "Q" ? "q-pay-shine" : ""}`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={t.img} alt={t.chain} className="w-7 h-7 rounded-full flex-shrink-0" />
+                          <img src={t.img} alt={t.chain} className="w-10 h-10 rounded-full flex-shrink-0" />
                           <span className="px-0.5">{t.label}</span>
                           {t.token === "Q" && (
-                            <span className="text-[8px] uppercase tracking-wide font-extrabold text-emerald-400 border border-emerald-400/30 rounded px-1 py-0.5 leading-none">
+                            <span className="text-[10px] uppercase tracking-wide font-extrabold text-emerald-400 border border-emerald-400/40 rounded px-1.5 py-0.5 leading-none">
                               50% off
                             </span>
                           )}
                           {selectedPayToken === t.id && (
-                            <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-yellow" style={{ boxShadow: "0 0 4px #F5C518" }} />
+                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-yellow" style={{ boxShadow: "0 0 4px #F5C518" }} />
                           )}
                         </button>
                       ))}
