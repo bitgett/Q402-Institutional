@@ -607,7 +607,7 @@ export default function PaymentPage() {
                               BNB Q tile keeps the exact logo+label layout as every other
                               tile — no extra in-flow element skewing its alignment. */}
                           {t.token === "Q" && (
-                            <span className="absolute top-1.5 left-1.5 text-[9px] uppercase tracking-wide font-extrabold text-emerald-400 bg-emerald-400/12 border border-emerald-400/40 rounded px-1 py-0.5 leading-none">
+                            <span className="absolute top-1.5 right-1.5 whitespace-nowrap text-[9px] uppercase tracking-wide font-extrabold text-emerald-400 bg-emerald-400/12 border border-emerald-400/40 rounded px-1 py-0.5 leading-none">
                               50% off
                             </span>
                           )}
