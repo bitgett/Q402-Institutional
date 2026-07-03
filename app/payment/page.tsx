@@ -592,17 +592,22 @@ export default function PaymentPage() {
                         <button
                           key={t.id}
                           onClick={() => setSelectedPayToken(t.id)}
-                          className={`relative overflow-hidden flex flex-col items-center justify-center gap-2 aspect-square p-2 rounded-xl border text-[13px] font-semibold text-center leading-tight transition-all ${
+                          className={`relative overflow-hidden flex flex-col items-center justify-center gap-2 aspect-square p-2 rounded-xl border text-[12px] font-semibold text-center leading-tight transition-all ${
                             selectedPayToken === t.id
                               ? "border-yellow/50 bg-yellow/8 text-yellow"
                               : "border-white/8 text-white/50 hover:border-white/20"
                           } ${t.token === "Q" ? "q-pay-shine" : ""}`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={t.img} alt={t.chain} className="w-10 h-10 rounded-full flex-shrink-0" />
-                          <span className="px-0.5">{t.label}</span>
+                          {/* Q logo art is a black rounded-square; bg-black fills the
+                              circular clip so it reads as a circle like every other icon. */}
+                          <img src={t.img} alt={t.chain} className={`w-10 h-10 rounded-full flex-shrink-0 ${t.token === "Q" ? "bg-black" : ""}`} />
+                          <span className="px-0.5 whitespace-nowrap">{t.label}</span>
+                          {/* Discount tag floats in the top-left corner (absolute) so the
+                              BNB Q tile keeps the exact logo+label layout as every other
+                              tile — no extra in-flow element skewing its alignment. */}
                           {t.token === "Q" && (
-                            <span className="text-[10px] uppercase tracking-wide font-extrabold text-emerald-400 border border-emerald-400/40 rounded px-1.5 py-0.5 leading-none">
+                            <span className="absolute top-1.5 left-1.5 text-[9px] uppercase tracking-wide font-extrabold text-emerald-400 bg-emerald-400/12 border border-emerald-400/40 rounded px-1 py-0.5 leading-none">
                               50% off
                             </span>
                           )}
