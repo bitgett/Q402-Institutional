@@ -87,16 +87,6 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
 
   return (
     <div style={{ paddingTop: isMobile ? 20 : 30 }}>
-      {/* Compact header */}
-      <div style={{ marginBottom: isMobile ? 18 : 22 }}>
-        <h1 style={{ fontFamily: displayFont, fontSize: isMobile ? 24 : 30, letterSpacing: "-0.02em", fontWeight: 600, color: v2.text, margin: 0 }}>
-          Escrow
-        </h1>
-        <p style={{ color: v2.muted, fontSize: fs.base, lineHeight: 1.5, margin: "6px 0 0", maxWidth: 640 }}>
-          Hold funds in a non-custodial vault until the work is done. Only your signature releases them; Q402 sponsors the gas and never holds your funds.
-        </p>
-      </div>
-
       {/* Rail + pane */}
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "232px 1fr", gap: isMobile ? 14 : 20, alignItems: "start" }}>
         {isMobile ? (
@@ -106,6 +96,17 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
         )}
 
         <div>
+          {/* Header lives at the top of the main column (Developer-view style):
+              aligned with the rail, sized to the content column, not a
+              full-width band spanning the whole page. */}
+          <div style={{ marginBottom: isMobile ? 12 : 16 }}>
+            <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em", color: v2.text }}>
+              Escrow
+            </div>
+            <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.5, marginTop: 6, maxWidth: 640 }}>
+              Hold funds in a non-custodial vault until the work is done. Only your signature releases them; Q402 sponsors the gas and never holds your funds.
+            </div>
+          </div>
           {section === "learn" ? (
             <LearnPane isMobile={isMobile} onCreate={openComposer} ownerAddress={ownerAddress} />
           ) : (
