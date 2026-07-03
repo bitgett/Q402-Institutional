@@ -48,6 +48,7 @@ const CHAINS = [
   { id: "scroll",    name: "Scroll",    color: "#FFDBB0", img: "/scroll.png",    rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "arbitrum",  name: "Arbitrum",  color: "#28A0F0", img: "/arbitrum.png",  rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
   { id: "base",      name: "Base",      color: "#0052FF", img: "/base.png",      rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
+  { id: "robinhood", name: "Robinhood", color: "#00C805", img: "/robinhood.svg", rounded: "rounded-full", multiplier: 1.0, comingSoon: false },
 ];
 
 // value = credits granted at that price tier. Must stay in sync with
@@ -89,6 +90,7 @@ const CHAIN_PRICES: Record<string, readonly number[]> = {
   eth:       UNIFIED_PRICES,
   arbitrum:  UNIFIED_PRICES,
   base:      UNIFIED_PRICES,
+  robinhood: UNIFIED_PRICES,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -585,7 +587,7 @@ export default function PaymentPage() {
                       <p className="text-xs text-white/30 uppercase tracking-widest font-semibold">Payment rail</p>
                       <p className="text-[10px] text-white/25">Different from your service chain above</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2">
                       {PAY_TOKENS.map(t => (
                         <button
                           key={t.id}
@@ -600,7 +602,7 @@ export default function PaymentPage() {
                           <img src={t.img} alt={t.chain} className="w-4 h-4 rounded-full flex-shrink-0" />
                           {t.label}
                           {t.token === "Q" && (
-                            <span className="ml-1 text-[8px] uppercase tracking-wide font-extrabold text-emerald-400 border border-emerald-400/30 rounded px-1 py-0.5 leading-none flex-shrink-0">
+                            <span className="ml-auto text-[8px] uppercase tracking-wide font-extrabold text-emerald-400 border border-emerald-400/30 rounded px-1 py-0.5 leading-none flex-shrink-0">
                               50% off
                             </span>
                           )}
@@ -745,7 +747,7 @@ export default function PaymentPage() {
                 <div className="mt-5 pt-4 border-t border-white/6 flex gap-2">
                   <span className="text-yellow/40 text-xs flex-shrink-0">🔒</span>
                   <p className="text-white/20 text-[10px] leading-relaxed">
-                    API key tied to your wallet. Pay in USDC / USDT / RLUSD on BNB Chain or Ethereum (RLUSD is Ethereum-only) — credits apply to your selected plan chain (BNB · AVAX · ETH · X Layer · Stable · Mantle · Injective · Monad · Scroll).
+                    API key tied to your wallet. Pay in USDC / USDT / RLUSD / Q on BNB Chain or Ethereum (RLUSD is Ethereum-only, Q is BNB-only) — credits apply to whichever plan chain you selected above.
                   </p>
                 </div>
               </div>

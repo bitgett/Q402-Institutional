@@ -154,3 +154,36 @@ describe("source drift — discount constant + formula stay in lockstep", () => 
     expect(activateSrc).toMatch(/qAmount/);
   });
 });
+
+// ── Audit hardening (2026-07-03): P1 price fail-closed, P2 Q txHash required ──
+
+describe("audit hardening — Q price + Q activation", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readFileSync } = require("node:fs") as typeof import("node:fs");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { resolve } = require("node:path") as typeof import("node:path");
+  const read = (p: string) => readFileSync(resolve(__dirname, "..", p), "utf8");
+
+  it("P1: quack-price fails closed on TWAP failure — no slot0 spot fallback", () => {
+    const qp = read("app/lib/quack-price.ts");
+    // The spend-path price must never fall back to the cheap-to-manipulate spot
+    // tick — slot0 must not be declared in the ABI or read (explanatory
+    // comments may still mention the word).
+    expect(qp).not.toMatch(/name: "slot0"/);
+    expect(qp).not.toMatch(/functionName: "slot0"/);
+    expect(qp).toMatch(/functionName: "observe"/);
+  });
+
+  it("P2: activate requires an explicit txHash for the Q rail", () => {
+    const activateSrc = read("app/api/payment/activate/route.ts");
+    expect(activateSrc).toMatch(/Q_TXHASH_REQUIRED/);
+  });
+
+  it("P2: the largest-transfer Q block-scan fallback is removed everywhere", () => {
+    const blockchain   = read("app/lib/blockchain.ts");
+    const activateSrc  = read("app/api/payment/activate/route.ts");
+    // The function itself is gone, and activate no longer references it.
+    expect(blockchain).not.toMatch(/export async function checkQPaymentOnChain/);
+    expect(activateSrc).not.toMatch(/checkQPaymentOnChain/);
+  });
+});

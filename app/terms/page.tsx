@@ -52,7 +52,8 @@ export default function TermsPage() {
           <section>
             <h2 className="text-white font-semibold text-base mb-3">4. Subscription &amp; Payment</h2>
             <ul className="list-disc list-inside space-y-2">
-              <li>Subscriptions are activated via on-chain USDC, USDT, or RLUSD payment to the Q402 payment address (RLUSD on Ethereum mainnet only).</li>
+              <li>Subscriptions are activated via on-chain USDC, USDT, RLUSD, or Q (QuackAI token) payment to the Q402 payment address (RLUSD on Ethereum mainnet only; Q on BNB Chain only).</li>
+              <li>Q payments are accepted at a promotional discount to the plan&apos;s list price. Your plan level and transaction credits are always determined by the full list price of the selected tier, not the discounted amount paid. The promotional discount may change or end with notice.</li>
               <li>All payments are final and non-refundable once on-chain confirmation is received.</li>
               <li>Each paid purchase grants a 30-day access window plus the transaction credits listed for the selected tier. Credits accumulate across renewals; access days stack if you renew before expiry.</li>
               <li>Your plan level is determined by cumulative paid amount within an active 30-day window. The same tier prices apply on every supported chain, so cumulative spend is summed in plain USD (no per-chain conversion). When cumulative spend crosses a higher tier&apos;s threshold, your plan upgrades automatically. Plans never downgrade while the window is active. If the window lapses (no payment for 30 days after the last renewal), cumulative resets and the next payment establishes a new window.</li>

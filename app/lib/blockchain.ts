@@ -180,7 +180,10 @@ const CHAINS = [
   },
 ];
 
-/** Maps intent chain ids ("bnb","eth","avax","xlayer","stable","mantle","injective","monad","scroll","arbitrum","base") to CHAINS[].name */
+/** Maps intent chain ids to CHAINS[].name for plan/credit threshold lookup.
+ *  "robinhood" is a service-only plan chain (USDG-only, gasless — no USDC/USDT
+ *  scan target on it), so it has no entry in the CHAINS scanner array above but
+ *  still needs a name here so a robinhood planChain resolves its tier. */
 export const INTENT_CHAIN_MAP: Record<string, string> = {
   bnb:       "BNB Chain",
   eth:       "Ethereum",
@@ -193,6 +196,7 @@ export const INTENT_CHAIN_MAP: Record<string, string> = {
   scroll:    "Scroll",
   arbitrum:  "Arbitrum",
   base:      "Base",
+  robinhood: "Robinhood Chain",
 };
 
 /**
@@ -437,40 +441,12 @@ export async function verifyQPaymentTx(txHash: string, fromAddress: string): Pro
   return { found: false };
 }
 
-/** Block-window scan for the best unused Q transfer from `fromAddress` to the
- *  subscription Safe on BNB (fallback when the client can't supply a txHash). */
-export async function checkQPaymentOnChain(fromAddress: string): Promise<PaymentResult> {
-  for (const rpc of Q_BNB.rpcs) {
-    try {
-      const provider = new ethers.JsonRpcProvider(rpc);
-      const currentBlock = await Promise.race([provider.getBlockNumber(), scanTimeout(8000)]);
-      const fromBlock = currentBlock - Q_BNB.blockWindow;
-      const contract = new ethers.Contract(Q_TOKEN.address, ERC20_ABI, provider);
-      const filter = contract.filters.Transfer(fromAddress, SUBSCRIPTION);
-      const events = await Promise.race([contract.queryFilter(filter, fromBlock, currentBlock), scanTimeout(12000)]);
-      const candidates: ScanCandidate[] = [];
-      for (const ev of events) {
-        if (!("args" in ev)) continue;
-        candidates.push({
-          txHash: ev.transactionHash,
-          blockNumber: ev.blockNumber,
-          amountUSD: Number(ethers.formatUnits(ev.args.value, Q_TOKEN.decimals)), // Q amount, used only for "largest" selection
-          token: "Q",
-          chain: "BNB Chain",
-          from: (ev.args.from as string)?.toLowerCase() ?? fromAddress.toLowerCase(),
-        });
-      }
-      if (candidates.length === 0) return { found: false };
-      const { kv } = await import("@vercel/kv");
-      const winner = await selectBestUnusedCandidate(candidates, async (h) => Boolean(await kv.get(`used_txhash:${h}`)));
-      if (!winner) return { found: false };
-      return { found: true, txHash: winner.txHash, qAmount: winner.amountUSD, token: "Q", chain: "BNB Chain", from: winner.from };
-    } catch {
-      // try next RPC
-    }
-  }
-  return { found: false };
-}
+// checkQPaymentOnChain (the block-window "largest unused Q transfer" fallback)
+// was REMOVED per audit P2 (2026-07-03). With no txHash it selected the LARGEST
+// unused Q transfer from the address, which could consume a bigger Q payment
+// than the one meant for the intent and seal it permanently (used_txhash). Q
+// activation now REQUIRES an explicit txHash and routes only through
+// verifyQPaymentTx — see app/api/payment/activate/route.ts (Q_TXHASH_REQUIRED).
 
 // ── Chain-aware pricing ────────────────────────────────────────────────────────
 // Tier order: [500tx, 1K, 5K, 10K, 50K, 100K, 500K]
@@ -500,6 +476,7 @@ const CHAIN_THRESHOLDS: Record<string, readonly number[]> = {
   "Ethereum":   UNIFIED_THRESHOLDS,
   "Arbitrum":   UNIFIED_THRESHOLDS,
   "Base":       UNIFIED_THRESHOLDS,
+  "Robinhood Chain": UNIFIED_THRESHOLDS,
 };
 // Fallback = any chain (all rows equal now). Kept as a named export so
 // callers don't have to know about the per-chain map being constant.
@@ -561,6 +538,7 @@ const CHAIN_MULTIPLIERS: Record<string, number> = {
   "Ethereum":  1.0,
   "Arbitrum":  1.0,
   "Base":      1.0,
+  "Robinhood Chain": 1.0,
 };
 
 /**

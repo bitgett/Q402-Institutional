@@ -39,21 +39,6 @@ const POOL_ABI = [
       { name: "secondsPerLiquidityCumulativeX128s", type: "uint160[]" },
     ],
   },
-  {
-    type: "function",
-    name: "slot0",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [
-      { name: "sqrtPriceX96", type: "uint160" },
-      { name: "tick", type: "int24" },
-      { name: "observationIndex", type: "uint16" },
-      { name: "observationCardinality", type: "uint16" },
-      { name: "observationCardinalityNext", type: "uint16" },
-      { name: "feeProtocol", type: "uint8" },
-      { name: "unlocked", type: "bool" },
-    ],
-  },
 ] as const;
 
 /** USD per Q from a V3 tick. token0=USDT, token1=Q, equal decimals, so
@@ -65,35 +50,30 @@ function tickToQuackUsd(tick: number): number {
 let cache: { price: number; at: number } | null = null;
 
 /**
- * Current USD value of 1 Q, from the 30-min TWAP (spot tick fallback if the
- * pool's observation window can't serve the TWAP). Throws on read failure or
- * an out-of-band price so callers fail closed.
+ * Current USD value of 1 Q, from the 30-min TWAP. Throws on read failure, an
+ * unservable TWAP window, or an out-of-band price so callers fail CLOSED —
+ * there is deliberately no spot (slot0) fallback: spot is far cheaper to
+ * manipulate than a 30-min TWAP, and this value gates a spend/pay path.
  */
 export async function quackUsdPrice(): Promise<number> {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) return cache.price;
   const client = createPublicClient({ transport: http(AGENTIC_CHAINS.bnb.rpc) });
 
-  let price: number;
-  try {
-    const result = (await client.readContract({
-      address: QUACK_USDT_V3_POOL,
-      abi: POOL_ABI,
-      functionName: "observe",
-      args: [[TWAP_WINDOW_SEC, 0]],
-    })) as readonly [readonly bigint[], readonly bigint[]];
-    const tickCumulatives = result[0];
-    // tickCumulatives[1] is "now", [0] is TWAP_WINDOW_SEC ago.
-    const avgTick = Number(tickCumulatives[1] - tickCumulatives[0]) / TWAP_WINDOW_SEC;
-    price = tickToQuackUsd(avgTick);
-  } catch {
-    // observe() unavailable (e.g. cardinality shrank) — fall back to spot tick.
-    const slot0 = (await client.readContract({
-      address: QUACK_USDT_V3_POOL,
-      abi: POOL_ABI,
-      functionName: "slot0",
-    })) as readonly [bigint, number, number, number, number, number, boolean];
-    price = tickToQuackUsd(Number(slot0[1]));
-  }
+  // TWAP only — fail CLOSED. If observe() reverts (RPC error, or the pool's
+  // observation window can't serve the full 30-min TWAP because cardinality
+  // shrank or trading spiked) we let it THROW so callers return 503 rather than
+  // quote a manipulable price. The remedy for a persistent revert is to grow the
+  // pool's observation cardinality, NOT to price off spot. (Audit P1, 2026-07-03.)
+  const result = (await client.readContract({
+    address: QUACK_USDT_V3_POOL,
+    abi: POOL_ABI,
+    functionName: "observe",
+    args: [[TWAP_WINDOW_SEC, 0]],
+  })) as readonly [readonly bigint[], readonly bigint[]];
+  const tickCumulatives = result[0];
+  // tickCumulatives[1] is "now", [0] is TWAP_WINDOW_SEC ago.
+  const avgTick = Number(tickCumulatives[1] - tickCumulatives[0]) / TWAP_WINDOW_SEC;
+  const price = tickToQuackUsd(avgTick);
 
   if (!Number.isFinite(price) || price < MIN_USD || price > MAX_USD) {
     throw new Error(`quack price out of sane band: ${price}`);

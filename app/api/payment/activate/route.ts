@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkPaymentOnChain, verifyPaymentTx, checkQPaymentOnChain, verifyQPaymentTx, planFromAmount, toBnbEquivUSD, maxTier } from "@/app/lib/blockchain";
+import { checkPaymentOnChain, verifyPaymentTx, verifyQPaymentTx, planFromAmount, toBnbEquivUSD, maxTier } from "@/app/lib/blockchain";
 import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getScopedCredits, addScopedCredits, initScopedQuotaIfNeeded, updateApiKeyPlan, resetUsageAlertState } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
@@ -140,11 +140,25 @@ export async function POST(req: NextRequest) {
     ? body.txHash
     : null;
 
-  // Q payments (50% discount, BNB-only) use a dedicated scan path so a large Q
-  // transfer never hijacks the stablecoin "largest amountUSD wins" selection.
+  // Q payments (50% discount, BNB-only) use a dedicated verification path.
   const isQ = intent.token === "Q";
+
+  // Q rail REQUIRES an explicit txHash (audit P2, 2026-07-03). Without one, a
+  // block-window scan would pick the LARGEST unused Q transfer from this
+  // address — which can consume a bigger Q payment than the one meant for this
+  // intent and seal it permanently (used_txhash). The payment UI always submits
+  // the txHash; direct API callers must too. Stablecoin rails keep the
+  // block-window fallback: they move exact 1:1-USD amounts, so the amount gate
+  // below makes a mis-selected transfer harmless.
+  if (isQ && !clientTxHash) {
+    return NextResponse.json(
+      { error: "Q payments require the on-chain payment txHash on activation.", code: "Q_TXHASH_REQUIRED" },
+      { status: 402 },
+    );
+  }
+
   const result = isQ
-    ? (clientTxHash ? await verifyQPaymentTx(clientTxHash, addr) : await checkQPaymentOnChain(addr))
+    ? await verifyQPaymentTx(clientTxHash!, addr)
     : (clientTxHash ? await verifyPaymentTx(clientTxHash, addr) : await checkPaymentOnChain(addr, intent.chain));
 
   if (!result.found) {
