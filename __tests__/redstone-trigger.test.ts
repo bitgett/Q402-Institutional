@@ -27,7 +27,6 @@ import {
   resumeTriggersForRestore,
   deleteTriggersForHardDelete,
   pullDueTriggers,
-  rescheduleCheck,
   claimCrossingFire,
   releaseCrossingFire,
   recordTriggerFired,

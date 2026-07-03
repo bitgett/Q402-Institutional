@@ -205,6 +205,22 @@ export async function POST(req: NextRequest, ctx: RouteCtx): Promise<NextRespons
     );
   }
 
+  // FAIL-CLOSED: a repeat trigger fires on every crossing, so it MUST be bounded
+  // by a wallet daily cap (per-tx bounds one fire, not the aggregate). A `once`
+  // trigger is bounded by its single amount, so exempt.
+  if (
+    mode === "repeat" &&
+    !(typeof wallet.dailyLimitUsd === "number" && Number.isFinite(wallet.dailyLimitUsd) && wallet.dailyLimitUsd > 0)
+  ) {
+    return NextResponse.json(
+      {
+        error: "DAILY_CAP_REQUIRED",
+        message: 'A repeat RedStone trigger requires a daily spend cap (dailyLimitUsd) on the wallet. Set one, or use mode "once".',
+      },
+      { status: 400 },
+    );
+  }
+
   try {
     const t = await createTrigger({
       ownerAddr: owner,

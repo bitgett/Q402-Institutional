@@ -208,15 +208,26 @@ async function processOneTrigger(
     return { ...base, value, outcome: "skipped-hook-denied", error: reasonMsg };
   }
 
+  // 3b.5 FAIL-CLOSED: a REPEAT trigger MUST have a positive wallet daily cap.
+  //     chargeAgainstDailyLimit only reserves when dailyLimitUsd > 0, so a repeat
+  //     trigger on a cap-less wallet would fire its per-tx-bounded amount on every
+  //     crossing with NO aggregate bound (wallet-limits can be deleted to null).
+  //     A `once` trigger is inherently bounded by its single fixed amount, so it
+  //     is exempt. Terminal — the owner must set a daily cap and resume.
+  const hasDailyCap =
+    typeof wallet.dailyLimitUsd === "number" &&
+    Number.isFinite(wallet.dailyLimitUsd) &&
+    wallet.dailyLimitUsd > 0;
+  if (t.mode === "repeat" && !hasDailyCap) {
+    const reason = `repeat trigger requires a wallet daily spend cap (dailyLimitUsd); none is set. Set one and resume.`;
+    await recordTriggerCapExceeded(t, reason, nowMs);
+    return { ...base, value, outcome: "skipped-daily-cap-too-low", error: reason };
+  }
+
   // 3c. Daily-cap reservation (same abuse surface as recurring — API-key-only
   //     trigger creation × automated fire must respect the wallet's daily cap).
   let dailyReserved = false;
-  if (
-    amt > 0 &&
-    typeof wallet.dailyLimitUsd === "number" &&
-    Number.isFinite(wallet.dailyLimitUsd) &&
-    wallet.dailyLimitUsd > 0
-  ) {
+  if (amt > 0 && hasDailyCap && wallet.dailyLimitUsd) {
     if (amt > wallet.dailyLimitUsd) {
       const reason = `amount $${amt.toFixed(2)} exceeds the wallet's daily cap $${wallet.dailyLimitUsd.toFixed(2)}. Raise the cap (or cancel + recreate the trigger).`;
       await recordTriggerCapExceeded(t, reason, nowMs);

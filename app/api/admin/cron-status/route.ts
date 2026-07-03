@@ -48,6 +48,7 @@ export const runtime = "nodejs";
  *  watchdog. CRON_META supplies expectedIntervalMs + staleAfterMs. */
 const TRACKED: CronName[] = [
   CRON_NAMES.RECURRING_PAYOUTS,
+  CRON_NAMES.REDSTONE_WATCHER,
   CRON_NAMES.DEPOSIT_SCAN,
   CRON_NAMES.REPUTATION_WEEKLY,
   CRON_NAMES.RELAYER_BALANCE,
