@@ -25,7 +25,7 @@ const PAY_TOKENS = [
   { id: "eth-rlusd", label: "ETH RLUSD", chain: "Ethereum",  chainId: "eth", token: "RLUSD", decimals: 18, address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", color: "#627EEA", img: "/eth.png"  },
   // Q (QuackAI token) — BNB-only, pay 50% of the plan price in Q. The exact Q
   // amount is priced+locked server-side at the 30-min TWAP when you pay.
-  { id: "bnb-q",     label: "BNB Q",     chain: "BNB Chain", chainId: "bnb", token: "Q",     decimals: 18, address: "0xc07e1300dc138601FA6B0b59f8D0FA477e690589", color: "#F5C518", img: "/q402-logo.svg" },
+  { id: "bnb-q",     label: "BNB Q",     chain: "BNB Chain", chainId: "bnb", token: "Q",     decimals: 18, address: "0xc07e1300dc138601FA6B0b59f8D0FA477e690589", color: "#F5C518", img: "/logos/quack.svg" },
 ];
 
 // `multiplier` was the +X% surcharge displayed on Ethereum/Avalanche tiles.
