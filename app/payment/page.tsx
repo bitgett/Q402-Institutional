@@ -601,7 +601,7 @@ export default function PaymentPage() {
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           {/* Q logo art is a black rounded-square; bg-black fills the
                               circular clip so it reads as a circle like every other icon. */}
-                          <img src={t.img} alt={t.chain} className={`w-10 h-10 rounded-full flex-shrink-0 ${t.token === "Q" ? "bg-black" : ""}`} />
+                          <img src={t.img} alt={t.chain} className={`w-10 h-10 rounded-full flex-shrink-0 ${t.token === "Q" ? "bg-black ring-1 ring-white/20" : ""}`} />
                           <span className="px-0.5 whitespace-nowrap">{t.label}</span>
                           {/* Discount tag floats in the top-left corner (absolute) so the
                               BNB Q tile keeps the exact logo+label layout as every other

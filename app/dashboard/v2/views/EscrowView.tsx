@@ -59,85 +59,79 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
     { id: "learn", label: "How it works", Icon: IconShield },
   ];
 
-  const railInner = (
-    <>
-      <button onClick={openComposer} disabled={!ownerAddress} style={newBtn(!ownerAddress)}>
-        + New escrow
-      </button>
-      <nav
-        style={{
-          display: "flex",
-          flexDirection: isMobile ? "row" : "column",
-          gap: 4,
-          marginTop: isMobile ? 0 : 14,
-          overflowX: isMobile ? "auto" : "visible",
-        }}
-      >
-        {NAV.map((item) => (
-          <NavButton key={item.id} item={item} active={section === item.id} onClick={() => goSection(item.id)} isMobile={isMobile} />
-        ))}
-      </nav>
-      {!isMobile && (
-        <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${v2.line}`, color: v2.muted2, fontSize: fs.label, lineHeight: 1.7 }}>
-          <TrustLine label="Non-custodial" /><TrustLine label="Gasless (Q402 sponsors)" /><TrustLine label="BNB Chain" />
-        </div>
-      )}
-    </>
+  // Controls that used to live in the left rail — now a top-right cluster:
+  // a segmented Active / History / How-it-works nav + the New escrow CTA, with
+  // the trust chips beneath. Moving them here frees the page for a full-width
+  // content area instead of a narrow console beside a sidebar.
+  const controls = (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: isMobile ? "stretch" : "flex-end", gap: 10, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+        <nav style={{ display: "flex", gap: 4, background: v2.surfaceFill, border: `1px solid ${v2.line}`, borderRadius: 12, padding: 4 }}>
+          {NAV.map((item) => (
+            <NavButton key={item.id} item={item} active={section === item.id} onClick={() => goSection(item.id)} isMobile={true} />
+          ))}
+        </nav>
+        <button onClick={openComposer} disabled={!ownerAddress} style={{ ...newBtn(!ownerAddress), width: "auto", whiteSpace: "nowrap" }}>
+          + New escrow
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end", color: v2.muted, fontSize: fs.label }}>
+        <TrustLine label="Non-custodial" />
+        <TrustLine label="Gasless (Q402 sponsors)" />
+        <TrustLine label="BNB Chain" />
+      </div>
+    </div>
   );
 
   return (
     <div style={{ paddingTop: isMobile ? 20 : 30 }}>
-      {/* Rail + pane */}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "232px 1fr", gap: isMobile ? 14 : 20, alignItems: "start" }}>
-        {isMobile ? (
-          <div>{railInner}</div>
-        ) : (
-          <aside style={{ ...glass(16), padding: 14, position: "sticky", top: 84 }}>{railInner}</aside>
-        )}
+      {/* Top bar: header on the left, the former left-rail controls in the top-right. */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          alignItems: isMobile ? "stretch" : "flex-start",
+          justifyContent: "space-between",
+          gap: isMobile ? 16 : 28,
+          marginBottom: isMobile ? 18 : 24,
+        }}
+      >
+        <div style={{ maxWidth: 560 }}>
+          <h1 style={{ font: `600 ${isMobile ? 24 : 28}px ${displayFont}`, letterSpacing: "-0.02em", color: v2.text, margin: 0 }}>
+            Escrow
+          </h1>
+          <p style={{ color: v2.muted, fontSize: fs.base, lineHeight: 1.6, margin: "8px 0 0" }}>
+            Hold funds in a non-custodial vault until the work is done. Only your signature releases them; Q402 sponsors the gas and never holds your funds.
+          </p>
+        </div>
+        {controls}
+      </div>
 
-        <div>
-          {/* Header lives at the top of the main column (Developer-view style):
-              aligned with the rail, sized to the content column, not a
-              full-width band spanning the whole page. */}
-          <div style={{ marginBottom: isMobile ? 12 : 16 }}>
-            <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em", color: v2.text }}>
-              Escrow
+      {/* Full-width content — the left rail is gone. */}
+      {section === "learn" ? (
+        <LearnPane isMobile={isMobile} onCreate={openComposer} ownerAddress={ownerAddress} />
+      ) : (
+        <div style={{ ...glass(18), padding: isMobile ? 14 : 20 }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.title, fontWeight: 600 }}>
+              {section === "active" ? "Active escrows" : "History"}
             </div>
-            <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.5, marginTop: 6, maxWidth: 640 }}>
-              Hold funds in a non-custodial vault until the work is done. Only your signature releases them; Q402 sponsors the gas and never holds your funds.
+            <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 3 }}>
+              {section === "active"
+                ? "Pending, funded, and disputed escrows you can act on."
+                : "Released, refunded, and closed escrows."}
             </div>
           </div>
-          {section === "learn" ? (
-            <LearnPane isMobile={isMobile} onCreate={openComposer} ownerAddress={ownerAddress} />
-          ) : (
-            <div style={{ ...glass(18), padding: isMobile ? 14 : 20 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 12, flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.title, fontWeight: 600 }}>
-                    {section === "active" ? "Active escrows" : "History"}
-                  </div>
-                  <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 3 }}>
-                    {section === "active"
-                      ? "Pending, funded, and disputed escrows you can act on."
-                      : "Released, refunded, and closed escrows."}
-                  </div>
-                </div>
-                <button onClick={openComposer} disabled={!ownerAddress} style={paneActionBtn(!ownerAddress)}>
-                  + New escrow
-                </button>
-              </div>
-              <EscrowList
-                ownerAddress={ownerAddress}
-                signMessage={signMessage}
-                refreshKey={refreshKey}
-                filter={section}
-                onCounts={handleCounts}
-                onCreate={openComposer}
-              />
-            </div>
-          )}
+          <EscrowList
+            ownerAddress={ownerAddress}
+            signMessage={signMessage}
+            refreshKey={refreshKey}
+            filter={section}
+            onCounts={handleCounts}
+            onCreate={openComposer}
+          />
         </div>
-      </div>
+      )}
 
       {composerOpen && (
         <EscrowComposerModal
@@ -406,21 +400,6 @@ function newBtn(disabled: boolean): React.CSSProperties {
     cursor: disabled ? "default" : "pointer",
     opacity: disabled ? 0.55 : 1,
     boxShadow: disabled ? "none" : `0 8px 22px ${v2.yellow}2b`,
-  };
-}
-
-function paneActionBtn(disabled: boolean): React.CSSProperties {
-  return {
-    background: "rgba(245,197,24,.10)",
-    color: v2.yellow,
-    border: `1px solid ${v2.yellow}44`,
-    borderRadius: 10,
-    padding: "8px 14px",
-    fontSize: fs.body,
-    fontWeight: 700,
-    cursor: disabled ? "default" : "pointer",
-    opacity: disabled ? 0.55 : 1,
-    whiteSpace: "nowrap",
   };
 }
 
