@@ -78,6 +78,7 @@ export async function getCronStatus(name: string): Promise<CronStatusRecord | nu
  *  call `recordCronStatus(name, ...)` from that cron's route handler. */
 export const CRON_NAMES = {
   RECURRING_PAYOUTS: "recurring-payouts",
+  REDSTONE_WATCHER: "redstone-watcher",
   DEPOSIT_SCAN: "deposit-scan",
   REPUTATION_WEEKLY: "reputation-weekly",
   RELAYER_BALANCE: "relayer-balance",
@@ -110,6 +111,14 @@ export const CRON_META: Record<CronName, CronMeta> = {
   [CRON_NAMES.RECURRING_PAYOUTS]: {
     expectedIntervalMs: 60 * 60 * 1000,
     staleAfterMs: 75 * 60 * 1000,
+  },
+  // RedStone data-event trigger watcher — Vercel cron every 15 min. Stale 40 min
+  // (~2.7x cadence) so normal jitter doesn't false-page but a genuinely wedged
+  // money-mover (feed read loop, KV pull failure) surfaces fast. Only meaningful
+  // once REDSTONE_ENABLED=1 — while disabled the route inert-returns success.
+  [CRON_NAMES.REDSTONE_WATCHER]: {
+    expectedIntervalMs: 15 * 60 * 1000,
+    staleAfterMs: 40 * 60 * 1000,
   },
   [CRON_NAMES.DEPOSIT_SCAN]: {
     expectedIntervalMs: 10 * 60 * 1000,

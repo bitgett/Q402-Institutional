@@ -21,6 +21,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/redstone-watcher",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/reputation-weekly",
       "schedule": "0 0 * * 0"
     },

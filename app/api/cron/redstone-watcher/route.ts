@@ -9,24 +9,24 @@
  *
  * OFF BY DEFAULT. When REDSTONE_ENABLED is unset the route inert-skips (reads
  * nothing, fires nothing, returns disabled:true), so it is safe to expose before
- * the feature is turned on. No Vercel cron is scheduled for it until the feature
- * is enabled — until then it is a manual, CRON_SECRET-gated endpoint (the demo
- * curls it directly).
+ * the feature is turned on. A Vercel cron (every 15 min) IS scheduled for it;
+ * while off it inert-returns but still records a healthy heartbeat, so the
+ * watchdog (which now tracks this cron via CRON_NAMES.REDSTONE_WATCHER) never
+ * false-pages a cron-scheduled-but-flag-off deployment.
  *
- * ── ENABLE CHECKLIST (do ALL before flipping REDSTONE_ENABLED=1 in prod) ──
- *   1. Add the Vercel cron for this route AND a CRON_NAMES.REDSTONE_WATCHER +
- *      CRON_META entry + recordCronStatus calls here — otherwise this
- *      money-moving cron can wedge (e.g. pullDueTriggers 502 every tick) with
- *      NO watchdog page. It is intentionally unwired now so a DISABLED feature
- *      never false-pages the watchdog; wire all three together at enable-time.
+ * ── ENABLE CHECKLIST (do the rest before flipping REDSTONE_ENABLED=1 in prod) ──
+ *   1. DONE — Vercel cron (every 15 min) + CRON_NAMES.REDSTONE_WATCHER +
+ *      CRON_META + recordCronStatus (success/error/inert) are all wired, so a
+ *      wedged money-cron surfaces on the watchdog once enabled.
  *   2. Every wallet that will host a trigger MUST have BOTH perTxMaxUsd AND
  *      dailyLimitUsd set — the daily-cap reserve is the only spend bound beyond
  *      per-tx, and (matching recurring) chargeAgainstDailyLimit fails OPEN if no
  *      positive limit is configured. A trigger fires on an attacker-choosable
  *      feed crossing, so both caps matter.
- *   3. Set REDSTONE_UNIQUE_SIGNERS >= 3 (median robust to one bad signer),
- *      REDSTONE_ALLOWED_FEEDS (absent ⇒ nothing readable), and a REDSTONE_BAND_*
- *      per feed. See docs/redstone-triggers.md.
+ *   3. Set REDSTONE_UNIQUE_SIGNERS (>= 3 for multi-signer crypto feeds; RWA/NAV
+ *      feeds like ACRED are single-institutional-signer ⇒ 1), REDSTONE_ALLOWED_FEEDS
+ *      (absent ⇒ nothing readable), and a REDSTONE_BAND_* per feed. See
+ *      docs/redstone-triggers.md.
  *
  * Edge-latch (see redstone-trigger.ts):
  *   feed UNMET      → (re-)arm; never fires.
@@ -76,6 +76,7 @@ import {
   type RedStoneTrigger,
 } from "@/app/lib/redstone-trigger";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
+import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -405,10 +406,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const denial = requireCronAuth(req);
   if (denial) return denial;
 
-  const now = Date.now();
+  const startedAt = Date.now();
+  const now = startedAt;
 
-  // Inert-skip when the feature is off — reads nothing, fires nothing.
+  // Inert-skip when the feature is off — reads nothing, fires nothing. Still
+  // record a healthy heartbeat so the watchdog (which now tracks this cron)
+  // doesn't false-page a deployment that has the cron scheduled but the feature
+  // flag off.
   if (!redstoneEnabled()) {
+    await recordCronStatus(CRON_NAMES.REDSTONE_WATCHER, {
+      lastStatus: "success",
+      lastResult: { disabled: true, pulled: 0 },
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json({
       asOf: new Date(now).toISOString(),
       disabled: true,
@@ -422,6 +432,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     due = await pullDueTriggers(now, MAX_TRIGGERS_PER_TICK);
   } catch (e) {
     console.error("[cron/redstone-watcher] pullDueTriggers failed:", e);
+    await recordCronStatus(CRON_NAMES.REDSTONE_WATCHER, {
+      lastStatus: "error",
+      lastError: `pull_failed: ${e instanceof Error ? e.message : String(e)}`,
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json({ error: "pull_failed" }, { status: 502 });
   }
 
@@ -441,6 +456,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       });
     }
   }
+
+  const summary = outcomes.reduce<Record<string, number>>((acc, o) => {
+    acc[o.outcome] = (acc[o.outcome] ?? 0) + 1;
+    return acc;
+  }, {});
+  await recordCronStatus(CRON_NAMES.REDSTONE_WATCHER, {
+    lastStatus: "success",
+    lastResult: { pulled: due.length, summary },
+    durationMs: Date.now() - startedAt,
+  });
 
   return NextResponse.json({
     asOf: new Date(now).toISOString(),
