@@ -38,16 +38,11 @@ import {
   listTriggers,
   applyUserTriggerAction,
   projectTrigger,
+  dailyCapSatisfied,
   TriggerValidationError,
   type TriggerOp,
   type TriggerMode,
 } from "@/app/lib/redstone-trigger";
-
-/** A wallet has a usable daily spend cap. Repeat triggers require this (they fire
- *  on every crossing); per-tx alone bounds one fire, not the aggregate. */
-function hasPositiveDailyCap(w: { dailyLimitUsd?: number }): boolean {
-  return typeof w.dailyLimitUsd === "number" && Number.isFinite(w.dailyLimitUsd) && w.dailyLimitUsd > 0;
-}
 
 interface Body {
   apiKey?: string;
@@ -149,7 +144,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // no daily cap (the watcher would terminal-fail it on the next fire anyway).
     if (action === "resume") {
       const existing = await getTrigger(owner, walletId, body.triggerId);
-      if (existing && existing.mode === "repeat" && !hasPositiveDailyCap(wallet)) {
+      if (existing && !dailyCapSatisfied(existing.mode, wallet.dailyLimitUsd)) {
         return NextResponse.json(
           {
             error: "DAILY_CAP_REQUIRED",
@@ -247,10 +242,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     // FAIL-CLOSED: a repeat trigger fires on every crossing, so it MUST be
     // bounded by a wallet daily cap (per-tx alone bounds one fire, not the
     // aggregate). A `once` trigger is bounded by its single amount, so exempt.
-    if (
-      mode === "repeat" &&
-      !(typeof wallet.dailyLimitUsd === "number" && Number.isFinite(wallet.dailyLimitUsd) && wallet.dailyLimitUsd > 0)
-    ) {
+    if (!dailyCapSatisfied(mode, wallet.dailyLimitUsd)) {
       return NextResponse.json(
         {
           error: "DAILY_CAP_REQUIRED",

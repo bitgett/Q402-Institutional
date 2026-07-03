@@ -36,6 +36,8 @@ import {
   markCrossingFired,
   conditionMet,
   inCooldown,
+  dailyCapSatisfied,
+  hasPositiveDailyCap,
   TriggerValidationError,
   RSTRIGGER_NEXT_CHECK_ZSET,
   type RedStoneTrigger,
@@ -143,6 +145,35 @@ describe("conditionMet", () => {
   it("< strict", () => {
     expect(conditionMet(2000, "<", 2000)).toBe(false);
     expect(conditionMet(1999, "<", 2000)).toBe(true);
+  });
+});
+
+// ── daily-cap fail-closed predicate (create/resume/watcher all gate on this) ──
+
+describe("hasPositiveDailyCap", () => {
+  it("true only for a positive finite number", () => {
+    expect(hasPositiveDailyCap(100)).toBe(true);
+    expect(hasPositiveDailyCap(0.01)).toBe(true);
+    expect(hasPositiveDailyCap(0)).toBe(false);
+    expect(hasPositiveDailyCap(-5)).toBe(false);
+    expect(hasPositiveDailyCap(undefined)).toBe(false);
+    expect(hasPositiveDailyCap(NaN)).toBe(false);
+    expect(hasPositiveDailyCap(Infinity)).toBe(false);
+  });
+});
+
+describe("dailyCapSatisfied (repeat triggers fail-CLOSED without a daily cap)", () => {
+  it("once is ALWAYS allowed (bounded by its single amount)", () => {
+    expect(dailyCapSatisfied("once", undefined)).toBe(true);
+    expect(dailyCapSatisfied("once", 0)).toBe(true);
+    expect(dailyCapSatisfied("once", 100)).toBe(true);
+  });
+  it("repeat requires a positive daily cap", () => {
+    expect(dailyCapSatisfied("repeat", 100)).toBe(true);
+    expect(dailyCapSatisfied("repeat", undefined)).toBe(false); // cap deleted/null
+    expect(dailyCapSatisfied("repeat", 0)).toBe(false);
+    expect(dailyCapSatisfied("repeat", -1)).toBe(false);
+    expect(dailyCapSatisfied("repeat", NaN)).toBe(false);
   });
 });
 

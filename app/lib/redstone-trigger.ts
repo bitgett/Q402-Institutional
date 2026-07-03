@@ -693,5 +693,23 @@ export function inCooldown(t: RedStoneTrigger, nowMs: number): boolean {
   return nowMs - t.lastFiredAt < t.cooldownSec * 1000;
 }
 
+/** A wallet has a usable (positive, finite) daily spend cap. */
+export function hasPositiveDailyCap(dailyLimitUsd: number | undefined): boolean {
+  return typeof dailyLimitUsd === "number" && Number.isFinite(dailyLimitUsd) && dailyLimitUsd > 0;
+}
+
+/**
+ * Whether a trigger of `mode` may run given the wallet's daily cap. A `repeat`
+ * trigger fires on EVERY crossing, so it MUST be bounded by a positive daily cap
+ * (per-tx bounds one fire, not the aggregate; and wallet limits are deletable to
+ * null). A `once` trigger is bounded by its single fixed amount, so it is always
+ * allowed. Single source of truth for the create / resume / watcher fail-closed
+ * guards. Returns true when it is SAFE to proceed.
+ */
+export function dailyCapSatisfied(mode: TriggerMode, dailyLimitUsd: number | undefined): boolean {
+  if (mode !== "repeat") return true;
+  return hasPositiveDailyCap(dailyLimitUsd);
+}
+
 /** Test seam. */
 export const __test = { conditionMet, inCooldown, HOUR_MS };
