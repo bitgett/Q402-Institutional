@@ -41,18 +41,29 @@
 
 export type HookLifecycle = "beforeAuthorize" | "beforeSettle" | "afterSettle";
 
-export type PaymentSource = "send" | "batch" | "bridge" | "recurring";
+export type PaymentSource = "send" | "batch" | "bridge" | "recurring" | "redstone-trigger";
 
 /**
  * Oracle condition for ConditionalOracle (#4). Travels with the payment
  * intent (per-payment, not stored per-wallet) — a payer attaches "only
  * settle when BTC >= 80000" or "only after this timestamp" to the
- * request. Evaluated against Chainlink Data Feeds at settle time.
+ * request. Evaluated against a Chainlink Data Feed (default) or a RedStone
+ * signed feed at settle time.
  */
 export interface OracleCondition {
   kind: "price" | "timestamp";
-  /** Chainlink feed pair, e.g. "BTC/USD". Required when kind="price". */
+  /**
+   * The feed to read (kind="price" only). For source="chainlink" (default)
+   * this is a Chainlink pair like "BTC/USD"; for source="redstone" it is a
+   * RedStone feed id like "ETH" (must be in REDSTONE_ALLOWED_FEEDS).
+   */
   feed?: string;
+  /**
+   * Price data source (kind="price" only). Defaults to "chainlink" so every
+   * existing condition is unchanged. "redstone" reads a signer-verified
+   * RedStone package via the off-chain reader (NAV / RWA / equities feeds).
+   */
+  source?: "chainlink" | "redstone";
   /** Comparison operator. */
   op: ">=" | "<=" | ">" | "<" | "after" | "before";
   /** Threshold — USD price (kind="price") or unix seconds (kind="timestamp"). */

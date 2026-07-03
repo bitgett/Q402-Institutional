@@ -89,6 +89,10 @@ export async function GET(): Promise<NextResponse> {
         { name: "q402_escrow_release", description: "Buyer releases a locked escrow to the seller (gasless)." },
         { name: "q402_escrow_refund", description: "Permissionless refund to the buyer after the timeout / resolve window." },
         { name: "q402_escrow_dispute", description: "A party disputes an open escrow (requires a named arbiter)." },
+        { name: "q402_redstone_feeds", description: "Discover which RedStone feeds this deployment can drive triggers off (no key)." },
+        { name: "q402_redstone_trigger_create", description: "Arm a gasless payout that fires once when a RedStone feed crosses a threshold (Mode C)." },
+        { name: "q402_redstone_trigger_list", description: "List the Agent Wallet's RedStone triggers." },
+        { name: "q402_redstone_trigger_cancel", description: "Permanently cancel a RedStone trigger." },
       ],
       // Hint for indexers + humans — the canonical hosts.
       docs: "https://q402.quackai.ai/docs",

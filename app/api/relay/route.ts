@@ -195,6 +195,7 @@ async function handleRelay(req: NextRequest): Promise<NextResponse> {
       const rawSource = (body as { source?: unknown }).source;
       if (
         rawSource === "recurring" ||
+        rawSource === "redstone-trigger" ||
         rawSource === "send" ||
         rawSource === "batch" ||
         rawSource === "api" ||

@@ -41,6 +41,7 @@
 import { createPublicClient, http, type Address } from "viem";
 import type { Hook, HookContext, HookOutcome, OracleCondition } from "./types";
 import { getPrimaryRpc } from "@/app/lib/relayer";
+import { redstoneEnabled, redstonePrice } from "@/app/lib/redstone";
 
 /** Minimal Chainlink AggregatorV3Interface surface. */
 const AGGREGATOR_ABI = [
@@ -138,18 +139,43 @@ function evalTimestamp(cond: OracleCondition): HookOutcome {
 
 async function evalPrice(chain: string, cond: OracleCondition): Promise<HookOutcome> {
   if (!cond.feed) {
-    return deny("CONDITION_FEED_REQUIRED", 400, "price condition requires a feed pair (e.g. BTC/USD)");
+    return deny("CONDITION_FEED_REQUIRED", 400, "price condition requires a feed (e.g. BTC/USD for chainlink, ETH for redstone)");
   }
-  const feedAddr = resolveFeedAddress(chain, cond.feed);
+
+  // Read the price from the requested source. Each reader returns either a
+  // { price } on success or a fully-formed deny HookOutcome — both are
+  // fail-closed (an unreadable/unverifiable feed denies, never allows).
+  const source = cond.source ?? "chainlink";
+  const read = source === "redstone"
+    ? await readRedStonePrice(cond.feed)
+    : await readChainlinkPrice(chain, cond.feed);
+  if ("action" in read) return read; // it's a deny
+
+  const price = read.price;
+  const ok = compare(price, cond.op, cond.value, "price");
+  if (ok === null) {
+    return deny("CONDITION_INVALID_OP", 400, `operator ${cond.op} invalid for a price condition`);
+  }
+  return ok
+    ? { action: "allow" }
+    : deny("CONDITION_NOT_MET", 412, `price condition not met (${cond.feed}=${price}, target=${cond.value}, op=${cond.op}, source=${source})`, {
+        kind: "price", feed: cond.feed, price, target: cond.value, op: cond.op, source,
+      });
+}
+
+/**
+ * Read a Chainlink Data Feed price for `pair` on `chain`. Fail-closed: an
+ * unknown feed / read failure / description mismatch / stale round / non-
+ * positive answer all return a deny HookOutcome instead of a price.
+ */
+async function readChainlinkPrice(chain: string, pair: string): Promise<{ price: number } | HookOutcome> {
+  const feedAddr = resolveFeedAddress(chain, pair);
   if (!feedAddr) {
-    return deny("CONDITION_FEED_UNKNOWN", 400, `no Chainlink feed configured for ${cond.feed} on ${chain}`);
+    return deny("CONDITION_FEED_UNKNOWN", 400, `no Chainlink feed configured for ${pair} on ${chain}`);
   }
 
   const client = createPublicClient({ transport: http(getPrimaryRpc(chain)) });
 
-  // Read description() + decimals() + latestRoundData() together. Any
-  // throw bubbles to the dispatcher which, with failMode "closed",
-  // denies — but we catch here to attach a precise code.
   let description: string;
   let decimals: number;
   let answer: bigint;
@@ -168,32 +194,38 @@ async function evalPrice(chain: string, cond: OracleCondition): Promise<HookOutc
     return deny("CONDITION_FEED_READ_FAILED", 502, `Chainlink feed read failed: ${e instanceof Error ? e.message.slice(0, 120) : "unknown"}`);
   }
 
-  // Safety: the on-chain description must match the requested pair.
-  // Guards against a wrong/rotated feed address silently returning a
-  // different asset's price.
-  if (normalisePair(description) !== normalisePair(cond.feed)) {
-    return deny("CONDITION_FEED_MISMATCH", 502, `feed at ${feedAddr} reports "${description}", expected "${cond.feed}"`);
+  // Safety: the on-chain description must match the requested pair. Guards
+  // against a wrong/rotated feed address silently returning a different asset.
+  if (normalisePair(description) !== normalisePair(pair)) {
+    return deny("CONDITION_FEED_MISMATCH", 502, `feed at ${feedAddr} reports "${description}", expected "${pair}"`);
   }
 
-  // Staleness: a dead feed must not satisfy a condition off an old price.
   const nowSec = Math.floor(Date.now() / 1000);
   if (nowSec - Number(updatedAt) > STALE_AFTER_SEC) {
-    return deny("CONDITION_FEED_STALE", 502, `feed ${cond.feed} last updated ${nowSec - Number(updatedAt)}s ago (> ${STALE_AFTER_SEC}s)`);
+    return deny("CONDITION_FEED_STALE", 502, `feed ${pair} last updated ${nowSec - Number(updatedAt)}s ago (> ${STALE_AFTER_SEC}s)`);
   }
   if (answer <= 0n) {
-    return deny("CONDITION_FEED_BAD_PRICE", 502, `feed ${cond.feed} returned non-positive answer ${answer.toString()}`);
+    return deny("CONDITION_FEED_BAD_PRICE", 502, `feed ${pair} returned non-positive answer ${answer.toString()}`);
   }
 
-  const price = Number(answer) / 10 ** decimals;
-  const ok = compare(price, cond.op, cond.value, "price");
-  if (ok === null) {
-    return deny("CONDITION_INVALID_OP", 400, `operator ${cond.op} invalid for a price condition`);
+  return { price: Number(answer) / 10 ** decimals };
+}
+
+/**
+ * Read a RedStone signed-feed price for `feedId`. Delegates to the off-chain
+ * reader (which verifies signer set + staleness + band + allowlist and THROWS
+ * on any of them). Fail-closed: disabled or any read failure denies.
+ */
+async function readRedStonePrice(feedId: string): Promise<{ price: number } | HookOutcome> {
+  if (!redstoneEnabled()) {
+    return deny("CONDITION_REDSTONE_DISABLED", 400, "RedStone price source is not enabled on this deployment (set REDSTONE_ENABLED=1)");
   }
-  return ok
-    ? { action: "allow" }
-    : deny("CONDITION_NOT_MET", 412, `price condition not met (${cond.feed}=${price}, target=${cond.value}, op=${cond.op})`, {
-        kind: "price", feed: cond.feed, price, target: cond.value, op: cond.op,
-      });
+  try {
+    const reading = await redstonePrice(feedId);
+    return { price: reading.value };
+  } catch (e) {
+    return deny("CONDITION_FEED_READ_FAILED", 502, `RedStone feed read failed: ${e instanceof Error ? e.message.slice(0, 140) : "unknown"}`);
+  }
 }
 
 /**

@@ -12,7 +12,7 @@
  * only) so the two product pages read as one family. But the composition is its
  * own: this is the hands-on page, so it leads with an interactive multi-client
  * install (Claude, Codex, Cursor, Cline, Copilot, Hermes), a wallet-mode
- * picker, a live q402_quote ranking, and the 36-tool
+ * picker, a live q402_quote ranking, and the 40-tool
  * surface. No marketing-landing motifs (corner glows, gradient sheen titles).
  */
 
@@ -88,7 +88,7 @@ const MODES: { tag: string; title: string; desc: React.ReactNode; env: string[];
   },
 ];
 
-// ── the 36-tool surface (grouped, with auth + one-line note) ────────────────
+// ── the 40-tool surface (grouped, with auth + one-line note) ────────────────
 const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: string }[] }[] = [
   {
     label: "Setup and read",
@@ -176,8 +176,17 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
       { name: "q402_escrow_dispute", auth: "live mode", note: "A party disputes an open escrow (requires a named arbiter)." },
     ],
   },
+  {
+    label: "RedStone triggers",
+    tools: [
+      { name: "q402_redstone_feeds", auth: "no auth", note: "Which RedStone feeds this deployment can drive triggers off. Read-only." },
+      { name: "q402_redstone_trigger_create", auth: "live mode", note: "Arm a gasless payout that fires once when a RedStone feed (NAV / price) crosses a threshold." },
+      { name: "q402_redstone_trigger_list", auth: "live mode", note: "List the Agent Wallet's RedStone triggers + their fire history." },
+      { name: "q402_redstone_trigger_cancel", auth: "live mode", note: "Permanently stop a RedStone trigger." },
+    ],
+  },
 ];
-const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 36
+const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 40
 
 const rise = {
   initial: { opacity: 0, y: 10 },
