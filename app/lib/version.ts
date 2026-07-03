@@ -26,4 +26,4 @@ export const SDK_VERSION = "1.9.0-base-x402" as const;
  * registry.npmjs.org, but UI labels reference *this* constant — so a
  * forgotten label after publish trips on screenshot review, not silently.
  */
-export const MCP_VERSION = "0.10.2" as const;
+export const MCP_VERSION = "0.11.0" as const;
