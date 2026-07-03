@@ -590,11 +590,11 @@ export default function PaymentPage() {
                         <button
                           key={t.id}
                           onClick={() => setSelectedPayToken(t.id)}
-                          className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all ${
+                          className={`relative overflow-hidden flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all ${
                             selectedPayToken === t.id
                               ? "border-yellow/50 bg-yellow/8 text-yellow"
                               : "border-white/8 text-white/50 hover:border-white/20"
-                          }`}
+                          } ${t.token === "Q" ? "q-pay-shine" : ""}`}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={t.img} alt={t.chain} className="w-4 h-4 rounded-full flex-shrink-0" />
