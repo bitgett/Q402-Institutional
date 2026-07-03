@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/app/context/WalletContext";
 import WalletModal from "@/app/components/WalletModal";
@@ -23,6 +23,9 @@ const PAY_TOKENS = [
   // RLUSD (Ripple USD) — NY DFS regulated stablecoin, ERC-20 + EIP-2612 permit, decimals 18.
   // Ethereum-only; the relay route rejects RLUSD on every other chain.
   { id: "eth-rlusd", label: "ETH RLUSD", chain: "Ethereum",  chainId: "eth", token: "RLUSD", decimals: 18, address: "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", color: "#627EEA", img: "/eth.png"  },
+  // Q (QuackAI token) — BNB-only, pay 50% of the plan price in Q. The exact Q
+  // amount is priced+locked server-side at the 30-min TWAP when you pay.
+  { id: "bnb-q",     label: "BNB Q",     chain: "BNB Chain", chainId: "bnb", token: "Q",     decimals: 18, address: "0xc07e1300dc138601FA6B0b59f8D0FA477e690589", color: "#F5C518", img: "/q402-logo.svg" },
 ];
 
 // `multiplier` was the +X% surcharge displayed on Ethereum/Avalanche tiles.
@@ -164,11 +167,40 @@ export default function PaymentPage() {
   // this txHash") or lose the binding and confuse the server-side
   // reconciliation. Cleared at the start of each FRESH payWithWallet call.
   const [lastIntentId,     setLastIntentId]     = useState<string | null>(null);
+  // Live Q-payment estimate (50% off). Display-only; the binding amount is
+  // locked server-side at intent time. Fetched whenever Q is the selected rail.
+  // Tagged with the `usd` it was priced for so a stale estimate for a different
+  // plan price is never shown (see qQuoteReady below).
+  const [qQuote, setQQuote] = useState<{ usd: number; quotedQAmount: number; discountedUsd: number; qPriceUsd: number } | null>(null);
 
   const chain = CHAINS.find(c => c.id === selectedChain)!;
   const { price, perTx } = calcPrice(selectedChain, selectedVolume);
   const checkoutPrice = price;
   const payToken = PAY_TOKENS.find(t => t.id === selectedPayToken)!;
+  const isQPay = payToken.token === "Q";
+
+  // Pull the live Q estimate when Q is selected (or the plan price changes).
+  // Only ever setState from the async resolution (never synchronously in the
+  // effect body) — the render gates on qQuoteReady so a stale value can't show.
+  useEffect(() => {
+    const pt = PAY_TOKENS.find((t) => t.id === selectedPayToken);
+    if (pt?.token !== "Q") return;
+    let cancelled = false;
+    const usd = checkoutPrice;
+    fetch(`/api/payment/q-quote?usd=${usd}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && !cancelled && typeof d.quotedQAmount === "number") {
+          setQQuote({ usd, quotedQAmount: d.quotedQAmount, discountedUsd: d.discountedUsd, qPriceUsd: d.qPriceUsd });
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [selectedPayToken, checkoutPrice]);
+
+  // The estimate is "ready" only when it was priced for the current plan price
+  // and Q is still the selected rail — otherwise show the pricing placeholder.
+  const qQuoteReady = isQPay && qQuote && qQuote.usd === checkoutPrice ? qQuote : null;
 
   // Derived: once wallet connects, treat idle as ready. Computed at render so
   // React 19 doesn't flag a setState-in-effect cascade.
@@ -263,13 +295,26 @@ export default function PaymentPage() {
       const intentId = intentData.intentId ?? null;
       setLastIntentId(intentId);
 
+      // Q payments send the exact Q amount the intent just locked at the TWAP
+      // (NOT the USD price). Stablecoin rails send the USD amount 1:1.
+      let sendAmount = String(checkoutPrice);
+      if (payToken.token === "Q") {
+        if (typeof intentData.quotedQAmount !== "number") {
+          setVerifyAttempts(v => v + 1);
+          setVerifyError("Could not price the Q payment. Please try again.");
+          setPayStep("error");
+          return;
+        }
+        sendAmount = String(intentData.quotedQAmount);
+      }
+
       setPayStep("awaiting_wallet");
       const txHash = await sendErc20Transfer({
         chain: payToken.chainId as WalletChainKey,
         from: address,
         tokenAddress: payToken.address,
         to: PAYMENT_ADDRESS,
-        amount: String(checkoutPrice),
+        amount: sendAmount,
         decimals: payToken.decimals,
       });
       setSubmittedTxHash(txHash);
@@ -554,6 +599,11 @@ export default function PaymentPage() {
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={t.img} alt={t.chain} className="w-4 h-4 rounded-full flex-shrink-0" />
                           {t.label}
+                          {t.token === "Q" && (
+                            <span className="ml-1 text-[8px] uppercase tracking-wide font-extrabold text-emerald-400 border border-emerald-400/30 rounded px-1 py-0.5 leading-none flex-shrink-0">
+                              50% off
+                            </span>
+                          )}
                           {selectedPayToken === t.id && (
                             <span className="ml-auto w-1.5 h-1.5 rounded-full bg-yellow flex-shrink-0" style={{ boxShadow: "0 0 4px #F5C518" }} />
                           )}
@@ -567,10 +617,25 @@ export default function PaymentPage() {
                       <div>
                         <p className="text-sm font-bold text-yellow">One signature. Instant activation.</p>
                         <p className="text-xs text-white/45 mt-1 leading-relaxed">
-                          <span className="text-white/65 font-semibold">{checkoutPrice.toLocaleString()} {payToken.token}</span>
-                          <span className="text-white/30"> on </span>
-                          <span className="text-white/65 font-semibold">{payToken.chain}</span>
-                          <span className="text-white/30">. Confirm in your wallet — your API key flips live the moment the block lands.</span>
+                          {isQPay ? (
+                            <>
+                              <span className="text-white/65 font-semibold">
+                                {qQuoteReady ? `~${qQuoteReady.quotedQAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })} Q` : "pricing Q…"}
+                              </span>
+                              <span className="text-white/30"> on </span>
+                              <span className="text-white/65 font-semibold">BNB Chain</span>
+                              <span className="text-emerald-400 font-semibold"> · 50% off</span>
+                              {qQuoteReady && <span className="text-white/40"> (you save ${(checkoutPrice - qQuoteReady.discountedUsd).toFixed(2)})</span>}
+                              <span className="text-white/30">. Confirm in your wallet — your API key flips live the moment the block lands.</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-white/65 font-semibold">{checkoutPrice.toLocaleString()} {payToken.token}</span>
+                              <span className="text-white/30"> on </span>
+                              <span className="text-white/65 font-semibold">{payToken.chain}</span>
+                              <span className="text-white/30">. Confirm in your wallet — your API key flips live the moment the block lands.</span>
+                            </>
+                          )}
                         </p>
                       </div>
                       <span className="text-[10px] uppercase tracking-[0.18em] text-yellow/70 border border-yellow/25 rounded-full px-2.5 py-1 flex-shrink-0 font-bold">

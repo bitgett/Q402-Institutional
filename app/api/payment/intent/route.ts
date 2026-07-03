@@ -6,6 +6,10 @@ import { randomBytes } from "crypto";
 import { intentByIdKey, intentLatestKey } from "@/app/lib/payment-intent";
 import { planFromAmount, txQuotaFromAmount, INTENT_CHAIN_MAP } from "@/app/lib/blockchain";
 import { SUBSCRIPTION_DEPLOYED_CHAINS } from "@/app/lib/wallets";
+import { quackUsdPrice } from "@/app/lib/quack-price";
+
+/** Fixed subscription discount for paying in Q (QuackAI token). 5000 bps = 50%. */
+const Q_DISCOUNT_BPS = 5000;
 
 /**
  * POST /api/payment/intent
@@ -103,10 +107,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "expectedUSD must be a positive number" }, { status: 400 });
   }
 
-  // token is optional — if provided, activate will cross-check
-  if (token !== undefined && !VALID_TOKENS.includes(token)) {
+  // token is optional — if provided, activate will cross-check. "Q" (QuackAI
+  // token) is a first-class subscription rail with a fixed 50% discount, BNB-only.
+  const isQ = token === "Q";
+  if (token !== undefined && !VALID_TOKENS.includes(token) && !isQ) {
     return NextResponse.json(
-      { error: `token must be one of: ${VALID_TOKENS.join(", ")}` },
+      { error: `token must be one of: ${VALID_TOKENS.join(", ")}, Q` },
       { status: 400 },
     );
   }
@@ -116,6 +122,14 @@ export async function POST(req: NextRequest) {
   if (token === "RLUSD" && chain !== "eth") {
     return NextResponse.json(
       { error: 'RLUSD is only supported on Ethereum mainnet (chain="eth")' },
+      { status: 400 },
+    );
+  }
+
+  // Q is a BNB-only ERC-20; the subscription Safe holds Q only on BNB.
+  if (isQ && chain !== "bnb") {
+    return NextResponse.json(
+      { error: 'Q payments are only supported on BNB Chain (chain="bnb")' },
       { status: 400 },
     );
   }
@@ -143,6 +157,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ── Q payments: lock the exact Q amount at the 30-min TWAP, 50% off ──────────
+  // Locking here means a Q price move between intent and payment can't change the
+  // bill; activate gates on the on-chain Q amount vs this value. Plan + credits
+  // are unchanged (full price) — the discount applies to the payment only.
+  let quotedQAmount: number | undefined;
+  let qPriceUsd: number | undefined;
+  if (isQ) {
+    try {
+      qPriceUsd = await quackUsdPrice(); // 30-min TWAP, sanity band, fail-closed
+    } catch {
+      return NextResponse.json(
+        { error: "Q price is temporarily unavailable. Please try again shortly.", code: "Q_PRICE_UNAVAILABLE" },
+        { status: 503 },
+      );
+    }
+    const discountedUsd = expectedUSD * (1 - Q_DISCOUNT_BPS / 10_000); // 50% of the plan price
+    // Round UP to 4 dp so the value we display == the value the user sends ==
+    // the value activate checks, and rounding can never underpay us.
+    quotedQAmount = Math.ceil((discountedUsd / qPriceUsd) * 1e4) / 1e4;
+  }
+
   const intentId = randomBytes(8).toString("hex");
   const intent = {
     intentId,
@@ -154,6 +189,7 @@ export async function POST(req: NextRequest) {
     planChain:     planChain ?? chain,
     quotedPlan,
     quotedCredits,
+    ...(isQ ? { quotedQAmount, qPriceUsd, discountBps: Q_DISCOUNT_BPS } : {}),
   };
 
   // Store under the intentId and advance the latest-pointer for this address.
@@ -169,6 +205,7 @@ export async function POST(req: NextRequest) {
     token:         token ?? null,
     quotedPlan,
     quotedCredits,
+    ...(isQ ? { quotedQAmount, qPriceUsd, discountBps: Q_DISCOUNT_BPS } : {}),
     expiresIn:     INTENT_TTL,
   });
 }

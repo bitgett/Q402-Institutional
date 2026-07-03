@@ -12,6 +12,16 @@ export interface PaymentIntent {
   planChain?:    string;
   quotedPlan:    string | null;
   quotedCredits: number;
+  // ── Q (QuackAI token) payments ──
+  // When token === "Q" the user pays in Q at a fixed 50% discount. The exact Q
+  // amount they must send is LOCKED here at intent time (priced off the 30-min
+  // TWAP), so a price move between intent and payment can't change the bill, and
+  // activate gates on qAmount vs this value (never re-deriving USD on-chain).
+  // Plan + credits above stay the FULL-price quote — the discount applies to the
+  // payment only, not to what the subscriber receives.
+  quotedQAmount?: number;   // Q the user must send (human units)
+  qPriceUsd?:     number;   // Q/USD TWAP locked at intent time (audit trail)
+  discountBps?:   number;   // 5000 = 50% (fixed)
 }
 
 // ── Storage layout ──────────────────────────────────────────────────────────

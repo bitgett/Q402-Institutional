@@ -15,6 +15,10 @@ export interface PaymentResult {
   found: boolean;
   txHash?: string;
   amountUSD?: number;
+  /** Q payments only: the raw Q amount transferred (18-dec, human units). Q is
+   *  NOT a 1:1-USD stablecoin, so its gating is done on qAmount vs the intent's
+   *  locked quotedQAmount, never on amountUSD. */
+  qAmount?: number;
   token?: string;
   chain?: string;
   /** Sender address (lowercase) — used by activate to verify intent.address === TX sender */
@@ -380,6 +384,89 @@ export async function verifyPaymentTx(txHash: string, fromAddress: string): Prom
       } catch {
         // try next RPC
       }
+    }
+  }
+  return { found: false };
+}
+
+// ── Q (QuackAI token) subscription payments ────────────────────────────────
+// Q is a BNB-only ERC-20 (18 dec), NOT a 1:1-USD stablecoin, so it gets a
+// DEDICATED scan path — adding Q to the CHAINS token list would let a large Q
+// transfer dominate the stablecoin "largest amountUSD wins" candidate selection
+// and hijack a normal USDC/USDT activation. The intent locks the exact Q amount
+// (priced off the 30-min TWAP), and activate gates on qAmount vs that locked
+// value, so no USD is re-derived on-chain here.
+const Q_TOKEN = { symbol: "Q", address: "0xc07e1300dc138601FA6B0b59f8D0FA477e690589", decimals: 18 } as const;
+const Q_BNB = CHAINS.find((c) => c.name === "BNB Chain")!;
+function scanTimeout(ms: number): Promise<never> {
+  return new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms));
+}
+
+/** Verify a specific tx is a Q transfer from `fromAddress` to the subscription
+ *  Safe on BNB. Returns qAmount (raw Q, human units); no USD conversion. */
+export async function verifyQPaymentTx(txHash: string, fromAddress: string): Promise<PaymentResult> {
+  for (const rpc of Q_BNB.rpcs) {
+    try {
+      const provider = new ethers.JsonRpcProvider(rpc);
+      const receipt = await Promise.race([provider.getTransactionReceipt(txHash), scanTimeout(8000)]);
+      if (!receipt) continue;
+      const contract = new ethers.Contract(Q_TOKEN.address, ERC20_ABI, provider);
+      const filter = contract.filters.Transfer(fromAddress, SUBSCRIPTION);
+      const events = await Promise.race([
+        contract.queryFilter(filter, receipt.blockNumber, receipt.blockNumber),
+        scanTimeout(8000),
+      ]);
+      for (const ev of events) {
+        if (ev.transactionHash.toLowerCase() !== txHash.toLowerCase()) continue;
+        if (!("args" in ev)) continue;
+        const qAmount = Number(ethers.formatUnits(ev.args.value, Q_TOKEN.decimals));
+        return {
+          found: true,
+          txHash: ev.transactionHash,
+          qAmount,
+          token: "Q",
+          chain: "BNB Chain",
+          from: (ev.args.from as string)?.toLowerCase() ?? fromAddress.toLowerCase(),
+        };
+      }
+      break; // receipt found on BNB — done
+    } catch {
+      // try next RPC
+    }
+  }
+  return { found: false };
+}
+
+/** Block-window scan for the best unused Q transfer from `fromAddress` to the
+ *  subscription Safe on BNB (fallback when the client can't supply a txHash). */
+export async function checkQPaymentOnChain(fromAddress: string): Promise<PaymentResult> {
+  for (const rpc of Q_BNB.rpcs) {
+    try {
+      const provider = new ethers.JsonRpcProvider(rpc);
+      const currentBlock = await Promise.race([provider.getBlockNumber(), scanTimeout(8000)]);
+      const fromBlock = currentBlock - Q_BNB.blockWindow;
+      const contract = new ethers.Contract(Q_TOKEN.address, ERC20_ABI, provider);
+      const filter = contract.filters.Transfer(fromAddress, SUBSCRIPTION);
+      const events = await Promise.race([contract.queryFilter(filter, fromBlock, currentBlock), scanTimeout(12000)]);
+      const candidates: ScanCandidate[] = [];
+      for (const ev of events) {
+        if (!("args" in ev)) continue;
+        candidates.push({
+          txHash: ev.transactionHash,
+          blockNumber: ev.blockNumber,
+          amountUSD: Number(ethers.formatUnits(ev.args.value, Q_TOKEN.decimals)), // Q amount, used only for "largest" selection
+          token: "Q",
+          chain: "BNB Chain",
+          from: (ev.args.from as string)?.toLowerCase() ?? fromAddress.toLowerCase(),
+        });
+      }
+      if (candidates.length === 0) return { found: false };
+      const { kv } = await import("@vercel/kv");
+      const winner = await selectBestUnusedCandidate(candidates, async (h) => Boolean(await kv.get(`used_txhash:${h}`)));
+      if (!winner) return { found: false };
+      return { found: true, txHash: winner.txHash, qAmount: winner.amountUSD, token: "Q", chain: "BNB Chain", from: winner.from };
+    } catch {
+      // try next RPC
     }
   }
   return { found: false };

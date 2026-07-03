@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkPaymentOnChain, verifyPaymentTx, planFromAmount, toBnbEquivUSD, maxTier } from "@/app/lib/blockchain";
+import { checkPaymentOnChain, verifyPaymentTx, checkQPaymentOnChain, verifyQPaymentTx, planFromAmount, toBnbEquivUSD, maxTier } from "@/app/lib/blockchain";
 import { getSubscription, setSubscription, generateApiKey, generateSandboxKey, getScopedCredits, addScopedCredits, initScopedQuotaIfNeeded, updateApiKeyPlan, resetUsageAlertState } from "@/app/lib/db";
 import { requireFreshAuth } from "@/app/lib/auth";
 import { getPaymentIntent, clearPaymentIntent } from "@/app/lib/payment-intent";
@@ -140,9 +140,12 @@ export async function POST(req: NextRequest) {
     ? body.txHash
     : null;
 
-  const result = clientTxHash
-    ? await verifyPaymentTx(clientTxHash, addr)
-    : await checkPaymentOnChain(addr, intent.chain);
+  // Q payments (50% discount, BNB-only) use a dedicated scan path so a large Q
+  // transfer never hijacks the stablecoin "largest amountUSD wins" selection.
+  const isQ = intent.token === "Q";
+  const result = isQ
+    ? (clientTxHash ? await verifyQPaymentTx(clientTxHash, addr) : await checkQPaymentOnChain(addr))
+    : (clientTxHash ? await verifyPaymentTx(clientTxHash, addr) : await checkPaymentOnChain(addr, intent.chain));
 
   if (!result.found) {
     return NextResponse.json(
@@ -183,10 +186,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 4. Amount: subscription rails are exact stablecoin transfers (BNB/ETH
-  // USDC/USDT), not oracle-priced swaps. Do not allow a percentage tolerance:
-  // a direct API caller could otherwise intentionally underpay every tier.
-  if (!isPaymentAmountSufficient(result.amountUSD ?? 0, intent.expectedUSD)) {
+  // 4. Amount. Stablecoin rails are exact 1:1-USD transfers (no percentage
+  //    tolerance, so a direct caller can't underpay a tier). Q rails gate on the
+  //    on-chain Q amount vs the amount LOCKED in the intent at the 30-min TWAP —
+  //    Q is never re-priced on-chain here, so a post-intent price move (or a
+  //    manipulated spot) can't reduce what must clear. Epsilon is for float noise.
+  if (isQ) {
+    const paidQ = result.qAmount ?? 0;
+    const requiredQ = intent.quotedQAmount ?? Infinity;
+    if (!(paidQ + 1e-6 >= requiredQ)) {
+      return NextResponse.json(
+        { error: `Q payment of ${paidQ} Q is less than the required ${requiredQ} Q for this plan`, code: "AMOUNT_LOW" },
+        { status: 402 },
+      );
+    }
+  } else if (!isPaymentAmountSufficient(result.amountUSD ?? 0, intent.expectedUSD)) {
     return NextResponse.json(
       { error: `Payment amount $${result.amountUSD} is less than intended $${intent.expectedUSD}`, code: "AMOUNT_LOW" },
       { status: 402 },
@@ -318,7 +332,14 @@ export async function POST(req: NextRequest) {
   const priorWindow   = windowActive
     ? (existing?.windowPaidBnbUSD ?? existing?.amountUSD ?? 0)
     : 0;
-  const thisBnbEquiv  = toBnbEquivUSD(result.amountUSD!, result.chain);
+  // Q payments: the recorded "paid USD" is the DISCOUNTED price (the USD value
+  // the wallet actually moved), while the cumulative-window value uses the FULL
+  // plan price so a half-price Q payment still counts toward tiers at plan value
+  // (product decision). Stablecoins: paid == full == the on-chain USD.
+  const paidUsdForRecord = isQ
+    ? Number((intent.expectedUSD * (1 - (intent.discountBps ?? 5000) / 10_000)).toFixed(2))
+    : (result.amountUSD ?? 0);
+  const thisBnbEquiv  = isQ ? intent.expectedUSD : toBnbEquivUSD(result.amountUSD!, result.chain);
   const newWindow     = priorWindow + thisBnbEquiv;
 
   const thisTier      = intent.quotedPlan ?? null;
@@ -374,7 +395,7 @@ export async function POST(req: NextRequest) {
       sandboxApiKey,
       plan,
       txHash:           result.txHash!,
-      amountUSD:        result.amountUSD!,
+      amountUSD:        paidUsdForRecord,
       trialQuotaBonus:  trialTxs,
       paidQuotaBonus:   paidTxs,
       quotaBonus:       totalTxs, // legacy sum mirror
@@ -411,7 +432,9 @@ export async function POST(req: NextRequest) {
       const priorPlan   = existing?.plan ?? null;
       const priorLabel  = priorPlan ? `was: ${priorPlan}` : "first activation";
       const tierTag     = tierUpgraded ? "  ⬆ tier upgrade" : "";
-      const amountLabel = result.amountUSD != null ? `$${result.amountUSD}` : "(unknown)";
+      const amountLabel = isQ
+        ? `${result.qAmount} Q (~$${paidUsdForRecord}, 50% off)`
+        : (result.amountUSD != null ? `$${result.amountUSD}` : "(unknown)");
       const tokenLabel  = result.token ?? "USDC/USDT/RLUSD";
       const chainLabel  = result.chain ?? "(unknown chain)";
       const txHash      = result.txHash ?? "(unknown tx)";

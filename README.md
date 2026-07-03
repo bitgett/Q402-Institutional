@@ -199,6 +199,33 @@ Trial = BNB-only (server-side `TRIAL_BNB_ONLY` gate). Paid = all 12 chains.
 
 ---
 
+## Pay your subscription in Q (50% off)
+
+Subscriptions can be paid in **Q** (the QuackAI token, BNB Chain,
+`0xc07e1300dc138601FA6B0b59f8D0FA477e690589`) at a fixed **50% discount** — on
+top of USDC, USDT, and RLUSD.
+
+- **Plan + credits are billed on the full list price.** A $149 Pro plan paid in
+  Q still grants Pro / 10K credits and counts $149 toward your cumulative tier —
+  the discount is on the payment, not on what you receive.
+- **The Q amount is locked at intent time.** `POST /api/payment/intent` prices
+  the discounted USD off the 30-minute Q/USDT TWAP (PancakeSwap V3, fail-closed
+  with a sanity band) and stores the exact `quotedQAmount`. A Q price move
+  between intent and payment can't change the bill, and `POST /api/payment/activate`
+  gates on the on-chain Q amount vs that locked value — it never re-derives USD
+  from the chain, so the price can't be gamed after the fact.
+- **Estimate before you pay:** `GET /api/payment/q-quote?usd=<planPrice>` returns
+  `{ discountedUsd, qPriceUsd, quotedQAmount }` using the same math (public,
+  display-only). The `/payment` page shows the live Q amount and your savings.
+- Q is scanned on a **dedicated path** (`verifyQPaymentTx` / `checkQPaymentOnChain`),
+  never added to the general stablecoin token list — otherwise a large Q transfer
+  could win "largest payment" selection over a real USDC/USDT settlement.
+
+The subscription address is a 2-of-3 Safe multisig; receiving Q is a plain ERC-20
+balance update, so no Safe change is required to accept it.
+
+---
+
 ## Architecture in one screen
 
 ```
