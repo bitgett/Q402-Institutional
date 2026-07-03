@@ -61,8 +61,8 @@ const USE_CASES = [
   {
     key: 'ai', label: 'AI Agents', tag: 'NEW',
     hook: 'Tell your agent. It pays.',
-    body: 'Let Claude, Codex, Cursor, Cline, or your own agent call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Thirty-six tools (q402_doctor for one-prompt setup, q402_agentic_info for Agent-Wallet introspection, recurring schedule with per-rule fire history, stablecoin yield, Q staking, CCIP bridge, payment requests, gasless escrow), signed Trust Receipts on every settlement, sandbox-safe defaults.',
-    chips: ['36 MCP tools', 'Batch × 20', 'Trust Receipts'],
+    body: 'Let Claude, Codex, Cursor, Cline, or your own agent call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Forty tools (q402_doctor for one-prompt setup, q402_agentic_info for Agent-Wallet introspection, recurring schedule with per-rule fire history, RedStone NAV/price triggers, stablecoin yield, Q staking, CCIP bridge, payment requests, gasless escrow), signed Trust Receipts on every settlement, sandbox-safe defaults.',
+    chips: ['40 MCP tools', 'Batch × 20', 'Trust Receipts'],
     chat: [
       { who: 'you', t: 'Send 5 USDC to 0xd8dA…6045 on BNB.' },
       { who: 'Claude', t: 'q402_pay({ chain:"bnb", token:"USDC", to:"0xd8dA…6045", amount:"5" })', meta: '✓ sent · 412ms · gas $0 · rct_8f2a…' },
@@ -998,7 +998,7 @@ export default function LandingBody() {
           <div className="c1-wrap">
             <Shead
               index="03" kicker="Capabilities"
-              sub="The SDK and 36-tool MCP server go well past one-shot payments."
+              sub="The SDK and 40-tool MCP server go well past one-shot payments."
             >
               Beyond a single transfer.
             </Shead>

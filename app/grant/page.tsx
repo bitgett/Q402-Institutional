@@ -60,7 +60,7 @@ const WHY = [
   },
   {
     title: "Gasless for your users. And for their agents.",
-    body: "EIP-712 and EIP-7702 mean no native-token prompts, no gas screens, no rejected transactions from empty wallets. The same rails run through a 36-tool MCP server, so an AI agent can pay on its own, inside the per-transaction and daily caps you set.",
+    body: "EIP-712 and EIP-7702 mean no native-token prompts, no gas screens, no rejected transactions from empty wallets. The same rails run through a 40-tool MCP server, so an AI agent can pay on its own, inside the per-transaction and daily caps you set.",
   },
   {
     title: "We grow with what you ship.",

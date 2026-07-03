@@ -133,6 +133,7 @@ export interface RelayedTx {
    * separate scheduled payouts from one-off sends.
    *
    *   - "recurring": fired by the recurring-payouts cron from a saved rule
+   *   - "redstone-trigger": fired by the redstone-watcher cron from a data-event trigger
    *   - "send":      one-shot manual send via Agent Wallet
    *   - "batch":     multi-recipient batch send via Agent Wallet
    *   - "api":       direct /api/relay call from a customer integration
@@ -140,7 +141,7 @@ export interface RelayedTx {
    *                  but never as "Recurring only" — we don't lie about
    *                  provenance for rows we can't classify.
    */
-  source?: "recurring" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request" | "stake" | "unstake";
+  source?: "recurring" | "redstone-trigger" | "send" | "batch" | "api" | "yield_deposit" | "yield_withdraw" | "request" | "stake" | "unstake";
   /** Yield rows only: the venue the funds moved through (aave | morpho | lista).
    *  Lets the dashboard + reconciliation tell venues apart after a protocol switch
    *  on a chain (BNB Aave→Lista); the toUser pool/vault address alone is opaque. */
