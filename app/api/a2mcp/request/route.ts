@@ -4,7 +4,7 @@ import { createPaymentRequest, toPublicRequest } from "@/app/lib/payment-request
 import {
   A2MCP_ENABLED, ETH_ADDR, isA2mcpChain, isStableToken, validateAmount,
 } from "@/app/lib/a2mcp";
-import { hasX402Payment, x402Challenge } from "@/app/lib/a2mcp-x402";
+import { hasX402Payment, x402Challenge, settleX402Fee, x402ResponseHeader } from "@/app/lib/a2mcp-x402";
 
 const REQ_DESC = "Q402 Payment Request: create a payable, gasless payment-request link";
 
@@ -52,6 +52,11 @@ export async function POST(req: NextRequest) {
   const amt = validateAmount(body.amount);
   if (!amt.ok) return NextResponse.json({ error: amt.error }, { status: 400 });
 
+  // x402: settle the 0.0001 USDT service fee (validated inputs first, so a
+  // malformed request is never charged).
+  const fee = await settleX402Fee(req);
+  if (!fee.ok) return NextResponse.json({ error: fee.error }, { status: fee.status });
+
   const record = await createPaymentRequest({
     creatorOwner: recipient, // the payee owns the request they are the recipient of
     recipient,
@@ -62,7 +67,7 @@ export async function POST(req: NextRequest) {
     sandbox: false,
   });
 
-  return NextResponse.json(
+  const out = NextResponse.json(
     {
       requestId: record.id,
       payUrl: `${publicBase(req)}/pay/${record.id}`,
@@ -70,4 +75,6 @@ export async function POST(req: NextRequest) {
     },
     { status: 201 },
   );
+  out.headers.set("PAYMENT-RESPONSE", x402ResponseHeader(fee.txHash, fee.payer));
+  return out;
 }

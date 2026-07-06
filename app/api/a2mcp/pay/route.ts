@@ -6,7 +6,7 @@ import {
   isA2mcpChain, isStableToken,
 } from "@/app/lib/a2mcp";
 import { getActiveRelayKey } from "@/app/lib/a2mcp-key";
-import { hasX402Payment, x402Challenge } from "@/app/lib/a2mcp-x402";
+import { hasX402Payment, x402Challenge, settleX402Fee, x402ResponseHeader } from "@/app/lib/a2mcp-x402";
 
 const PAY_DESC = "Q402 Gasless Payment: execute a gasless stablecoin transfer on-chain";
 
@@ -75,6 +75,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "missing witnessSig and authorization (or eip3009Nonce)" }, { status: 400 });
   }
 
+  // x402: verify + settle the 0.0001 USDT service fee on X Layer BEFORE serving.
+  // Inputs are validated above, so a malformed request is rejected (400) without
+  // ever charging. Bogus signatures are rejected off-chain (no gas), and the
+  // EIP-3009 nonce gives on-chain single-use (replay-safe).
+  const fee = await settleX402Fee(req);
+  if (!fee.ok) return NextResponse.json({ error: fee.error }, { status: fee.status });
+
   // Per-payer bound (on top of the per-IP limit and the key quota) so a single
   // signer cannot monopolize the shared free-tier gas budget.
   if (!(await rateLimit(from.toLowerCase(), "a2mcp-pay-from", 20, 60))) {
@@ -123,5 +130,7 @@ export async function POST(req: NextRequest) {
   // Refund the reserved slot unless the relay actually settled (HTTP 2xx).
   if (dayKey && !relayRes.ok) await kv.decr(dayKey).catch(() => {});
   const data = await relayRes.json().catch(() => ({ error: "relay returned a non-JSON response" }));
-  return NextResponse.json(data, { status: relayRes.status });
+  const out = NextResponse.json(data, { status: relayRes.status });
+  out.headers.set("PAYMENT-RESPONSE", x402ResponseHeader(fee.txHash, fee.payer));
+  return out;
 }
