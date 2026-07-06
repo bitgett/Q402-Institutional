@@ -2,8 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import { createPaymentRequest, toPublicRequest } from "@/app/lib/payment-request";
 import {
-  A2MCP_ENABLED, ETH_ADDR, isA2mcpChain, isStableToken, validateAmount, requestDescriptor,
+  A2MCP_ENABLED, ETH_ADDR, isA2mcpChain, isStableToken, validateAmount,
 } from "@/app/lib/a2mcp";
+import { hasX402Payment, x402Challenge } from "@/app/lib/a2mcp-x402";
+
+const REQ_DESC = "Q402 Payment Request: create a payable, gasless payment-request link";
 
 /**
  * POST /api/a2mcp/request  (OKX.AI ASP #2831, free A2MCP service)
@@ -23,10 +26,13 @@ function publicBase(req: NextRequest): string {
 }
 
 export async function GET(req: NextRequest) {
-  return NextResponse.json(requestDescriptor(`${publicBase(req)}/api/a2mcp/request`));
+  return x402Challenge(`${publicBase(req)}/api/a2mcp/request`, REQ_DESC);
 }
 
 export async function POST(req: NextRequest) {
+  const resource = `${publicBase(req)}/api/a2mcp/request`;
+  if (!hasX402Payment(req)) return x402Challenge(resource, REQ_DESC);
+
   if (!A2MCP_ENABLED) return NextResponse.json({ error: "A2MCP service is not enabled" }, { status: 503 });
   const ip = getClientIP(req);
   if (!(await rateLimit(ip, "a2mcp-request", 30, 60))) {

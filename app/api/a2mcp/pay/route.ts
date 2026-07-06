@@ -3,9 +3,12 @@ import { kv } from "@vercel/kv";
 import { rateLimit, getClientIP } from "@/app/lib/ratelimit";
 import {
   A2MCP_ENABLED, A2MCP_RELAY_URL, A2MCP_PAY_DAILY_CAP, ETH_ADDR,
-  isA2mcpChain, isStableToken, payDescriptor,
+  isA2mcpChain, isStableToken,
 } from "@/app/lib/a2mcp";
 import { getActiveRelayKey } from "@/app/lib/a2mcp-key";
+import { hasX402Payment, x402Challenge } from "@/app/lib/a2mcp-x402";
+
+const PAY_DESC = "Q402 Gasless Payment: execute a gasless stablecoin transfer on-chain";
 
 /**
  * POST /api/a2mcp/pay  (OKX.AI ASP #2831, free A2MCP service)
@@ -30,11 +33,17 @@ function publicBase(req: NextRequest): string {
   return req.nextUrl.origin.replace(/\/$/, "");
 }
 
+// x402: accessing the resource without a payment returns the 402 challenge
+// (OKX Agent Payments Protocol). This is unconditional (not behind A2MCP_ENABLED)
+// so the endpoint is a valid x402 service even before the settle path is armed.
 export async function GET(req: NextRequest) {
-  return NextResponse.json(payDescriptor(`${publicBase(req)}/api/a2mcp/pay`));
+  return x402Challenge(`${publicBase(req)}/api/a2mcp/pay`, PAY_DESC);
 }
 
 export async function POST(req: NextRequest) {
+  const resource = `${publicBase(req)}/api/a2mcp/pay`;
+  if (!hasX402Payment(req)) return x402Challenge(resource, PAY_DESC);
+
   if (!A2MCP_ENABLED) return NextResponse.json({ error: "A2MCP service is not enabled" }, { status: 503 });
   const relayKey = await getActiveRelayKey(); // KV-stored auto-refreshed key, env fallback
   if (!relayKey) return NextResponse.json({ error: "A2MCP relay is not configured" }, { status: 503 });
