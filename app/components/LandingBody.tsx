@@ -74,8 +74,8 @@ const USE_CASES = [
 
 const SECURITY = [
   {
-    n: '01', t: 'Non-custodial',
-    body: 'Users sign off-chain. Keys never leave the wallet; Q402 never holds funds or keys.',
+    n: '01', t: 'Non-custodial payments',
+    body: 'On payments, the user signs with their own key and it never leaves their wallet. Q402 only relays and sponsors gas.',
   },
   {
     n: '02', t: 'EIP-7702 owner-binding',
@@ -901,8 +901,9 @@ export default function LandingBody() {
 
 /* ===== TRUST RECEIPT CARD (the visual in the §04 split) ===== */
 .c1-rcpt-paper{border:1px solid var(--line);border-radius:18px;max-width:none;width:100%;
-  background:linear-gradient(180deg,#0B1322,#080E1A);box-shadow:var(--panel-sh);position:relative;}
-@media(min-width:821px){.c1-rcpt-paper{margin-top:-26px;}}
+  background:linear-gradient(180deg,#0B1322,#080E1A);box-shadow:var(--panel-sh);position:relative;
+  display:flex;flex-direction:column;}
+@media(min-width:821px){.c1-rcpt-paper{margin-top:0;align-self:stretch;}}
 .c1-rcpt-top{display:flex;align-items:center;justify-content:space-between;padding:20px 26px;
   border-bottom:1px solid var(--hair);}
 .c1-rcpt-brand{display:flex;align-items:center;gap:11px;font-family:var(--disp);letter-spacing:.02em;}
@@ -910,7 +911,7 @@ export default function LandingBody() {
   color:var(--acc);text-transform:none;}
 .c1-rcpt-doc{font-weight:600;font-size:13px;color:var(--mut);padding-left:11px;border-left:1px solid var(--hair);}
 .c1-rcpt-id{font-family:var(--mono);font-size:12.5px;color:var(--acc2);}
-.c1-rcpt-rows{padding:10px 26px;}
+.c1-rcpt-rows{padding:10px 26px;flex:1;display:flex;flex-direction:column;justify-content:center;}
 .c1-rcpt-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;
   border-bottom:1px dashed var(--hair);font-size:14.5px;color:var(--mut);}
 .c1-rcpt-row:last-child{border-bottom:none;}
@@ -1036,9 +1037,9 @@ export default function LandingBody() {
           <div className="c1-wrap">
             <Shead
               index="04" kicker="Trust & security"
-              sub="Users sign off-chain; Q402 sponsors gas and never holds keys or funds."
+              sub="On payments the user signs; Agent Wallets use an encrypted managed key for autonomous agents."
             >
-              Custody never changes hands.
+              Bounded by the contract, not our word.
             </Shead>
 
             <div className="c1-trust" data-reveal>
