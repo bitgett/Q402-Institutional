@@ -142,7 +142,7 @@ export default function EventPage() {
             </span>
             <span className="text-white/25 text-xs">·</span>
             <span className="text-xs text-white/65">
-              {TRIAL_DURATION_DAYS} days · {TRIAL_CREDITS.toLocaleString()} gasless TX · Q402 covers gas
+              {TRIAL_DURATION_DAYS} days · {TRIAL_CREDITS.toLocaleString()} gasless TX · through Jul 20
             </span>
           </motion.div>
 
@@ -163,8 +163,8 @@ export default function EventPage() {
             className="relative z-10 text-lg text-white/55 font-light tracking-wide max-w-2xl mb-10"
           >
             {TRIAL_CREDITS.toLocaleString()} gasless transactions on BNB Chain (USDC + USDT) for
-            the next {TRIAL_DURATION_DAYS} days. <span className="text-yellow font-semibold">Q402 covers the gas</span> —
-            no card, no gas tank. Sign up with Google, email, or wallet to get your live
+            the next {TRIAL_DURATION_DAYS} days. <span className="text-yellow font-semibold">Q402 covers the gas</span>,
+            no card, no gas tank. Free Trial open through July 20. Sign up with Google, email, or wallet to get your live
             and sandbox API&nbsp;keys in 30&nbsp;seconds.
           </motion.p>
 
