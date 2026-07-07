@@ -8,4 +8,4 @@
  * new version, the test fails until this file is bumped.
  */
 export const PACKAGE_NAME = "@quackai/q402-mcp";
-export const PACKAGE_VERSION = "0.11.0";
+export const PACKAGE_VERSION = "0.11.4";
