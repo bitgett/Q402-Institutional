@@ -108,7 +108,7 @@ Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
 Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything else → Multichain.
 6+ BNB batches return `status="ambiguous"` so the agent asks the user how to split.
 
-**40 tools** (all sandbox by default; live needs an API key + a signing path):
+**43 tools** (all sandbox by default; live needs an API key + a signing path):
 
 | Tool | Auth | What it does |
 |---|---|---|
@@ -121,6 +121,9 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_wallet_status` | private key | Per-chain EIP-7702 state |
 | `q402_clear_delegation` | private key / api key | Reset EIP-7702 delegation (Mode A/B local key OR Mode C api key, server-signed). Sponsored on every chain except Ethereum (billed to your Gas Tank). Two-phase consent (`consentToken`) |
 | `q402_agentic_info` | api key | Agent Wallet info (caps, ERC-8004) |
+| `q402_memory_summary` | api key | Treasury overview over a window: USD-stablecoin spend by chain/source, top vendors, schedules, open requests/escrow, failures. Read-only. |
+| `q402_vendor_history` | api key | Total paid to one vendor (or a vendor leaderboard) with recurring cadence. Read-only. |
+| `q402_agent_spend_report` | api key | Per-Agent-Wallet spend with each wallet's caps. Read-only. |
 | `q402_recurring_list` | api key | List scheduled rules |
 | `q402_recurring_create` | api key | Author a rule (paid Multichain only) |
 | `q402_recurring_fires` | api key | Last 50 fires per rule |
@@ -138,6 +141,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_yield_withdraw` | live key | Withdraw the Agent Wallet's supplied stablecoin from a lending vault on BNB or Base per `chain` (`amount="max"` for the full position). Always allowed, even after downgrade. |
 | `q402_stake` | live mode | Gasless Q (QuackAI) staking into QuackAiStake on BNB Chain. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). Confirm + sandbox-by-default. |
 | `q402_unstake` | live mode | Gasless unstake (withdraw) of Q from QuackAiStake on BNB back to the wallet. |
+| `q402_stake_positions` | live mode | Read-only: the Agent Wallet's Q stakes (indices, maturity, exitable) + liquid Q balance. |
 | `q402_request_create` | api key | Publish a payment request (invoice). No funds move; returns a /pay link + req_ id. Recipient defaults to the Agent Wallet. |
 | `q402_request_status` | none | Look up a request by req_ id (amount, recipient, status). Read-only. |
 | `q402_request_pay` | live key | Pay a request gaslessly from your own Agent Wallet (Mode C). Terms locked to the request. Two-phase consent (same as `q402_pay`). |
@@ -147,6 +151,10 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_escrow_release` | live mode | Buyer releases a locked escrow to the seller (gasless). |
 | `q402_escrow_refund` | live mode | Permissionless refund to the buyer after the timeout / resolve window. |
 | `q402_escrow_dispute` | live mode | A party disputes an open escrow (requires a named arbiter). |
+| `q402_redstone_feeds` | none | List RedStone NAV/price feeds a trigger can watch (allowlisted ids + sanity bands). Read-only. |
+| `q402_redstone_trigger_create` | live mode | Arm a gasless payout that fires once when a RedStone feed crosses a threshold (edge-latched, exactly-once). |
+| `q402_redstone_trigger_list` | api key | List the Agent Wallet's RedStone triggers + recent fires. Read-only. |
+| `q402_redstone_trigger_cancel` | api key | Permanently stop a RedStone trigger. |
 
 The eight fund-moving tools (`q402_pay`, `q402_batch_pay`, `q402_bridge_send`, `q402_yield_deposit`, `q402_yield_withdraw`, `q402_stake`, `q402_unstake`, `q402_request_pay`) use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one. `confirm: true` alone no longer fires a payment. `q402_clear_delegation` uses the same two-phase consent — it broadcasts a real tx and, on Ethereum, bills your Gas Tank.
 

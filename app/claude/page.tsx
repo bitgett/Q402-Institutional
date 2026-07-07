@@ -12,7 +12,7 @@
  * only) so the two product pages read as one family. But the composition is its
  * own: this is the hands-on page, so it leads with an interactive multi-client
  * install (Claude, Codex, Cursor, Cline, Copilot, Hermes), a wallet-mode
- * picker, a live q402_quote ranking, and the 40-tool
+ * picker, a live q402_quote ranking, and the 43-tool
  * surface. No marketing-landing motifs (corner glows, gradient sheen titles).
  */
 
@@ -88,7 +88,7 @@ const MODES: { tag: string; title: string; desc: React.ReactNode; env: string[];
   },
 ];
 
-// ── the 40-tool surface (grouped, with auth + one-line note) ────────────────
+// ── the 43-tool surface (grouped, with auth + one-line note) ────────────────
 const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: string }[] }[] = [
   {
     label: "Setup and read",
@@ -98,6 +98,14 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
       { name: "q402_balance", auth: "api key", note: "Verify key + remaining quota." },
       { name: "q402_agentic_info", auth: "api key", note: "Agent Wallet info: addresses, caps, ERC-8004 id. Read-only." },
       { name: "q402_wallet_status", auth: "private key", note: "Per-chain EIP-7702 delegation state. Read-only." },
+    ],
+  },
+  {
+    label: "Memory",
+    tools: [
+      { name: "q402_memory_summary", auth: "api key", note: "Summarize treasury activity: spend by chain and source, top vendors, schedules, requests, escrow, failures. Read-only." },
+      { name: "q402_vendor_history", auth: "api key", note: "Total paid to a vendor, or a vendor leaderboard with recurring cadence. Read-only." },
+      { name: "q402_agent_spend_report", auth: "api key", note: "Per-Agent-Wallet spend with each wallet's caps. Read-only." },
     ],
   },
   {
@@ -186,7 +194,7 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
     ],
   },
 ];
-const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 40
+const TOOL_COUNT = TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0); // 43
 
 const rise = {
   initial: { opacity: 0, y: 10 },

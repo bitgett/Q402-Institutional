@@ -667,7 +667,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
               </div>
             </div>
 
-            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 40 total</h3>
+            <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3 mt-6">4 · Tools exposed — 43 total</h3>
             <div className="rounded-xl border border-white/8 mb-6 overflow-hidden" style={{ background: "rgba(255,255,255,0.02)" }}>
               <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] text-sm">
@@ -689,6 +689,9 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_wallet_status",       auth: "private key", purpose: "Per-chain EIP-7702 delegation state for the EOA derived from Q402_PRIVATE_KEY. Read-only." },
                     { name: "q402_clear_delegation",    auth: "private key / api key", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (billed to Gas Tank). Two-phase consentToken (preview then execute)." },
                     { name: "q402_agentic_info",        auth: "api key",     purpose: "Agent Wallet info (addresses, caps, daily-spend used, ERC-8004 id). Drives Mode C." },
+                    { name: "q402_memory_summary",      auth: "api key",     purpose: "Treasury overview over a window: USD-stablecoin spend by chain/source, top vendors, scheduled payouts, open requests/escrow, failures. Read-only." },
+                    { name: "q402_vendor_history",      auth: "api key",     purpose: "Total paid to one vendor (or a vendor leaderboard) with recurring cadence. Read-only." },
+                    { name: "q402_agent_spend_report",  auth: "api key",     purpose: "Per-Agent-Wallet spend report with each wallet's caps. Read-only." },
                     { name: "q402_recurring_list",      auth: "api key",     purpose: "List scheduled rules." },
                     { name: "q402_recurring_create",    auth: "api key",     purpose: "Author a rule. Paid Multichain on EVERY chain (BNB included)." },
                     { name: "q402_recurring_fires",     auth: "api key",     purpose: "Last 50 fires per rule (timestamp + txHashes + amount)." },
@@ -716,6 +719,10 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_escrow_release",      auth: "live mode",   purpose: "Buyer releases a locked escrow to the seller (gasless)." },
                     { name: "q402_escrow_refund",       auth: "live mode",   purpose: "Permissionless refund to the buyer after the timeout / resolve window." },
                     { name: "q402_escrow_dispute",      auth: "live mode",   purpose: "A party disputes an open escrow (requires a named arbiter)." },
+                    { name: "q402_redstone_feeds",          auth: "none",    purpose: "List RedStone NAV/price feeds a trigger can watch (allowlisted ids + sanity bands). Read-only." },
+                    { name: "q402_redstone_trigger_create", auth: "api key", purpose: "Author a feed-crossing trigger that fires a gasless payout when a RedStone NAV/price crosses a threshold. Edge-latched, exactly-once." },
+                    { name: "q402_redstone_trigger_list",   auth: "api key", purpose: "List the Agent Wallet's RedStone triggers + recent fires. Read-only." },
+                    { name: "q402_redstone_trigger_cancel", auth: "api key", purpose: "Cancel a RedStone trigger (terminal)." },
                   ]).map((t, i, arr) => (
                     <tr key={t.name} style={{ borderBottom: i === arr.length - 1 ? undefined : "1px solid rgba(255,255,255,0.04)" }}>
                       <td className="px-4 py-3"><code className="text-yellow text-xs">{t.name}</code></td>

@@ -37,7 +37,7 @@ const INSTALL_CMD = "npx -y @quackai/q402-mcp";
 
 // Hero key facts - the one place these headline numbers live.
 const HERO_FACTS = [
-  { v: "40", label: "MCP tools" },
+  { v: "43", label: "MCP tools" },
   { v: "12", label: "EVM chains" },
   { v: "$0", label: "gas per send" },
   { v: "10", label: "wallets / owner" },
@@ -125,14 +125,15 @@ const CAPS = [
   },
 ];
 
-// 04 - the full 40-tool surface, grouped like an API reference (5+2+1+7+4+2+4+1+3+6+4).
+// 04 - the full 43-tool surface, grouped like an API reference (5+3+2+1+7+4+3+4+1+3+6+4).
 const TOOL_GROUPS = [
   { label: "Setup and read", tools: ["q402_doctor", "q402_quote", "q402_balance", "q402_agentic_info", "q402_wallet_status"] },
+  { label: "Memory", tools: ["q402_memory_summary", "q402_vendor_history", "q402_agent_spend_report"] },
   { label: "Pay", tools: ["q402_pay", "q402_batch_pay"] },
   { label: "Receipts", tools: ["q402_receipt"] },
   { label: "Recurring", tools: ["q402_recurring_list", "q402_recurring_create", "q402_recurring_fires", "q402_recurring_pause", "q402_recurring_resume", "q402_recurring_skip_next", "q402_recurring_cancel"] },
   { label: "Yield", tools: ["q402_yield_reserves", "q402_yield_positions", "q402_yield_deposit", "q402_yield_withdraw"] },
-  { label: "Staking", tools: ["q402_stake", "q402_unstake"] },
+  { label: "Staking", tools: ["q402_stake", "q402_unstake", "q402_stake_positions"] },
   { label: "Bridge", tools: ["q402_bridge_quote", "q402_bridge_send", "q402_bridge_history", "q402_bridge_gas_tank"] },
   { label: "Delegation", tools: ["q402_clear_delegation"] },
   { label: "Requests", tools: ["q402_request_create", "q402_request_status", "q402_request_pay"] },
@@ -167,7 +168,7 @@ export default function AgentsPage() {
           <Section index="03" label="Capabilities" title="Well past a single payment.">
             <CapabilityGrid />
           </Section>
-          <Section index="04" label="40 tools" title="The whole surface, one package.">
+          <Section index="04" label="43 tools" title="The whole surface, one package.">
             <InstallBlock />
             <ToolIndex />
             <ChainStrip />
