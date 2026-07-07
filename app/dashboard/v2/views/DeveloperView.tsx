@@ -85,7 +85,7 @@ const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: stri
     n: "02",
     title: "Initialize with your API key",
     label: "Client init",
-    code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll | arbitrum | base\n});`,
+    code: `const q402 = new Q402Client({\n  apiKey: "q402_live_xxxxx",\n  chain:  "avax",  // avax | bnb | eth | xlayer | stable | mantle | injective | monad | scroll | arbitrum | base | robinhood\n});`,
   },
   {
     n: "03",
