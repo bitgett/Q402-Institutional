@@ -16,6 +16,7 @@ const CHAINS = [
   { key: "scroll", name: "Scroll",    token: "ETH",   rpc: "https://rpc.scroll.io",                       cgId: "ethereum"     },
   { key: "arbitrum", name: "Arbitrum", token: "ETH",  rpc: "https://arb1.arbitrum.io/rpc",                 cgId: "ethereum"     },
   { key: "base",   name: "Base",      token: "ETH",   rpc: "https://mainnet.base.org",                    cgId: "ethereum"     },
+  { key: "robinhood", name: "Robinhood Chain", token: "ETH", rpc: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com", cgId: "ethereum" },
 ];
 
 // Minimum USD thresholds — alert when below these
@@ -42,6 +43,9 @@ const ALERT_THRESHOLD_USD: Record<string, number> = {
   // Base: ETH-denominated OP Stack L2, same fee profile as Scroll/Arbitrum.
   // Same $5 floor for consistency; tune after first week of mainnet data.
   base: 5,
+  // Robinhood Chain: ETH-denominated Arbitrum Nitro L2, same fee profile as
+  // Arbitrum One. Same $5 floor for consistency.
+  robinhood: 5,
 };
 
 async function getNativeBalance(rpc: string, address: string): Promise<string> {

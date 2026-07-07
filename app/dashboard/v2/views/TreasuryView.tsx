@@ -106,6 +106,7 @@ const CHAIN_META: ChainMeta[] = [
   { key: "scroll",    name: "Scroll",     token: "ETH",   color: "#EEB431", depositable: true },
   { key: "arbitrum",  name: "Arbitrum",   token: "ETH",   color: "#28A0F0", depositable: true },
   { key: "base",      name: "Base",       token: "ETH",   color: "#0052FF", depositable: true },
+  { key: "robinhood", name: "Robinhood Chain", token: "ETH", color: "#00C805", depositable: true },
 ];
 
 // Chains a trial-scoped account can transact on (BNB-only, mirroring the
