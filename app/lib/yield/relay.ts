@@ -136,7 +136,8 @@ const YIELD_ERC4626_ABI = [
     inputs: [
       { name: "owner", type: "address" }, { name: "facilitator", type: "address" },
       { name: "vault", type: "address" }, { name: "asset", type: "address" },
-      { name: "amount", type: "uint256" }, { name: "nonce", type: "uint256" },
+      { name: "amount", type: "uint256" }, { name: "minSharesOut", type: "uint256" },
+      { name: "nonce", type: "uint256" },
       { name: "deadline", type: "uint256" }, { name: "witnessSignature", type: "bytes" },
     ],
     outputs: [{ name: "shares", type: "uint256" }],
@@ -146,7 +147,8 @@ const YIELD_ERC4626_ABI = [
     inputs: [
       { name: "owner", type: "address" }, { name: "facilitator", type: "address" },
       { name: "vault", type: "address" }, { name: "asset", type: "address" },
-      { name: "amount", type: "uint256" }, { name: "nonce", type: "uint256" },
+      { name: "amount", type: "uint256" }, { name: "minAssetsOut", type: "uint256" },
+      { name: "maxSharesBurned", type: "uint256" }, { name: "nonce", type: "uint256" },
       { name: "deadline", type: "uint256" }, { name: "witnessSignature", type: "bytes" },
     ],
     outputs: [{ name: "assetsOut", type: "uint256" }],
@@ -207,11 +209,19 @@ export async function settleYieldAction(a: SignedYieldAction): Promise<YieldSett
       functionName: a.action === "supply" ? "supplyToAave" : "withdrawFromAave",
       args: [a.fromAddr, account.address, a.pool, a.assetAddress, a.amountRaw, a.nonceUint, a.deadline, a.witnessSig],
     });
-  } else {
+  } else if (a.action === "supply") {
+    // ERC-4626 supply binds minSharesOut (MD-01) between amount and nonce.
     callData = encodeFunctionData({
       abi: YIELD_ERC4626_ABI,
-      functionName: a.action === "supply" ? "supplyToErc4626" : "withdrawFromErc4626",
-      args: [a.fromAddr, account.address, a.pool, a.assetAddress, a.amountRaw, a.nonceUint, a.deadline, a.witnessSig],
+      functionName: "supplyToErc4626",
+      args: [a.fromAddr, account.address, a.pool, a.assetAddress, a.amountRaw, a.minSharesOut, a.nonceUint, a.deadline, a.witnessSig],
+    });
+  } else {
+    // ERC-4626 withdraw binds minAssetsOut + maxSharesBurned (MD-01 / L-01).
+    callData = encodeFunctionData({
+      abi: YIELD_ERC4626_ABI,
+      functionName: "withdrawFromErc4626",
+      args: [a.fromAddr, account.address, a.pool, a.assetAddress, a.amountRaw, a.minAssetsOut, a.maxSharesBurned, a.nonceUint, a.deadline, a.witnessSig],
     });
   }
 

@@ -52,18 +52,18 @@ contract Q402PaymentImplementationBASEv2 {
 
     // Vault-bound (not pool-bound): the signed `vault` replaces Aave's `pool`.
     bytes32 public constant ERC4626_SUPPLY_AUTHORIZATION_TYPEHASH = keccak256(
-        "Erc4626SupplyAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 nonce,uint256 deadline)"
+        "Erc4626SupplyAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 minSharesOut,uint256 nonce,uint256 deadline)"
     );
 
     bytes32 public constant ERC4626_WITHDRAW_AUTHORIZATION_TYPEHASH = keccak256(
-        "Erc4626WithdrawAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 nonce,uint256 deadline)"
+        "Erc4626WithdrawAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 minAssetsOut,uint256 maxSharesBurned,uint256 nonce,uint256 deadline)"
     );
 
     string public constant NAME    = "Q402 Base";
     string public constant VERSION = "1";
 
     /// @notice Impl version tag — lets the SDK detect this build and prompt re-delegation.
-    string public constant IMPL_VERSION = "2-yield-base-erc4626";
+    string public constant IMPL_VERSION = "3-yield-base-erc4626-slippage";
 
     // ─── ERC-4626 vault allowlist (Base, immutable — spec §9.1 model A) ───────
     // Never trust the signed `vault`/`asset` unchecked: a compromised / prompt-
@@ -124,6 +124,7 @@ contract Q402PaymentImplementationBASEv2 {
     error AssetVaultMismatch();
     error ApproveFailed();
     error NothingToWithdraw();
+    error SlippageExceeded();
 
     // ─── v1: gasless ERC-20 transfer (preserved, payments) ───────────────────
 
@@ -161,7 +162,7 @@ contract Q402PaymentImplementationBASEv2 {
      */
     function supplyToErc4626(
         address owner, address facilitator, address vault, address asset,
-        uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
+        uint256 amount, uint256 minSharesOut, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external nonReentrant returns (uint256 shares) {
         if (msg.sender != facilitator)                  revert UnauthorizedFacilitator();
         if (owner != address(this))                     revert OwnerMismatch();
@@ -173,7 +174,7 @@ contract Q402PaymentImplementationBASEv2 {
 
         bytes32 structHash = keccak256(abi.encode(
             ERC4626_SUPPLY_AUTHORIZATION_TYPEHASH,
-            owner, facilitator, vault, asset, amount, nonce, deadline
+            owner, facilitator, vault, asset, amount, minSharesOut, nonce, deadline
         ));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
         if (_recoverSigner(digest, witnessSignature) != owner) revert InvalidSignature();
@@ -187,6 +188,10 @@ contract Q402PaymentImplementationBASEv2 {
         _setApproval(asset, vault, amount);         // exact-amount, reset-to-zero safe
         shares = IERC4626(vault).deposit(amount, owner);
         _setApproval(asset, vault, 0);              // zero any residual allowance (defense in depth)
+
+        // Slippage floor: reject if the vault minted fewer shares than the signed
+        // intent's minimum (MD-01).
+        if (shares < minSharesOut) revert SlippageExceeded();
 
         emit Erc4626Supplied(owner, vault, asset, amount, shares, nonce);
     }
@@ -204,7 +209,7 @@ contract Q402PaymentImplementationBASEv2 {
      */
     function withdrawFromErc4626(
         address owner, address facilitator, address vault, address asset,
-        uint256 amount, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
+        uint256 amount, uint256 minAssetsOut, uint256 maxSharesBurned, uint256 nonce, uint256 deadline, bytes calldata witnessSignature
     ) external nonReentrant returns (uint256 assetsOut) {
         if (msg.sender != facilitator)  revert UnauthorizedFacilitator();
         if (owner != address(this))     revert OwnerMismatch();
@@ -214,24 +219,34 @@ contract Q402PaymentImplementationBASEv2 {
         if (!isAllowedAsset(asset))     revert AssetNotAllowed();
         if (usedNonces[owner][nonce])   revert NonceAlreadyUsed();
 
-        bytes32 structHash = keccak256(abi.encode(
-            ERC4626_WITHDRAW_AUTHORIZATION_TYPEHASH,
-            owner, facilitator, vault, asset, amount, nonce, deadline
-        ));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
-        if (_recoverSigner(digest, witnessSignature) != owner) revert InvalidSignature();
+        {
+            // scoped so structHash/digest free their stack slots before redeem/withdraw
+            bytes32 structHash = keccak256(abi.encode(
+                ERC4626_WITHDRAW_AUTHORIZATION_TYPEHASH,
+                owner, facilitator, vault, asset, amount, minAssetsOut, maxSharesBurned, nonce, deadline
+            ));
+            bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
+            if (_recoverSigner(digest, witnessSignature) != owner) revert InvalidSignature();
+        }
 
         usedNonces[owner][nonce] = true;
 
+        // `amount == max` redeems the max CURRENTLY REDEEMABLE shares (maxRedeem),
+        // which can be < the full balance under vault caps/queues (L-01). `minAssetsOut`
+        // floors the assets the user accepts; `maxSharesBurned` caps a fixed withdraw (MD-01).
         bool isMax = amount == type(uint256).max;
         if (isMax) {
             uint256 shares = IERC4626(vault).maxRedeem(owner);
             if (shares == 0) revert NothingToWithdraw();
+            if (shares > maxSharesBurned) revert SlippageExceeded();
             assetsOut = IERC4626(vault).redeem(shares, owner, owner);
         } else {
-            IERC4626(vault).withdraw(amount, owner, owner); // reverts if assets exceed position
+            uint256 sharesBurned = IERC4626(vault).withdraw(amount, owner, owner); // reverts if assets exceed position
+            if (sharesBurned > maxSharesBurned) revert SlippageExceeded();
             assetsOut = amount;
         }
+
+        if (assetsOut < minAssetsOut) revert SlippageExceeded();
 
         emit Erc4626Withdrawn(owner, vault, asset, assetsOut, isMax, nonce);
     }

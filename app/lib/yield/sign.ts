@@ -69,6 +69,7 @@ const ERC4626_SUPPLY_AUTH_TYPES = {
     { name: "vault", type: "address" },
     { name: "asset", type: "address" },
     { name: "amount", type: "uint256" },
+    { name: "minSharesOut", type: "uint256" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
   ],
@@ -81,10 +82,24 @@ const ERC4626_WITHDRAW_AUTH_TYPES = {
     { name: "vault", type: "address" },
     { name: "asset", type: "address" },
     { name: "amount", type: "uint256" },
+    { name: "minAssetsOut", type: "uint256" },
+    { name: "maxSharesBurned", type: "uint256" },
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
   ],
 } as const;
+
+/** Default slippage tolerance for ERC-4626 supply/withdraw share/asset bounds (0.5%). */
+const YIELD_SLIPPAGE_BPS = 50n;
+const BPS = 10000n;
+
+/** ERC-4626 preview/read surface used to bind slippage into the signed intent. */
+const ERC4626_PREVIEW_ABI = [
+  { type: "function", name: "previewDeposit", stateMutability: "view", inputs: [{ name: "assets", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "previewWithdraw", stateMutability: "view", inputs: [{ name: "assets", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "previewRedeem", stateMutability: "view", inputs: [{ name: "shares", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "maxRedeem", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
+] as const;
 
 export type YieldProtocol = "aave" | "morpho" | "lista";
 
@@ -175,6 +190,10 @@ export interface SignedYieldAction {
   signedFacilitator: Address;
   amount: string; // human string; "max" for withdraw-all
   amountRaw: bigint;
+  /** ERC-4626 slippage bounds bound into the witness (0 / MAX for Aave). */
+  minSharesOut: bigint;
+  minAssetsOut: bigint;
+  maxSharesBurned: bigint;
   nonceUint: bigint;
   deadline: bigint;
   witnessSig: Hex;
@@ -302,6 +321,38 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
     }
   }
 
+  // MD-01 / L-01: bind slippage into the ERC-4626 intent so the signed consent
+  // covers the share/asset outcome, not just the amount. Aave aTokens are 1:1 and
+  // carry no share-price slippage, so they keep the original witness. Fail closed on
+  // a read error — we never sign an unbounded intent.
+  let minSharesOut = 0n;
+  let minAssetsOut = 0n;
+  let maxSharesBurned = MAX_UINT256;
+  if (protocol === "lista" || protocol === "morpho") {
+    try {
+      const pub = createPublicClient({ chain: viemChain, transport: http(cfg.rpc) });
+      const rd = (fn: "previewDeposit" | "previewWithdraw" | "previewRedeem" | "maxRedeem", args: readonly unknown[]) =>
+        pub.readContract({ address: target, abi: ERC4626_PREVIEW_ABI, functionName: fn, args } as never) as Promise<bigint>;
+      if (p.action === "supply") {
+        const expShares = await rd("previewDeposit", [amountRaw]);
+        minSharesOut = (expShares * (BPS - YIELD_SLIPPAGE_BPS)) / BPS;
+      } else if (isMax) {
+        // max path redeems maxRedeem shares; the meaningful floor is assets out.
+        const shares = await rd("maxRedeem", [fromAddr]);
+        const expAssets = shares > 0n ? await rd("previewRedeem", [shares]) : 0n;
+        minAssetsOut = (expAssets * (BPS - YIELD_SLIPPAGE_BPS)) / BPS;
+        maxSharesBurned = MAX_UINT256;
+      } else {
+        // fixed withdraw delivers exactly `amount` assets; bound the shares it burns.
+        minAssetsOut = amountRaw;
+        const expShares = await rd("previewWithdraw", [amountRaw]);
+        maxSharesBurned = (expShares * (BPS + YIELD_SLIPPAGE_BPS)) / BPS;
+      }
+    } catch {
+      throw new Error("YIELD_SLIPPAGE_PRECHECK_FAILED");
+    }
+  }
+
   const walletClient = createWalletClient({ account, chain: viemChain, transport: http(cfg.rpc) });
 
   const domain = {
@@ -319,11 +370,12 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
     witnessSig = (p.action === "supply"
       ? await walletClient.signTypedData({ domain, types: AAVE_SUPPLY_AUTH_TYPES, primaryType: "AaveSupplyAuthorization", message })
       : await walletClient.signTypedData({ domain, types: AAVE_WITHDRAW_AUTH_TYPES, primaryType: "AaveWithdrawAuthorization", message })) as Hex;
+  } else if (p.action === "supply") {
+    const message = { owner: fromAddr, facilitator: p.facilitator, vault: target, asset: tokenCfg.address, amount: amountRaw, minSharesOut, nonce: nonceUint, deadline };
+    witnessSig = (await walletClient.signTypedData({ domain, types: ERC4626_SUPPLY_AUTH_TYPES, primaryType: "Erc4626SupplyAuthorization", message })) as Hex;
   } else {
-    const message = { owner: fromAddr, facilitator: p.facilitator, vault: target, asset: tokenCfg.address, amount: amountRaw, nonce: nonceUint, deadline };
-    witnessSig = (p.action === "supply"
-      ? await walletClient.signTypedData({ domain, types: ERC4626_SUPPLY_AUTH_TYPES, primaryType: "Erc4626SupplyAuthorization", message })
-      : await walletClient.signTypedData({ domain, types: ERC4626_WITHDRAW_AUTH_TYPES, primaryType: "Erc4626WithdrawAuthorization", message })) as Hex;
+    const message = { owner: fromAddr, facilitator: p.facilitator, vault: target, asset: tokenCfg.address, amount: amountRaw, minAssetsOut, maxSharesBurned, nonce: nonceUint, deadline };
+    witnessSig = (await walletClient.signTypedData({ domain, types: ERC4626_WITHDRAW_AUTH_TYPES, primaryType: "Erc4626WithdrawAuthorization", message })) as Hex;
   }
 
   // EIP-7702 authorization delegating to the v2 impl (the one exposing
@@ -350,6 +402,9 @@ export async function signYieldAction(p: SignYieldParams): Promise<SignedYieldAc
     signedFacilitator: p.facilitator,
     amount: isMax ? "max" : p.amount,
     amountRaw,
+    minSharesOut,
+    minAssetsOut,
+    maxSharesBurned,
     nonceUint,
     deadline,
     witnessSig,

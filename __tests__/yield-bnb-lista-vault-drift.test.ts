@@ -76,14 +76,14 @@ describe("BNB Lista yield: off-chain <-> on-chain drift guard", () => {
 
   it("ERC-4626 supply witness typehash is byte-identical off-chain and on the BNB impl", () => {
     const expected =
-      "Erc4626SupplyAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 nonce,uint256 deadline)";
+      "Erc4626SupplyAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 minSharesOut,uint256 nonce,uint256 deadline)";
     expect(eip712TypeString(signSrc, "Erc4626SupplyAuthorization")).toBe(expected);
     expect(contractSrc).toContain(expected);
   });
 
   it("ERC-4626 withdraw witness typehash is byte-identical off-chain and on the BNB impl", () => {
     const expected =
-      "Erc4626WithdrawAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 nonce,uint256 deadline)";
+      "Erc4626WithdrawAuthorization(address owner,address facilitator,address vault,address asset,uint256 amount,uint256 minAssetsOut,uint256 maxSharesBurned,uint256 nonce,uint256 deadline)";
     expect(eip712TypeString(signSrc, "Erc4626WithdrawAuthorization")).toBe(expected);
     expect(contractSrc).toContain(expected);
   });
