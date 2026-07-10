@@ -108,6 +108,15 @@ const APPROVAL_FUND_CAP_WEI = ethers.parseEther("0.003");
 
 export async function runOftBridge(args: RunOftBridgeArgs): Promise<NextResponse> {
   const { owner, walletId, src, dst } = args;
+  // Controlled-launch gate: even with the Q402OftSender addresses wired into the
+  // manifest, the USDT0 rail stays OFF until OFT_ENABLED=1. Lets the contracts
+  // deploy + the code ship dark, then flip the rail on when the pools are funded.
+  if (process.env.OFT_ENABLED !== "1") {
+    return NextResponse.json({
+      error: "OFT_DISABLED",
+      message: "The USDT0 (LayerZero) bridge is not enabled yet. Use q402_bridge_send for USDC in the meantime.",
+    }, { status: 503 });
+  }
   if (isChainDisabled(src) || isChainDisabled(dst)) {
     return NextResponse.json({ error: CHAIN_DISABLED_MESSAGE }, { status: 400 });
   }
