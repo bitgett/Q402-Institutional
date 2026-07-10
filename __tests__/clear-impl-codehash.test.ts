@@ -49,8 +49,9 @@ describe("clear-delegation impl recogniser — codehash, not NAME()", () => {
   it("the allowlist is non-empty with the expected cardinality and shape", () => {
     // 12 current impls + 10 retired (collected per-(chain,address); the same
     // address has distinct bytecode across chains, so address-dedupe would
-    // under-collect). Robinhood's codehash added 2026-07-02.
-    expect(Q402_IMPL_CODEHASHES.size).toBe(22);
+    // under-collect). Robinhood's codehash added 2026-07-02; the two slippage-
+    // bound ERC-4626 yield impls (BNB Lista + BASE Morpho) added 2026-07-10.
+    expect(Q402_IMPL_CODEHASHES.size).toBe(24);
     for (const h of Q402_IMPL_CODEHASHES) expect(h).toMatch(/^0x[0-9a-f]{64}$/);
   });
 

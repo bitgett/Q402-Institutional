@@ -28,7 +28,7 @@ const BSC_USDT = "0x55d398326f99059fF775485246999027B3197955";
 const BSC_USDC = "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d";
 const PROBE = "0x000000000000000000000000000000000000dEaD";
 const EXPECT_NAME = "Q402 BNB Chain";
-const EXPECT_IMPL_VERSION = "2-yield-bnb-erc4626-lista";
+const EXPECT_IMPL_VERSION = "3-yield-bnb-erc4626-lista-slippage";
 
 if (!IMPL) {
   console.error("YIELD_IMPL_BNB_LISTA is not set in .env.local — deploy the Lista ERC-4626 impl first (scripts/deploy-yield-impl.mjs --chain bnb), then set it. DO NOT flip LISTA_YIELD_ENABLED yet.");
