@@ -88,6 +88,7 @@ contract Q402CCIPSender {
     error OnlyFacilitator();
     error TransferFailed();
     error ZeroOwner();
+    error RecipientNotOwner();
 
     modifier onlyFacilitator() {
         if (msg.sender != FACILITATOR) revert OnlyFacilitator();
@@ -137,6 +138,11 @@ contract Q402CCIPSender {
         uint256 maxFee
     ) external onlyFacilitator returns (bytes32 messageId) {
         if (owner == address(0)) revert ZeroOwner();
+        // Recipient is force-bound to the owner's own address on the destination
+        // chain (mirrors Q402OftSender). Without this, a compromised FACILITATOR
+        // could pull any approver's USDC and deliver it to a third party. The
+        // "then pay someone" step is a separate destination-chain payment.
+        if (destReceiver != owner) revert RecipientNotOwner();
 
         // ── 1. Pull USDC from the owner (who pre-approved this contract) ──────
         //      onlyFacilitator: the pool pays the CCIP fee, so an open bridge()

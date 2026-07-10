@@ -1433,6 +1433,16 @@ function isCCIPLinkChain(s: string): s is CCIPLinkChain {
   return s === "eth" || s === "avax" || s === "arbitrum";
 }
 
+// Chains whose bridge fee is paid in NATIVE from a Sender pool + debited from the
+// native Gas Tank slot: CCIP's triangle (eth/avax/arbitrum) PLUS the LayerZero
+// OFT rail (mantle/monad/xlayer; eth/arbitrum overlap). The native-fee debit +
+// its read MUST cover this whole set — gating them on isCCIPLinkChain silently
+// no-ops the OFT fee debit on mantle/monad/xlayer (free bridges + pool drain).
+const NATIVE_BRIDGE_FEE_CHAINS = ["eth", "avax", "arbitrum", "mantle", "monad", "xlayer"] as const;
+function isNativeBridgeFeeChain(s: string): boolean {
+  return (NATIVE_BRIDGE_FEE_CHAINS as readonly string[]).includes(s);
+}
+
 export async function getLinkDeposits(address: string): Promise<LinkDeposit[]> {
   try {
     const list = await kv.lrange<LinkDeposit>(linkDepKey(address), 0, -1);
@@ -1810,6 +1820,7 @@ export async function claimAndDebitNativeBridge(
     `${ownerLc.toLowerCase()}:${chain}`,
     chain,
     amount,
+    isNativeBridgeFeeChain(chain),  // native fee: CCIP triangle + OFT rail
   );
 }
 
@@ -1838,6 +1849,7 @@ export async function claimAndDebitLinkBridge(
     `${ownerLc.toLowerCase()}:${chain}:link`,
     chain,
     amount,
+    isCCIPLinkChain(chain),  // LINK fee: CCIP triangle only
   );
 }
 
@@ -1847,8 +1859,9 @@ async function claimAndDebitInternal(
   claimValue: string,
   chain: string,
   amount: number,
+  chainAllowed: boolean,
 ): Promise<AtomicDebitResult> {
-  if (!isCCIPLinkChain(chain) || amount <= 0) {
+  if (!chainAllowed || amount <= 0) {
     return { debited: true };
   }
   const result = await (kv as unknown as {
@@ -1901,7 +1914,9 @@ function ccipPendingFeeDebitKey(addr: string, chain: string, txHash: string): st
 }
 
 export async function setPendingFeeDebit(rec: PendingFeeDebitRecord): Promise<void> {
-  if (!isCCIPLinkChain(rec.chain)) return;
+  // Native fee chains span the CCIP triangle + the OFT rail; LINK only exists on
+  // the triangle, so a LINK record on a non-triangle chain is a no-op (impossible).
+  if (rec.feeToken === "LINK" ? !isCCIPLinkChain(rec.chain) : !isNativeBridgeFeeChain(rec.chain)) return;
   await kv.set(ccipPendingFeeDebitKey(rec.ownerLc, rec.chain, rec.txHash), rec, { ex: 3600 });
 }
 
@@ -2071,7 +2086,7 @@ export async function listPendingFundKeys(maxItems = 500): Promise<string[]> {
 export async function getNativeBridgeUsedTotals(address: string): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   const perChain = await Promise.all(
-    CCIP_LINK_CHAINS.map(async (c) => {
+    NATIVE_BRIDGE_FEE_CHAINS.map(async (c) => {
       const raw = await kv.get<number | string>(`${nativeBridgeUsedKey(address)}.${c}`);
       const n = typeof raw === "string" ? parseFloat(raw) : (raw ?? 0);
       return { c, n: Number.isFinite(n) ? n : 0 };
