@@ -179,6 +179,8 @@ export const Q402_IMPL_CODEHASHES: ReadonlySet<string> = new Set<string>([
   "0x463e2cb224f4dcaf599bb52734dc148af4849c4802057a03af9a2fce25bd4e81", // arbitrum retired (0xe5b90d)
   "0x9acb7b7f2f29371e56d4f3de584c35c8c522b87e09a5a2e043b169143fd12692", // arbitrum retired (0x2fb2b2)
   "0xa9104ce3dd511f78a24d5c12bedd7021a8730716964fb070accbb4e3abfc18f6", // robinhood current (0x2fb2b2), keccak256(eth_getCode) verified 2026-07-02
+  "0x8318019b8613545d217dfa5d30e1a8495cc37dc63407146d762db7f82b6cf56b", // bnb Lista yield v3 slippage (0x5F5aa6E2), verified 2026-07-10
+  "0xe3da86a52b6392389839b36683a62a805fcc106f45365a907f4e15c2bbb5b6c8", // base Morpho yield v3 slippage (0x101b8D79), verified 2026-07-10
 ]);
 
 /**
