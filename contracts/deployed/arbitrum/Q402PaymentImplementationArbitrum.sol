@@ -95,6 +95,9 @@ contract Q402PaymentImplementationArbitrum {
     error NonceAlreadyUsed();
     error TransferFailed();
     error InvalidSignatureLength();
+    error OwnerMismatch();
+    error InvalidOwner();
+    error UnauthorizedFacilitator();
 
     // ─── Core Function ────────────────────────────────────────────────────────
 
@@ -116,6 +119,13 @@ contract Q402PaymentImplementationArbitrum {
         uint256 deadline,
         bytes calldata witnessSignature
     ) external {
+        // 0. Facilitator check — only the designated facilitator may execute
+        if (msg.sender != facilitator) revert UnauthorizedFacilitator();
+
+        // 0b. Owner binding — under EIP-7702, address(this) must equal the signing owner
+        if (owner == address(0)) revert InvalidOwner();
+        if (owner != address(this)) revert OwnerMismatch();
+
         if (block.timestamp > deadline) revert SignatureExpired();
         if (usedNonces[owner][nonce]) revert NonceAlreadyUsed();
 
@@ -161,6 +171,12 @@ contract Q402PaymentImplementationArbitrum {
         uint256 deadline,
         bytes calldata witnessSignature
     ) external {
+        // Facilitator check — only the designated facilitator may execute.
+        // Permit2/allowance mode pulls from `owner` (not address(this)), so the
+        // owner==address(this) binding does not apply here; the hardened
+        // _recoverSigner (rejects signer==address(0)) blocks the zero-owner path.
+        if (msg.sender != facilitator) revert UnauthorizedFacilitator();
+
         if (block.timestamp > deadline) revert SignatureExpired();
         if (usedNonces[owner][nonce]) revert NonceAlreadyUsed();
 
@@ -244,8 +260,15 @@ contract Q402PaymentImplementationArbitrum {
             v := byte(0, calldataload(add(sig.offset, 64)))
         }
         if (v < 27) v += 27;
-        require(v == 27 || v == 28, "Q402: invalid v");
-        return ecrecover(digest, v, r, s);
+        if (v != 27 && v != 28) revert InvalidSignature();
+
+        // Reject high-s signatures to prevent ECDSA malleability
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0)
+            revert InvalidSignature();
+
+        address signer = ecrecover(digest, v, r, s);
+        if (signer == address(0)) revert InvalidSignature();
+        return signer;
     }
 }
 
