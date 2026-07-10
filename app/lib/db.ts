@@ -1429,7 +1429,7 @@ export async function recordTrialAlertSent(address: string, daysTier: number): P
 const CCIP_LINK_CHAINS = ["eth", "avax", "arbitrum"] as const;
 type CCIPLinkChain = typeof CCIP_LINK_CHAINS[number];
 
-function isCCIPLinkChain(s: string): s is CCIPLinkChain {
+export function isCCIPLinkChain(s: string): s is CCIPLinkChain {
   return s === "eth" || s === "avax" || s === "arbitrum";
 }
 
@@ -1439,7 +1439,7 @@ function isCCIPLinkChain(s: string): s is CCIPLinkChain {
 // its read MUST cover this whole set — gating them on isCCIPLinkChain silently
 // no-ops the OFT fee debit on mantle/monad/xlayer (free bridges + pool drain).
 const NATIVE_BRIDGE_FEE_CHAINS = ["eth", "avax", "arbitrum", "mantle", "monad", "xlayer"] as const;
-function isNativeBridgeFeeChain(s: string): boolean {
+export function isNativeBridgeFeeChain(s: string): boolean {
   return (NATIVE_BRIDGE_FEE_CHAINS as readonly string[]).includes(s);
 }
 
