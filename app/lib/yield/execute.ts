@@ -649,7 +649,7 @@ export async function handleYieldAction(req: NextRequest, action: YieldAction): 
       marketAddress: chosenWithdraw?.marketAddress as Address | undefined,
     });
 
-    // For a withdraw-all ("max"), the exact drawn amount isn't known at sign time,
+    // For a max withdraw ("max" = max currently redeemable), the exact drawn amount isn't known at sign time,
     // so signed.amount is the "max" sentinel. Use the chosen position's balance so
     // the activity row shows the real number instead of "max". Best-effort: with no
     // chosen position (fail-open read) we keep the sentinel, rendered as "All".

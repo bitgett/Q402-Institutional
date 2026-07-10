@@ -138,7 +138,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_yield_reserves` | none | List Q402 Yield markets + live supply APY. `chain="bnb"` (curated lending vaults, USDC/USDT) or `chain="base"` (Morpho MetaMorpho vault, USDC only). |
 | `q402_yield_positions` | api key | The Agent Wallet's current Q402 Yield positions (value + APY). Read-only. |
 | `q402_yield_deposit` | live key | Supply the Agent Wallet's stablecoin into a curated lending vault on BNB (USDC/USDT) or the Morpho vault on Base (USDC only) via `chain` (Mode C). **Paid Multichain plan only. Trial cannot deposit.** Confirm + sandbox-by-default. |
-| `q402_yield_withdraw` | live key | Withdraw the Agent Wallet's supplied stablecoin from a lending vault on BNB or Base per `chain` (`amount="max"` for the full position). Always allowed, even after downgrade. |
+| `q402_yield_withdraw` | live key | Withdraw the Agent Wallet's supplied stablecoin from a lending vault on BNB or Base per `chain` (`amount="max"` = the max currently redeemable, which vault caps or queues can leave below the full position). Always allowed, even after downgrade. |
 | `q402_stake` | live mode | Gasless Q (QuackAI) staking into QuackAiStake on BNB Chain. Lock tiers 0-3 (30d/10%, 60d/15%, 120d/32%, 180d/40% APR). Confirm + sandbox-by-default. |
 | `q402_unstake` | live mode | Gasless unstake (withdraw) of Q from QuackAiStake on BNB back to the wallet. |
 | `q402_stake_positions` | live mode | Read-only: the Agent Wallet's Q stakes (indices, maturity, exitable) + liquid Q balance. |

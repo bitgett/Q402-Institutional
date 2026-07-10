@@ -188,7 +188,7 @@ export interface SignedYieldAction {
   fromAddr: Address;
   /** The facilitator bound into the witness — the relayer MUST match it. */
   signedFacilitator: Address;
-  amount: string; // human string; "max" for withdraw-all
+  amount: string; // human string; "max" = max currently redeemable (maxRedeem, can be < full position)
   amountRaw: bigint;
   /** ERC-4626 slippage bounds bound into the witness (0 / MAX for Aave). */
   minSharesOut: bigint;
@@ -210,7 +210,7 @@ interface SignYieldParams {
   // asset — narrow here so the union can never route Q into a vault.
   token: "USDC" | "USDT";
   action: YieldAction;
-  /** Human decimal string. For withdraw, "max" = full position. */
+  /** Human decimal string. For withdraw, "max" = max currently redeemable (maxRedeem, can be < full position). */
   amount: string;
   facilitator: Address;
   deadlineSeconds?: number;

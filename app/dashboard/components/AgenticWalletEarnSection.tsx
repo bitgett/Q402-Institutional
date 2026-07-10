@@ -588,7 +588,7 @@ function AgenticWalletEarnActions({
                 onChange={(e) => setAmount(e.target.value)}
                 disabled={busy || isMax}
                 inputMode="decimal"
-                placeholder={isMax ? "max (full position)" : "0.00"}
+                placeholder={isMax ? "max (currently redeemable)" : "0.00"}
                 aria-label="Amount"
                 className="w-full rounded-md border px-2.5 py-1.5 text-[12.5px] font-mono text-white placeholder-white/25 disabled:opacity-50"
                 style={inputStyle}
@@ -620,7 +620,7 @@ function AgenticWalletEarnActions({
                 disabled={busy}
                 className="accent-emerald-400 w-3.5 h-3.5"
               />
-              <span className="text-[11px] text-white/55">Withdraw full position (max)</span>
+              <span className="text-[11px] text-white/55">Withdraw max currently redeemable</span>
             </label>
           )}
         </>

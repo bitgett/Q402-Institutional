@@ -208,14 +208,14 @@ function fmtNum(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-// Withdraw-all yield settlements record the "max" sentinel as the amount (the
+// Max-redeemable yield settlements record the "max" sentinel as the amount (the
 // exact drawn balance isn't known until the on-chain event), so rendering it
-// numerically would surface "NaN". Show "All" instead, and degrade any other
+// numerically would surface "NaN". Show "Max" instead, and degrade any other
 // non-finite value to a dash rather than NaN.
 function fmtTxAmount(v: number | string): string {
   if (typeof v === "string") {
     const t = v.trim().toLowerCase();
-    if (t === "max") return "All";
+    if (t === "max") return "Max";
     if (t === "") return "—"; // unstake records no amount (variable principal+reward)
   }
   const n = Number(v);
