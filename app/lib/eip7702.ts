@@ -181,6 +181,8 @@ export const Q402_IMPL_CODEHASHES: ReadonlySet<string> = new Set<string>([
   "0xa9104ce3dd511f78a24d5c12bedd7021a8730716964fb070accbb4e3abfc18f6", // robinhood current (0x2fb2b2), keccak256(eth_getCode) verified 2026-07-02
   "0x8318019b8613545d217dfa5d30e1a8495cc37dc63407146d762db7f82b6cf56b", // bnb Lista yield v3 slippage (0x5F5aa6E2), verified 2026-07-10
   "0xe3da86a52b6392389839b36683a62a805fcc106f45365a907f4e15c2bbb5b6c8", // base Morpho yield v3 slippage (0x101b8D79), verified 2026-07-10
+  "0xec96433924eff1de183f8671bb663ebe9d5e817cca3d0de8a41238de12046f61", // bnb Lista yield v4 slippage-measured (0x8cE48260), verified 2026-07-10
+  "0x4385bad7312ce5dfa7ff38e099d5bc0b4d3aeaaa7036ce0ad33de423438e9dc3", // base Morpho yield v4 slippage-measured (0x85C68EbB), verified 2026-07-10
 ]);
 
 /**
