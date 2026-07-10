@@ -5,19 +5,21 @@ import {
   CHAIN_DISABLED_MESSAGE,
 } from "@/app/lib/chain-status";
 
-// All ten chains run the verified guarded build (owner-binding + correct
-// per-chain EIP-712 NAME). Mantle/Injective/Monad/Scroll/Arbitrum were
-// redeployed + verified 2026-06-15 and the stale prod env overrides removed, so
-// the allow-list holds nothing.
+// Every chain EXCEPT robinhood runs the verified guarded build (owner-binding +
+// correct per-chain EIP-712 NAME). robinhood is HELD 2026-07-10: its live impl
+// 0x2fb2…f350 is an unguarded build (no owner==address(this) binding), confirmed
+// on-chain, so new settlements/delegations are blocked until the guarded impl is
+// redeployed + re-wired. See app/lib/chain-status.ts.
 describe("chain-status — settlement allow-list", () => {
-  it("holds no chains — all ten run the verified guarded build", () => {
-    expect(DISABLED_CHAINS.size).toBe(0);
+  it("holds only robinhood while its unguarded impl is redeployed", () => {
+    expect(DISABLED_CHAINS.size).toBe(1);
+    expect(isChainDisabled("robinhood")).toBe(true);
   });
 
-  it("keeps every chain active", () => {
+  it("keeps every other chain active", () => {
     for (const c of [
       "bnb", "avax", "eth", "stable", "xlayer",
-      "mantle", "injective", "monad", "scroll", "arbitrum",
+      "mantle", "injective", "monad", "scroll", "arbitrum", "base",
     ]) {
       expect(isChainDisabled(c)).toBe(false);
     }
