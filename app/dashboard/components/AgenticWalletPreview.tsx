@@ -74,7 +74,7 @@ function PreviewCard({ onCreate, creating }: { onCreate: () => void; creating: b
         <PreviewStatTile
           label="Balance"
           value="$0.00"
-          sub="USDC + USDT across chains"
+          sub="USDC · USDT · USDG across chains"
           tone="hero"
         />
         <PreviewStatTile label="Daily cap" value="$500" sub="resets at 00:00 UTC" />

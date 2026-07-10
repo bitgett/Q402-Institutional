@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
     );
   }
   if (typeof token !== "string" || !ALLOWED_TOKENS.has(token)) {
-    return NextResponse.json({ error: "token must be USDC, USDT, or RLUSD" }, { status: 400 });
+    return NextResponse.json({ error: "token must be USDC, USDT, RLUSD, or USDG" }, { status: 400 });
   }
   if (typeof facilitator !== "string" || !ETH_ADDR.test(facilitator)) {
     return NextResponse.json({ error: "facilitator must be a 0x-prefixed EVM address" }, { status: 400 });

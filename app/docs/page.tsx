@@ -179,7 +179,7 @@ export default function DocsPage() {
           {/* ── OVERVIEW ── */}
           <Section id="overview" title="Overview">
             <p className="text-white/75 text-base leading-relaxed mb-6">
-              A managed relay for USDC / USDT / RLUSD across 12 EVM chains.
+              A managed relay for USDC / USDT / RLUSD / USDG across 12 EVM chains.
               Users hold no native token; Q402 submits the TX and pays the gas.
             </p>
 
@@ -275,7 +275,7 @@ export default function DocsPage() {
             <div className="grid sm:grid-cols-3 gap-4 mb-8">
               {[
                 { label: "Protocol",         value: "EIP-712 + EIP-7702" },
-                { label: "Settlement token", value: "USDC · USDT · RLUSD (eth-only)" },
+                { label: "Settlement token", value: "USDC · USDT · RLUSD (eth) · USDG (robinhood)" },
                 { label: "Gas source",       value: "Your gas pool" },
               ].map((item) => (
                 <div key={item.label} className="rounded-xl p-4 border border-white/8" style={{ background: "rgba(255,255,255,0.02)" }}>
@@ -683,7 +683,7 @@ Q402_MULTICHAIN_API_KEY=q402_live_...`}</pre>
                     { name: "q402_doctor",              auth: "none",        purpose: "First-install onboarding + ongoing health check (quota, EIP-7702 state, relay reachability)." },
                     { name: "q402_quote",               auth: "none",        purpose: "Compare gas + supported tokens across 12 chains." },
                     { name: "q402_balance",             auth: "api key",     purpose: "Verify key + remaining quota. Returns Trial + Multichain in one read when both keys set." },
-                    { name: "q402_pay",                 auth: "live mode",   purpose: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
+                    { name: "q402_pay",                 auth: "live mode",   purpose: "Single-recipient gasless USDC / USDT / RLUSD / USDG send. Sandbox by default." },
                     { name: "q402_batch_pay",           auth: "live mode",   purpose: "Up to 20 recipients per call (trial: 5 with your own key; server-managed Agent Wallet batch is paid Multichain-only). 6+ BNB batches with Trial → status=\"ambiguous\" so the agent asks how to split." },
                     { name: "q402_receipt",             auth: "none",        purpose: "Fetch + locally verify a Trust Receipt by rct_… id (ECDSA recovery against the relayer EOA)." },
                     { name: "q402_wallet_status",       auth: "private key", purpose: "Per-chain EIP-7702 delegation state for the EOA derived from Q402_PRIVATE_KEY. Read-only." },
@@ -1218,7 +1218,7 @@ const signature = await signer.signTypedData(domain, types, {
               },
               {
                 q: "Which tokens are supported?",
-                a: "USDC + USDT on every chain (Injective added native Circle USDC via CCTP). RLUSD on Ethereum only (18 decimals, NY DFS regulated)."
+                a: "USDC + USDT on most chains (Injective added native Circle USDC via CCTP). RLUSD on Ethereum only (18 decimals, NY DFS regulated). USDG on Robinhood Chain only (Paxos Global Dollar, 6 decimals)."
               },
               {
                 q: "How do I get an API key?",

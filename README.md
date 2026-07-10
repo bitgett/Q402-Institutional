@@ -1,6 +1,6 @@
 # Q402 — Gasless Payments on EVM
 
-> Pay USDC, USDT, or RLUSD across **12 EVM chains** with $0 in gas.
+> Pay USDC, USDT, RLUSD, or USDG across **12 EVM chains** with $0 in gas.
 > Now with a receive side too: publish a **payment request** (invoice) and
 > anyone can pay it gaslessly. Built on EIP-7702 + EIP-712. Callable from a
 > browser, a Node.js backend, or any MCP-compatible AI client: first-class

@@ -1484,7 +1484,7 @@ function PlayGlyph({ size = 11, color }: { size?: number; color?: string }) {
 // Ports the v1 <Playground/> simulate logic + per-chain token allowlist
 // (app/dashboard/page.tsx:496) into v2 chrome. The simulate is a client-side
 // preview (no relay) exactly as in v1 — same 1.8s fake settle + masked key.
-type PgToken = "USDC" | "USDT" | "RLUSD";
+type PgToken = "USDC" | "USDT" | "RLUSD" | "USDG";
 
 function Playground({
   apiKey,
@@ -1509,6 +1509,7 @@ function Playground({
     if (trialView) return ["USDC", "USDT"];
     if (chain === "injective") return ["USDT"];
     if (chain === "eth") return ["USDC", "USDT", "RLUSD"];
+    if (chain === "robinhood") return ["USDG"]; // Robinhood Chain is USDG-only (Paxos Global Dollar)
     return ["USDC", "USDT"];
   }, [trialView, chain]);
 

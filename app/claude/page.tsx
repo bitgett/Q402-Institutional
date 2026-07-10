@@ -111,7 +111,7 @@ const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: s
   {
     label: "Pay",
     tools: [
-      { name: "q402_pay", auth: "live mode", note: "Single-recipient gasless USDC / USDT / RLUSD send. Sandbox by default." },
+      { name: "q402_pay", auth: "live mode", note: "Single-recipient gasless USDC / USDT / RLUSD / USDG send. Sandbox by default." },
       { name: "q402_batch_pay", auth: "live mode", note: "Up to 20 recipients in one signed batch (trial: 5 with your own key; server-managed Agent Wallet batch is paid Multichain-only)." },
     ],
   },
@@ -287,7 +287,7 @@ function Section({
 
 export default function ClaudePage() {
   const [amount, setAmount] = useState("50");
-  const [tokenFilter, setTokenFilter] = useState<"USDC" | "USDT" | "RLUSD" | "ANY">("ANY");
+  const [tokenFilter, setTokenFilter] = useState<"USDC" | "USDT" | "RLUSD" | "USDG" | "ANY">("ANY");
   const [activeClient, setActiveClient] = useState<string>("claude");
 
   const current = CLIENTS.find((c) => c.key === activeClient) ?? CLIENTS[0];
@@ -549,7 +549,7 @@ export default function ClaudePage() {
                 </div>
               </div>
               <div className="flex items-center gap-1.5 ml-auto">
-                {(["ANY", "USDC", "USDT", "RLUSD"] as const).map((t) => (
+                {(["ANY", "USDC", "USDT", "RLUSD", "USDG"] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -599,7 +599,7 @@ export default function ClaudePage() {
                 </AnimatePresence>
               </ul>
               <div className="px-5 py-3 text-[11px] border-t font-mono" style={{ borderColor: HAIR, color: MUT2 }}>
-                {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC, USDT, or RLUSD" : tokenFilter}. Agent picks ${ranked[0]?.name ?? "-"} by default. Sender always pays $0; gas comes from the developer's gas tank.`}
+                {`Sending $${amount || "0"} ${tokenFilter === "ANY" ? "USDC, USDT, RLUSD, or USDG" : tokenFilter}. Agent picks ${ranked[0]?.name ?? "-"} by default. Sender always pays $0; gas comes from the developer's gas tank.`}
               </div>
             </div>
           </Section>

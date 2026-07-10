@@ -26,7 +26,7 @@ export default function TermsPage() {
             <h2 className="text-white font-semibold text-base mb-3">2. Description of Service</h2>
             <p className="mb-3">
               Q402 provides a gasless ERC-20 payment relay infrastructure. Customers integrate the Q402
-              SDK or API to allow their end-users to transfer USDC, USDT, or RLUSD on supported EVM chains
+              SDK or API to allow their end-users to transfer USDC, USDT, RLUSD, or USDG on supported EVM chains
               without holding native gas tokens. Q402&apos;s relayer wallet pays all on-chain transaction
               fees on the customer&apos;s behalf.
             </p>

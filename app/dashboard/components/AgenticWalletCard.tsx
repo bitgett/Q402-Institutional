@@ -306,7 +306,7 @@ export function AgenticWalletCard({
           <StatTile
             label="Balance"
             value={balance ? formatBalance(balance.totalUsd) : balanceLoading ? "…" : "$—"}
-            sub="USDC + USDT across 12 chains"
+            sub="USDC · USDT · USDG across 12 chains"
             tone="hero"
             action={
               <button
