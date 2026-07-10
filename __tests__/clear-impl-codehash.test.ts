@@ -53,7 +53,7 @@ describe("clear-delegation impl recogniser — codehash, not NAME()", () => {
     // bound ERC-4626 yield impls (BNB Lista + BASE Morpho) added 2026-07-10, then
     // their v4 slippage-measured redeploys added 2026-07-10 (v3 kept for wallets
     // delegated during the v3 window).
-    expect(Q402_IMPL_CODEHASHES.size).toBe(26);
+    expect(Q402_IMPL_CODEHASHES.size).toBe(27);
     for (const h of Q402_IMPL_CODEHASHES) expect(h).toMatch(/^0x[0-9a-f]{64}$/);
   });
 

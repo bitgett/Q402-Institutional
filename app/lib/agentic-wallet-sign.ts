@@ -223,7 +223,7 @@ export const AGENTIC_CHAINS: Record<AgenticChainKey, ChainCfg> = {
     id: 4663,
     name: "Robinhood Chain",
     rpc: process.env.ROBINHOOD_RPC_URL ?? "https://rpc.mainnet.chain.robinhood.com",
-    impl: "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    impl: "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
     domainName: "Q402 Robinhood Chain",
     domainVersion: "1",
     tokens: {

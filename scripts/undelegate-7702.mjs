@@ -46,6 +46,7 @@ const CHAINS = {
   scroll: { id: 534352, rpc: "https://rpc.scroll.io",                explorer: "https://scrollscan.com/tx/" },
   arbitrum: { id: 42161, rpc: "https://arb1.arbitrum.io/rpc",         explorer: "https://arbiscan.io/tx/" },
   base:   { id: 8453,  rpc: "https://mainnet.base.org",             explorer: "https://basescan.org/tx/" },
+  robinhood: { id: 4663, rpc: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com", explorer: "https://robinhoodchain.blockscout.com/tx/" },
 };
 
 const args = process.argv.slice(2);
@@ -123,9 +124,13 @@ const feeData = await provider.getFeeData();
 const priorityFee = (feeData.maxPriorityFeePerGas && feeData.maxPriorityFeePerGas > 0n)
   ? feeData.maxPriorityFeePerGas
   : ethers.parseUnits("1", "gwei");
-const maxFee = (feeData.maxFeePerGas && feeData.maxFeePerGas > 0n)
+// Low-base-fee chains (e.g. Arbitrum Orbit / Robinhood) report maxFeePerGas below
+// the 1 gwei priority fallback; raise the cap so priority <= maxFee stays valid and
+// there is headroom above the current base fee.
+let maxFee = (feeData.maxFeePerGas && feeData.maxFeePerGas > 0n)
   ? feeData.maxFeePerGas
   : ethers.parseUnits("5", "gwei");
+if (maxFee < priorityFee) maxFee = priorityFee * 2n;
 
 console.log(`\nSubmitting type-0x04 TX (authorization signed by target, address=0x0)...`);
 const tx = await sponsor.sendTransaction({

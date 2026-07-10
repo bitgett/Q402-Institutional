@@ -52,13 +52,10 @@ const RPCS = {
 };
 
 // Keep in sync with app/lib/chain-status.ts — chains held in the settlement
-// allow-list. robinhood is held 2026-07-10: its live impl 0x2fb2…f350 is an
-// UNGUARDED build (no owner==address(this) binding), confirmed on-chain. The
-// owner-guard failure below is therefore EXPECTED and correctly stays a hard
-// failure (a live unsafe impl must not pass the gate) until the guarded Robinhood
-// impl is redeployed + re-wired; the hold only tags the message and drops robinhood
-// from the "every active chain must verify" requirement.
-const DISABLED_CHAINS = new Set(["robinhood"]);
+// allow-list. Empty: robinhood's brief 2026-07-10 hold (unguarded original impl)
+// was resolved the same day by redeploying the guarded impl 0xa9a7dce7… and
+// re-pointing the manifest at it, so the owner-guard probe below now passes.
+const DISABLED_CHAINS = new Set([]);
 
 // Chains deployed from the BNB reference source via scripts/deploy-fixed-impl.mjs
 // (same logic, only the NAME constant differs per chain). For these we hold the

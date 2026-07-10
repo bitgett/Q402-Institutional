@@ -5,21 +5,19 @@ import {
   CHAIN_DISABLED_MESSAGE,
 } from "@/app/lib/chain-status";
 
-// Every chain EXCEPT robinhood runs the verified guarded build (owner-binding +
-// correct per-chain EIP-712 NAME). robinhood is HELD 2026-07-10: its live impl
-// 0x2fb2…f350 is an unguarded build (no owner==address(this) binding), confirmed
-// on-chain, so new settlements/delegations are blocked until the guarded impl is
-// redeployed + re-wired. See app/lib/chain-status.ts.
+// All chains run the verified guarded build (owner-binding + correct per-chain
+// EIP-712 NAME). robinhood was briefly held 2026-07-10 (unguarded original impl)
+// and resolved the same day by redeploying the guarded impl 0xa9a7dce7… + re-wiring,
+// so the allow-list holds nothing again. See app/lib/chain-status.ts.
 describe("chain-status — settlement allow-list", () => {
-  it("holds only robinhood while its unguarded impl is redeployed", () => {
-    expect(DISABLED_CHAINS.size).toBe(1);
-    expect(isChainDisabled("robinhood")).toBe(true);
+  it("holds no chains — all run the verified guarded build", () => {
+    expect(DISABLED_CHAINS.size).toBe(0);
   });
 
-  it("keeps every other chain active", () => {
+  it("keeps every chain active", () => {
     for (const c of [
       "bnb", "avax", "eth", "stable", "xlayer",
-      "mantle", "injective", "monad", "scroll", "arbitrum", "base",
+      "mantle", "injective", "monad", "scroll", "arbitrum", "base", "robinhood",
     ]) {
       expect(isChainDisabled(c)).toBe(false);
     }

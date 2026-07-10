@@ -89,7 +89,7 @@ export const Q402_IMPL_PER_CHAIN: Record<ChainKey, string> = {
   scroll:    "0x7635f32d893b64b5944cb8cbf2ac4cd3da41b2f1",
   arbitrum:  "0x8d854436ab0426f5bc6cc70865c90576ad523e73",
   base:      "0x2fb2b2d110b6c5664e701666b3741240242bf350",
-  robinhood: "0x2fb2b2d110b6c5664e701666b3741240242bf350",
+  robinhood: "0xa9a7dce76def2ac36057fef0d8103df10581d61e",
 };
 
 export function isOfficialQ402Impl(chain: ChainKey, impl: string | undefined): boolean {
@@ -125,8 +125,10 @@ const RETIRED_IMPLS: Record<ChainKey, readonly string[]> = {
   arbitrum:  ["0xe5b90d564650bdce7c2bb4344f777f6582e05699", "0x2fb2b2d110b6c5664e701666b3741240242bf350"],
   // base: 0x2fb2b2… is the CURRENT impl here (deployed at nonce 0), not retired.
   base:      [],
-  // robinhood: 0x2fb2b2… is the CURRENT impl here, not retired.
-  robinhood: [],
+  // robinhood: 0x2fb2b2… was the ORIGINAL impl — an UNGUARDED build (no
+  // owner==address(this) binding), held + retired 2026-07-10. The guarded
+  // 0xa9a7dce7… is now current; keep the old one clearable for any straggler.
+  robinhood: ["0x2fb2b2d110b6c5664e701666b3741240242bf350"],
 };
 
 /**
@@ -178,7 +180,8 @@ export const Q402_IMPL_CODEHASHES: ReadonlySet<string> = new Set<string>([
   "0x3f1cafbe691713c9df9c6ca3908698b7941d0252181cec6872905e415e5bf828", // scroll retired (0x2fb2b2)
   "0x463e2cb224f4dcaf599bb52734dc148af4849c4802057a03af9a2fce25bd4e81", // arbitrum retired (0xe5b90d)
   "0x9acb7b7f2f29371e56d4f3de584c35c8c522b87e09a5a2e043b169143fd12692", // arbitrum retired (0x2fb2b2)
-  "0xa9104ce3dd511f78a24d5c12bedd7021a8730716964fb070accbb4e3abfc18f6", // robinhood current (0x2fb2b2), keccak256(eth_getCode) verified 2026-07-02
+  "0xa9104ce3dd511f78a24d5c12bedd7021a8730716964fb070accbb4e3abfc18f6", // robinhood RETIRED (0x2fb2b2, unguarded build), held + replaced 2026-07-10 — kept clearable
+  "0x72a4c31007d861fe97c2e5493ce7752f15d3ffc84df6cb988c5c172c4aeb08ee", // robinhood current (0xa9a7dce7, GUARDED build), keccak256(eth_getCode) verified 2026-07-10
   "0x8318019b8613545d217dfa5d30e1a8495cc37dc63407146d762db7f82b6cf56b", // bnb Lista yield v3 slippage (0x5F5aa6E2), verified 2026-07-10
   "0xe3da86a52b6392389839b36683a62a805fcc106f45365a907f4e15c2bbb5b6c8", // base Morpho yield v3 slippage (0x101b8D79), verified 2026-07-10
   "0xec96433924eff1de183f8671bb663ebe9d5e817cca3d0de8a41238de12046f61", // bnb Lista yield v4 slippage-measured (0x8cE48260), verified 2026-07-10

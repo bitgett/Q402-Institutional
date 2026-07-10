@@ -295,7 +295,9 @@ export const CHAIN_CONFIG = {
     // Q402PaymentImplementation ("Q402 Robinhood Chain") deployed on Robinhood
     // Chain (chainId 4663). On-chain NAME() = "Q402 Robinhood Chain". Distinguished
     // at signing time by chainId 4663 + domainName "Q402 Robinhood Chain".
-    implContract: process.env.ROBINHOOD_IMPLEMENTATION_CONTRACT?.trim() || "0x2fb2B2D110b6c5664e701666B3741240242bf350",
+    // Guarded build redeployed 2026-07-10 (the original 0x2fb2…f350 was an
+    // UNGUARDED build with no owner==address(this) binding — held + retired).
+    implContract: process.env.ROBINHOOD_IMPLEMENTATION_CONTRACT?.trim() || "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
     // USDG (Paxos Global Dollar) is the ONLY supported token on Robinhood Chain,
     // 6 decimals. There is NO Circle USDC and NO Tether USDT here — the on-chain
     // tokens carrying those symbols are mock/scam and are intentionally not wired.
