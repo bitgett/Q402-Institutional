@@ -122,10 +122,19 @@ contract Q402OftSender {
         IS_ADAPTER  = underlying != oft;
         // Adapter locks the underlying via transferFrom(this, ...), so pre-approve it
         // once. A native OFT burns from this contract's own balance and needs no
-        // allowance, so we skip the approval there.
+        // allowance, so we skip the approval there. Uses a return-data-tolerant
+        // approve: Ethereum's USDT (0xdAC1…) returns NO data from approve(), so a
+        // bool-typed IERC20.approve would revert on the decode.
         if (IS_ADAPTER) {
-            IERC20(underlying).approve(oft, type(uint256).max);
+            _safeApproveMax(underlying, oft);
         }
+    }
+
+    /// @dev approve(spender, max) tolerant of non-standard tokens (USDT returns no data).
+    function _safeApproveMax(address token, address spender) private {
+        (bool ok, bytes memory data) =
+            token.call(abi.encodeWithSelector(IERC20.approve.selector, spender, type(uint256).max));
+        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
     }
 
     // ─── Core: bridge (facilitator-gated) ────────────────────────────────────

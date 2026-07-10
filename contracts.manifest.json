@@ -15,15 +15,29 @@
       "implContract": "0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Avalanche",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
-        "USDC": { "address": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E", "decimals": 6 },
-        "USDT": { "address": "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7", "decimals": 6 }
+        "USDC": {
+          "address": "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+          "decimals": 6
+        },
+        "USDT": {
+          "address": "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
+          "decimals": 6
+        }
       },
       "explorer": "https://snowtrace.io",
       "verifyUrl": "https://snowtrace.io/address/0x96a8C74d95A35D0c14Ec60364c78ba6De99E9A4c#code"
@@ -35,15 +49,29 @@
       "implContract": "0x6cF4aD62C208b6494a55a1494D497713ba013dFa",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 BNB Chain",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
-        "USDC": { "address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "decimals": 18 },
-        "USDT": { "address": "0x55d398326f99059fF775485246999027B3197955", "decimals": 18 }
+        "USDC": {
+          "address": "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+          "decimals": 18
+        },
+        "USDT": {
+          "address": "0x55d398326f99059fF775485246999027B3197955",
+          "decimals": 18
+        }
       },
       "explorer": "https://bscscan.com",
       "verifyUrl": "https://bscscan.com/address/0x6cF4aD62C208b6494a55a1494D497713ba013dFa#code"
@@ -55,16 +83,34 @@
       "implContract": "0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Ethereum",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
-        "USDC": { "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "decimals": 6 },
-        "USDT": { "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "decimals": 6 },
-        "RLUSD": { "address": "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD", "decimals": 18, "notes": "Ripple USD — NY DFS regulated stablecoin issued by Standard Custody & Trust (Ripple subsidiary). ERC-20 + EIP-2612 permit. UUPS upgradeable proxy; implementation at 0x9747a0d261c2d56eb93f542068e5d1e23170fa9e. Q402 uses the EIP-7702 + EIP-712 TransferAuthorization witness pattern, so RLUSD's permit support is incidental — not required for settlement." }
+        "USDC": {
+          "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "decimals": 6
+        },
+        "USDT": {
+          "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+          "decimals": 6
+        },
+        "RLUSD": {
+          "address": "0x8292Bb45bf1Ee4d140127049757C2E0fF06317eD",
+          "decimals": 18,
+          "notes": "Ripple USD — NY DFS regulated stablecoin issued by Standard Custody & Trust (Ripple subsidiary). ERC-20 + EIP-2612 permit. UUPS upgradeable proxy; implementation at 0x9747a0d261c2d56eb93f542068e5d1e23170fa9e. Q402 uses the EIP-7702 + EIP-712 TransferAuthorization witness pattern, so RLUSD's permit support is incidental — not required for settlement."
+        }
       },
       "explorer": "https://etherscan.io",
       "verifyUrl": "https://etherscan.io/address/0x8E67a64989CFcb0C40556b13ea302709CCFD6AaD#code"
@@ -74,19 +120,35 @@
       "chainId": 196,
       "relayMode": "eip7702_xlayer",
       "fallbackRelayMode": "eip3009",
-      "fallbackTokens": ["USDC"],
+      "fallbackTokens": [
+        "USDC"
+      ],
       "implContract": "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 X Layer",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract is the user's own EOA under EIP-7702 delegation, NOT the impl contract."
       },
       "tokens": {
-        "USDC": { "address": "0x74b7F16337b8972027F6196A17a631aC6dE26d22", "decimals": 6 },
-        "USDT": { "address": "0x1E4a5963aBFD975d8c9021ce480b42188849D41D", "decimals": 6 }
+        "USDC": {
+          "address": "0x74b7F16337b8972027F6196A17a631aC6dE26d22",
+          "decimals": 6
+        },
+        "USDT": {
+          "address": "0x1E4a5963aBFD975d8c9021ce480b42188849D41D",
+          "decimals": 6
+        }
       },
       "explorer": "https://www.oklink.com/xlayer",
       "verifyUrl": "https://www.oklink.com/xlayer/address/0x8D854436ab0426F5BC6Cc70865C90576AD523E73"
@@ -98,15 +160,31 @@
       "implContract": "0xE5b90D564650bdcE7C2Bb4344F777f6582e05699",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Mantle",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
-        "USDC": { "address": "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9", "decimals": 6, "notes": "Mantle-native canonical-bridged USDC (L2StandardERC20, Mantle L2 bridge 0x4200...0010, L1 counterpart 0xA0b8...eB48)." },
-        "USDT": { "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736", "decimals": 6, "notes": "USDT0 (LayerZero OFT) — Mantle ecosystem's default USDT implementation per official 2025-11-27 announcement. Legacy canonical-bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) deposits sunset 2026-02-03; on-chain supply of USDT0 is ~12.5x the legacy. USDT0 shares this 0x779Ded... address with Stable via CREATE3 deterministic deployment; decimals differ per chain (Mantle 6, Stable 18)." }
+        "USDC": {
+          "address": "0x09Bc4E0D864854c6aFB6eB9A9cdF58aC190D0dF9",
+          "decimals": 6,
+          "notes": "Mantle-native canonical-bridged USDC (L2StandardERC20, Mantle L2 bridge 0x4200...0010, L1 counterpart 0xA0b8...eB48)."
+        },
+        "USDT": {
+          "address": "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+          "decimals": 6,
+          "notes": "USDT0 (LayerZero OFT) — Mantle ecosystem's default USDT implementation per official 2025-11-27 announcement. Legacy canonical-bridged USDT (0x201EBa5CC46D216Ce6DC03F6a759e8E766e956aE) deposits sunset 2026-02-03; on-chain supply of USDT0 is ~12.5x the legacy. USDT0 shares this 0x779Ded... address with Stable via CREATE3 deterministic deployment; decimals differ per chain (Mantle 6, Stable 18)."
+        }
       },
       "explorer": "https://explorer.mantle.xyz",
       "verifyUrl": "https://explorer.mantle.xyz/address/0xE5b90D564650bdcE7C2Bb4344F777f6582e05699"
@@ -118,17 +196,36 @@
       "implContract": "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Injective",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). Impl deployed 2026-06-15 by 0xfc77...f466; on-chain NAME() = 'Q402 Injective'. The impl address is distinct per chain (CREATE depends on the deployer nonce on each chain); it must not be assumed equal across chains. Distinguished at signing time by chainId 1776 + domainName 'Q402 Injective'."
       },
       "tokens": {
-        "USDC": { "address": "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a", "decimals": 6, "notes": "Native Circle USDC (CCTP) on Injective EVM. Verified on-chain: symbol='USDC', name='USDC', decimals=6." },
-        "USDT": { "address": "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13", "decimals": 6, "notes": "Canonical Tether on Injective EVM (MTS-compliant — Cosmos and EVM share the same balance via MultiVM Token Standard). Verified on-chain: symbol='USDT', name='Tether', decimals=6." }
+        "USDC": {
+          "address": "0xa00C59fF5a080D2b954d0c75e46E22a0c371235a",
+          "decimals": 6,
+          "notes": "Native Circle USDC (CCTP) on Injective EVM. Verified on-chain: symbol='USDC', name='USDC', decimals=6."
+        },
+        "USDT": {
+          "address": "0x88f7F2b685F9692caf8c478f5BADF09eE9B1Cc13",
+          "decimals": 6,
+          "notes": "Canonical Tether on Injective EVM (MTS-compliant — Cosmos and EVM share the same balance via MultiVM Token Standard). Verified on-chain: symbol='USDT', name='Tether', decimals=6."
+        }
       },
-      "supportedApiTokens": ["USDC", "USDT"],
+      "supportedApiTokens": [
+        "USDC",
+        "USDT"
+      ],
       "explorer": "https://blockscout.injective.network",
       "verifyUrl": "https://blockscout.injective.network/address/0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e"
     },
@@ -139,15 +236,31 @@
       "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Stable",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this))."
       },
       "tokens": {
-        "USDC": { "address": "0x779ded0c9e1022225f8e0630b35a9b54be713736", "decimals": 18, "aliasFor": "USDT0" },
-        "USDT": { "address": "0x779ded0c9e1022225f8e0630b35a9b54be713736", "decimals": 18, "aliasFor": "USDT0" }
+        "USDC": {
+          "address": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+          "decimals": 18,
+          "aliasFor": "USDT0"
+        },
+        "USDT": {
+          "address": "0x779ded0c9e1022225f8e0630b35a9b54be713736",
+          "decimals": 18,
+          "aliasFor": "USDT0"
+        }
       },
       "nativeToken": "USDT0",
       "notes": "USDT0 is both the gas token and the transfer token. API token keys 'USDC' and 'USDT' both resolve to the USDT0 address.",
@@ -161,17 +274,36 @@
       "implContract": "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Monad",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). Monad fully supports EIP-7702 (docs.monad.xyz/developer-essentials/eip-7702). Note: Monad's reserve-balance rule disallows delegated EOAs from dipping below 10 MON in a single TX — Q402 only moves ERC-20 tokens, so a delegated user's MON balance is unchanged by transfer() and the rule does not trigger in normal operation."
       },
       "tokens": {
-        "USDC": { "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603", "decimals": 6, "notes": "Native Circle USDC via CCTP V2 — issued by Circle, not bridged. 17 source chains supported via CCTP." },
-        "USDT": { "address": "0xe7cd86e13AC4309349F30B3435a9d337750fC82D", "decimals": 6, "notes": "USDT0 (LayerZero OFT) — Tether's omnichain standard on Monad. Same OFT family as Mantle's USDT0 entry." }
+        "USDC": {
+          "address": "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+          "decimals": 6,
+          "notes": "Native Circle USDC via CCTP V2 — issued by Circle, not bridged. 17 source chains supported via CCTP."
+        },
+        "USDT": {
+          "address": "0xe7cd86e13AC4309349F30B3435a9d337750fC82D",
+          "decimals": 6,
+          "notes": "USDT0 (LayerZero OFT) — Tether's omnichain standard on Monad. Same OFT family as Mantle's USDT0 entry."
+        }
       },
-      "supportedApiTokens": ["USDC", "USDT"],
+      "supportedApiTokens": [
+        "USDC",
+        "USDT"
+      ],
       "explorer": "https://monadscan.com",
       "verifyUrl": "https://monadscan.com/address/0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f"
     },
@@ -182,17 +314,36 @@
       "implContract": "0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Scroll",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Scroll mainnet via the Euclid upgrade (phase 1 2025-04-16, phase 2 2025-04-22 — see docs.scroll.io/en/technology/overview/scroll-upgrades/euclid-upgrade). Impl redeployed 2026-06-15 by 0xfc77...f466; on-chain NAME() = 'Q402 Scroll'. The impl address is distinct per chain (CREATE depends on the deployer nonce on each chain); it must not be assumed equal across chains. Distinguished at signing time by chainId 534352 + domainName 'Q402 Scroll'."
       },
       "tokens": {
-        "USDC": { "address": "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4", "decimals": 6, "notes": "Native Circle USDC on Scroll mainnet (confirmed with Scroll team)." },
-        "USDT": { "address": "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df", "decimals": 6, "notes": "Tether's canonical Scroll deployment (confirmed with Scroll team)." }
+        "USDC": {
+          "address": "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4",
+          "decimals": 6,
+          "notes": "Native Circle USDC on Scroll mainnet (confirmed with Scroll team)."
+        },
+        "USDT": {
+          "address": "0xf55BEC9cafDbE8730f096Aa55dad6D22d44099Df",
+          "decimals": 6,
+          "notes": "Tether's canonical Scroll deployment (confirmed with Scroll team)."
+        }
       },
-      "supportedApiTokens": ["USDC", "USDT"],
+      "supportedApiTokens": [
+        "USDC",
+        "USDT"
+      ],
       "explorer": "https://scrollscan.com",
       "verifyUrl": "https://scrollscan.com/address/0x7635F32D893B64b5944CB8cbF2AC4cd3dA41B2f1"
     },
@@ -203,17 +354,36 @@
       "implContract": "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Arbitrum",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). EIP-7702 (set-code transactions, type 0x04) is live on Arbitrum One mainnet since ArbOS 40 'Callisto'; ArbOS 51 'Dia' (activated 2026-01-08) refined precompile delegation behavior to align with the EIP-7702 spec. Impl redeployed 2026-06-15 by 0xfc77...f466; on-chain NAME() = 'Q402 Arbitrum'. The impl address is distinct per chain (CREATE depends on the deployer nonce on each chain); it must not be assumed equal across chains. Distinguished at signing time by chainId 42161 + domainName 'Q402 Arbitrum'."
       },
       "tokens": {
-        "USDC": { "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "decimals": 6, "notes": "Native Circle USDC on Arbitrum One — issued by Circle via CCTP, not the legacy bridged USDC.e (0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8). Q402 intentionally rejects USDC.e to avoid the bridged/native confusion that surfaced during Mantle's USDT migration." },
-        "USDT": { "address": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", "decimals": 6, "notes": "Tether's canonical Arbitrum One deployment." }
+        "USDC": {
+          "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+          "decimals": 6,
+          "notes": "Native Circle USDC on Arbitrum One — issued by Circle via CCTP, not the legacy bridged USDC.e (0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8). Q402 intentionally rejects USDC.e to avoid the bridged/native confusion that surfaced during Mantle's USDT migration."
+        },
+        "USDT": {
+          "address": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+          "decimals": 6,
+          "notes": "Tether's canonical Arbitrum One deployment."
+        }
       },
-      "supportedApiTokens": ["USDC", "USDT"],
+      "supportedApiTokens": [
+        "USDC",
+        "USDT"
+      ],
       "explorer": "https://arbiscan.io",
       "verifyUrl": "https://arbiscan.io/address/0x8D854436ab0426F5BC6Cc70865C90576AD523E73"
     },
@@ -224,17 +394,36 @@
       "implContract": "0x2fb2B2D110b6c5664e701666B3741240242bf350",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Base",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). Impl deployed 2026-06-19 by 0xfc77...f466 (CREATE at nonce 0 on Base, which is why this address matches the Stable-chain impl — coincidental, they are distinct chains). On-chain verified: NAME()='Q402 Base', VERSION()='1', owner-binding reverts OwnerMismatch(). EIP-7702 (type 0x04 set-code) live on Base mainnet via the OP Stack Isthmus upgrade (L1 Pectra-aligned); verified by the type-4 smoke tx 0xc2034668a260526ef88ae3ab0d8d01bd82c62ea3c5136cbf0755dd1e87d3b9ed (2026-06-19) — payer EOA delegated (code 0xef0100<impl>), 0.001 USDC moved gaslessly, recipient credited. Distinguished at signing time by chainId 8453 + domainName 'Q402 Base'."
       },
       "tokens": {
-        "USDC": { "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "decimals": 6, "notes": "Native Circle USDC on Base (issued by Circle), not the legacy bridged USDbC (0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA). Q402 uses native USDC only. Verified on-chain: symbol=USDC decimals=6." },
-        "USDT": { "address": "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", "decimals": 6, "notes": "Bridged Tether USD (USDT) on Base, 6 decimals. This is a bridged token (not native Tether issuance) with thinner liquidity (~$25M supply) than native USDC. Verified on-chain: symbol=USDT decimals=6 name='Tether USD'." }
+        "USDC": {
+          "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          "decimals": 6,
+          "notes": "Native Circle USDC on Base (issued by Circle), not the legacy bridged USDbC (0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA). Q402 uses native USDC only. Verified on-chain: symbol=USDC decimals=6."
+        },
+        "USDT": {
+          "address": "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+          "decimals": 6,
+          "notes": "Bridged Tether USD (USDT) on Base, 6 decimals. This is a bridged token (not native Tether issuance) with thinner liquidity (~$25M supply) than native USDC. Verified on-chain: symbol=USDT decimals=6 name='Tether USD'."
+        }
       },
-      "supportedApiTokens": ["USDC", "USDT"],
+      "supportedApiTokens": [
+        "USDC",
+        "USDT"
+      ],
       "explorer": "https://basescan.org",
       "verifyUrl": "https://basescan.org/address/0x2fb2B2D110b6c5664e701666B3741240242bf350#code"
     },
@@ -245,16 +434,30 @@
       "implContract": "0xa9a7dcE76DEF2AC36057FeF0d8103dF10581d61e",
       "witness": {
         "type": "TransferAuthorization",
-        "fields": ["owner", "facilitator", "token", "recipient", "amount", "nonce", "deadline"],
+        "fields": [
+          "owner",
+          "facilitator",
+          "token",
+          "recipient",
+          "amount",
+          "nonce",
+          "deadline"
+        ],
         "domainName": "Q402 Robinhood Chain",
         "domainVersion": "1",
         "verifyingContractRule": "userEOA",
         "notes": "verifyingContract = user's own EOA under EIP-7702 delegation (contract _domainSeparator uses address(this)). On-chain NAME() = 'Q402 Robinhood Chain'. Distinguished at signing time by chainId 4663 + domainName 'Q402 Robinhood Chain'. USDG-only chain (Paxos Global Dollar): there is NO Circle USDC and NO Tether USDT on Robinhood Chain — the on-chain tokens carrying those symbols are mock/scam and are intentionally NOT supported. Allowlist is USDG only."
       },
       "tokens": {
-        "USDG": { "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", "decimals": 6, "notes": "Paxos Global Dollar (USDG) — the only supported token on Robinhood Chain, 6 decimals. Verified on-chain: symbol='USDG'." }
+        "USDG": {
+          "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+          "decimals": 6,
+          "notes": "Paxos Global Dollar (USDG) — the only supported token on Robinhood Chain, 6 decimals. Verified on-chain: symbol='USDG'."
+        }
       },
-      "supportedApiTokens": ["USDG"],
+      "supportedApiTokens": [
+        "USDG"
+      ],
       "explorer": "https://robinhoodchain.blockscout.com",
       "verifyUrl": "https://robinhoodchain.blockscout.com/address/0x2fb2B2D110b6c5664e701666B3741240242bf350"
     }
@@ -278,7 +481,10 @@
         "router": "0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D",
         "linkToken": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
         "sender": "0x0289C29Bc37CDBc3711f73be17936c5C15d6468d",
-        "supportedDestinations": ["avax", "arbitrum"],
+        "supportedDestinations": [
+          "avax",
+          "arbitrum"
+        ],
         "explorer": "https://etherscan.io",
         "ccipExplorer": "https://ccip.chain.link"
       },
@@ -287,7 +493,10 @@
         "router": "0xF4c7E640EdA248ef95972845a62bdC74237805dB",
         "linkToken": "0x5947BB275c521040051D82396192181b413227A3",
         "sender": "0x863217d0895fe98081Cc71e61D32820EF60147d3",
-        "supportedDestinations": ["eth", "arbitrum"],
+        "supportedDestinations": [
+          "eth",
+          "arbitrum"
+        ],
         "explorer": "https://snowtrace.io",
         "ccipExplorer": "https://ccip.chain.link"
       },
@@ -296,7 +505,10 @@
         "router": "0x141fa059441E0ca23ce184B6A78bafD2A517DdE8",
         "linkToken": "0xf97f4df75117a78c1A5a0DBb814Af92458539FB4",
         "sender": "0x305C232373f2Ff3947EF048C8013f426e2927805",
-        "supportedDestinations": ["eth", "avax"],
+        "supportedDestinations": [
+          "eth",
+          "avax"
+        ],
         "explorer": "https://arbiscan.io",
         "ccipExplorer": "https://ccip.chain.link"
       }
@@ -309,7 +521,11 @@
       "description": "Gas Tank KV is extended with a LINK slot per CCIP chain. Native slot (existing) is also valid for fee payment with a 10% CCIP surcharge.",
       "linkKey": "gastank:{address}:{chain}:link",
       "nativeKey": "gastank:{address}:{chain}",
-      "linkChains": ["eth", "avax", "arbitrum"]
+      "linkChains": [
+        "eth",
+        "avax",
+        "arbitrum"
+      ]
     },
     "feePolicy": {
       "q402Markup": 0,
@@ -332,8 +548,13 @@
         "oft": "0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee",
         "oftType": "adapter",
         "decimals": 6,
-        "sender": "",
-        "supportedDestinations": ["arbitrum", "mantle", "monad", "xlayer"],
+        "sender": "0x7bE4CEEbb0D45Fa10BA902f2D454d12755DFD06A",
+        "supportedDestinations": [
+          "arbitrum",
+          "mantle",
+          "monad",
+          "xlayer"
+        ],
         "explorer": "https://etherscan.io",
         "lzScan": "https://layerzeroscan.com"
       },
@@ -342,8 +563,13 @@
         "oft": "0x14E4A1B13bf7F943c8ff7C51fb60FA964A298D92",
         "oftType": "native",
         "decimals": 6,
-        "sender": "",
-        "supportedDestinations": ["eth", "mantle", "monad", "xlayer"],
+        "sender": "0x863217d0895fe98081Cc71e61D32820EF60147d3",
+        "supportedDestinations": [
+          "eth",
+          "mantle",
+          "monad",
+          "xlayer"
+        ],
         "explorer": "https://arbiscan.io",
         "lzScan": "https://layerzeroscan.com"
       },
@@ -352,8 +578,13 @@
         "oft": "0xcb768e263FB1C62214E7cab4AA8d036D76dc59CC",
         "oftType": "native",
         "decimals": 6,
-        "sender": "",
-        "supportedDestinations": ["eth", "arbitrum", "monad", "xlayer"],
+        "sender": "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+        "supportedDestinations": [
+          "eth",
+          "arbitrum",
+          "monad",
+          "xlayer"
+        ],
         "explorer": "https://explorer.mantle.xyz",
         "lzScan": "https://layerzeroscan.com"
       },
@@ -362,8 +593,13 @@
         "oft": "0x9151434b16b9763660705744891fA906F660EcC5",
         "oftType": "native",
         "decimals": 6,
-        "sender": "",
-        "supportedDestinations": ["eth", "arbitrum", "mantle", "xlayer"],
+        "sender": "0xd4f703683acac7C02bf482A061C9E1F8DEdA467c",
+        "supportedDestinations": [
+          "eth",
+          "arbitrum",
+          "mantle",
+          "xlayer"
+        ],
         "explorer": "https://monadscan.com",
         "lzScan": "https://layerzeroscan.com"
       },
@@ -372,8 +608,13 @@
         "oft": "0x94bcca6bdfd6a61817ab0e960bfede4984505554",
         "oftType": "native",
         "decimals": 6,
-        "sender": "",
-        "supportedDestinations": ["eth", "arbitrum", "mantle", "monad"],
+        "sender": "0x7A07e97b509543fed5B3DDc1A20Ec2dDA6F7e2e5",
+        "supportedDestinations": [
+          "eth",
+          "arbitrum",
+          "mantle",
+          "monad"
+        ],
         "explorer": "https://www.oklink.com/xlayer",
         "lzScan": "https://layerzeroscan.com"
       }
