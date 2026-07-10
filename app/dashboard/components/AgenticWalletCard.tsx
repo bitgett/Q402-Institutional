@@ -30,6 +30,7 @@ import { AgenticWalletHooksModal } from "./AgenticWalletHooksModal";
 import { AgenticWalletReceiveModal } from "./AgenticWalletReceiveModal";
 import { AgenticWalletAgentModal } from "./AgenticWalletAgentModal";
 import { AgenticWalletBridgeModal } from "./AgenticWalletBridgeModal";
+import { AgenticWalletOftBridgeModal } from "./AgenticWalletOftBridgeModal";
 import { AgenticWalletWithdrawModal, type WithdrawBucket } from "./AgenticWalletWithdrawModal";
 import { AgenticWalletRecurringSection } from "./AgenticWalletRecurringSection";
 import { AgenticWalletEarnSection } from "./AgenticWalletEarnSection";
@@ -168,6 +169,7 @@ export function AgenticWalletCard({
   const [hooksOpen, setHooksOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [bridgeOpen, setBridgeOpen] = useState(false);
+  const [oftBridgeOpen, setOftBridgeOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [balance, setBalance] = useState<BalancePayload | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -389,6 +391,17 @@ export function AgenticWalletCard({
             title={
               hasMultichainScope
                 ? "Cross-chain USDC via Chainlink CCIP — ETH / AVAX / Arbitrum triangle."
+                : "Cross-chain bridging requires an active multichain subscription."
+            }
+          />
+          <ActionPill
+            label={hasMultichainScope ? "Bridge USDT" : "Bridge USDT (Paid)"}
+            disabled={archived || !hasMultichainScope}
+            onClick={() => setOftBridgeOpen(true)}
+            iconArrow="bridge"
+            title={
+              hasMultichainScope
+                ? "Cross-chain USDT (USDT0) via LayerZero — ETH / Arbitrum / Mantle / Monad / X Layer."
                 : "Cross-chain bridging requires an active multichain subscription."
             }
           />
@@ -637,6 +650,21 @@ export function AgenticWalletCard({
           onClose={() => setBridgeOpen(false)}
           onSent={() => {
             setBridgeOpen(false);
+            onChanged();
+          }}
+        />
+      )}
+
+      {oftBridgeOpen && (
+        <AgenticWalletOftBridgeModal
+          walletAddress={wallet.address}
+          walletId={wallet.walletId}
+          ownerAddress={address}
+          signMessage={signMessage}
+          hasMultichainScope={hasMultichainScope}
+          onClose={() => setOftBridgeOpen(false)}
+          onSent={() => {
+            setOftBridgeOpen(false);
             onChanged();
           }}
         />

@@ -64,6 +64,7 @@ import { AgenticWalletSendModal } from "@/app/dashboard/components/AgenticWallet
 import { AgenticWalletReceiveModal } from "@/app/dashboard/components/AgenticWalletReceiveModal";
 import { AgenticWalletBatchModal } from "@/app/dashboard/components/AgenticWalletBatchModal";
 import { AgenticWalletBridgeModal } from "@/app/dashboard/components/AgenticWalletBridgeModal";
+import { AgenticWalletOftBridgeModal } from "@/app/dashboard/components/AgenticWalletOftBridgeModal";
 import { AgenticWalletLimitsModal } from "@/app/dashboard/components/AgenticWalletLimitsModal";
 import { AgenticWalletHooksModal } from "@/app/dashboard/components/AgenticWalletHooksModal";
 import { AgenticWalletAgentModal } from "@/app/dashboard/components/AgenticWalletAgentModal";
@@ -387,6 +388,7 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
   const [bridgeOpen, setBridgeOpen] = useState(false);
+  const [oftBridgeOpen, setOftBridgeOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(false);
   const [hooksOpen, setHooksOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
@@ -1269,6 +1271,30 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
 
                     <button
                       type="button"
+                      className="v2-tile"
+                      disabled={demoMode || archived || !multichainActive}
+                      onClick={() => setOftBridgeOpen(true)}
+                      title={
+                        demoMode
+                          ? "Connect your wallet"
+                          : multichainActive
+                            ? "Cross-chain USDT (USDT0) via LayerZero."
+                            : hasMultichainScope
+                              ? "Switch the top-bar scope to Multichain to bridge across chains."
+                              : "Bridging requires an active Multichain subscription."
+                      }
+                      style={{ ...styles.actionTile, ...(demoMode || archived || !multichainActive ? styles.tileDisabled : null) }}
+                    >
+                      {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
+                      <span style={{ width: 26, height: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        <ChainIcon chain="mantle" size={22} />
+                      </span>
+                      <span style={styles.tileLabel}>Bridge</span>
+                      <span style={styles.tileSub}>USDT</span>
+                    </button>
+
+                    <button
+                      type="button"
                       className="v2-tile v2-tile-shine"
                       disabled={demoMode || archived}
                       onClick={() => setStakeOpen(true)}
@@ -1855,6 +1881,20 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
           onClose={() => setBridgeOpen(false)}
           onSent={() => {
             setBridgeOpen(false);
+            afterWrite();
+          }}
+        />
+      )}
+      {activeWallet && oftBridgeOpen && (
+        <AgenticWalletOftBridgeModal
+          walletAddress={activeWallet.address}
+          walletId={activeWallet.walletId}
+          ownerAddress={addr ?? activeWallet.ownerAddr}
+          signMessage={signMessage}
+          hasMultichainScope={multichainActive}
+          onClose={() => setOftBridgeOpen(false)}
+          onSent={() => {
+            setOftBridgeOpen(false);
             afterWrite();
           }}
         />
