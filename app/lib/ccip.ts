@@ -15,6 +15,7 @@
 import { JsonRpcProvider, Wallet, Contract, type ContractRunner, ZeroAddress, AbiCoder } from "ethers";
 import manifest from "../../contracts.manifest.json";
 import { getPrimaryRpc, getTokenConfig, type ChainKey } from "./relayer";
+import { loadRelayerKey } from "./relayer-key";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ export const ROUTER_ABI = [
 
 /** Q402CCIPSender ABI (subset). */
 export const SENDER_ABI = [
-  "function bridge(uint64 destChainSelector, uint256 amount, address destReceiver, uint8 feeToken, uint256 maxFee) external returns (bytes32)",
+  "function bridgeFor(address owner, uint64 destChainSelector, uint256 amount, address destReceiver, uint8 feeToken, uint256 maxFee) external returns (bytes32)",
   "function quoteFee(uint64 destChainSelector, uint256 amount, address destReceiver, uint8 feeToken) external view returns (uint256)",
   "function poolBalances() external view returns (uint256 linkBalance, uint256 nativeBalance)",
   "function ROUTER() external view returns (address)",
@@ -236,8 +237,14 @@ const ERC20_ABI = [
 export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResult & { approveTxHash?: string }> {
   const provider = getCCIPProvider(p.src);
   const wallet = new Wallet(p.agenticWalletKey, provider);
-  const sender = new Contract(CCIP_CONFIG[p.src].sender, SENDER_ABI, wallet);
   const senderAddr = CCIP_CONFIG[p.src].sender;
+  // The Agent Wallet only ever signs the one-time approval below. The bridge call
+  // itself is submitted by the RELAYER via bridgeFor(owner, ...) — Q402CCIPSender
+  // is facilitator-gated, so a leaked wallet key cannot drain the fee pool.
+  const rk = loadRelayerKey();
+  if (!rk.ok) throw new Error(`CCIP bridge: relayer key unavailable (${rk.reason})`);
+  const relayer = new Wallet(rk.privateKey, provider);
+  const sender = new Contract(senderAddr, SENDER_ABI, relayer);
 
   const feeTokenEnum = p.feeToken === "LINK" ? FEE_TOKEN_LINK : FEE_TOKEN_NATIVE;
   const dstSelector = CCIP_CONFIG[p.dst].chainSelector;
@@ -259,7 +266,8 @@ export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResu
     approveTxHash = approveTx.hash;
   }
 
-  const tx = await sender.bridge(
+  const tx = await sender.bridgeFor(
+    wallet.address,
     dstSelector,
     p.amount,
     p.destReceiver,
