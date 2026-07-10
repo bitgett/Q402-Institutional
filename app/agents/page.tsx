@@ -141,7 +141,7 @@ const TOOL_GROUPS = [
   { label: "RedStone triggers", tools: ["q402_redstone_feeds", "q402_redstone_trigger_create", "q402_redstone_trigger_list", "q402_redstone_trigger_cancel"] },
 ];
 
-const CHAINS = ["BNB", "Ethereum", "Arbitrum", "Avalanche", "Mantle", "X Layer", "Monad", "Scroll", "Injective", "Stable", "Base"];
+const CHAINS = ["BNB", "Ethereum", "Arbitrum", "Avalanche", "Mantle", "X Layer", "Monad", "Scroll", "Injective", "Stable", "Base", "Robinhood"];
 
 // Distinct, restrained motion: a short rise with a different easing than the
 // landing's fadeUp signature, and it does not repeat on every tiny element.
