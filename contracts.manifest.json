@@ -315,5 +315,76 @@
       "q402Markup": 0,
       "description": "Q402 takes no fee on top of the CCIP cost. User pays exactly what Chainlink charges (LINK or native, per their choice)."
     }
+  },
+  "oft": {
+    "version": "1.0.0",
+    "notes": [
+      "Cross-chain USDT (USDT0) bridge via LayerZero OFT. Companion rail to `.ccip` (USDC). Agent picks the rail by token: USDC -> CCIP, USDT/USDT0 -> OFT.",
+      "Sender contract: Q402OftSender deployed per chain. Holds a NATIVE pool (LayerZero fee is native-only) topped up by the facilitator from the same Gas Tank machinery. bridgeFor is onlyFacilitator (drain-proof); recipient is force-bound to the owner's own address on the destination chain.",
+      "OFT contracts are the existing USDT0 deployments (no custom bridge protocol). On Ethereum USDT0 is an OFT ADAPTER wrapping native USDT (token != oft); on the other chains it is a native OFT (token == oft). The Sender derives the token via OFT.token() so no token address is hardcoded here.",
+      "v1 chains: eth, arbitrum, mantle, monad, xlayer (all 6-decimal). avax, bnb, stable are v2 (addresses to be gathered; stable USDT0 is 18-decimal).",
+      "VERIFY-BEFORE-DEPLOY: confirm each `oft` address + its token()/eid on-chain, confirm every listed lane has a live USDT0 peer, and confirm enforcedOptions are set (else supply built executor lzReceive options). `sender` addresses are populated after Q402OftSender is deployed per chain.",
+      "Fees: no Q402 markup. User pays the LayerZero native fee, debited from the Gas Tank native slot 1:1 with the Sender pool's consumption."
+    ],
+    "chains": {
+      "eth": {
+        "eid": 30101,
+        "oft": "0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee",
+        "oftType": "adapter",
+        "decimals": 6,
+        "sender": "",
+        "supportedDestinations": ["arbitrum", "mantle", "monad", "xlayer"],
+        "explorer": "https://etherscan.io",
+        "lzScan": "https://layerzeroscan.com"
+      },
+      "arbitrum": {
+        "eid": 30110,
+        "oft": "0x14E4A1B13bf7F943c8ff7C51fb60FA964A298D92",
+        "oftType": "native",
+        "decimals": 6,
+        "sender": "",
+        "supportedDestinations": ["eth", "mantle", "monad", "xlayer"],
+        "explorer": "https://arbiscan.io",
+        "lzScan": "https://layerzeroscan.com"
+      },
+      "mantle": {
+        "eid": 30181,
+        "oft": "0xcb768e263FB1C62214E7cab4AA8d036D76dc59CC",
+        "oftType": "native",
+        "decimals": 6,
+        "sender": "",
+        "supportedDestinations": ["eth", "arbitrum", "monad", "xlayer"],
+        "explorer": "https://explorer.mantle.xyz",
+        "lzScan": "https://layerzeroscan.com"
+      },
+      "monad": {
+        "eid": 30390,
+        "oft": "0x9151434b16b9763660705744891fA906F660EcC5",
+        "oftType": "native",
+        "decimals": 6,
+        "sender": "",
+        "supportedDestinations": ["eth", "arbitrum", "mantle", "xlayer"],
+        "explorer": "https://monadscan.com",
+        "lzScan": "https://layerzeroscan.com"
+      },
+      "xlayer": {
+        "eid": 30274,
+        "oft": "0x94bcca6bdfd6a61817ab0e960bfede4984505554",
+        "oftType": "native",
+        "decimals": 6,
+        "sender": "",
+        "supportedDestinations": ["eth", "arbitrum", "mantle", "monad"],
+        "explorer": "https://www.oklink.com/xlayer",
+        "lzScan": "https://layerzeroscan.com"
+      }
+    },
+    "gasTankSchema": {
+      "description": "Reuses the existing native Gas Tank slot. No LINK slot (LayerZero fee is native-only).",
+      "nativeKey": "gastank:{address}:{chain}"
+    },
+    "feePolicy": {
+      "q402Markup": 0,
+      "description": "Q402 takes no fee on top of the LayerZero cost. User pays exactly the native messaging fee, debited from the Gas Tank."
+    }
   }
 }
