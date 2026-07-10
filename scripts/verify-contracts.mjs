@@ -48,6 +48,7 @@ const RPCS = {
   scroll: "https://rpc.scroll.io",
   arbitrum: "https://arb1.arbitrum.io/rpc",
   base:   "https://mainnet.base.org",
+  robinhood: process.env.ROBINHOOD_RPC_URL || "https://rpc.mainnet.chain.robinhood.com",
 };
 
 // Keep in sync with app/lib/chain-status.ts — chains held in the settlement
@@ -246,7 +247,10 @@ for (const [chain, cfg] of Object.entries(manifest.chains)) {
       }
     }
   } catch (e) {
-    row.error = e.shortMessage || e.message;
+    // Keep a non-empty message: a provider that cannot start (e.g. missing/unreachable
+    // RPC) can surface with empty shortMessage AND message, which would otherwise be
+    // misread downstream as a successful-but-empty read.
+    row.error = e.shortMessage || e.message || "provider failed to start (RPC unreachable / network not detected)";
   }
   results.push(row);
 }
@@ -267,18 +271,19 @@ const warnings = [];
 const verifiedChains = new Set();
 for (const row of results) {
   const c = row.checks ?? {};
-  if (row.error) {
-    // A thrown RPC error is a connectivity issue, not an invariant violation.
-    // Gate on a successful fetch: warn and re-run when the RPC is healthy. A
-    // genuinely missing contract surfaces as hasCode=false (a successful
-    // getCode returning "0x"), which stays a hard failure below.
-    warnings.push(`${row.chain}: RPC read error (connectivity, not an invariant) — ${row.error}`);
+  if (row.error || c.hasCode === undefined) {
+    // A thrown RPC error (or a provider that never completed a getCode, so hasCode
+    // was never set) is a connectivity issue, not an invariant violation. Gate on a
+    // successful fetch: warn and re-run when the RPC is healthy. A genuinely missing
+    // contract surfaces as hasCode === false (a successful getCode returning "0x"),
+    // which stays a hard failure below.
+    warnings.push(`${row.chain}: RPC read error (connectivity, not an invariant) — ${row.error || "provider returned no code read"}`);
     continue;
   }
   if (c.hasCode && (c.nameMatch !== undefined || c.typehashMatchesTransferAuth !== undefined || c.bytecodeMatch !== undefined)) {
     verifiedChains.add(row.chain);
   }
-  if (!c.hasCode) {
+  if (c.hasCode === false) {
     failures.push(`${row.chain}: no bytecode at ${row.address}`);
   }
   if (c.nameMatch === false) {
