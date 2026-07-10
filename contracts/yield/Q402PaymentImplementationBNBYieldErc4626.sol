@@ -70,7 +70,7 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
     string public constant VERSION = "1";
 
     /// @notice Impl version tag — lets the SDK detect this build and prompt re-delegation.
-    string public constant IMPL_VERSION = "3-yield-bnb-erc4626-lista-slippage";
+    string public constant IMPL_VERSION = "4-yield-bnb-erc4626-lista-slippage-measured";
 
     // ─── ERC-4626 vault allowlist (BNB / Lista, immutable — spec §9.1 model A) ─
     // Never trust the signed `vault`/`asset` unchecked: a compromised / prompt-
@@ -207,12 +207,15 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
 
         usedNonces[owner][nonce] = true;            // CEI: effects before interactions
 
+        uint256 sharesBefore = IERC20(vault).balanceOf(owner);
         _setApproval(asset, vault, amount);         // exact-amount, reset-to-zero safe
-        shares = IERC4626(vault).deposit(amount, owner);
+        IERC4626(vault).deposit(amount, owner);
         _setApproval(asset, vault, 0);              // zero any residual allowance (defense in depth)
 
-        // Slippage floor: the signed intent bound a minimum share output; reject if the
-        // vault returned fewer shares than the user consented to (MD-01).
+        // Slippage floor enforced on the OBSERVED share delta, not the vault's return
+        // value: a non-conforming or upgraded allowlisted vault cannot satisfy the bound
+        // while minting fewer shares to the owner (MD-01 / L-002).
+        shares = IERC20(vault).balanceOf(owner) - sharesBefore;
         if (shares < minSharesOut) revert SlippageExceeded();
 
         emit Erc4626Supplied(owner, vault, asset, amount, shares, nonce);
@@ -222,12 +225,16 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
 
     /**
      * @notice Withdraw from the ERC-4626 vault back to the owner EOA, gasless.
-     *         `amount == type(uint256).max` redeems the FULL share balance
-     *         (maxRedeem). A concrete `amount` withdraws that many underlying assets.
-     * @dev ERC-4626 `withdraw` takes ASSETS and `redeem` takes SHARES. Full-drain
-     *      MUST be redeem(maxRedeem) — withdraw(uint.max assets) is NOT a withdraw-all
-     *      idiom and share rounding would leave dust. No approval needed: the vault
-     *      burns the owner's shares (msg.sender == address(this) == owner).
+     *         `amount == type(uint256).max` redeems the MAXIMUM CURRENTLY REDEEMABLE
+     *         shares (maxRedeem), which vault caps, queues or pauses can leave below
+     *         the owner's full share balance. Shares may remain outstanding after the
+     *         call. A concrete `amount` withdraws that many underlying assets.
+     * @dev ERC-4626 `withdraw` takes ASSETS and `redeem` takes SHARES; the max path
+     *      uses redeem(maxRedeem) so it never over-asks and share rounding leaves no
+     *      dust. This is a "withdraw max currently redeemable", NOT a guaranteed full
+     *      exit: draining a position that a cap or queue is throttling needs a repeated
+     *      or queued withdrawal. No approval needed: the vault burns the owner's shares
+     *      (msg.sender == address(this) == owner).
      */
     function withdrawFromErc4626(
         address owner, address facilitator, address vault, address asset,
@@ -260,28 +267,27 @@ contract Q402PaymentImplementationBNBYieldErc4626 {
         usedNonces[owner][nonce] = true;
 
         // `amount == max` redeems the max CURRENTLY REDEEMABLE shares (maxRedeem),
-        // which can be < the full balance under vault caps/queues (L-01). The signed
-        // `minAssetsOut` floor bounds what the user accepts from that redeem; the
-        // `maxSharesBurned` ceiling bounds a fixed-asset withdraw (MD-01).
+        // which can be < the full balance under vault caps/queues (L-01). Bounds are
+        // enforced on OBSERVED balance deltas below, never on the vault's return values.
         bool isMax = amount == type(uint256).max;
+        uint256 assetBefore = IERC20(asset).balanceOf(owner);
+        uint256 shareBefore = IERC20(vault).balanceOf(owner);
         if (isMax) {
-            uint256 shares = IERC4626(vault).maxRedeem(owner);
-            if (shares == 0) revert NothingToWithdraw();
-            if (shares > maxSharesBurned) revert SlippageExceeded();
-            assetsOut = IERC4626(vault).redeem(shares, owner, owner);
+            uint256 redeemable = IERC4626(vault).maxRedeem(owner);
+            if (redeemable == 0) revert NothingToWithdraw();
+            IERC4626(vault).redeem(redeemable, owner, owner);
         } else {
-            // Measure the underlying actually received (balance delta) rather than
-            // trusting `amount`, so a non-compliant / fee-charging vault cannot make
-            // the Erc4626Withdrawn event over-report the payout. nonReentrant + the
-            // single external call make the delta exact.
-            uint256 balBefore = IERC20(asset).balanceOf(owner);
-            uint256 sharesBurned = IERC4626(vault).withdraw(amount, owner, owner); // reverts if assets exceed position
-            if (sharesBurned > maxSharesBurned) revert SlippageExceeded();
-            assetsOut = IERC20(asset).balanceOf(owner) - balBefore;
+            IERC4626(vault).withdraw(amount, owner, owner); // reverts if assets exceed position
         }
 
-        // Assets floor applies to both paths: the user consented to receiving at
-        // least `minAssetsOut` underlying (L-01 / MD-01).
+        // Enforce the signed bounds on measured deltas, not on what the vault reports:
+        // a non-conforming / upgraded allowlisted vault cannot burn more shares or
+        // deliver fewer assets than the signed intent allows while still passing, and
+        // the emitted `assetsOut` is the real payout (L-01 / MD-01 / L-002). nonReentrant
+        // + the single external call make the deltas exact.
+        uint256 sharesBurned = shareBefore - IERC20(vault).balanceOf(owner);
+        if (sharesBurned > maxSharesBurned) revert SlippageExceeded();
+        assetsOut = IERC20(asset).balanceOf(owner) - assetBefore;
         if (assetsOut < minAssetsOut) revert SlippageExceeded();
 
         emit Erc4626Withdrawn(owner, vault, asset, assetsOut, isMax, nonce);
