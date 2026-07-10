@@ -117,8 +117,11 @@ describe("CCIP API route shape", () => {
   describe("Q402CCIPSender ABI mirror (lib/ccip.ts)", () => {
     const src = readFile("app/lib/ccip.ts");
 
-    it("SENDER_ABI exposes bridge + quoteFee + poolBalances", () => {
-      expect(src).toMatch(/function bridge\(uint64/);
+    it("SENDER_ABI exposes bridgeFor (facilitator-gated) + quoteFee + poolBalances", () => {
+      // bridgeFor(owner, ...) replaced the permissionless bridge() 2026-07-11: the
+      // pool pays the CCIP fee, so an open entrypoint let anyone drain it. Only the
+      // facilitator (relayer) may now trigger a pool-paid send.
+      expect(src).toMatch(/function bridgeFor\(address owner, uint64/);
       expect(src).toMatch(/function quoteFee/);
       expect(src).toMatch(/function poolBalances/);
     });

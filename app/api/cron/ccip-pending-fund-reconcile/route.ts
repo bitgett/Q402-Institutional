@@ -43,6 +43,8 @@ import {
   type PendingFundRecord,
   type PendingClearDebitRecord,
   type PendingFeeDebitRecord,
+  isCCIPLinkChain,
+  isNativeBridgeFeeChain,
 } from "@/app/lib/db";
 import { getCCIPProvider, isCCIPChain, type CCIPChainKey } from "@/app/lib/ccip";
 import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
@@ -401,7 +403,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       await kv.del(key).catch(() => { /* swallow */ });
       continue;
     }
-    if (!isCCIPChain(rec.chain) || typeof rec.amount !== "number" || rec.amount <= 0) {
+    // Native fee rows span the CCIP triangle + the OFT rail (mantle/monad/xlayer);
+    // LINK rows only exist on the triangle. Guarding native rows on isCCIPChain
+    // would delete mantle/monad/xlayer OFT fee rows without ever debiting them.
+    const chainOk = rec.feeToken === "LINK" ? isCCIPLinkChain(rec.chain) : isNativeBridgeFeeChain(rec.chain);
+    if (!chainOk || typeof rec.amount !== "number" || rec.amount <= 0) {
       await kv.del(key).catch(() => { /* swallow */ });
       continue;
     }

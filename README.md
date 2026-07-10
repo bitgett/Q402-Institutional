@@ -108,7 +108,7 @@ Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
 Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything else → Multichain.
 6+ BNB batches return `status="ambiguous"` so the agent asks the user how to split.
 
-**43 tools** (all sandbox by default; live needs an API key + a signing path):
+**45 tools** (all sandbox by default; live needs an API key + a signing path):
 
 | Tool | Auth | What it does |
 |---|---|---|
@@ -135,6 +135,8 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_bridge_send` | live key | Execute a cross-chain USDC bridge from the Agent Wallet (Mode C, since MCP 0.8.10). Sandbox-by-default; `sandbox: false` + live Multichain key fires a real on-chain bridge. |
 | `q402_bridge_history` | not yet wired | Returns a dashboard pointer (`{ implemented: false, dashboardUrl }`). Live MCP execution needs session-bound owner-sig auth (follow-up). View at /dashboard → Wallets → Bridge. |
 | `q402_bridge_gas_tank` | not yet wired | Returns static guidance + the canonical Gas Tank deposit address. Live balance lookup needs owner-sig auth (dashboard for now). |
+| `q402_oft_quote` | none | Quote a LayerZero USDT (USDT0) bridge (native fee + delivered amount) across eth/arbitrum/mantle/monad/xlayer. |
+| `q402_oft_send` | live key | Bridge USDT (USDT0) cross-chain via LayerZero OFT from the Agent Wallet to the same wallet on the destination (Mode C). Sandbox-by-default; two-phase consent. |
 | `q402_yield_reserves` | none | List Q402 Yield markets + live supply APY. `chain="bnb"` (curated lending vaults, USDC/USDT) or `chain="base"` (Morpho MetaMorpho vault, USDC only). |
 | `q402_yield_positions` | api key | The Agent Wallet's current Q402 Yield positions (value + APY). Read-only. |
 | `q402_yield_deposit` | live key | Supply the Agent Wallet's stablecoin into a curated lending vault on BNB (USDC/USDT) or the Morpho vault on Base (USDC only) via `chain` (Mode C). **Paid Multichain plan only. Trial cannot deposit.** Confirm + sandbox-by-default. |
