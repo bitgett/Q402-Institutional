@@ -37,6 +37,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/oft-pool-monitor",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/cron-watchdog",
       "schedule": "*/30 * * * *"
     },
