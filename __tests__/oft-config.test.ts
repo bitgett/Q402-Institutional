@@ -30,10 +30,12 @@ describe("OFT config ↔ manifest.oft", () => {
     for (const e of eids) expect(e).toBeGreaterThanOrEqual(30000);
   });
 
-  it("Ethereum is the adapter; the rest are native OFTs", () => {
-    expect(OFT_CONFIG.eth.oftType).toBe("adapter");
-    for (const k of OFT_CHAINS.filter((c) => c !== "eth")) {
-      expect(OFT_CONFIG[k].oftType).toBe("native");
+  it("every v1 chain is an OFT adapter (verified on-chain via OFT.token() != oft)", () => {
+    // All 5 USDT0 deployments wrap an existing canonical USDT (token != oft),
+    // so every chain is an adapter. The Sender derives the token at runtime; this
+    // just documents the on-chain reality (see manifest.oft.notes).
+    for (const k of OFT_CHAINS) {
+      expect(OFT_CONFIG[k].oftType).toBe("adapter");
     }
   });
 

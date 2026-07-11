@@ -537,7 +537,7 @@
     "notes": [
       "Cross-chain USDT (USDT0) bridge via LayerZero OFT. Companion rail to `.ccip` (USDC). Agent picks the rail by token: USDC -> CCIP, USDT/USDT0 -> OFT.",
       "Sender contract: Q402OftSender deployed per chain. Holds a NATIVE pool (LayerZero fee is native-only) topped up by the facilitator from the same Gas Tank machinery. bridgeFor is onlyFacilitator (drain-proof); recipient is force-bound to the owner's own address on the destination chain.",
-      "OFT contracts are the existing USDT0 deployments (no custom bridge protocol). On Ethereum USDT0 is an OFT ADAPTER wrapping native USDT (token != oft); on the other chains it is a native OFT (token == oft). The Sender derives the token via OFT.token() so no token address is hardcoded here.",
+      "OFT contracts are the existing USDT0 deployments (no custom bridge protocol). On EVERY v1 chain USDT0 is an OFT ADAPTER wrapping that chain's canonical USDT (token != oft) - verified on-chain via OFT.token(): eth 0xdAC17F958D2ee523a2206206994597C13D831ec7, arbitrum 0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9, mantle+xlayer 0x779Ded0c9e1022225f8E0630b35a9b54bE713736, monad 0xe7cd86e13AC4309349F30B3435a9d337750fC82D. The Sender derives the token via OFT.token() at runtime so no token address is hardcoded here.",
       "v1 chains: eth, arbitrum, mantle, monad, xlayer (all 6-decimal). avax, bnb, stable are v2 (addresses to be gathered; stable USDT0 is 18-decimal).",
       "VERIFY-BEFORE-DEPLOY: confirm each `oft` address + its token()/eid on-chain, confirm every listed lane has a live USDT0 peer, and confirm enforcedOptions are set (else supply built executor lzReceive options). `sender` addresses are populated after Q402OftSender is deployed per chain.",
       "Fees: no Q402 markup. User pays the LayerZero native fee, debited from the Gas Tank native slot 1:1 with the Sender pool's consumption."
@@ -561,7 +561,7 @@
       "arbitrum": {
         "eid": 30110,
         "oft": "0x14E4A1B13bf7F943c8ff7C51fb60FA964A298D92",
-        "oftType": "native",
+        "oftType": "adapter",
         "decimals": 6,
         "sender": "0x863217d0895fe98081Cc71e61D32820EF60147d3",
         "supportedDestinations": [
@@ -576,7 +576,7 @@
       "mantle": {
         "eid": 30181,
         "oft": "0xcb768e263FB1C62214E7cab4AA8d036D76dc59CC",
-        "oftType": "native",
+        "oftType": "adapter",
         "decimals": 6,
         "sender": "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
         "supportedDestinations": [
@@ -591,7 +591,7 @@
       "monad": {
         "eid": 30390,
         "oft": "0x9151434b16b9763660705744891fA906F660EcC5",
-        "oftType": "native",
+        "oftType": "adapter",
         "decimals": 6,
         "sender": "0xd4f703683acac7C02bf482A061C9E1F8DEdA467c",
         "supportedDestinations": [
@@ -606,7 +606,7 @@
       "xlayer": {
         "eid": 30274,
         "oft": "0x94bcca6bdfd6a61817ab0e960bfede4984505554",
-        "oftType": "native",
+        "oftType": "adapter",
         "decimals": 6,
         "sender": "0x7A07e97b509543fed5B3DDc1A20Ec2dDA6F7e2e5",
         "supportedDestinations": [
