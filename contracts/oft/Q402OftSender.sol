@@ -132,9 +132,28 @@ contract Q402OftSender {
 
     /// @dev approve(spender, max) tolerant of non-standard tokens (USDT returns no data).
     function _safeApproveMax(address token, address spender) private {
-        (bool ok, bytes memory data) =
-            token.call(abi.encodeWithSelector(IERC20.approve.selector, spender, type(uint256).max));
-        if (!ok || (data.length != 0 && !abi.decode(data, (bool)))) revert TransferFailed();
+        _safeCall(token, abi.encodeWithSelector(IERC20.approve.selector, spender, type(uint256).max));
+    }
+
+    /// @dev transferFrom tolerant of non-standard tokens. Ethereum/Arbitrum USDT
+    ///      (Tether) return NO data from transfer/transferFrom/approve, so a
+    ///      bool-typed IERC20 call reverts on the ABI decode of empty returndata.
+    ///      Treat "success + (no returndata OR returndata==true)" as ok.
+    function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
+        _safeCall(token, abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
+    }
+
+    /// @dev transfer tolerant of non-standard tokens (same reason as above).
+    function _safeTransfer(address token, address to, uint256 amount) private {
+        _safeCall(token, abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
+    }
+
+    /// @dev Low-level token call that tolerates non-standard (no-return) ERC20s.
+    ///      Reverts TransferFailed on: call failure, or a bool-returning token
+    ///      that returned false. A no-returndata token that didn't revert passes.
+    function _safeCall(address token, bytes memory data) private {
+        (bool ok, bytes memory ret) = token.call(data);
+        if (!ok || (ret.length != 0 && !abi.decode(ret, (bool)))) revert TransferFailed();
     }
 
     // ─── Core: bridge (facilitator-gated) ────────────────────────────────────
@@ -165,7 +184,9 @@ contract Q402OftSender {
         if (owner == address(0)) revert ZeroOwner();
 
         // 1. Pull the owner's token into this contract (owner pre-approved us).
-        if (!TOKEN.transferFrom(owner, address(this), amountLD)) revert TransferFailed();
+        //    Non-standard USDT (eth/arbitrum Tether) returns no data, so use the
+        //    return-data-tolerant path — a bool-typed call would revert on decode.
+        _safeTransferFrom(address(TOKEN), owner, address(this), amountLD);
 
         // 2. Build the OFT send: recipient is HARD-BOUND to the owner on the dest chain.
         SendParam memory sp = SendParam({
@@ -209,7 +230,7 @@ contract Q402OftSender {
     /// @notice Facilitator rescues any ERC-20 stranded on this contract (e.g. a failed
     ///         send that already pulled the token). Not part of the normal flow.
     function withdrawToken(address token, uint256 amount, address to) external onlyFacilitator {
-        if (!IERC20(token).transfer(to, amount)) revert TransferFailed();
+        _safeTransfer(token, to, amount);
         emit PoolWithdraw(token, to, amount);
     }
 

@@ -548,7 +548,7 @@
         "oft": "0x6C96dE32CEa08842dcc4058c14d3aaAD7Fa41dee",
         "oftType": "adapter",
         "decimals": 6,
-        "sender": "0x7bE4CEEbb0D45Fa10BA902f2D454d12755DFD06A",
+        "sender": "0x7b850d2B5026fd7b79B4bc25BC756B2a970C2C33",
         "supportedDestinations": [
           "arbitrum",
           "mantle",
@@ -563,7 +563,7 @@
         "oft": "0x14E4A1B13bf7F943c8ff7C51fb60FA964A298D92",
         "oftType": "adapter",
         "decimals": 6,
-        "sender": "0x863217d0895fe98081Cc71e61D32820EF60147d3",
+        "sender": "0xc5d4dFA6D2e545409C1abf86f336Dd43bb87621f",
         "supportedDestinations": [
           "eth",
           "mantle",
@@ -578,7 +578,7 @@
         "oft": "0xcb768e263FB1C62214E7cab4AA8d036D76dc59CC",
         "oftType": "adapter",
         "decimals": 6,
-        "sender": "0x8D854436ab0426F5BC6Cc70865C90576AD523E73",
+        "sender": "0x863217d0895fe98081Cc71e61D32820EF60147d3",
         "supportedDestinations": [
           "eth",
           "arbitrum",
@@ -593,7 +593,7 @@
         "oft": "0x9151434b16b9763660705744891fA906F660EcC5",
         "oftType": "adapter",
         "decimals": 6,
-        "sender": "0xd4f703683acac7C02bf482A061C9E1F8DEdA467c",
+        "sender": "0xBef6F89C3c2f83a42f60dC60adCae79c2D74fe00",
         "supportedDestinations": [
           "eth",
           "arbitrum",
@@ -608,7 +608,7 @@
         "oft": "0x94bcca6bdfd6a61817ab0e960bfede4984505554",
         "oftType": "adapter",
         "decimals": 6,
-        "sender": "0x7A07e97b509543fed5B3DDc1A20Ec2dDA6F7e2e5",
+        "sender": "0xac8DdC4A4E214c804837442169f93a6ce7780C92",
         "supportedDestinations": [
           "eth",
           "arbitrum",
