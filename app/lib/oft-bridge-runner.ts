@@ -104,7 +104,20 @@ export interface RunOftBridgeArgs {
 // approve(). Estimated per attempt from the live gas price; capped so a spike
 // can't drain the Gas Tank.
 const APPROVAL_GAS_UNITS = 80_000n;
-const APPROVAL_FUND_CAP_WEI = ethers.parseEther("0.003");
+// Per-chain ceiling on the one-time approve-gas top-up, in NATIVE units. A chain with a
+// high gas price denominated in a low-value token (Monad/Mantle run ~200 gwei) needs a
+// far larger native cap than ETH/Arbitrum, where the same 80k-gas approve costs a sliver
+// of a valuable token. The old single ETH-sized cap (0.003) starved the Monad approve
+// (it needs ~0.016 MON), so the top-up funded only 0.003 and the approve reverted
+// "Signer had insufficient balance".
+const APPROVAL_FUND_CAP_WEI_DEFAULT = ethers.parseEther("0.003");
+const APPROVAL_FUND_CAP_WEI: Record<string, bigint> = {
+  eth:      ethers.parseEther("0.005"),
+  arbitrum: ethers.parseEther("0.005"),
+  mantle:   ethers.parseEther("0.10"),
+  monad:    ethers.parseEther("0.10"),
+  xlayer:   ethers.parseEther("0.03"),
+};
 
 export async function runOftBridge(args: RunOftBridgeArgs): Promise<NextResponse> {
   const { owner, walletId, src, dst } = args;
@@ -258,8 +271,12 @@ export async function runOftBridge(args: RunOftBridgeArgs): Promise<NextResponse
       if (allowance < amountRaw) {
         const [walletNative, feeData] = await Promise.all([provider.getBalance(wallet.address), provider.getFeeData()]);
         const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? ethers.parseUnits("1", "gwei");
-        let need = APPROVAL_GAS_UNITS * gasPrice;
-        if (need > APPROVAL_FUND_CAP_WEI) need = APPROVAL_FUND_CAP_WEI;
+        // 1.5x headroom: the RPC checks balance >= gasLimit * maxFeePerGas (the ceiling,
+        // not gas actually burned), and the price can tick up between this quote and the
+        // approve broadcast. Cap per chain so a cheap-native / high-gas chain isn't starved.
+        let need = (APPROVAL_GAS_UNITS * gasPrice * 3n) / 2n;
+        const cap = APPROVAL_FUND_CAP_WEI[src] ?? APPROVAL_FUND_CAP_WEI_DEFAULT;
+        if (need > cap) need = cap;
         if (walletNative < need) {
           const shortfall = need - walletNative;
           const fundWhole = Number(shortfall) / 1e18;
@@ -304,7 +321,7 @@ export async function runOftBridge(args: RunOftBridgeArgs): Promise<NextResponse
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const isGasLow = /insufficient funds for intrinsic transaction cost|insufficient funds for gas/i.test(msg);
+      const isGasLow = /insufficient funds for intrinsic transaction cost|insufficient funds for gas|insufficient balance/i.test(msg);
       const body = isGasLow
         ? { error: "AGENT_WALLET_GAS_LOW", chain: src, address: wallet.address,
             ...(agentFundTxHash ? { agentFundTxHash, agentFundEth } : {}),
