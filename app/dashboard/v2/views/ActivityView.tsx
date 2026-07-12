@@ -99,11 +99,38 @@ interface BridgeRecord {
   walletId: string;
   src: string;
   dst: string;
-  amount: string; // raw 6-dec USDC
+  amount: string; // raw 6-dec (USDC via CCIP, or USDT0 via OFT; both 6-dec)
   feeToken: string;
   feeWhole: number;
   initiatedAt: number;
   status: "processing" | "success" | "failed";
+  /** Rail: "ccip" (USDC/Chainlink) or "oft" (USDT/LayerZero). Undefined =
+   *  "ccip" for back-compat with any pre-merge cached record. */
+  rail?: "ccip" | "oft";
+  /** Settled token symbol shown in the amount cell ("USDC" | "USDT"). */
+  token?: string;
+}
+
+/** Render subset of app/lib/oft-bridge-runner.ts OftBridgeHistoryRecord. The OFT
+ *  history record carries a guid + feeRaw and has no status/feeToken field. */
+interface OftHistRecord {
+  guid: string;
+  txHash: string;
+  owner: string;
+  walletId: string;
+  src: string;
+  dst: string;
+  amount: string; // raw 6-dec USDT0
+  feeWhole: number;
+  initiatedAt: number;
+}
+
+/** Source-chain native symbol an OFT bridge fee is denominated in (debited from
+ *  the Gas Tank). Mirrors the OFT modal's CHAINS native map. */
+function oftNativeSymbol(src: string): string {
+  return (
+    { eth: "ETH", arbitrum: "ETH", mantle: "MNT", monad: "MON", xlayer: "OKB" } as Record<string, string>
+  )[src] ?? "ETH";
 }
 
 /** Mirrors AgenticWalletPublic (the fields the wallet filter needs). */
@@ -122,7 +149,7 @@ const RAIL: { id: RailTab; label: string; hint: string }[] = [
   { id: "yield", label: "Yield", hint: "Lending vault deposits · withdrawals" },
   { id: "staking", label: "Staking", hint: "Q stake · unstake" },
   { id: "request", label: "Requests", hint: "Inbound payment requests" },
-  { id: "bridge", label: "Bridge history", hint: "CCIP cross-chain" },
+  { id: "bridge", label: "Bridge history", hint: "USDC · USDT cross-chain" },
   { id: "receipts", label: "Trust Receipts", hint: "Verifiable receipts" },
 ];
 
@@ -375,6 +402,21 @@ const DEMO_BRIDGES: BridgeRecord[] = [
     initiatedAt: Date.now() - 1 * 3600_000,
     status: "processing",
   },
+  {
+    messageId: "0x0f70003c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f7",
+    txHash: "0x25c6f8b14e0d2a73591c4be07f2389a164f28a1c39b7e0d52f6a4c8b1e93d70a",
+    owner: DEMO_WALLET_OPS,
+    walletId: "wal_ops",
+    src: "monad",
+    dst: "mantle",
+    amount: "40000000", // 40 USDT (6-dec)
+    feeToken: "MON",
+    feeWhole: 4.5249,
+    initiatedAt: Date.now() - 2 * 3600_000,
+    status: "success",
+    rail: "oft",
+    token: "USDT",
+  },
 ];
 
 // ── view ─────────────────────────────────────────────────────────────────────
@@ -486,23 +528,60 @@ function ActivityViewInner({ ownerAddress, signMessage, scope }: ActivityViewPro
     if (Array.isArray(data.txs)) setTxs(data.txs as RelayedTx[]);
   }, [ownerAddress, signMessage]);
 
-  // ── Bridge history (GET /api/ccip/bridge-history; param `signature`) ─────
+  // ── Bridge history (both rails; owner-signature param `signature`) ───────
+  // One owner signature covers both GET endpoints: CCIP (USDC / Chainlink) and
+  // OFT (USDT0 / LayerZero). Fetch both, tag each row with its rail, and merge
+  // newest-first so the Bridge history tab shows every cross-chain move — before
+  // this the tab only queried CCIP, so USDT/LayerZero bridges never appeared.
   const loadBridges = useCallback(async () => {
     if (!ownerAddress) return;
     const auth = await getAuthCreds(ownerAddress, signMessage);
     if (!auth) return;
-    const url = new URL("/api/ccip/bridge-history", window.location.origin);
-    url.searchParams.set("address", ownerAddress);
-    url.searchParams.set("nonce", auth.nonce);
-    url.searchParams.set("signature", auth.signature);
-    const res = await fetch(url.toString());
-    if (res.status === 401) {
-      const d = await res.json().catch(() => null);
-      if (d?.code === "NONCE_EXPIRED") clearAuthCache(ownerAddress);
-      return;
+    const owner = ownerAddress;
+    const creds = auth;
+
+    async function fetchRecords(path: string): Promise<unknown[]> {
+      const url = new URL(path, window.location.origin);
+      url.searchParams.set("address", owner);
+      url.searchParams.set("nonce", creds.nonce);
+      url.searchParams.set("signature", creds.signature);
+      const res = await fetch(url.toString());
+      if (res.status === 401) {
+        const d = await res.json().catch(() => null);
+        if (d?.code === "NONCE_EXPIRED") clearAuthCache(owner);
+        return [];
+      }
+      const data = await res.json().catch(() => null);
+      return data && Array.isArray(data.records) ? (data.records as unknown[]) : [];
     }
-    const data = await res.json().catch(() => null);
-    if (data && Array.isArray(data.records)) setBridges(data.records as BridgeRecord[]);
+
+    const [ccipRaw, oftRaw] = await Promise.all([
+      fetchRecords("/api/ccip/bridge-history"),
+      fetchRecords("/api/oft/history"),
+    ]);
+
+    const ccip: BridgeRecord[] = (ccipRaw as BridgeRecord[]).map((r) => ({
+      ...r,
+      rail: "ccip" as const,
+      token: "USDC",
+    }));
+    const oft: BridgeRecord[] = (oftRaw as OftHistRecord[]).map((r) => ({
+      messageId: r.guid,
+      txHash: r.txHash,
+      owner: r.owner,
+      walletId: r.walletId,
+      src: r.src,
+      dst: r.dst,
+      amount: r.amount,
+      feeToken: oftNativeSymbol(r.src),
+      feeWhole: r.feeWhole,
+      initiatedAt: r.initiatedAt,
+      status: "success" as const, // OFT history is written only after a mined bridge
+      rail: "oft" as const,
+      token: "USDT",
+    }));
+
+    setBridges([...ccip, ...oft].sort((a, b) => b.initiatedAt - a.initiatedAt));
   }, [ownerAddress, signMessage]);
 
   // ── Agent wallet list (for the wallet filter; same fetch as the Tab) ─────
@@ -1380,10 +1459,10 @@ function SettlementTable({ txs, emptyFor, ownedAddrs }: { txs: RelayedTx[]; empt
   );
 }
 
-// ── Bridge table (CCIP records) ──────────────────────────────────────────────
+// ── Bridge table (CCIP + OFT records) ────────────────────────────────────────
 function BridgeTable({ bridges }: { bridges: BridgeRecord[] }) {
   if (bridges.length === 0) {
-    return <Empty text="No CCIP bridges yet. Cross-chain transfers appear here once initiated." />;
+    return <Empty text="No bridges yet. Cross-chain USDC (CCIP) and USDT (LayerZero) transfers appear here once initiated." />;
   }
   return (
     <div style={{ overflowX: "auto" }}>
@@ -1405,7 +1484,7 @@ function BridgeTable({ bridges }: { bridges: BridgeRecord[] }) {
             return (
               <Tr key={`${b.messageId}-${i}`}>
                 <Td>
-                  <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500 }}>CCIP bridge</div>
+                  <div style={{ fontSize: fs.cardTitle, color: v2.text, fontWeight: 500 }}>{b.rail === "oft" ? "LayerZero bridge" : "CCIP bridge"}</div>
                   <div style={{ fontSize: fs.body, color: v2.muted2, marginTop: 3 }}>
                     {fmtDate(b.initiatedAt)} ·{" "}
                     {hasExplorer ? (
@@ -1463,7 +1542,7 @@ function BridgeTable({ bridges }: { bridges: BridgeRecord[] }) {
                 </Td>
                 <Td align="right">
                   <span style={{ fontSize: fs.base, fontWeight: 600, fontFamily: displayFont }}>
-                    {usdc.toFixed(2)} <span style={{ color: v2.muted2, fontWeight: 400 }}>USDC</span>
+                    {usdc.toFixed(2)} <span style={{ color: v2.muted2, fontWeight: 400 }}>{b.token ?? "USDC"}</span>
                   </span>
                 </Td>
               </Tr>
