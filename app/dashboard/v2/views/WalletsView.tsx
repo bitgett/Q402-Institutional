@@ -1287,7 +1287,8 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
                     >
                       {!demoMode && !multichainActive && <span style={styles.paidChip}>Paid</span>}
                       <span style={{ width: 26, height: 26, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <ChainIcon chain="mantle" size={22} />
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/layerzero.png" alt="" width={24} height={24} style={{ borderRadius: "50%", background: "#fff", padding: 2, boxSizing: "border-box", flexShrink: 0, display: "block" }} />
                       </span>
                       <span style={styles.tileLabel}>Bridge</span>
                       <span style={styles.tileSub}>USDT</span>

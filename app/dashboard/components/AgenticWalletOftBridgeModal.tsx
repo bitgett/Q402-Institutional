@@ -162,13 +162,16 @@ export function AgenticWalletOftBridgeModal({ walletAddress, walletId, ownerAddr
   const srcMeta = meta(src), dstMeta = meta(dst);
   const footer = !result ? (
     <PrimaryCTA onClick={submit} disabled={!canSubmit || !hasMultichainScope} busy={submitting}>
-      Bridge {amount || "—"} USDT · {srcMeta.label} → {dstMeta.label}
+      Bridge {amount || "…"} USDT · {srcMeta.label} → {dstMeta.label}
     </PrimaryCTA>
   ) : (<PrimaryCTA onClick={onSent}>Done</PrimaryCTA>);
 
   return (
     <ModalShell
-      icon={<ChainIcon chain="mantle" size={30} />}
+      icon={
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src="/layerzero.png" alt="" width={30} height={30} style={{ borderRadius: "50%", background: "#fff", padding: 2, boxSizing: "border-box", display: "block" }} />
+      }
       iconBare
       title="Bridge USDT · LayerZero"
       subtitle={<MonoAddr>{walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}</MonoAddr>}
@@ -183,7 +186,7 @@ export function AgenticWalletOftBridgeModal({ walletAddress, walletId, ownerAddr
       {!result ? (
         <>
           <div style={{ borderRadius: 10, border: "1px solid rgba(245,197,24,.2)", background: "rgba(245,197,24,.05)", padding: "10px 12px", fontSize: 12, lineHeight: 1.5, color: "rgba(226,232,240,0.78)" }}>
-            USDT0 over LayerZero. Delivered to the same wallet on the destination chain. Q402 markup is zero — you only pay the LayerZero fee out of your Gas Tank <span style={{ color: GOLD_TEXT }}>{srcMeta.native}</span> bucket on {srcMeta.label}. To send to someone else, bridge first, then use q402_pay on the destination.
+            USDT0 over LayerZero, delivered to your same address on {dstMeta.label}. Q402 adds no markup, you pay only the LayerZero network fee from your <span style={{ color: GOLD_TEXT }}>{srcMeta.native}</span> Gas Tank.
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -203,7 +206,7 @@ export function AgenticWalletOftBridgeModal({ walletAddress, walletId, ownerAddr
             <input type="text" value={amount} onChange={e => setAmount(e.target.value)} placeholder="1.50" inputMode="decimal"
               disabled={submitting} className="placeholder-white/25"
               style={{ ...inputStyle({ mono: true, invalid: !(amount === "" || amountValid) }), ...(submitting ? { opacity: 0.5, cursor: "not-allowed" } : {}) }} />
-            <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", marginTop: 6 }}>USDT0 has 6 decimals — max precision 0.000001 USDT.</div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", marginTop: 6 }}>USDT0 uses 6 decimals, smallest step 0.000001 USDT.</div>
           </Field>
 
           <button type="button" disabled={!canQuote} onClick={fetchQuote}
@@ -225,7 +228,7 @@ export function AgenticWalletOftBridgeModal({ walletAddress, walletId, ownerAddr
                 <span className="text-white/55">You receive on {dstMeta.label}</span>
                 <span className="font-mono" style={{ color: "rgba(143,214,247,.9)" }}>{(Number(quote.amountReceived) / 10 ** quote.decimals).toLocaleString("en-US", { maximumFractionDigits: 6 })} USDT</span>
               </div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,.45)" }}>Server caps slippage at +10% before rejecting — re-quote if more than a minute has passed.</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,.45)" }}>Server rejects over +10% slippage. Re-quote if the price is over a minute old.</div>
             </div>
           )}
 
@@ -238,8 +241,8 @@ export function AgenticWalletOftBridgeModal({ walletAddress, walletId, ownerAddr
             : confirmStatus === "failed" ? { color: "#fca5a5", borderColor: "rgba(248,113,113,.3)", background: "rgba(248,113,113,.05)" }
             : confirmStatus === "unknown" ? { color: "rgba(255,255,255,.7)", borderColor: "rgba(255,255,255,.15)" }
             : { color: "#f9d64a", borderColor: "rgba(245,197,24,0.30)", background: "rgba(245,197,24,0.05)" }}>
-            {confirmStatus === "delivered" ? "Delivered" : confirmStatus === "failed" ? "Failed" : confirmStatus === "unknown" ? "Still in flight — track on LayerZero Scan ↗" : "Bridging…"} · {srcMeta.label} → {dstMeta.label}
-            {confirmStatus === "pending" && <div className="text-[10.5px] text-white/55 mt-1">LayerZero usually settles in 1–5 min. We&apos;ll keep checking.</div>}
+            {confirmStatus === "delivered" ? "Delivered" : confirmStatus === "failed" ? "Failed" : confirmStatus === "unknown" ? "Still in flight, track on LayerZero Scan ↗" : "Bridging…"} · {srcMeta.label} → {dstMeta.label}
+            {confirmStatus === "pending" && <div className="text-[10.5px] text-white/55 mt-1">LayerZero usually settles in 1-5 min. We&apos;ll keep checking.</div>}
           </div>
           {result.approveTxHash && <ResultRow label="USDT approve" href={`${srcMeta.explorer}/tx/${result.approveTxHash}`} value={shortHash(result.approveTxHash)} hint="One-time per wallet per chain." />}
           {result.txHash && <ResultRow label="Source tx" href={result.srcExplorer ?? `${srcMeta.explorer}/tx/${result.txHash}`} value={shortHash(result.txHash)} />}

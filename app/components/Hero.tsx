@@ -219,8 +219,8 @@ export default function Hero() {
                 {[
                   { value: "99.99%",  label: "Uptime",            sub: "180-day rolling",  live: true,  accent: "yellow" },
                   { value: "<0.9 s",  label: "Inclusion time",    sub: "median, all chains", live: true,  accent: "yellow" },
-                  { value: "17K+",    label: "MCP installs",      sub: "and growing",      live: true,  accent: "yellow" },
-                  { value: "100K+",   label: "Settlements",       sub: "gasless, onchain", live: true,  accent: "cyan" },
+                  { value: "23K+",    label: "MCP installs",      sub: "and growing",      live: true,  accent: "yellow" },
+                  { value: "200K+",   label: "Settlements",       sub: "gasless, onchain", live: true,  accent: "cyan" },
                   { value: "1 tx",    label: "Full payment flow", sub: "EIP-712 + relay",  live: false, accent: "white" },
                   { value: "12",      label: "Chains live",       sub: "mainnet, today",   live: false, accent: "white" },
                 ].map((s, i) => {

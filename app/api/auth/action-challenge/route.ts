@@ -80,6 +80,13 @@ const ALLOWED_ACTIONS = new Set([
   // returns null, and the user sees "Sign the bridge challenge…" with
   // no wallet popup.
   "ccip.bridge",
+  // LayerZero USDT0 (OFT) bridge — intent is { walletId, src, dst, amount, maxFeeRaw }.
+  // /api/oft/send rebuilds the canonical message from these fields and verifies the
+  // signature there. Shipped without this entry (same missing-allowlist failure mode
+  // as ccip.bridge / hooks_config): the OFT bridge modal's getActionAuth returned null,
+  // so "Sign the bridge challenge…" showed with NO wallet popup and the bridge could
+  // never be signed. Fields must match /api/oft/send's requireIntentAuth intent exactly.
+  "oft.bridge",
   // Agent Wallet EIP-7702 delegation clear — intent is { walletId, chain }.
   // Lets the bridge modal recover when the Agent Wallet is delegated to
   // an impl with no receive(), without forcing the user out to a
