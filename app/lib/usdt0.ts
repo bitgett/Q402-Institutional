@@ -245,7 +245,17 @@ export async function executeOftBridge(p: OftBridgeParams): Promise<OftBridgeRes
   const allowance = (await token.allowance(wallet.address, senderAddr)) as bigint;
   let approveTxHash: string | undefined;
   if (allowance < p.amountLD) {
-    const approveTx = await token.approve(senderAddr, 2n ** 256n - 1n);
+    // Exact per-bridge approval (not infinite): caps a compromised-facilitator blast
+    // radius to a single bridge's amount. The recipient is already owner-bound so funds
+    // can't be stolen, but an unbounded standing allowance let a leaked relayer key
+    // force-move the wallet's whole balance; exact approve limits it to one bridge.
+    // Reset a stale partial allowance to 0 first for USDT-family tokens that reject a
+    // non-zero -> non-zero approve.
+    if (allowance > 0n) {
+      const reset = await token.approve(senderAddr, 0n);
+      await reset.wait();
+    }
+    const approveTx = await token.approve(senderAddr, p.amountLD);
     const approveReceipt = await approveTx.wait();
     if (!approveReceipt) throw new Error("OFT bridge: approve tx mined but receipt null");
     approveTxHash = approveTx.hash;

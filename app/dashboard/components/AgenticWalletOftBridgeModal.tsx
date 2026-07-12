@@ -122,7 +122,7 @@ export function AgenticWalletOftBridgeModal({ walletAddress, walletId, ownerAddr
     setSubmitting(true);
     try {
       const rawAmount = toUsdtRaw(amount);
-      const auth = await getActionAuth(ownerAddress, "oft.bridge", { walletId, src, dst, amount: rawAmount }, signMessage);
+      const auth = await getActionAuth(ownerAddress, "oft.bridge", { walletId, src, dst, amount: rawAmount, maxFeeRaw: "" }, signMessage);
       if (!auth) { setError("Sign the bridge challenge in your wallet. It's bound to this exact src -> dst + amount."); return; }
       const res = await fetch("/api/oft/send", {
         method: "POST", headers: { "Content-Type": "application/json" },

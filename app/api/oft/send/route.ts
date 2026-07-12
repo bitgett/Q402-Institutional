@@ -89,6 +89,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       src,
       dst,
       amount: body.amount,
+      // Bind the fee cap into the signature so a tampered/MITM'd request can't swap in
+      // a different maxFeeRaw than the owner saw (empty = no client cap -> server ceiling).
+      maxFeeRaw: body.maxFeeRaw ?? "",
     },
   });
   if (typeof authResult !== "string") {

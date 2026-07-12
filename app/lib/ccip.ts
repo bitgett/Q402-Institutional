@@ -249,18 +249,23 @@ export async function executeBridge(p: BridgeSendParams): Promise<BridgeSendResu
   const feeTokenEnum = p.feeToken === "LINK" ? FEE_TOKEN_LINK : FEE_TOKEN_NATIVE;
   const dstSelector = CCIP_CONFIG[p.dst].chainSelector;
 
-  // ── Lazy approve — first-bridge-per-chain bootstrap ─────────────────────
-  // Sender.bridge() does USDC.transferFrom(msg.sender, address(this), amount),
-  // so the Agentic Wallet must have allowed Sender to pull USDC. Check the
-  // current allowance and approve(MAX_UINT) if insufficient. Idempotent: a
-  // single MAX approval covers every future bridge from this wallet on this
-  // chain, so this only ever runs on the very first attempt.
+  // ── Lazy approve — exact per-bridge allowance ──────────────────────────
+  // Sender.bridgeFor() does USDC.transferFrom(owner, address(this), amount), so the
+  // Agentic Wallet must allow Sender to pull USDC. Approve EXACTLY this bridge's
+  // amount (not MAX_UINT): the recipient is owner-bound so funds can't be stolen, but
+  // an unbounded standing allowance let a leaked relayer key force-move the whole
+  // balance. Exact approve caps that to one bridge. Reset a stale partial allowance
+  // to 0 first for tokens that reject a non-zero -> non-zero approve.
   const usdcAddr = getTokenConfig(p.src as ChainKey, "USDC").address;
   const usdc = new Contract(usdcAddr, ERC20_ABI, wallet);
   const allowance = (await usdc.allowance(wallet.address, senderAddr)) as bigint;
   let approveTxHash: string | undefined;
   if (allowance < p.amount) {
-    const approveTx = await usdc.approve(senderAddr, 2n ** 256n - 1n);
+    if (allowance > 0n) {
+      const reset = await usdc.approve(senderAddr, 0n);
+      await reset.wait();
+    }
+    const approveTx = await usdc.approve(senderAddr, p.amount);
     const approveReceipt = await approveTx.wait();
     if (!approveReceipt) throw new Error("CCIP bridge: approve tx mined but receipt null");
     approveTxHash = approveTx.hash;

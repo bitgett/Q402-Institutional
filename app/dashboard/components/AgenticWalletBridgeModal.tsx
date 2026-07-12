@@ -305,6 +305,7 @@ export function AgenticWalletBridgeModal({
         dst,
         amount: rawAmount,
         feeToken,
+        maxFeeRaw: "",
       };
       const auth = await getActionAuth(ownerAddress, "ccip.bridge", intent, signMessage);
       if (!auth) {

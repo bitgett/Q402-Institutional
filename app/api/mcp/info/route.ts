@@ -78,6 +78,7 @@ export async function GET(): Promise<NextResponse> {
         { name: "q402_bridge_gas_tank", description: "Bridge Gas Tank fee model + deposit address." },
         { name: "q402_oft_quote", description: "Quote the LayerZero fee for a USDT (USDT0) bridge." },
         { name: "q402_oft_send", description: "Execute a USDT (USDT0) bridge via LayerZero OFT (Mode C)." },
+        { name: "q402_oft_history", description: "Recent USDT0 (LayerZero OFT) bridges for the Agent Wallet (dashboard-bound; pointer for now)." },
         { name: "q402_yield_reserves", description: "List Q402 Yield markets + supply APY: curated lending markets on BNB and Base (each market reports its venue)." },
         { name: "q402_yield_positions", description: "The Agent Wallet's lending positions on BNB/Base + aggregate USD value." },
         { name: "q402_yield_deposit", description: "Supply stablecoins into the chain's curated lending market (BNB, USDC/USDT; Base, USDC) to earn yield." },

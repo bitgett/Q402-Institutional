@@ -120,6 +120,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       dst,
       amount:   body.amount,
       feeToken,
+      // Bind the fee cap into the signature (empty = no client cap -> server ceiling).
+      maxFeeRaw: body.maxFeeRaw ?? "",
     },
   });
   if (typeof authResult !== "string") {
