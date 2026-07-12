@@ -37,7 +37,7 @@ const INSTALL_CMD = "npx -y @quackai/q402-mcp";
 
 // Hero key facts - the one place these headline numbers live.
 const HERO_FACTS = [
-  { v: "45", label: "MCP tools" },
+  { v: "46", label: "MCP tools" },
   { v: "12", label: "EVM chains" },
   { v: "$0", label: "gas per send" },
   { v: "10", label: "wallets / owner" },
@@ -125,7 +125,7 @@ const CAPS = [
   },
 ];
 
-// 04 - the full 45-tool surface, grouped like an API reference (5+3+2+1+7+4+3+4+1+3+6+4).
+// 04 - the full 46-tool surface, grouped like an API reference (5+3+2+1+7+4+3+4+1+3+6+4).
 const TOOL_GROUPS = [
   { label: "Setup and read", tools: ["q402_doctor", "q402_quote", "q402_balance", "q402_agentic_info", "q402_wallet_status"] },
   { label: "Memory", tools: ["q402_memory_summary", "q402_vendor_history", "q402_agent_spend_report"] },
@@ -168,7 +168,7 @@ export default function AgentsPage() {
           <Section index="03" label="Capabilities" title="Well past a single payment.">
             <CapabilityGrid />
           </Section>
-          <Section index="04" label="45 tools" title="The whole surface, one package.">
+          <Section index="04" label="46 tools" title="The whole surface, one package.">
             <InstallBlock />
             <ToolIndex />
             <ChainStrip />

@@ -108,7 +108,7 @@ Then ask your AI: **"Set up Q402"**. The agent runs `q402_doctor` → creates
 Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything else → Multichain.
 6+ BNB batches return `status="ambiguous"` so the agent asks the user how to split.
 
-**45 tools** (all sandbox by default; live needs an API key + a signing path):
+**46 tools** (all sandbox by default; live needs an API key + a signing path):
 
 | Tool | Auth | What it does |
 |---|---|---|
@@ -158,7 +158,7 @@ Auto-routes by chain: `chain="bnb"` + trial key → Trial (free 2k TX). Anything
 | `q402_redstone_trigger_list` | api key | List the Agent Wallet's RedStone triggers + recent fires. Read-only. |
 | `q402_redstone_trigger_cancel` | api key | Permanently stop a RedStone trigger. |
 
-The eight fund-moving tools (`q402_pay`, `q402_batch_pay`, `q402_bridge_send`, `q402_yield_deposit`, `q402_yield_withdraw`, `q402_stake`, `q402_unstake`, `q402_request_pay`) use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one. `confirm: true` alone no longer fires a payment. `q402_clear_delegation` uses the same two-phase consent — it broadcasts a real tx and, on Ethereum, bills your Gas Tank.
+The nine fund-moving tools (`q402_pay`, `q402_batch_pay`, `q402_bridge_send`, `q402_oft_send`, `q402_yield_deposit`, `q402_yield_withdraw`, `q402_stake`, `q402_unstake`, `q402_request_pay`) use **two-phase consent**. Call them first WITHOUT a `consentToken`: the tool does not send, it returns a `needs_confirmation` preview (recipient, amount, chain) plus a `consentToken`. Relay that preview to the user, get an explicit yes, then re-call with the same args **plus** the `consentToken` to execute. The token is re-derived from the parameters about to run, so a previewed payment can't be swapped for a different one. `confirm: true` alone no longer fires a payment. `q402_clear_delegation` uses the same two-phase consent — it broadcasts a real tx and, on Ethereum, bills your Gas Tank.
 
 Q402 Yield is a **paid-only** feature: depositing requires a live Multichain plan, Trial accounts cannot supply, and withdrawals are always allowed so deposited funds can always be recovered. Curated lending vaults (Aave, Morpho, Lista) are wired behind the `chain` argument: BNB Chain (USDC and USDT) and Morpho on Base (a Gauntlet USDC Prime MetaMorpho ERC-4626 vault, USDC only). The Base impl is deployed to Base mainnet (`0xd4f703683acac7C02bf482A061C9E1F8DEdA467c`).
 

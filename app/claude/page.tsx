@@ -12,7 +12,7 @@
  * only) so the two product pages read as one family. But the composition is its
  * own: this is the hands-on page, so it leads with an interactive multi-client
  * install (Claude, Codex, Cursor, Cline, Copilot, Hermes), a wallet-mode
- * picker, a live q402_quote ranking, and the 45-tool
+ * picker, a live q402_quote ranking, and the 46-tool
  * surface. No marketing-landing motifs (corner glows, gradient sheen titles).
  */
 
@@ -88,7 +88,7 @@ const MODES: { tag: string; title: string; desc: React.ReactNode; env: string[];
   },
 ];
 
-// ── the 45-tool surface (grouped, with auth + one-line note) ────────────────
+// ── the 46-tool surface (grouped, with auth + one-line note) ────────────────
 const TOOL_GROUPS: { label: string; tools: { name: string; auth: string; note: string }[] }[] = [
   {
     label: "Setup and read",
