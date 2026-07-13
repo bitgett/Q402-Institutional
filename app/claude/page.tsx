@@ -339,6 +339,23 @@ export default function ClaudePage() {
                   Open dashboard
                 </Link>
               </div>
+
+              {/* Example prompts — what you'd actually type, not just the tool list. */}
+              <div className="mt-9">
+                <span className="block mb-3 text-[10px] uppercase tracking-[0.24em] font-mono" style={{ color: MUT2 }}>Try asking your agent</span>
+                <div className="flex flex-col sm:flex-row flex-wrap gap-2.5">
+                  {[
+                    "Pay 5 USDC to 0xA1b2…9F3c on Base.",
+                    "What is in my agent wallet, and on which chains?",
+                    "Bridge 10 USDT to Mantle, then earn yield on it.",
+                  ].map((p) => (
+                    <span key={p} className="inline-flex items-start gap-2 px-3.5 py-2.5 rounded-lg border font-mono text-[12.5px] leading-snug" style={{ borderColor: HAIR, color: MUT }}>
+                      <span className="mt-px shrink-0" style={{ color: CYAN }} aria-hidden>&rsaquo;</span>
+                      {p}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </motion.div>
 
             {/* meta row: version + npm + github + works-with */}
