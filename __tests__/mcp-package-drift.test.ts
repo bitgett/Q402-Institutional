@@ -26,7 +26,7 @@
  * connectivity. A future run on a healthy network will surface the issue.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -185,6 +185,15 @@ function extractTokenDecimals(src: string, chain: string, token: "usdc" | "usdt"
 }
 
 describe("@quackai/q402-mcp drift guard (chains.ts ↔ contracts.manifest.json)", () => {
+  // Do the network fetch (npm latest + tagged chains.ts, each with retry/backoff)
+  // ONCE here with a generous 30s allowance. Individual it()s then read the cached
+  // result instantly, so the ~6.5s worst-case retry backoff can no longer blow past
+  // vitest's 5s per-test default and turn a slow-network blip into a red CI run
+  // (which defeats this file's deliberate offline soft-skip design).
+  beforeAll(async () => {
+    await loadMcpChainsSource();
+  }, 30000);
+
   it("resolves the npm-published version and fetches its tagged source", async () => {
     await loadMcpChainsSource();
     if (!mcpSource) {
