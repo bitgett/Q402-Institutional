@@ -1,4 +1,4 @@
-# Q402 — Gasless payments for AI agents and apps
+# Q402 - Gasless payments for AI agents and apps
 
 > Pay USDC, USDT, RLUSD, or USDG across **12 EVM chains** with $0 in gas. A user or
 > an AI agent signs once; the Q402 relayer submits the transaction and covers the gas,
@@ -36,10 +36,10 @@ a signed Trust Receipt.
 
 ## Quickstart
 
-**Dashboard** — sign up at [q402.quackai.ai](https://q402.quackai.ai) with Google, email,
+**Dashboard** - sign up at [q402.quackai.ai](https://q402.quackai.ai) with Google, email,
 or a wallet for live + sandbox keys, transaction history, and Gas Tank balances.
 
-**Browser SDK** — drop it into any page with `window.ethereum`:
+**Browser SDK** - drop it into any page with `window.ethereum`:
 
 ```html
 <script src="https://q402.quackai.ai/q402-sdk.js"></script>
@@ -51,7 +51,7 @@ or a wallet for live + sandbox keys, transaction history, and Gas Tank balances.
 
 The SDK handles EIP-712 + EIP-7702 + the relay POST. The user signs once.
 
-**AI agent (MCP)** — one line, then ask your agent to finish setup:
+**AI agent (MCP)** - one line, then ask your agent to finish setup:
 
 ```bash
 claude mcp add q402 -- npx -y @quackai/q402-mcp

@@ -351,7 +351,7 @@ const STEPS = [
   { n: "03", title: "Settle", railSub: "Release or refund", accent: v2.mint, Icon: IconCheck },
 ];
 
-/* ── Escrow trust flow — full-width, landing-grade 3-card diagram ────────────
+/* ── Escrow trust flow: full-width, landing-grade 3-card diagram ─────────────
  * Buyer -> Non-custodial vault -> Settle, with animated connectors, an accent
  * icon per node, and a mono footer. Mirrors the landing "Three addresses" flow,
  * restyled with v2 tokens. The travelling-dot animation lives in FLOW_CSS. */

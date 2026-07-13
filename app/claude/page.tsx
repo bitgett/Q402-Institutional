@@ -340,7 +340,7 @@ export default function ClaudePage() {
                 </Link>
               </div>
 
-              {/* Example prompts — what you'd actually type, not just the tool list. */}
+              {/* Example prompts: what you'd actually type, not just the tool list. */}
               <div className="mt-9">
                 <span className="block mb-3 text-[10px] uppercase tracking-[0.24em] font-mono" style={{ color: MUT2 }}>Try asking your agent</span>
                 <div className="flex flex-col sm:flex-row flex-wrap gap-2.5">

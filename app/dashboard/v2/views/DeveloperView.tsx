@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * DeveloperView — scoped credentials + AI-client integration
+ * DeveloperView - scoped credentials + AI-client integration
  * (prototype id="developer", .wide-view).
  *
  * REAL IMPLEMENTATION (replaces the foundation stub).
@@ -11,7 +11,7 @@
  *   Col 1  .context: Credentials / MCP setup / Webhook / API playground /
  *          Documentation  (scroll-spy sub-nav; clicking scrolls to section)
  *   Col 2  .view-main: title "Developer access", desc, then
- *          .developer-grid — but the KEY trial/multichain IA FIX is that BOTH
+ *          .developer-grid - but the KEY trial/multichain IA FIX is that BOTH
  *          API keys render SIDE BY SIDE (Multichain · 12 chains · paid Gas
  *          Tank scope  AND  Trial · 2,000 sponsored TX · 30-day · BNB-only)
  *          so the user never has to switch "mode" to find a key. The card
@@ -19,7 +19,7 @@
  *          The 3rd grid cell is the Webhook status card. Below: MCP setup
  *          card, full Webhook config, and the API playground.
  *
- * ── DATA SOURCES wired (REUSE — same fetches the v1 dashboard uses) ──────
+ * ── DATA SOURCES wired (REUSE - same fetches the v1 dashboard uses) ──────
  *   - Keys: POST /api/keys/provision (auth'd via getAuthCreds) →
  *       { multichainApiKey/apiKey, sandboxApiKey/multichainSandboxApiKey,
  *         trialApiKey, trialSandboxApiKey, hasPaid, isTrialActive, plan,
@@ -30,17 +30,17 @@
  *       POST /api/webhook/test → { success, statusCode | error }.
  *       Same NONCE_EXPIRED handling + clearAuthCache as v1.
  *   - MCP card: install string for @quackai/q402-mcp (version from
- *       app/lib/version.ts) — mirrors
+ *       app/lib/version.ts) - mirrors
  *       app/components/ClaudeMcpCard.tsx, re-skinned to v2 chrome.
  *   - Playground: ports the v1 <Playground/> simulate logic + per-chain
  *       token allowlist (page.tsx:496) into v2-styled chrome (the v1 one is
- *       a private, Tailwind-themed function — business logic preserved).
+ *       a private, Tailwind-themed function - business logic preserved).
  *   - Docs link: /docs route.
  *
  * ── SCOPE semantics ─────────────────────────────────────────────────────
  *   `scope` highlights the active key card and selects the playground's
  *   chain set (trial → trial key + BNB-only; multichain → live key + 11
- *   chains). BOTH key cards always render — scope only changes emphasis.
+ *   chains). BOTH key cards always render - scope only changes emphasis.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -69,7 +69,7 @@ const MCP_NPM_URL = "https://www.npmjs.com/package/@quackai/q402-mcp";
 const MCP_GITHUB_URL = "https://github.com/bitgett/q402-mcp";
 
 /**
- * SDK integration snippets — the four-step quickstart the legacy Developer tab
+ * SDK integration snippets - the four-step quickstart the legacy Developer tab
  * showed (app/dashboard/_legacy-page.tsx.bak STEPS). Ported verbatim so the v2
  * surface teaches the same script-load → init → pay → settlement path. Each
  * block carries a short metadata `label` rendered above its dashed code box.
@@ -97,12 +97,12 @@ const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: stri
     n: "04",
     title: "Settlement confirmed",
     label: "Result shape",
-    code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: "5", token: "USDC"\n// }\n// Gas paid by Q402 — user spends $0`,
+    code: `// result = {\n//   success: true,\n//   txHash: "0xf3c8...d91e",\n//   tokenAmount: "5", token: "USDC"\n// }\n// Gas paid by Q402 - user spends $0`,
   },
 ];
 
 /**
- * Canonical @quackai/q402-mcp tool surface — 46 tools, source of truth is
+ * Canonical @quackai/q402-mcp tool surface - 46 tools, source of truth is
  * mcp-server/src/index.ts (ListTools order). One-line purposes condensed from
  * each tool's own `description` + app/docs/page.tsx. Grouped so the grid reads
  * as Core → Memory → Recurring → Bridge (CCIP + LayerZero) → Yield → Staking →
@@ -131,10 +131,10 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Recurring", name: "q402_recurring_resume", purpose: "Resume a paused / stopped rule." },
   { group: "Recurring", name: "q402_recurring_skip_next", purpose: "Skip only the next scheduled fire. Cadence preserved." },
   { group: "Recurring", name: "q402_recurring_cancel", purpose: "Permanently stop a rule." },
-  // Bridge (Chainlink CCIP — eth/avax/arbitrum triangle)
+  // Bridge (Chainlink CCIP - eth/avax/arbitrum triangle)
   { group: "Bridge", name: "q402_bridge_quote", purpose: "Quote the CCIP fee for a USDC bridge (LINK vs native). Read-only." },
   { group: "Bridge", name: "q402_bridge_send", purpose: "Execute a CCIP USDC bridge via the Agent Wallet (Mode C). Sandbox by default." },
-  { group: "Bridge", name: "q402_bridge_history", purpose: "Recent CCIP bridges — dashboard pointer until session-binding lands." },
+  { group: "Bridge", name: "q402_bridge_history", purpose: "Recent CCIP bridges - dashboard pointer until session-binding lands." },
   { group: "Bridge", name: "q402_bridge_gas_tank", purpose: "Bridge Gas Tank fee model + deposit address (dashboard pointer)." },
   { group: "Bridge", name: "q402_oft_quote", purpose: "Quote the LayerZero fee for a USDT (USDT0) OFT bridge across eth / arbitrum / mantle / monad / xlayer. Read-only." },
   { group: "Bridge", name: "q402_oft_send", purpose: "Bridge USDT (USDT0) across chains via LayerZero OFT (Mode C). Sandbox by default, two-phase consent." },
@@ -149,9 +149,9 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Staking", name: "q402_unstake", purpose: "Gasless unstake of matured Q on BNB. Per-record: exit one stake by index (ith) or all matured. Moves funds, needs confirm." },
   { group: "Staking", name: "q402_stake_positions", purpose: "The Agent Wallet's Q stakes (indices, maturity, exitable) + liquid Q balance. Read-only." },
   // Requests
-  { group: "Requests", name: "q402_request_create", purpose: "Publish a payment request (invoice). No funds move — returns a /pay link + req_ id." },
+  { group: "Requests", name: "q402_request_create", purpose: "Publish a payment request (invoice). No funds move - returns a /pay link + req_ id." },
   { group: "Requests", name: "q402_request_status", purpose: "Look up a request by req_ id (amount, recipient, status). Read-only, no auth." },
-  { group: "Requests", name: "q402_request_pay", purpose: "Pay a request gaslessly from your own Agent Wallet. Moves funds — two-phase consent, like q402_pay." },
+  { group: "Requests", name: "q402_request_pay", purpose: "Pay a request gaslessly from your own Agent Wallet. Moves funds - two-phase consent, like q402_pay." },
   // Escrow (gasless non-custodial EIP-7702 escrow)
   { group: "Escrow", name: "q402_escrow_create", purpose: "Create a gasless non-custodial escrow (pending record, moves no funds); optional walletId funds it from an Agent Wallet." },
   { group: "Escrow", name: "q402_escrow_status", purpose: "Read an escrow's state, parties, amount, and tx hashes. Read-only." },
@@ -167,7 +167,7 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
 ];
 
 /**
- * DEMO — sample dataset shown when no wallet is connected (or the signed
+ * DEMO - sample dataset shown when no wallet is connected (or the signed
  * provision read hasn't landed yet). It lets the full Developer surface read
  * as "complete at a glance" instead of a wall of "Connect wallet" locks.
  *
@@ -177,9 +177,9 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
  * status explicit. Real provisioned keys always win the moment they load.
  */
 const DEMO = {
-  /** Multichain live key — masked sample, never a real secret. */
+  /** Multichain live key - masked sample, never a real secret. */
   multichainKey: "q402_live_804685527••••",
-  /** Trial live key — masked sample, never a real secret. */
+  /** Trial live key - masked sample, never a real secret. */
   trialKey: "q402_live_4479df8••••",
   multichainSub: "12 EVM chains · paid Gas Tank scope",
   trialSub: "2,000 sponsored TX · 30-day trial · 1,847 left · 14d left",
@@ -194,9 +194,9 @@ const DEMO_COPY_TOOLTIP = "Connect your wallet";
 export interface DeveloperViewProps {
   /** Connected owner address (null until wallet connects). */
   ownerAddress: string | null;
-  /** Wallet signer — needed to auth key provisioning + webhook config. */
+  /** Wallet signer - needed to auth key provisioning + webhook config. */
   signMessage: (message: string) => Promise<string | null>;
-  /** Active scope — selects which API key is highlighted + playground chains. */
+  /** Active scope - selects which API key is highlighted + playground chains. */
   scope: Scope;
 }
 
@@ -217,7 +217,7 @@ interface ProvisionResult {
 }
 
 /**
- * useDeveloperData — runs the same provision + webhook reads the v1 dashboard
+ * useDeveloperData - runs the same provision + webhook reads the v1 dashboard
  * does, derived down to exactly what the Developer surface needs. One signed
  * session (getAuthCreds) covers both reads. On NONCE_EXPIRED it clears the
  * cache so the next mount re-signs.
@@ -267,7 +267,7 @@ function useDeveloperData(
           setProv(data);
         }
       } catch {
-        /* leave prov null — cards render the locked placeholder */
+        /* leave prov null - cards render the locked placeholder */
       }
 
       // Webhook config (URL only; secret is never returned on GET)
@@ -296,7 +296,7 @@ function useDeveloperData(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]);
 
-  // ── Derived key surface — mirrors app/dashboard/page.tsx:1464-1498 ──────
+  // ── Derived key surface - mirrors app/dashboard/page.tsx:1464-1498 ──────
   const hasPaid = prov?.hasPaid === true;
   // Paid (Multichain) live key: prefer the scope-explicit alias, fall back to
   // legacy apiKey, only surfaced when the wallet has actually paid.
@@ -312,7 +312,7 @@ function useDeveloperData(
     prov?.trialExpiresAt && isTrialActive
       ? Math.max(0, Math.ceil((new Date(prov.trialExpiresAt).getTime() - Date.now()) / 86_400_000))
       : null;
-  // Sandbox key — feeds the MCP setup card (safe to surface anywhere).
+  // Sandbox key - feeds the MCP setup card (safe to surface anywhere).
   const sandboxKey =
     prov?.multichainSandboxApiKey ?? prov?.sandboxApiKey ?? "";
 
@@ -338,7 +338,7 @@ function useDeveloperData(
 
 // ── Small copy helper ────────────────────────────────────────────────────────
 function maskKey(key: string): string {
-  if (!key) return "—";
+  if (!key) return "-";
   if (key.length <= 18) return key;
   return `${key.slice(0, 12)}${"•".repeat(12)}${key.slice(-4)}`;
 }
@@ -400,7 +400,7 @@ function CopyButton({
 }
 
 /**
- * MetaLabel — small uppercase metadata caption for code/config blocks so they
+ * MetaLabel - small uppercase metadata caption for code/config blocks so they
  * read as read-only artifacts (not editable inputs). Optional accent suffix.
  */
 function MetaLabel({
@@ -634,7 +634,7 @@ function TrialGauge({
 }
 
 // ── Usage alerts row ─────────────────────────────────────────────────────────
-// "Email me at 80% / 90%" — opens the legacy usage-alert config modal via
+// "Email me at 80% / 90%" - opens the legacy usage-alert config modal via
 // identity.openUsageAlerts(). Yellow = action.
 function UsageAlertsRow({ onOpen }: { onOpen: () => void }) {
   return (
@@ -705,12 +705,12 @@ function KeyCard({
   locked?: boolean;
   lockedNote?: string;
   /**
-   * Demo (preview) mode — `apiKey` is a pre-masked sample, so show it as the
+   * Demo (preview) mode - `apiKey` is a pre-masked sample, so show it as the
    * key value (not a locked note) but keep Copy disabled with a tooltip.
    */
   demo?: boolean;
   /**
-   * Rotate handler — wired to identity.rotateKey(scope). When supplied (real
+   * Rotate handler - wired to identity.rotateKey(scope). When supplied (real
    * data, key present), the card surfaces a "Rotate key…" control behind a
    * confirm step. Resolves with the freshly minted key (or null on failure).
    */
@@ -758,7 +758,7 @@ function KeyCard({
         flexDirection: "column",
         opacity: isActiveScope ? 1 : 0.72,
         borderColor: isActiveScope ? "rgba(245,202,22,.45)" : v2.line,
-        // Layered glow on the active scope's key — yellow ring + soft halo +
+        // Layered glow on the active scope's key - yellow ring + soft halo +
         // deep drop so it reads as the hero of the surface.
         boxShadow: isActiveScope
           ? "0 0 0 2px rgba(245,202,22,.45), 0 0 24px rgba(245,202,22,.15), 0 24px 80px rgba(0,0,0,.34)"
@@ -802,7 +802,7 @@ function KeyCard({
       >
         <span style={{ overflowWrap: "anywhere" }}>
           {demo
-            ? apiKey /* pre-masked sample — shown verbatim, never re-masked */
+            ? apiKey /* pre-masked sample - shown verbatim, never re-masked */
             : locked
               ? (lockedNote ?? "Locked")
               : maskKey(apiKey)}
@@ -816,7 +816,7 @@ function KeyCard({
 
       {footer}
 
-      {/* Freshly rotated key — surfaced once, with its own copy control. The
+      {/* Freshly rotated key - surfaced once, with its own copy control. The
           old key is dead the moment this lands, so we make it loud + copyable. */}
       {rotatedKey && (
         <div
@@ -840,7 +840,7 @@ function KeyCard({
               gap: 5,
             }}
           >
-            <CheckIcon size={12} color={v2.mint} /> New key — old one is now dead
+            <CheckIcon size={12} color={v2.mint} /> New key - old one is now dead
           </div>
           <div
             style={{
@@ -909,7 +909,7 @@ function KeyCard({
           <CopyButton value={locked ? "" : apiKey} label="Copy key" disabled={locked} />
         )}
 
-        {/* Rotation control — confirm-then-rotate. Yellow = action; the confirm
+        {/* Rotation control - confirm-then-rotate. Yellow = action; the confirm
             row stays neutral-glass (no green) and the destructive note is muted. */}
         {canRotate &&
           (confirming ? (
@@ -923,7 +923,7 @@ function KeyCard({
               }}
             >
               <span style={{ color: v2.muted, fontSize: fs.label }}>
-                Rotating invalidates the current key — continue?
+                Rotating invalidates the current key - continue?
               </span>
               <button
                 type="button"
@@ -1054,7 +1054,7 @@ function WebhookStatusRow({
 
 // ── MCP setup card ───────────────────────────────────────────────────────────
 // Mirrors app/components/ClaudeMcpCard.tsx: install command + a config JSON
-// pre-filled with the SANDBOX key only (q402_test_* — safe to surface here;
+// pre-filled with the SANDBOX key only (q402_test_* - safe to surface here;
 // live keys go through q402_doctor → ~/.q402/mcp.env, never this JSON).
 function buildMcpConfig(sandboxKey: string): string {
   return `{
@@ -1073,7 +1073,7 @@ function McpSetupCard({
   demo,
 }: {
   sandboxKey: string;
-  /** Demo (preview) mode — disable copy actions with a connect tooltip. */
+  /** Demo (preview) mode - disable copy actions with a connect tooltip. */
   demo?: boolean;
 }) {
   const config = useMemo(() => buildMcpConfig(sandboxKey), [sandboxKey]);
@@ -1116,7 +1116,7 @@ function McpSetupCard({
         }
       />
 
-      {/* Install command — read-only artifact (dashed) with header copy. */}
+      {/* Install command - read-only artifact (dashed) with header copy. */}
       <div style={{ marginTop: 14 }}>
         <div style={blockHeader}>
           <MetaLabel>Install command</MetaLabel>
@@ -1146,7 +1146,7 @@ function McpSetupCard({
           <MetaLabel
             accent={
               <span style={{ color: "rgba(245,202,22,.8)", textTransform: "none", letterSpacing: 0, fontWeight: 600 }}>
-                — sandbox key
+                - sandbox key
               </span>
             }
           >
@@ -1163,7 +1163,7 @@ function McpSetupCard({
       </div>
 
       <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 13, lineHeight: 1.6 }}>
-        Safe to paste anywhere, then ask your AI &ldquo;Set up Q402&rdquo; —{" "}
+        Safe to paste anywhere, then ask your AI &ldquo;Set up Q402&rdquo; -{" "}
         <code style={{ color: v2.muted }}>q402_doctor</code> writes{" "}
         <code style={{ color: v2.muted }}>~/.q402/mcp.env</code> with your live
         key + wallet for real payments.
@@ -1286,7 +1286,7 @@ function WebhookConfig({
   };
 
   // Configure-zone state: an edited-but-not-yet-saved URL reads yellow
-  // ("unsaved"); saved (webhook live) and idle both read neutral glass — mint
+  // ("unsaved"); saved (webhook live) and idle both read neutral glass - mint
   // is reserved for settlement success, not a configured-webhook state.
   const saved = !!webhookUrl;
   const unsaved = !!urlInput && urlInput !== webhookUrl;
@@ -1383,7 +1383,7 @@ function WebhookConfig({
               color: "rgba(247,202,22,.75)",
             }}
           >
-            Signing Secret — save this now
+            Signing Secret - save this now
           </div>
           <div
             style={{
@@ -1496,7 +1496,7 @@ function PlayGlyph({ size = 11, color }: { size?: number; color?: string }) {
 // ── API playground ───────────────────────────────────────────────────────────
 // Ports the v1 <Playground/> simulate logic + per-chain token allowlist
 // (app/dashboard/page.tsx:496) into v2 chrome. The simulate is a client-side
-// preview (no relay) exactly as in v1 — same 1.8s fake settle + masked key.
+// preview (no relay) exactly as in v1 - same 1.8s fake settle + masked key.
 type PgToken = "USDC" | "USDT" | "RLUSD" | "USDG";
 
 function Playground({
@@ -1506,7 +1506,7 @@ function Playground({
 }: {
   apiKey: string;
   trialView: boolean;
-  /** Demo (preview) mode — `apiKey` is a pre-masked sample; disable Copy. */
+  /** Demo (preview) mode - `apiKey` is a pre-masked sample; disable Copy. */
   demo?: boolean;
 }) {
   const [chain, setChain] = useState(trialView ? "bnb" : "avax");
@@ -1859,7 +1859,7 @@ function IntegrationGuide() {
         }
       />
       <div style={{ color: v2.muted, fontSize: fs.body, marginBottom: 14 }}>
-        Script-load → init → pay → settlement. Gas paid by Q402 — the user
+        Script-load → init → pay → settlement. Gas paid by Q402 - the user
         spends $0.
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -2073,11 +2073,11 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
     credsRef,
   } = useDeveloperData(ownerAddress, signMessage);
 
-  // Identity bridge — published by the legacy page (key rotation, trial quota,
+  // Identity bridge - published by the legacy page (key rotation, trial quota,
   // days-left, usage-alert modal). Reused so v2 never re-derives those facts.
   const identity = useDashboardIdentity();
 
-  // Rotate handlers — the confirm step lives in the KeyCard; this just calls
+  // Rotate handlers - the confirm step lives in the KeyCard; this just calls
   // the intent-bound /api/keys/rotate via identity.rotateKey(scope) and returns
   // the new key (null on cancel / expiry / failure). page.tsx scope: paid|trial.
   const rotateMultichain = useCallback(async () => {
@@ -2170,7 +2170,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
             {loading && <span style={{ color: v2.muted2 }}> · Loading…</span>}
           </div>
 
-          {/* ── Demo banner — full-width, animated, with a connect CTA ──── */}
+          {/* ── Demo banner - full-width, animated, with a connect CTA ──── */}
           {demoMode && (
             <div
               className="animate-glow"
@@ -2206,7 +2206,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                     letterSpacing: "-.01em",
                   }}
                 >
-                  Preview mode — showing sample data
+                  Preview mode - showing sample data
                 </div>
                 <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 2 }}>
                   Connect your wallet to provision live keys, configure webhooks,
@@ -2300,7 +2300,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
                 onConfigure={() => scrollTo("webhook")}
               />
             </div>
-            {/* Usage alerts — only when a wallet is connected (the alert config
+            {/* Usage alerts - only when a wallet is connected (the alert config
                 endpoint requires a signed session). */}
             {ownerAddress && (
               <div style={{ marginTop: 14 }}>
