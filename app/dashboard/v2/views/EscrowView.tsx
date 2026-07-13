@@ -269,20 +269,15 @@ function MobilePill({ item, active, onClick }: { item: NavItem; active: boolean;
   );
 }
 
-/* "How it works" - trust diagram + FAQ (no marketing use-case cards). */
+/* "How it works" - the escrow trust flow as a full-width visual (landing-grade),
+ * with a supporting FAQ. Responsive: the flow stacks on narrow screens. */
 function LearnPane({ isMobile }: { isMobile: boolean }) {
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) 372px",
-        gap: isMobile ? 22 : 32,
-        alignItems: "start",
-      }}
-    >
-      <div>
+    <div>
+      <EscrowFlow />
+      <div style={{ marginTop: isMobile ? 28 : 36 }}>
         <SectionLabel>Good to know</SectionLabel>
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", columnGap: 36 }}>
           <FaqRow q="What if the seller never delivers?" a="You reclaim the full amount yourself after the timeout you chose. An escrow never auto-pays the seller." />
           <FaqRow q="Can Q402 touch my funds?" a="No. The vault is non-custodial. Only your signature moves the funds; Q402 only sponsors the gas and never holds them." />
           <FaqRow q="What does it cost to fund or settle?" a="Gas is on us. Q402 sponsors every escrow action, so you never need to hold a native gas token." />
@@ -290,7 +285,6 @@ function LearnPane({ isMobile }: { isMobile: boolean }) {
           <FaqRow q="Which tokens and chains?" a="USDC and USDT on BNB Chain today. More chains open up as their vaults deploy." />
         </div>
       </div>
-      {!isMobile && <FlowPanel />}
     </div>
   );
 }
@@ -310,81 +304,121 @@ const STEPS = [
   { n: "03", title: "Settle", railSub: "Release or refund", accent: v2.mint, Icon: IconCheck },
 ];
 
-/* Flow panel - a clean concept diagram of the trust model (no fake data). */
-function FlowPanel() {
+/* ── Escrow trust flow — full-width, landing-grade 3-card diagram ────────────
+ * Buyer -> Non-custodial vault -> Settle, with animated connectors, an accent
+ * icon per node, and a mono footer. Mirrors the landing "Three addresses" flow,
+ * restyled with v2 tokens. The travelling-dot animation lives in FLOW_CSS. */
+const MONO = 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace';
+
+const FLOW_CSS = `
+.escf-flow{display:flex;align-items:stretch;gap:0;}
+@media(max-width:900px){.escf-flow{flex-direction:column;}}
+.escf-node{flex:0 0 234px;border:1px solid ${v2.line};border-radius:16px;
+  background:linear-gradient(180deg,rgba(255,255,255,.028),rgba(255,255,255,.008));
+  padding:18px;display:flex;flex-direction:column;gap:12px;position:relative;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);}
+@media(max-width:900px){.escf-node{flex:1 1 auto;}}
+.escf-node-mid{border-color:${v2.yellow}4d;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 26px 56px -30px ${v2.yellow}80;}
+.escf-ico{width:46px;height:46px;border-radius:12px;border:1px solid ${v2.line};
+  display:flex;align-items:center;justify-content:center;color:${v2.yellow};background:${v2.yellow}0f;}
+.escf-ico-cyan{color:${v2.cyan};border-color:${v2.cyan}47;background:${v2.cyan}10;}
+.escf-ico-mint{color:${v2.mint};border-color:${v2.mint}47;background:${v2.mint}10;}
+.escf-tag{font-family:${displayFont};font-weight:600;font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:${v2.muted2};margin-bottom:8px;}
+.escf-t{font-family:${displayFont};font-weight:700;font-size:18px;letter-spacing:-.02em;
+  margin-bottom:7px;color:${v2.text};}
+.escf-s{color:${v2.muted};font-size:13px;line-height:1.5;}
+.escf-addr{font-family:${MONO};font-size:11.5px;color:${v2.text};margin-top:auto;
+  padding-top:14px;border-top:1px solid ${v2.line};display:flex;align-items:center;gap:6px;}
+.escf-addr-acc{color:${v2.yellow};}
+.escf-coin{width:14px;height:14px;display:block;}
+.escf-link{flex:1 1 auto;min-width:88px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:0 10px;}
+@media(max-width:900px){.escf-link{min-height:98px;padding:10px 0;}}
+.escf-link-line{position:relative;width:100%;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,${v2.line},transparent);}
+@media(max-width:900px){.escf-link-line{width:2px;height:auto;align-self:center;min-height:52px;
+  background:linear-gradient(180deg,transparent,${v2.line},transparent);}}
+.escf-link-line::after{content:"";position:absolute;right:-1px;top:50%;
+  transform:translateY(-50%) rotate(45deg);width:7px;height:7px;
+  border-top:2px solid ${v2.yellow};border-right:2px solid ${v2.yellow};opacity:.7;}
+@media(max-width:900px){.escf-link-line::after{right:auto;left:50%;top:auto;bottom:-1px;
+  transform:translateX(-50%) rotate(135deg);}}
+.escf-link-dot{position:absolute;top:50%;left:0;width:9px;height:9px;border-radius:50%;
+  background:${v2.yellow};transform:translate(-50%,-50%);
+  box-shadow:0 0 0 4px ${v2.yellow}22,0 0 14px 2px ${v2.yellow}99;
+  animation:escTravelH 2.6s cubic-bezier(.6,0,.4,1) infinite;}
+.escf-link-2 .escf-link-dot{animation-delay:1.3s;}
+@keyframes escTravelH{0%{left:0;opacity:0;}9%{opacity:1;}88%{opacity:1;}100%{left:100%;opacity:0;}}
+@media(max-width:900px){
+  .escf-link-dot{top:0;left:50%;animation-name:escTravelV;}
+  @keyframes escTravelV{0%{top:0;opacity:0;}9%{opacity:1;}88%{opacity:1;}100%{top:100%;opacity:0;}}
+}
+@media(prefers-reduced-motion:reduce){.escf-link-dot{animation:none;opacity:1;}}
+.escf-link-top{font-family:${displayFont};font-weight:500;font-size:11px;letter-spacing:.04em;
+  color:${v2.muted};margin-bottom:14px;text-align:center;white-space:nowrap;}
+.escf-link-1 .escf-link-top{color:${v2.cyan};}
+.escf-link-bot{margin-top:14px;}
+.escf-badge{font-family:${displayFont};font-weight:700;font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:${v2.yellow};border:1px solid ${v2.yellow}52;border-radius:999px;
+  padding:4px 10px;background:${v2.yellow}12;white-space:nowrap;}
+.escf-badge-mint{color:${v2.mint};border-color:${v2.mint}52;background:${v2.mint}12;}
+.escf-cap{margin-top:20px;color:${v2.muted2};font-size:13.5px;text-align:center;}
+.escf-cap b{color:${v2.text};font-weight:600;}
+`;
+
+function EscrowFlow() {
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 372 }}>
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: "-14% -8% -8%",
-          background: `radial-gradient(58% 50% at 72% 12%, ${v2.yellow}1f, transparent 70%), radial-gradient(52% 48% at 18% 92%, ${v2.cyan}18, transparent 70%)`,
-          filter: "blur(8px)",
-          pointerEvents: "none",
-        }}
-      />
-      <div style={{ position: "relative", ...glass(16), padding: 20, background: "linear-gradient(180deg, rgba(16,30,50,.9), rgba(10,18,32,.92))" }}>
-        <div style={{ fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", fontWeight: 700, color: v2.muted, marginBottom: 16 }}>
-          How your funds stay safe
+    <div>
+      <style dangerouslySetInnerHTML={{ __html: FLOW_CSS }} />
+      <div className="escf-flow">
+        <div className="escf-node">
+          <span className="escf-ico escf-ico-cyan"><IconDoc size={22} /></span>
+          <div>
+            <div className="escf-tag">A · Buyer</div>
+            <div className="escf-t">Create and fund</div>
+            <div className="escf-s">Set the seller, amount, and an optional arbiter. Your Agent Wallet locks it in, gasless.</div>
+          </div>
+          <div className="escf-addr">escrow #7f3a</div>
         </div>
 
-        <FlowNode label="You (the buyer)" dot={v2.cyan} />
-        <Connector label="lock funds, gasless" />
+        <div className="escf-link escf-link-1">
+          <div className="escf-link-top">lock</div>
+          <div className="escf-link-line"><span className="escf-link-dot" /></div>
+          <div className="escf-link-bot"><span className="escf-badge">$0 gas</span></div>
+        </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 13, padding: "14px 15px", borderRadius: 14, background: "rgba(245,197,24,.06)", border: `1px solid ${v2.yellow}33` }}>
-          <span style={{ width: 40, height: 40, borderRadius: 11, background: "rgba(245,197,24,.12)", border: `1px solid ${v2.yellow}44`, display: "grid", placeItems: "center", color: v2.yellow, flexShrink: 0 }}>
-            <IconLock size={20} color={v2.yellow} />
-          </span>
+        <div className="escf-node escf-node-mid">
+          <span className="escf-ico"><IconLock size={22} /></span>
           <div>
-            <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.cardTitle, fontWeight: 600 }}>Non-custodial vault</div>
-            <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.45, marginTop: 2 }}>Funds sit here until it settles. Q402 cannot move them.</div>
+            <div className="escf-tag">B · Non-custodial vault</div>
+            <div className="escf-t">Holds the funds</div>
+            <div className="escf-s">Funds sit here until it settles. Only your signature moves them; Q402 cannot.</div>
+          </div>
+          <div className="escf-addr escf-addr-acc">your signature →</div>
+        </div>
+
+        <div className="escf-link escf-link-2">
+          <div className="escf-link-top">on delivery</div>
+          <div className="escf-link-line"><span className="escf-link-dot" /></div>
+          <div className="escf-link-bot"><span className="escf-badge escf-badge-mint">or timeout</span></div>
+        </div>
+
+        <div className="escf-node">
+          <span className="escf-ico escf-ico-mint"><IconCheck size={22} /></span>
+          <div>
+            <div className="escf-tag">C · Settle</div>
+            <div className="escf-t">Release or refund</div>
+            <div className="escf-s">Release to the seller on delivery, or reclaim the full amount after the timeout.</div>
+          </div>
+          <div className="escf-addr">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/usdc.svg" alt="" className="escf-coin" />+ 50.00 USDC
           </div>
         </div>
-
-        <Connector label="only your signature" split />
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <OutcomeTile accent={v2.mint} title="Release" sub="to the seller" foot="you sign" Icon={IconCheck} />
-          <OutcomeTile accent={v2.cyan} title="Refund" sub="back to you" foot="on timeout" Icon={IconBack} />
-        </div>
       </div>
-    </div>
-  );
-}
-
-function FlowNode({ label, dot }: { label: string; dot: string }) {
-  return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "9px 13px", borderRadius: 11, background: "rgba(255,255,255,.03)", border: `1px solid ${v2.line}`, width: "100%" }}>
-      <span style={{ width: 8, height: 8, borderRadius: 999, background: dot, boxShadow: `0 0 7px ${dot}88` }} />
-      <span style={{ color: v2.text, fontSize: fs.base, fontWeight: 600 }}>{label}</span>
-    </div>
-  );
-}
-
-function Connector({ label, split }: { label: string; split?: boolean }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0 7px 16px" }}>
-      <span style={{ width: 1, height: 22, background: `linear-gradient(${v2.line}, ${v2.muted2})` }} />
-      <span style={{ color: v2.muted2, fontSize: fs.micro, fontStyle: "italic" }}>{label}</span>
-      {split && <span style={{ flex: 1, height: 1, background: v2.line, marginRight: 2 }} />}
-    </div>
-  );
-}
-
-function OutcomeTile({
-  accent, title, sub, foot, Icon,
-}: {
-  accent: string; title: string; sub: string; foot: string; Icon: (p: { size?: number; color?: string }) => React.ReactNode;
-}) {
-  return (
-    <div style={{ padding: "12px 13px", borderRadius: 12, background: "rgba(255,255,255,.02)", border: `1px solid ${v2.line}` }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 7, color: accent }}>
-        <Icon size={15} color={accent} />
-        <span style={{ fontFamily: displayFont, fontSize: fs.base, fontWeight: 700 }}>{title}</span>
-      </div>
-      <div style={{ color: v2.muted, fontSize: fs.label, marginTop: 5 }}>{sub}</div>
-      <div style={{ color: v2.muted2, fontSize: fs.micro, marginTop: 2 }}>{foot}</div>
+      <p className="escf-cap"><b>One vault, only your signature.</b> Q402 sponsors the gas and never holds your funds.</p>
     </div>
   );
 }
@@ -442,9 +476,6 @@ function IconCheck({ size = 20, color }: { size?: number; color?: string }) {
 }
 function IconShield({ size = 20, color }: { size?: number; color?: string }) {
   return base(size, color, (<><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" /><path d="M9 12l2 2 4-4" /></>));
-}
-function IconBack({ size = 20, color }: { size?: number; color?: string }) {
-  return base(size, color, (<><path d="M9 7 4 12l5 5" /><path d="M4 12h11a5 5 0 0 1 5 5v1" /></>));
 }
 function IconClock({ size = 20, color }: { size?: number; color?: string }) {
   return base(size, color, (<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>));
