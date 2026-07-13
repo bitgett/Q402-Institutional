@@ -79,8 +79,8 @@ export default function NavDropdown({ label, items }: { label: string; items: Na
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`relative inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
-          open || active ? "text-white" : "text-white/55 hover:text-white"
+        className={`relative inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-all ${
+          open || active ? "text-white" : "text-white/55 hover:text-white hover:[text-shadow:0_0_11px_rgba(255,255,255,0.32)]"
         }`}
       >
         {label}

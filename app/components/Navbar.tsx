@@ -49,6 +49,11 @@ export default function Navbar() {
       style={{ background: "rgba(7,11,20,0.8)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
     >
       <div className="w-full px-5 lg:px-8 h-[72px] flex items-center justify-between gap-4">
+        <style dangerouslySetInnerHTML={{ __html: `
+          .q402-navshine{position:absolute;inset:0;background:linear-gradient(110deg,transparent 32%,rgba(255,255,255,0.62) 50%,transparent 68%);transform:translateX(-130%);animation:q402NavShine 3.6s ease-in-out infinite;pointer-events:none;}
+          @keyframes q402NavShine{0%,55%{transform:translateX(-130%);}82%,100%{transform:translateX(130%);}}
+          @media(prefers-reduced-motion:reduce){.q402-navshine{animation:none;opacity:0;}}
+        ` }} />
         {/* Brand - left corner, at the viewport edge (unchanged position) */}
         <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 group">
           <span className="w-7 h-7 rounded-md bg-yellow flex items-center justify-center shadow-[0_0_12px_rgba(245,197,24,0.35)] transition-transform group-hover:scale-105">
@@ -63,12 +68,10 @@ export default function Navbar() {
           {EVENT_MODE && (
             <Link
               href="/event"
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-yellow/90 hover:text-yellow transition-colors"
+              className="relative overflow-hidden inline-flex items-center mr-2 px-3.5 py-1.5 rounded-full text-[12.5px] font-extrabold tracking-wide text-navy bg-yellow shadow-[0_0_15px_rgba(245,197,24,0.45)] hover:shadow-[0_0_26px_rgba(245,197,24,0.8)] hover:scale-[1.03] transition-all"
             >
-              Event
-              <span className="text-[8px] font-extrabold tracking-[0.14em] text-yellow bg-yellow/15 border border-yellow/40 rounded-sm px-1 leading-[1.5]">
-                FREE
-              </span>
+              <span className="relative z-10">Free trial</span>
+              <span aria-hidden className="q402-navshine" />
             </Link>
           )}
           <NavDropdown label="Product" items={PRODUCT_ITEMS} />
@@ -79,7 +82,7 @@ export default function Navbar() {
               <Link
                 key={l.href}
                 href={l.href}
-                className={`relative px-3 py-2 text-sm font-medium transition-colors ${isActive ? "text-white" : "text-white/55 hover:text-white"}`}
+                className={`relative px-3 py-2 text-sm font-medium transition-all ${isActive ? "text-white" : "text-white/55 hover:text-white hover:[text-shadow:0_0_11px_rgba(255,255,255,0.32)]"}`}
               >
                 {l.label}
                 {isActive && <span aria-hidden className="absolute left-3 right-3 -bottom-0.5 h-px" style={{ background: "#F5C518" }} />}
