@@ -356,13 +356,13 @@ const FLOW_CSS = `
   @keyframes escTravelV{0%{top:0;opacity:0;}9%{opacity:1;}88%{opacity:1;}100%{top:100%;opacity:0;}}
 }
 @media(prefers-reduced-motion:reduce){.escf-link-dot{animation:none;opacity:1;}}
-.escf-link-top{font-family:${displayFont};font-weight:500;font-size:11px;letter-spacing:.04em;
+.escf-link-top{font-family:${displayFont};font-weight:600;font-size:13px;letter-spacing:.03em;
   color:${v2.muted};margin-bottom:14px;text-align:center;white-space:nowrap;}
 .escf-link-1 .escf-link-top{color:${v2.cyan};}
 .escf-link-bot{margin-top:14px;}
-.escf-badge{font-family:${displayFont};font-weight:700;font-size:10px;letter-spacing:.1em;
+.escf-badge{font-family:${displayFont};font-weight:700;font-size:11.5px;letter-spacing:.08em;
   text-transform:uppercase;color:${v2.yellow};border:1px solid ${v2.yellow}52;border-radius:999px;
-  padding:4px 10px;background:${v2.yellow}12;white-space:nowrap;}
+  padding:5px 11px;background:${v2.yellow}12;white-space:nowrap;}
 .escf-badge-mint{color:${v2.mint};border-color:${v2.mint}52;background:${v2.mint}12;}
 .escf-cap{margin-top:20px;color:${v2.muted2};font-size:13.5px;text-align:center;}
 .escf-cap b{color:${v2.text};font-weight:600;}
