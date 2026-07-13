@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import WalletButton from "./WalletButton";
-import NavDropdown, { type NavDropdownItem } from "./NavDropdown";
+import NavDropdown, { Hex, type NavDropdownItem } from "./NavDropdown";
 import MobileMenu from "./MobileMenu";
 import { EVENT_MODE } from "@/app/lib/feature-flags";
 
@@ -82,8 +82,9 @@ export default function Navbar() {
               <Link
                 key={l.href}
                 href={l.href}
-                className={`relative px-3 py-2 text-sm font-medium transition-all ${isActive ? "text-white" : "text-white/55 hover:text-white hover:[text-shadow:0_0_11px_rgba(255,255,255,0.32)]"}`}
+                className={`relative inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold tracking-tight transition-all ${isActive ? "text-white [text-shadow:0_0_12px_rgba(245,197,24,0.4)]" : "text-white/60 hover:text-white hover:[text-shadow:0_0_12px_rgba(245,197,24,0.4)]"}`}
               >
+                <Hex className="opacity-55" size={12} />
                 {l.label}
                 {isActive && <span aria-hidden className="absolute left-3 right-3 -bottom-0.5 h-px" style={{ background: "#F5C518" }} />}
               </Link>
