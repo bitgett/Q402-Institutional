@@ -1,21 +1,27 @@
 "use client";
 
 /**
- * EscrowView - the Escrow top-nav view, as a management app (NOT a landing page).
+ * EscrowView - the Escrow top-nav view, as a management console (NOT a landing
+ * page). Same shell language as the Developer view: a 230px left context rail
+ * beside a glass main pane.
  *
- * Layout: a compact header, then a left rail (New escrow + Active / History /
- * How it works) beside a right pane that swaps content. Active/History render
- * the escrow table (filtered); "How it works" is the concept/flow explainer.
- * This keeps escrow's many details manageable instead of stacked down one page.
+ * Left rail (.v2-context, desktop): the "Escrow" eyebrow, a New-escrow CTA, the
+ * Active / History / How-it-works nav (Developer-style label + hint buttons),
+ * and a vertical LIFECYCLE stepper (Create -> Fund -> Settle) so the model is
+ * always visible at a glance. The rail is CSS-hidden on mobile, so mobile falls
+ * back to a stacked header + pill nav.
+ *
+ * Main: the section content swaps - Active/History render the escrow table
+ * (filtered); "How it works" is the trust diagram + FAQ. No marketing use-case
+ * cards, no mock balances - this reads like a console, not a pitch.
  *
  * Design: Space Grotesk display / DM Sans body, navy glass + yellow/cyan/mint
- * accents. No emoji, no em-dash, always "Q402". The flow panel is a concept
- * diagram (no mock balances/addresses).
+ * accents. No emoji, no em-dash, always "Q402".
  */
 
 import { useState, useRef } from "react";
 import { v2, fs, glass } from "../theme";
-import { displayFont } from "../primitives";
+import { displayFont, Eyebrow, V2AccentScope } from "../primitives";
 import { useIsMobile } from "../../../lib/use-is-mobile";
 import { EscrowList, type EscrowCounts } from "./EscrowList";
 import { EscrowComposerModal } from "./EscrowComposerModal";
@@ -28,6 +34,13 @@ export interface EscrowViewProps {
 }
 
 type Section = "active" | "history" | "learn";
+
+interface NavItem {
+  id: Section;
+  label: string;
+  hint: string;
+  Icon: (p: { size?: number; color?: string }) => React.ReactNode;
+}
 
 export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
   const [composerOpen, setComposerOpen] = useState(false);
@@ -50,189 +63,224 @@ export function EscrowView({ ownerAddress, signMessage }: EscrowViewProps) {
     }
   };
   const goSection = (id: Section) => { userNav.current = true; setSection(id); };
-
   const openComposer = () => setComposerOpen(true);
 
-  const NAV: { id: Section; label: string; badge?: number; Icon: (p: { size?: number; color?: string }) => React.ReactNode }[] = [
-    { id: "active", label: "Active", badge: counts.active, Icon: IconLock },
-    { id: "history", label: "History", badge: counts.history, Icon: IconClock },
-    { id: "learn", label: "How it works", Icon: IconShield },
+  const nav: NavItem[] = [
+    { id: "active", label: "Active", hint: `${counts.active} open`, Icon: IconLock },
+    { id: "history", label: "History", hint: `${counts.history} settled`, Icon: IconClock },
+    { id: "learn", label: "How it works", hint: "The trust model", Icon: IconShield },
   ];
 
-  // Controls that used to live in the left rail — now a top-right cluster:
-  // a segmented Active / History / How-it-works nav + the New escrow CTA, with
-  // the trust chips beneath. Moving them here frees the page for a full-width
-  // content area instead of a narrow console beside a sidebar.
-  const controls = (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: isMobile ? "stretch" : "flex-end", gap: 10, flexShrink: 0 }}>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end" }}>
-        <nav style={{ display: "flex", gap: 4, background: v2.surfaceFill, border: `1px solid ${v2.line}`, borderRadius: 12, padding: 4 }}>
-          {NAV.map((item) => (
-            <NavButton key={item.id} item={item} active={section === item.id} onClick={() => goSection(item.id)} isMobile={true} />
-          ))}
-        </nav>
-        <button onClick={openComposer} disabled={!ownerAddress} style={{ ...newBtn(!ownerAddress), width: "auto", whiteSpace: "nowrap" }}>
-          + New escrow
-        </button>
+  // Section body, shared between desktop and mobile.
+  const body = section === "learn" ? (
+    <LearnPane isMobile={isMobile} />
+  ) : (
+    <div>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.title, fontWeight: 600 }}>
+          {section === "active" ? "Active escrows" : "History"}
+        </div>
+        <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 3 }}>
+          {section === "active"
+            ? "Pending, funded, and disputed escrows you can act on."
+            : "Released, refunded, and closed escrows."}
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: isMobile ? "flex-start" : "flex-end", color: v2.muted, fontSize: fs.label }}>
+      <EscrowList
+        ownerAddress={ownerAddress}
+        signMessage={signMessage}
+        refreshKey={refreshKey}
+        filter={section}
+        onCounts={handleCounts}
+        onCreate={openComposer}
+      />
+    </div>
+  );
+
+  const mainHeader = (
+    <>
+      <div style={{ font: `600 ${fs.h2}px ${displayFont}`, letterSpacing: "-.04em", color: v2.text }}>
+        Escrow
+      </div>
+      <div style={{ color: v2.muted, fontSize: fs.body, marginTop: 6, maxWidth: 640, lineHeight: 1.55 }}>
+        Hold funds in a non-custodial vault until the work is done. Only your signature releases them; Q402 sponsors the gas and never holds your funds.
+      </div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 12, color: v2.muted, fontSize: fs.label }}>
         <TrustLine label="Non-custodial" />
         <TrustLine label="Gasless (Q402 sponsors)" />
         <TrustLine label="BNB Chain" />
       </div>
-    </div>
+    </>
   );
 
-  return (
-    <div style={{ paddingTop: isMobile ? 20 : 30 }}>
-      {/* Top bar: header on the left, the former left-rail controls in the top-right. */}
-      <div
-        style={{
-          display: "flex",
-          flexDirection: isMobile ? "column" : "row",
-          alignItems: isMobile ? "stretch" : "flex-start",
-          justifyContent: "space-between",
-          gap: isMobile ? 16 : 28,
-          marginBottom: isMobile ? 18 : 24,
-        }}
-      >
-        <div style={{ maxWidth: 560 }}>
-          <h1 style={{ font: `600 ${isMobile ? 24 : 28}px ${displayFont}`, letterSpacing: "-0.02em", color: v2.text, margin: 0 }}>
-            Escrow
-          </h1>
-          <p style={{ color: v2.muted, fontSize: fs.base, lineHeight: 1.6, margin: "8px 0 0" }}>
-            Hold funds in a non-custodial vault until the work is done. Only your signature releases them; Q402 sponsors the gas and never holds your funds.
-          </p>
-        </div>
-        {controls}
-      </div>
+  const modal = composerOpen && (
+    <EscrowComposerModal
+      ownerAddress={ownerAddress}
+      signMessage={signMessage}
+      onClose={() => setComposerOpen(false)}
+      onCreated={() => setRefreshKey((k) => k + 1)}
+    />
+  );
 
-      {/* Full-width content — the left rail is gone. */}
-      {section === "learn" ? (
-        <LearnPane isMobile={isMobile} onCreate={openComposer} ownerAddress={ownerAddress} />
-      ) : (
-        <div style={{ ...glass(18), padding: isMobile ? 14 : 20 }}>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.title, fontWeight: 600 }}>
-              {section === "active" ? "Active escrows" : "History"}
-            </div>
-            <div style={{ color: v2.muted2, fontSize: fs.label, marginTop: 3 }}>
-              {section === "active"
-                ? "Pending, funded, and disputed escrows you can act on."
-                : "Released, refunded, and closed escrows."}
-            </div>
+  // ── Mobile: stacked (no rail; CSS hides .v2-context) ───────────────────────
+  if (isMobile) {
+    return (
+      <V2AccentScope className="v2-view-enter" style={{ paddingTop: 16 }}>
+        <div style={{ ...glass(19), padding: 16 }}>
+          {mainHeader}
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 16 }}>
+            <button onClick={openComposer} disabled={!ownerAddress} style={{ ...newBtn(!ownerAddress), width: "auto", whiteSpace: "nowrap", padding: "9px 14px" }}>
+              + New escrow
+            </button>
+            {nav.map((item) => (
+              <MobilePill key={item.id} item={item} active={section === item.id} onClick={() => goSection(item.id)} />
+            ))}
           </div>
-          <EscrowList
-            ownerAddress={ownerAddress}
-            signMessage={signMessage}
-            refreshKey={refreshKey}
-            filter={section}
-            onCounts={handleCounts}
-            onCreate={openComposer}
-          />
+          <div style={{ marginTop: 18 }}>{body}</div>
         </div>
-      )}
+        {modal}
+      </V2AccentScope>
+    );
+  }
 
-      {composerOpen && (
-        <EscrowComposerModal
-          ownerAddress={ownerAddress}
-          signMessage={signMessage}
-          onClose={() => setComposerOpen(false)}
-          onCreated={() => setRefreshKey((k) => k + 1)}
-        />
-      )}
+  // ── Desktop: Developer-style 230px rail + glass main ───────────────────────
+  return (
+    <V2AccentScope className="v2-view-enter" style={{ paddingTop: 17 }}>
+      <div className="v2-view-shell" style={{ display: "grid", gridTemplateColumns: "230px minmax(0,1fr)", gap: 18 }}>
+        <EscrowRail nav={nav} active={section} onSelect={goSection} onNew={openComposer} disabled={!ownerAddress} />
+        <main className="v2-view-main" style={{ ...glass(19), padding: 21 }}>
+          {mainHeader}
+          <div style={{ marginTop: 20 }}>{body}</div>
+        </main>
+      </div>
+      {modal}
+    </V2AccentScope>
+  );
+}
+
+/* ── Left context rail: eyebrow + new CTA + nav + lifecycle stepper ────────── */
+function EscrowRail({
+  nav, active, onSelect, onNew, disabled,
+}: {
+  nav: NavItem[];
+  active: Section;
+  onSelect: (id: Section) => void;
+  onNew: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <aside className="v2-context" style={{ ...glass(19), padding: 15, height: "fit-content" }}>
+      <Eyebrow style={{ margin: "2px 9px 11px" }}>Escrow</Eyebrow>
+      <button onClick={onNew} disabled={disabled} style={{ ...newBtn(disabled), marginBottom: 12 }}>
+        + New escrow
+      </button>
+      {nav.map((item) => (
+        <RailNavButton key={item.id} item={item} active={active === item.id} onClick={() => onSelect(item.id)} />
+      ))}
+      <div style={{ height: 1, background: v2.line, margin: "13px 4px 0" }} />
+      <LifecycleStepper />
+    </aside>
+  );
+}
+
+/* Developer-style rail button: icon + label + hint, yellow-tinted when active. */
+function RailNavButton({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
+  const { Icon } = item;
+  return (
+    <button
+      type="button"
+      className="v2-trans"
+      onClick={onClick}
+      style={{
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        border: active ? `1px solid ${v2.line}` : "1px solid transparent",
+        background: active ? "rgba(247,202,22,.07)" : "none",
+        textAlign: "left",
+        padding: "9px 11px",
+        borderRadius: 10,
+        cursor: "pointer",
+        marginBottom: 2,
+      }}
+    >
+      <Icon size={16} color={active ? v2.yellow : v2.muted} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: "block", color: active ? v2.text : v2.muted, fontSize: fs.base, fontWeight: 600 }}>{item.label}</span>
+        <span style={{ display: "block", color: v2.muted2, fontSize: fs.micro, marginTop: 1 }}>{item.hint}</span>
+      </span>
+    </button>
+  );
+}
+
+/* Vertical lifecycle stepper (Create -> Fund -> Settle) in the rail. */
+function LifecycleStepper() {
+  return (
+    <div style={{ marginTop: 14, padding: "0 4px" }}>
+      <span style={{ fontSize: 10, letterSpacing: ".2em", textTransform: "uppercase", fontWeight: 700, color: v2.muted2, display: "block", marginBottom: 12 }}>
+        Lifecycle
+      </span>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {STEPS.map((s, i) => {
+          const last = i === STEPS.length - 1;
+          return (
+            <div key={s.n} style={{ display: "flex", gap: 11 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 999, background: s.accent, boxShadow: `0 0 8px ${s.accent}66`, marginTop: 3 }} />
+                {!last && <span style={{ width: 1.5, flex: 1, minHeight: 20, background: `linear-gradient(${s.accent}66, ${STEPS[i + 1].accent}66)`, margin: "3px 0" }} />}
+              </div>
+              <div style={{ paddingBottom: last ? 0 : 13 }}>
+                <div style={{ color: v2.text, fontSize: fs.base, fontWeight: 600, fontFamily: displayFont }}>{s.title}</div>
+                <div style={{ color: v2.muted2, fontSize: fs.micro, lineHeight: 1.4, marginTop: 2 }}>{s.railSub}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-/* Left-rail nav button (vertical rail on desktop; pill row on mobile). */
-function NavButton({
-  item, active, onClick, isMobile,
-}: {
-  item: { id: Section; label: string; badge?: number; Icon: (p: { size?: number; color?: string }) => React.ReactNode };
-  active: boolean;
-  onClick: () => void;
-  isMobile: boolean;
-}) {
+/* Mobile pill nav (rail is CSS-hidden on mobile). */
+function MobilePill({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
   const { Icon } = item;
   return (
     <button
       onClick={onClick}
       style={{
-        display: "flex",
+        display: "inline-flex",
         alignItems: "center",
-        gap: 9,
-        width: isMobile ? "auto" : "100%",
-        whiteSpace: "nowrap",
-        padding: isMobile ? "8px 13px" : "9px 11px",
+        gap: 7,
+        padding: "8px 13px",
         borderRadius: 10,
-        border: active ? `1px solid ${v2.yellow}33` : "1px solid transparent",
-        background: active ? "rgba(245,197,24,.10)" : "transparent",
+        border: active ? `1px solid ${v2.yellow}33` : `1px solid ${v2.line}`,
+        background: active ? "rgba(245,197,24,.10)" : v2.surfaceFill,
         color: active ? v2.text : v2.muted,
         fontSize: fs.base,
         fontWeight: 600,
         cursor: "pointer",
-        textAlign: "left",
+        whiteSpace: "nowrap",
       }}
     >
-      <Icon size={17} color={active ? v2.yellow : v2.muted} />
-      <span style={{ flex: isMobile ? "0" : "1" }}>{item.label}</span>
-      {typeof item.badge === "number" && item.badge > 0 && (
-        <span
-          style={{
-            fontSize: fs.micro,
-            fontWeight: 700,
-            color: active ? v2.yellow : v2.muted2,
-            background: active ? "rgba(245,197,24,.14)" : "rgba(255,255,255,.05)",
-            borderRadius: 999,
-            padding: "1px 7px",
-            minWidth: 18,
-            textAlign: "center",
-          }}
-        >
-          {item.badge}
-        </span>
-      )}
+      <Icon size={16} color={active ? v2.yellow : v2.muted} />
+      {item.label}
     </button>
   );
 }
 
-/* "How it works" pane - the concept/flow explainer. */
-function LearnPane({ isMobile, onCreate, ownerAddress }: { isMobile: boolean; onCreate: () => void; ownerAddress: string | null }) {
+/* "How it works" - trust diagram + FAQ (no marketing use-case cards). */
+function LearnPane({ isMobile }: { isMobile: boolean }) {
   return (
-    <div style={{ ...glass(18), padding: isMobile ? 16 : 24 }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "1fr 372px",
-          gap: isMobile ? 22 : 32,
-          alignItems: "start",
-        }}
-      >
-        <div>
-          <SectionLabel>The flow</SectionLabel>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-            {STEPS.map((s) => (
-              <StepRow key={s.n} step={s} />
-            ))}
-          </div>
-          <button onClick={onCreate} disabled={!ownerAddress} style={{ ...newBtn(!ownerAddress), marginTop: 20, width: isMobile ? "100%" : "auto", padding: "11px 20px" }}>
-            Create an escrow
-          </button>
-        </div>
-        {!isMobile && <FlowPanel />}
-      </div>
-
-      <div style={{ marginTop: 30 }}>
-        <SectionLabel>Where people use it</SectionLabel>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12, marginTop: 16 }}>
-          <UseCaseCard title="Freelance milestone" body="Lock a milestone up front. The freelancer delivers, you release. If they ghost, you reclaim the full amount after the timeout." />
-          <UseCaseCard title="OTC / P2P trade" body="Deal with someone you do not fully trust. Funds sit in the vault until you release, or a named arbiter settles a dispute." />
-          <UseCaseCard title="Agent-to-agent deal" body="One AI agent hires another. The buyer agent locks payment gaslessly; it releases on delivery, always inside the policy you set." />
-        </div>
-      </div>
-
-      <div style={{ marginTop: 30 }}>
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "minmax(0,1fr) 372px",
+        gap: isMobile ? 22 : 32,
+        alignItems: "start",
+      }}
+    >
+      <div>
         <SectionLabel>Good to know</SectionLabel>
         <div style={{ marginTop: 8 }}>
           <FaqRow q="What if the seller never delivers?" a="You reclaim the full amount yourself after the timeout you chose. An escrow never auto-pays the seller." />
@@ -242,16 +290,7 @@ function LearnPane({ isMobile, onCreate, ownerAddress }: { isMobile: boolean; on
           <FaqRow q="Which tokens and chains?" a="USDC and USDT on BNB Chain today. More chains open up as their vaults deploy." />
         </div>
       </div>
-    </div>
-  );
-}
-
-/* Use-case card + FAQ row for the learn pane. */
-function UseCaseCard({ title, body }: { title: string; body: string }) {
-  return (
-    <div style={{ ...glass(14), padding: 14 }}>
-      <div style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.cardTitle, fontWeight: 600 }}>{title}</div>
-      <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5, marginTop: 6 }}>{body}</div>
+      {!isMobile && <FlowPanel />}
     </div>
   );
 }
@@ -266,29 +305,10 @@ function FaqRow({ q, a }: { q: string; a: string }) {
 }
 
 const STEPS = [
-  { n: "01", title: "Create", body: "Set the seller, amount, and an optional arbiter. Nothing moves yet; you just get an escrow id.", accent: v2.yellow, Icon: IconDoc },
-  { n: "02", title: "Fund", body: "Your Agent Wallet locks the funds into the vault, gaslessly. The escrow is now open.", accent: v2.cyan, Icon: IconLock },
-  { n: "03", title: "Settle", body: "Release to the seller on delivery, or dispute to the arbiter. A timeout refunds you.", accent: v2.mint, Icon: IconCheck },
+  { n: "01", title: "Create", railSub: "Set terms, get an id", accent: v2.yellow, Icon: IconDoc },
+  { n: "02", title: "Fund", railSub: "Agent Wallet locks it", accent: v2.cyan, Icon: IconLock },
+  { n: "03", title: "Settle", railSub: "Release or refund", accent: v2.mint, Icon: IconCheck },
 ];
-
-/* A horizontal step row (used in the learn pane). */
-function StepRow({ step }: { step: { n: string; title: string; body: string; accent: string; Icon: (p: { size?: number; color?: string }) => React.ReactNode } }) {
-  const { Icon } = step;
-  return (
-    <div style={{ display: "flex", gap: 13, alignItems: "flex-start" }}>
-      <span style={{ width: 40, height: 40, borderRadius: 11, background: `${step.accent}14`, border: `1px solid ${step.accent}33`, display: "grid", placeItems: "center", color: step.accent, flexShrink: 0 }}>
-        <Icon size={19} color={step.accent} />
-      </span>
-      <div>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ fontFamily: displayFont, fontSize: fs.micro, fontWeight: 700, color: step.accent, letterSpacing: ".08em" }}>{step.n}</span>
-          <span style={{ color: v2.text, fontFamily: displayFont, fontSize: fs.cardTitle, fontWeight: 600 }}>{step.title}</span>
-        </div>
-        <div style={{ color: v2.muted, fontSize: fs.body, lineHeight: 1.5, marginTop: 3 }}>{step.body}</div>
-      </div>
-    </div>
-  );
-}
 
 /* Flow panel - a clean concept diagram of the trust model (no fake data). */
 function FlowPanel() {
