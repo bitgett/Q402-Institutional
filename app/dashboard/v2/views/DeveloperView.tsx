@@ -102,10 +102,11 @@ const STEPS: ReadonlyArray<{ n: string; title: string; label: string; code: stri
 ];
 
 /**
- * Canonical @quackai/q402-mcp tool surface — 36 tools, source of truth is
+ * Canonical @quackai/q402-mcp tool surface — 46 tools, source of truth is
  * mcp-server/src/index.ts (ListTools order). One-line purposes condensed from
  * each tool's own `description` + app/docs/page.tsx. Grouped so the grid reads
- * as Core → Recurring → Bridge (CCIP) → Yield → Staking → Requests → Escrow.
+ * as Core → Memory → Recurring → Bridge (CCIP + LayerZero) → Yield → Staking →
+ * Requests → Escrow → Triggers.
  */
 const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }> = [
   // Core
@@ -118,6 +119,10 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Core", name: "q402_wallet_status", purpose: "Per-chain EIP-7702 delegation state for the configured EOA. Read-only." },
   { group: "Core", name: "q402_clear_delegation", purpose: "Clear EIP-7702 delegation on a single chain (Mode A/B local key OR Mode C api key, server-signed). Sponsored except Ethereum (Gas Tank). Two-phase consentToken (preview then execute)." },
   { group: "Core", name: "q402_agentic_info", purpose: "Agent Wallet info (addresses, caps, daily-spend used, ERC-8004 id)." },
+  // Memory (read-only spend intelligence)
+  { group: "Memory", name: "q402_memory_summary", purpose: "Read-only spend summary for the Agent Wallet (totals, top vendors, recent activity)." },
+  { group: "Memory", name: "q402_vendor_history", purpose: "Payment history with a specific vendor / recipient. Read-only." },
+  { group: "Memory", name: "q402_agent_spend_report", purpose: "Per-agent spend report over a window, broken down by chain + token. Read-only." },
   // Recurring
   { group: "Recurring", name: "q402_recurring_list", purpose: "List scheduled rules." },
   { group: "Recurring", name: "q402_recurring_create", purpose: "Author a rule. Paid Multichain on every chain (BNB included)." },
@@ -131,6 +136,9 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Bridge", name: "q402_bridge_send", purpose: "Execute a CCIP USDC bridge via the Agent Wallet (Mode C). Sandbox by default." },
   { group: "Bridge", name: "q402_bridge_history", purpose: "Recent CCIP bridges — dashboard pointer until session-binding lands." },
   { group: "Bridge", name: "q402_bridge_gas_tank", purpose: "Bridge Gas Tank fee model + deposit address (dashboard pointer)." },
+  { group: "Bridge", name: "q402_oft_quote", purpose: "Quote the LayerZero fee for a USDT (USDT0) OFT bridge across eth / arbitrum / mantle / monad / xlayer. Read-only." },
+  { group: "Bridge", name: "q402_oft_send", purpose: "Bridge USDT (USDT0) across chains via LayerZero OFT (Mode C). Sandbox by default, two-phase consent." },
+  { group: "Bridge", name: "q402_oft_history", purpose: "Recent USDT0 OFT bridges, dashboard pointer until session-binding lands." },
   // Yield (curated lending vaults: Aave, Morpho, Lista)
   { group: "Yield", name: "q402_yield_reserves", purpose: "List Q402 Yield markets + supply APY across curated lending vaults. Read-only, no auth." },
   { group: "Yield", name: "q402_yield_positions", purpose: "Agent Wallet's current lending positions + aggregate USD value. Read-only." },
@@ -151,6 +159,11 @@ const MCP_TOOLS: ReadonlyArray<{ group: string; name: string; purpose: string }>
   { group: "Escrow", name: "q402_escrow_release", purpose: "Buyer releases a locked escrow to the seller (gasless). Moves funds, needs confirm." },
   { group: "Escrow", name: "q402_escrow_refund", purpose: "Permissionless refund to the buyer after the timeout / resolve window." },
   { group: "Escrow", name: "q402_escrow_dispute", purpose: "A party disputes an open escrow (requires a named arbiter)." },
+  // Triggers (RedStone NAV / price)
+  { group: "Triggers", name: "q402_redstone_feeds", purpose: "List RedStone price / NAV feeds available for triggers. Read-only, no auth." },
+  { group: "Triggers", name: "q402_redstone_trigger_create", purpose: "Create a feed-crossing trigger that fires an autonomous gasless payout when a price / NAV crosses. Needs confirm." },
+  { group: "Triggers", name: "q402_redstone_trigger_list", purpose: "List the Agent Wallet's active RedStone triggers. Read-only." },
+  { group: "Triggers", name: "q402_redstone_trigger_cancel", purpose: "Cancel a RedStone trigger by id." },
 ];
 
 /**
@@ -480,7 +493,7 @@ const SECTIONS = [
   { id: "credentials", label: "Credentials", hint: "API keys · scopes" },
   { id: "integration", label: "Integration guide", hint: "SDK in 4 steps" },
   { id: "mcp", label: "MCP setup", hint: "Claude · Cursor · Cline" },
-  { id: "tools", label: "MCP tool reference", hint: "36 tools" },
+  { id: "tools", label: "MCP tool reference", hint: "46 tools" },
   { id: "webhook", label: "Webhook", hint: "Signed settlement POSTs" },
   { id: "playground", label: "API playground", hint: "Simulate a quote" },
   { id: "docs", label: "Documentation", hint: "Full reference" },
@@ -1888,12 +1901,12 @@ function IntegrationGuide() {
   );
 }
 
-// ── MCP tool reference grid (36 tools) ───────────────────────────────────────
+// ── MCP tool reference grid (46 tools) ───────────────────────────────────────
 // The full @quackai/q402-mcp tool surface with one-line purposes + npm/GitHub
 // source links. Grouped Core → Recurring → Bridge → Yield → Staking → Requests → Escrow.
 function McpToolGrid() {
   const groups = useMemo(() => {
-    const order = ["Core", "Recurring", "Bridge", "Yield", "Staking", "Requests", "Escrow"] as const;
+    const order = ["Core", "Memory", "Recurring", "Bridge", "Yield", "Staking", "Requests", "Escrow", "Triggers"] as const;
     return order.map((g) => ({
       group: g,
       tools: MCP_TOOLS.filter((t) => t.group === g),
@@ -2306,7 +2319,7 @@ export function DeveloperView({ ownerAddress, signMessage, scope }: DeveloperVie
             <McpSetupCard sandboxKey={mcpSandboxKey} demo={demoMode} />
           </div>
 
-          {/* ── MCP tool reference grid (36 tools) ──────────────────── */}
+          {/* ── MCP tool reference grid (46 tools) ──────────────────── */}
           <div ref={refs.tools} style={section(3)}>
             <McpToolGrid />
           </div>
