@@ -61,7 +61,7 @@ const USE_CASES = [
   {
     key: 'ai', label: 'AI Agents', tag: 'NEW',
     hook: 'Tell your agent. It pays.',
-    body: 'Let Claude, Codex, Cursor, Cline, or your own agent call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Forty-three tools (q402_doctor for one-prompt setup, q402_agentic_info for Agent-Wallet introspection, treasury Memory for spend intelligence, recurring schedule with per-rule fire history, RedStone NAV/price triggers, stablecoin yield, Q staking, CCIP bridge, payment requests, gasless escrow), signed Trust Receipts on every settlement, sandbox-safe defaults.',
+    body: 'Let Claude, Codex, Cursor, Cline, or your own agent call Q402 through MCP. Start with 2,000 sponsored BNB transactions on a free Trial key, then upgrade to a Multichain Gas Tank when you outgrow it. Forty-six tools (q402_doctor for one-prompt setup, q402_agentic_info for Agent-Wallet introspection, treasury Memory for spend intelligence, recurring schedule with per-rule fire history, RedStone NAV/price triggers, stablecoin yield, Q staking, CCIP bridge, payment requests, gasless escrow), signed Trust Receipts on every settlement, sandbox-safe defaults.',
     chips: ['46 MCP tools', 'Batch × 20', 'Trust Receipts'],
     chat: [
       { who: 'you', t: 'Send 5 USDC to 0xd8dA…6045 on BNB.' },

@@ -122,11 +122,16 @@ export function AgenticWalletOftBridgeModal({ walletAddress, walletId, ownerAddr
     setSubmitting(true);
     try {
       const rawAmount = toUsdtRaw(amount);
-      const auth = await getActionAuth(ownerAddress, "oft.bridge", { walletId, src, dst, amount: rawAmount, maxFeeRaw: "" }, signMessage);
+      // Bind the fee the user just saw (quote.nativeFee.raw) as the on-chain cap, +10%
+      // headroom for normal drift between quote and execution. Goes into BOTH the signed
+      // intent and the send body so the executed fee can't exceed what was shown; the
+      // server clamps it against its own ceiling (takes the min of the two).
+      const maxFeeRaw = ((BigInt(quote.nativeFee.raw) * 110n) / 100n).toString();
+      const auth = await getActionAuth(ownerAddress, "oft.bridge", { walletId, src, dst, amount: rawAmount, maxFeeRaw }, signMessage);
       if (!auth) { setError("Sign the bridge challenge in your wallet. It's bound to this exact src -> dst + amount."); return; }
       const res = await fetch("/api/oft/send", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: ownerAddress, nonce: auth.challenge, signature: auth.signature, walletId, src, dst, amount: rawAmount }),
+        body: JSON.stringify({ address: ownerAddress, nonce: auth.challenge, signature: auth.signature, walletId, src, dst, amount: rawAmount, maxFeeRaw }),
       });
       const data = (await res.json().catch(() => ({}))) as SendResponse;
       if (!res.ok || !data.success) { setError(data.message ?? data.detail ?? data.error ?? `Bridge failed (HTTP ${res.status}).`); return; }
@@ -186,7 +191,7 @@ export function AgenticWalletOftBridgeModal({ walletAddress, walletId, ownerAddr
       {!result ? (
         <>
           <div style={{ borderRadius: 10, border: "1px solid rgba(245,197,24,.2)", background: "rgba(245,197,24,.05)", padding: "10px 12px", fontSize: 12, lineHeight: 1.5, color: "rgba(226,232,240,0.78)" }}>
-            USDT0 over LayerZero, delivered to your same address on {dstMeta.label}. Q402 adds no markup, you pay only the LayerZero network fee from your <span style={{ color: GOLD_TEXT }}>{srcMeta.native}</span> Gas Tank.
+            USDT0 over LayerZero, delivered to your same address on {dstMeta.label}. Q402 adds no markup. You pay the LayerZero fee plus a small approval gas, both from your <span style={{ color: GOLD_TEXT }}>{srcMeta.native}</span> Gas Tank.
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>

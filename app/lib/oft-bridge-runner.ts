@@ -151,7 +151,7 @@ export async function runOftBridge(args: RunOftBridgeArgs): Promise<NextResponse
   }
 
   // ── Rate limit: 10 bridges/hour per (wallet, src). fail-OPEN. ──────────────
-  if (!(await rateLimit(`wallet:${walletId}:${src}`, "oft-bridge-wallet", 10, 3600, true))) {
+  if (!(await rateLimit(`wallet:${walletId}:${src}`, "oft-bridge-wallet", 10, 3600, false))) {
     return NextResponse.json({
       error: "BRIDGE_RATE_LIMITED",
       message: "This Agent Wallet has fired more than 10 USDT0 bridges on this source chain in the last hour. Wait a bit and retry.",

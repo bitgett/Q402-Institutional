@@ -86,6 +86,7 @@ export const CRON_NAMES = {
   TREASURY_REBALANCE: "treasury-rebalance",
   OFAC_REFRESH: "ofac-refresh",
   CRON_WATCHDOG: "cron-watchdog",
+  OFT_POOL_MONITOR: "oft-pool-monitor",
 } as const;
 export type CronName = typeof CRON_NAMES[keyof typeof CRON_NAMES];
 
@@ -150,6 +151,14 @@ export const CRON_META: Record<CronName, CronMeta> = {
   // over cadence) so a single missed tick surfaces within a
   // sensible window without paging on tail latency.
   [CRON_NAMES.TREASURY_REBALANCE]: {
+    expectedIntervalMs: 6 * 60 * 60 * 1000,
+    staleAfterMs: 8 * 60 * 60 * 1000,
+  },
+  // OFT sender-pool runway monitor — Vercel cron every 6h. Read-only (pool balances +
+  // runway), alerts when a pool covers < OFT_POOL_MIN_BRIDGES. Stale 8h so one missed
+  // tick doesn't page but a wedged monitor surfaces (a monitor that can't watch itself
+  // is worthless — this is what the audit flagged).
+  [CRON_NAMES.OFT_POOL_MONITOR]: {
     expectedIntervalMs: 6 * 60 * 60 * 1000,
     staleAfterMs: 8 * 60 * 60 * 1000,
   },
