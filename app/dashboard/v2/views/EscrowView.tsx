@@ -277,23 +277,70 @@ function LearnPane({ isMobile }: { isMobile: boolean }) {
       <EscrowFlow />
       <div style={{ marginTop: isMobile ? 28 : 36 }}>
         <SectionLabel>Good to know</SectionLabel>
-        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", columnGap: 36 }}>
-          <FaqRow q="What if the seller never delivers?" a="You reclaim the full amount yourself after the timeout you chose. An escrow never auto-pays the seller." />
-          <FaqRow q="Can Q402 touch my funds?" a="No. The vault is non-custodial. Only your signature moves the funds; Q402 only sponsors the gas and never holds them." />
-          <FaqRow q="What does it cost to fund or settle?" a="Gas is on us. Q402 sponsors every escrow action, so you never need to hold a native gas token." />
-          <FaqRow q="Who can settle a dispute?" a="Only an arbiter you name at creation, and only if you add one. Without an arbiter it is release-or-refund only." />
-          <FaqRow q="Which tokens and chains?" a="USDC and USDT on BNB Chain today. More chains open up as their vaults deploy." />
+        <div style={{ marginTop: 12 }}>
+          <FaqAccordion />
         </div>
       </div>
     </div>
   );
 }
 
-function FaqRow({ q, a }: { q: string; a: string }) {
+const FAQS: { q: string; a: string }[] = [
+  { q: "What if the seller never delivers?", a: "You reclaim the full amount yourself after the timeout you chose. An escrow never auto-pays the seller." },
+  { q: "Can Q402 touch my funds?", a: "No. The vault is non-custodial. Only your signature moves the funds; Q402 only sponsors the gas and never holds them." },
+  { q: "What does it cost to fund or settle?", a: "Gas is on us. Q402 sponsors every escrow action, so you never need to hold a native gas token." },
+  { q: "Who can settle a dispute?", a: "Only an arbiter you name at creation, and only if you add one. Without an arbiter it is release-or-refund only." },
+  { q: "Which tokens and chains?", a: "USDC and USDT on BNB Chain today. More chains open up as their vaults deploy." },
+];
+
+/* Good-to-know as a tidy accordion (was a wall of prose). Click a question to
+ * expand its answer; the grid-rows transition animates height with no measuring. */
+function FaqAccordion() {
+  const [open, setOpen] = useState<number | null>(0);
   return (
-    <div style={{ padding: "11px 0", borderBottom: `1px solid ${v2.line}` }}>
-      <div style={{ color: v2.text, fontSize: fs.base, fontWeight: 600 }}>{q}</div>
-      <div style={{ color: v2.muted, fontSize: fs.label, lineHeight: 1.5, marginTop: 4 }}>{a}</div>
+    <div style={{ ...glass(14), overflow: "hidden" }}>
+      {FAQS.map((it, i) => {
+        const isOpen = open === i;
+        return (
+          <div key={it.q} style={{ borderTop: i === 0 ? "none" : `1px solid ${v2.line}` }}>
+            <button
+              type="button"
+              onClick={() => setOpen(isOpen ? null : i)}
+              className="v2-trans"
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "15px 17px",
+                background: isOpen ? "rgba(245,197,24,.045)" : "transparent",
+                border: "none",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <span style={{ flex: 1, color: v2.text, fontSize: fs.base, fontWeight: 600 }}>{it.q}</span>
+              <span
+                style={{
+                  color: isOpen ? v2.yellow : v2.muted2,
+                  transform: isOpen ? "rotate(180deg)" : "none",
+                  transition: "transform .25s ease, color .2s ease",
+                  flexShrink: 0,
+                  display: "grid",
+                  placeItems: "center",
+                }}
+              >
+                <IconChevron size={16} />
+              </span>
+            </button>
+            <div style={{ display: "grid", gridTemplateRows: isOpen ? "1fr" : "0fr", transition: "grid-template-rows .28s cubic-bezier(.4,0,.2,1)" }}>
+              <div style={{ overflow: "hidden" }}>
+                <div style={{ padding: "0 17px 16px", color: v2.muted, fontSize: fs.label, lineHeight: 1.6, maxWidth: 720 }}>{it.a}</div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -479,4 +526,7 @@ function IconShield({ size = 20, color }: { size?: number; color?: string }) {
 }
 function IconClock({ size = 20, color }: { size?: number; color?: string }) {
   return base(size, color, (<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>));
+}
+function IconChevron({ size = 20, color }: { size?: number; color?: string }) {
+  return base(size, color, (<path d="M6 9l6 6 6-6" />));
 }
