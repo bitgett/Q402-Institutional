@@ -297,8 +297,20 @@ export async function runOftBridge(args: RunOftBridgeArgs): Promise<NextResponse
           if (!fundReceipt || fundReceipt.status !== 1) throw new Error(`approval-gas fund tx ${fundTx.hash} failed`);
           agentFundTxHash = fundTx.hash;
           agentFundEth = fundWhole;
-          // Atomic claim+debit keyed by the fund txHash (one-time, tiny amount).
-          await claimAndDebitNativeBridge(fundTx.hash, owner, src, fundWhole);
+          // Atomic claim+debit keyed by the fund txHash (one-time, tiny amount). The
+          // fund tx already broadcast, so a debit-ledger hiccup must NOT lose the debit
+          // or fail an otherwise-fundable bridge. Queue a pending-fee-debit row (the
+          // same reconcile path the main LZ-fee debit below uses) and carry on.
+          try {
+            await claimAndDebitNativeBridge(fundTx.hash, owner, src, fundWhole);
+          } catch (debitErr) {
+            const derr = debitErr instanceof Error ? debitErr.message : String(debitErr);
+            console.error("[oft-bridge-runner] approval-gas debit failed (fund tx already sent)", { owner, src, fundWhole, fundTx: fundTx.hash, err: derr });
+            try {
+              await setPendingFeeDebit({ txHash: fundTx.hash, feeToken: "native", amount: fundWhole, ownerLc: owner, chain: src, submittedAt: Date.now(), messageId: `approval-gas:${fundTx.hash}` });
+            } catch { /* ops alert + reconcile cron still cover it */ }
+            void sendOpsAlert(`<b>OFT approval-gas debit failed - pending row written</b>\nOwner <code>${owner}</code> ${src} fund ${fundWhole} native tx <code>${fundTx.hash}</code>\n${derr.slice(0, 160)}`, "error").catch(() => {});
+          }
         }
       }
     } catch (e) {
@@ -384,11 +396,21 @@ export async function runOftBridge(args: RunOftBridgeArgs): Promise<NextResponse
     };
 
     // ── Permanent settled marker (AWAITED before response) ───────────────────
-    try {
-      await markBridgeSettled(fp, { messageId: result.guid, txHash: result.txHash, src, dst, amount, feeToken: "native", settledAt: Date.now() });
-    } catch (markerErr) {
-      console.error("[oft-bridge-runner] markBridgeSettled failed", { owner, fp, guid: result.guid, err: markerErr instanceof Error ? markerErr.message : String(markerErr) });
-      void sendOpsAlert(`<b>OFT settled-marker write failed</b>\nfp <code>${fp}</code> guid <code>${result.guid}</code> tx <code>${result.txHash}</code>`, "error").catch(() => {});
+    // Retry the write: this is the durable replay-guard, and losing it means an
+    // identical intent replayed after the 24h idempotency key expires could bridge
+    // (and pay the fee) a second time. Retry 3x against a transient KV blip; ops-alert
+    // for manual repair only if all attempts fail.
+    let markerWritten = false;
+    for (let attempt = 0; attempt < 3 && !markerWritten; attempt++) {
+      try {
+        await markBridgeSettled(fp, { messageId: result.guid, txHash: result.txHash, src, dst, amount, feeToken: "native", settledAt: Date.now() });
+        markerWritten = true;
+      } catch (markerErr) {
+        if (attempt === 2) {
+          console.error("[oft-bridge-runner] markBridgeSettled failed after 3 attempts", { owner, fp, guid: result.guid, err: markerErr instanceof Error ? markerErr.message : String(markerErr) });
+          void sendOpsAlert(`<b>OFT settled-marker write failed (3x)</b>\nfp <code>${fp}</code> guid <code>${result.guid}</code> tx <code>${result.txHash}</code>\nReplay guard missing until the 24h idempotency key also lapses - manual SET may be needed.`, "error").catch(() => {});
+        }
+      }
     }
 
     try {
