@@ -3,7 +3,6 @@ import { timingSafeEqual } from "node:crypto";
 import { formatEther } from "ethers";
 import { OFT_CHAINS, OFT_CONFIG, getOftProvider, type OftChainKey } from "@/app/lib/usdt0";
 import { sendOpsAlert } from "@/app/lib/ops-alerts";
-import { recordCronStatus, CRON_NAMES } from "@/app/lib/cron-status";
 
 /**
  * GET /api/cron/oft-pool-monitor
@@ -60,8 +59,6 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const startedAt = Date.now();
-
   // Read every pool balance in parallel. A per-chain RPC failure must not sink the
   // whole sweep — record it and keep going (an unreadable pool is itself worth an
   // alert, since we can't confirm it's funded).
@@ -104,14 +101,6 @@ export async function GET(req: Request) {
     );
     alertSent = true;
   }
-
-  // Record the run so the cron-watchdog can page if THIS monitor goes stale. An
-  // unreadable pool counts as an error status (we couldn't confirm funding).
-  await recordCronStatus(CRON_NAMES.OFT_POOL_MONITOR, {
-    lastStatus: pools.some((p) => p.error) ? "error" : "success",
-    lastResult: `checked ${pools.length}, ${low.length} low${pools.some((p) => p.error) ? ", pool(s) unreadable" : ""}`,
-    durationMs: Date.now() - startedAt,
-  });
 
   return NextResponse.json({
     checked: pools.length,
