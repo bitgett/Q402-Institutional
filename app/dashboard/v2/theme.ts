@@ -172,4 +172,4 @@ export const v2CssVars: React.CSSProperties = {
 export type Scope = "trial" | "multichain";
 
 /** Task views in the v2 top nav. */
-export type V2ViewId = "wallets" | "activity" | "treasury" | "developer" | "escrow" | "referral";
+export type V2ViewId = "wallets" | "activity" | "treasury" | "developer" | "escrow";

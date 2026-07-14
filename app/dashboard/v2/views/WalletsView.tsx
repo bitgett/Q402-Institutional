@@ -50,7 +50,6 @@ import type { Scope, V2ViewId } from "../theme";
 import { ChainIcon, TokenIcon, StablePair, Q402Mark, SparkIcon, AgentBadgeIcon, GasTankIcon, GearIcon } from "../logos";
 import { useDashboardIdentity } from "../identity-context";
 import { getAuthCreds, clearAuthCache } from "@/app/lib/auth-client";
-import { getStoredRefCode } from "@/app/components/ReferralCapture";
 import { useIsMobile } from "@/app/lib/use-is-mobile";
 import { explorerTxUrl, explorerLabel, CHAIN_KEYS } from "@/app/lib/eip7702";
 import type { ChainKey } from "@/app/lib/relayer";
@@ -460,9 +459,6 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
         setError("Sign the auth challenge to create a wallet.");
         return;
       }
-      // Forward a captured referral code (first-touch ?ref=). The server credits
-      // it only when this is the owner's FIRST wallet, so it's safe to always send.
-      const refCode = getStoredRefCode();
       const res = await fetch("/api/wallet/agentic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -470,7 +466,6 @@ export function WalletsView({ ownerAddress, signMessage, scope, onNavigate }: Wa
           address: addr,
           nonce: auth.nonce,
           signature: auth.signature,
-          ...(refCode ? { refCode } : {}),
         }),
       });
       const data = await res.json();
