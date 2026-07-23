@@ -583,7 +583,7 @@ console.log("Paid! TX:", result.txHash);`} />
               An MCP server for Claude / Codex / Cursor / Cline / Copilot / Hermes.{" "}
               <a className="text-yellow hover:underline" href="https://www.npmjs.com/package/@quackai/q402-mcp">@quackai/q402-mcp</a>
               {" · "}
-              <a className="text-yellow hover:underline" href="https://github.com/bitgett/q402-mcp">bitgett/q402-mcp</a>.
+              <a className="text-yellow hover:underline" href="https://github.com/quackai-org/q402-mcp">quackai-org/q402-mcp</a>.
             </p>
 
             <h3 className="text-xs font-semibold text-white/65 uppercase tracking-widest mb-3">1 · Install</h3>

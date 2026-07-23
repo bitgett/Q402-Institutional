@@ -371,7 +371,7 @@ export default function ClaudePage() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/logos/npm.webp" alt="npm" className="w-4 h-4 object-contain" /> npm <span className="text-[11px] opacity-70" aria-hidden>&#8599;</span>
                 </a>
-                <a href="https://github.com/bitgett/q402-mcp" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/10 text-white/65 hover:text-white hover:border-white/25 transition-colors">
+                <a href="https://github.com/quackai-org/q402-mcp" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-white/10 text-white/65 hover:text-white hover:border-white/25 transition-colors">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/logos/github.svg" alt="GitHub" className="w-4 h-4 object-contain invert opacity-90" /> GitHub <span className="text-[11px] opacity-70" aria-hidden>&#8599;</span>
                 </a>

@@ -66,7 +66,7 @@ const MCP_INSTALL = "npx -y @quackai/q402-mcp";
 
 /** npm + GitHub source for the MCP package (surfaced on the tool-reference grid). */
 const MCP_NPM_URL = "https://www.npmjs.com/package/@quackai/q402-mcp";
-const MCP_GITHUB_URL = "https://github.com/bitgett/q402-mcp";
+const MCP_GITHUB_URL = "https://github.com/quackai-org/q402-mcp";
 
 /**
  * SDK integration snippets - the four-step quickstart the legacy Developer tab

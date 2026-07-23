@@ -1,7 +1,7 @@
 /**
  * mcp-package-drift.test.ts
  *
- * @quackai/q402-mcp ships from a separate repo (github.com/bitgett/q402-mcp)
+ * @quackai/q402-mcp ships from a separate repo (github.com/quackai-org/q402-mcp)
  * and a separate npm package, so neither this repo's CI nor a normal lockfile
  * bump catches the case where the MCP server's chain registry drifts from
  * contracts.manifest.json. That happened during the Mantle rollout (we caught
@@ -32,10 +32,10 @@ import { resolve } from "node:path";
 
 const NPM_LATEST_URL = "https://registry.npmjs.org/@quackai/q402-mcp/latest";
 function rawUrlFor(version: string): string {
-  return `https://raw.githubusercontent.com/bitgett/q402-mcp/v${version}/src/chains.ts`;
+  return `https://raw.githubusercontent.com/quackai-org/q402-mcp/v${version}/src/chains.ts`;
 }
 function rawUrlForPath(version: string, path: string): string {
-  return `https://raw.githubusercontent.com/bitgett/q402-mcp/v${version}/${path}`;
+  return `https://raw.githubusercontent.com/quackai-org/q402-mcp/v${version}/${path}`;
 }
 
 interface ManifestToken { address: string; decimals: number }

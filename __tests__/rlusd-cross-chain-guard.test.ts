@@ -38,7 +38,7 @@ const intentRouteSource = readFileSync(
   "utf8"
 );
 
-// MCP server lives in a separate repo (bitgett/q402-mcp) and the `mcp-server/`
+// MCP server lives in a separate repo (quackai-org/q402-mcp) and the `mcp-server/`
 // directory is .gitignore'd in this repo. On a local dev tree the working copy
 // often sits as a sibling and the MCP-side assertions run; on a fresh clone
 // they would normally be skipped.
@@ -67,7 +67,7 @@ const mcpAvailable       = mcpChainsSource !== null && mcpPayToolSource !== null
 if (process.env.CI === "true" && !mcpAvailable) {
   throw new Error(
     "[rlusd-cross-chain-guard] CI=true but mcp-server/ is missing — " +
-    "the .github/workflows/ci.yml step that clones bitgett/q402-mcp " +
+    "the .github/workflows/ci.yml step that clones quackai-org/q402-mcp " +
     "didn't run or failed. The MCP-side cross-chain guard would be " +
     "silently skipped, which defeats the purpose. Aborting.",
   );

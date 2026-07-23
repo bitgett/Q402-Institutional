@@ -33,7 +33,7 @@ function readLF(p: string): string {
 const ROOT = resolve(__dirname, "..");
 const browserSdkSource = readLF(resolve(ROOT, "public", "q402-sdk.js"));
 
-// The MCP server lives in its own repo (bitgett/q402-mcp) and is gitignored
+// The MCP server lives in its own repo (quackai-org/q402-mcp) and is gitignored
 // here. On a fresh `git clone` of q402-landing the `mcp-server/` directory
 // is absent — without this guard the test crashes with ENOENT before any
 // describe block runs, even though the browser-SDK half could still verify.

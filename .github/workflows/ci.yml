@@ -34,12 +34,12 @@ jobs:
         uses: actions/checkout@v4
 
       # `mcp-server/` is `.gitignore`d in this repo because @quackai/q402-mcp
-      # lives in a separate repo (bitgett/q402-mcp). For drift-guard tests to
+      # lives in a separate repo (quackai-org/q402-mcp). For drift-guard tests to
       # actually run (instead of `describe.skipIf(!mcpAvailable)` skipping the
       # MCP-side assertions on fresh clones), clone it as a sibling directory
       # the test file already expects.
       - name: Clone sibling MCP repo for drift assertions
-        run: git clone --depth=1 https://github.com/bitgett/q402-mcp.git mcp-server
+        run: git clone --depth=1 https://github.com/quackai-org/q402-mcp.git mcp-server
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

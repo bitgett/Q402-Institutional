@@ -94,7 +94,7 @@ mode needs a live API key, a signing path, and an explicit in-chat confirmation.
 fund-moving tools use two-phase consent: the first call returns a `needs_confirmation`
 preview plus a `consentToken`, and only a re-call with that token executes.
 
-Full grouped reference: the [`@quackai/q402-mcp` README](https://github.com/bitgett/q402-mcp#tools-exposed)
+Full grouped reference: the [`@quackai/q402-mcp` README](https://github.com/quackai-org/q402-mcp#tools-exposed)
 and [/claude](https://q402.quackai.ai/claude).
 
 ---

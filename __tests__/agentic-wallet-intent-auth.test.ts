@@ -202,7 +202,7 @@ describe("/api/auth/action-challenge route shape", () => {
   });
 });
 
-// MCP is a sibling repo (`bitgett/q402-mcp`) and lives under
+// MCP is a sibling repo (`quackai-org/q402-mcp`) and lives under
 // `mcp-server/` in dev checkouts. In a fresh CI worktree without the
 // MCP repo cloned alongside, the path doesn't exist. Skip the source-
 // grep there instead of crashing the whole suite. The MCP repo has its

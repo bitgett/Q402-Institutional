@@ -32,7 +32,7 @@ const ROOT = resolve(__dirname, "..");
 const batchRouteSrc = readLF(resolve(ROOT, "app", "api", "relay", "batch", "route.ts"));
 const sdkSrc        = readLF(resolve(ROOT, "public", "q402-sdk.js"));
 
-// The MCP server is a sibling repo (bitgett/q402-mcp), gitignored here.
+// The MCP server is a sibling repo (quackai-org/q402-mcp), gitignored here.
 // On a fresh clone of q402-landing the `mcp-server/` directory is absent
 // and we'd ENOENT at module load. Soft-skip the MCP-side blocks when the
 // sibling repo isn't checked out alongside; the same suites still run on
